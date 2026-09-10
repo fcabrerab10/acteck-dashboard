@@ -23,7 +23,8 @@ export const SILUETAS = {
   visionGeneral: [fila(3, 48), hero(4), grid('1fr 1fr', [panel(2, { alto: 76 }), panel(2, { alto: 76 })]), kpis(3), panel(6, { alto: 220 }), fila(2, 32), grid('minmax(0,1.05fr) minmax(0,1fr)', [chart(240), chart(240)]), kpis(3), grid('minmax(0,1.05fr) minmax(0,1fr)', [chart(220), chart(220)]), grid('1.2fr 1fr 1fr', [panel(6), tabla(6, 3), tabla(6, 3)])],
 
   sellIn: [...sellCliente.slice(0, 2), panel(6, { alto: 220 }), panel(5, { alto: 180 }), ...sellCliente.slice(2)],
-  sellInGlobal: [fila(2, 48), kpis(4), panel(5, { alto: 180 }), grid('1.5fr 1fr', [chart(200), panel(6)]), fila(4, 46), tabla(16, 10)],
+  sellInGlobal: [hero(3), kpis(4), panel(5, { alto: 180 }), grid('1.5fr 1fr', [chart(200), panel(6)]), fila(4, 34), fila(6, 26), tabla(16, 10)],
+  sellInDrill: [fila(3, 30), kpis(3), grid('minmax(0,1.4fr) minmax(0,1fr)', [tabla(6, 8), panel(6)]), tabla(3, 13, { alto: 110 })],
   sellOut: [hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(0,1fr)', [chart(240), panel(6)]), panel(3, { alto: 160 }), tabla(14, 8)],
   sellOutDicotech: [hero(4), kpis(5), grid('minmax(0,1.35fr) minmax(0,1fr)', [chart(240), panel(6)]), grid('minmax(0,0.55fr) minmax(0,1.45fr)', [panel(5), tabla(8, 4)]), grid('1fr 1fr', [tabla(6, 3), tabla(6, 3)]), tabla(8, 8, { alto: 320 }), tabla(12, 8)],
 
@@ -39,7 +40,8 @@ export const SILUETAS = {
   forecastClientes: [hero(4), grid('minmax(0,1fr) 320px', [[fila(5, 48), panel(1, { alto: 44 }), tabla(18, 9)], [panel(8, { alto: 380 }), panel(4, { alto: 200 })]])],
   forecastReservas: [hero(4), fila(2, 34), grid('minmax(0,1fr) 320px', [[fila(3, 80), tabla(16, 10)], panel(10, { alto: 480 })])],
   estrategiaPrecios: [hero(4), fila(6, 32), fila(2, 20), tabla(18, 9)],
-  analisisClientes: [fila(3, 90), fila(2, 40), kpis(4), grid('minmax(0,1.05fr) minmax(0,1fr)', [chart(300), chart(300)]), fila(3, 30), grid('repeat(4, minmax(0,1fr))', [panel(4), panel(4), panel(4), panel(4)])],
+  analisisClientes: [fila(3, 30), hero(3), kpis(4), fila(4, 30), tabla(16, 13), grid('minmax(0,1fr) minmax(0,1.1fr)', [chart(300), tabla(10, 6)]), panel(1, { alto: 44 })],
+  analisisDrill: [kpis(3), grid('minmax(0,1.4fr) minmax(0,1fr)', [chart(190), panel(6)]), tabla(6, 10)],
   resumenClientes: [fila(1, 90), grid('2fr 1fr 1fr', [hero(3), [kpis(1, '1fr'), kpis(1, '1fr')], [kpis(1, '1fr'), kpis(1, '1fr')]]), chart(300), grid('repeat(3, minmax(0,1fr))', [panel(8, { alto: 340 }), panel(8, { alto: 340 }), panel(8, { alto: 340 })])],
   ordenesCompra: [hero(4), panel(4, { alto: 220 }), grid('minmax(0,2fr) minmax(0,1fr)', [panel(5, { alto: 200 }), panel(5, { alto: 200 })]), panel(6, { alto: 220 }), tabla(12, 8)],
   adminInterna: [hero(0), fila(4, 40), grid('1fr 380px', [panel(12, { alto: 460 }), [panel(6, { alto: 220 }), panel(6, { alto: 220 })]]), panel(8, { alto: 350 })],

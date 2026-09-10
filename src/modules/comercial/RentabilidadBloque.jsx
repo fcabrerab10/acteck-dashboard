@@ -2,14 +2,17 @@
 // Cascada Fact Bruta → Fact Neta → Venta Neta → Utilidad Comercial, tiles de
 // margen (MC %, MUC %, Lost Profit, ticket) con YoY, y serie mensual.
 // Global (Visión General): v_erp_medidas_mes. Por cliente (Sell In): v_erp_medidas_cliente_mes.
+// Información sensible: sólo se renderiza con puedeVerSensible(perfil) (super admin o permisos.sensible).
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerSensible } from '../../lib/permisos';
 import { Percent } from 'lucide-react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -44,11 +47,14 @@ const sumHasta = (rows, mesMax) => {
 
 export default function RentabilidadBloque({ anio, mesMax, clienteKey = null, titulo }) {
   const { theme } = useTheme();
+  const perfil = usePerfil();
+  const sensible = puedeVerSensible(perfil);
   const [rows, setRows] = useState([]);
   const [rowsPrev, setRowsPrev] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!sensible) return undefined;
     let cancel = false;
     setLoading(true);
     const vista = clienteKey ? 'v_erp_medidas_cliente_mes' : 'v_erp_medidas_mes';
@@ -62,7 +68,7 @@ export default function RentabilidadBloque({ anio, mesMax, clienteKey = null, ti
       setRows(a.data || []); setRowsPrev(p.data || []); setLoading(false);
     }).catch(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, [anio, clienteKey]);
+  }, [anio, clienteKey, sensible]);
 
   const mesTope = useMemo(() => {
     const ultimo = rows.reduce((m, r) => Math.max(m, N(r.mes)), 0);
@@ -87,6 +93,7 @@ export default function RentabilidadBloque({ anio, mesMax, clienteKey = null, ti
   const border = `1px solid ${theme.border}`;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
 
+  if (!sensible) return null;
   if (!loading && !rows.length) return null;
 
   const base = Math.max(ytd.fact_bruta, 1);
@@ -173,23 +180,27 @@ export default function RentabilidadBloque({ anio, mesMax, clienteKey = null, ti
                 );
               })}
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 9.5, color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontWeight: 500 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: blue }} />Fact. Neta</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: green }} />Contribución</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: orange }} />MC % (eje der.)</span>
+            </div>
             <div style={{ height: 96, minWidth: 0 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={serie} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barGap={1}>
+                <LineChart data={serie} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke={theme.border} strokeDasharray="2 4" />
                   <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontDisplay }} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="m" hide />
+                  <YAxis yAxisId="m" hide domain={[0, 'auto']} />
                   <YAxis yAxisId="p" orientation="right" hide domain={[0, 60]} />
                   <Tooltip
-                    cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}
+                    cursor={{ stroke: theme.border }}
                     contentStyle={{ background: theme.surface, border, borderRadius: 10, fontSize: 11, fontFamily: TYPO.fontText, color: theme.text }}
                     formatter={(v, n) => (n === 'MC %' ? [pct(v), n] : [money(v), n])}
                   />
-                  <Bar yAxisId="m" dataKey="factNeta" name="Fact. Neta" fill={blue} fillOpacity={0.35} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                  <Bar yAxisId="m" dataKey="contribucion" name="Contribución" fill={blue} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                  <Bar yAxisId="m" dataKey="utilidad" name="Utilidad Comercial" fill={green} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                  <Line yAxisId="p" type="monotone" dataKey="mc" name="MC %" stroke={orange} strokeWidth={1.6} dot={{ r: 2, strokeWidth: 0, fill: orange }} connectNulls isAnimationActive={false} />
-                </ComposedChart>
+                  <Line yAxisId="m" type="monotone" dataKey="factNeta" name="Fact. Neta" stroke={blue} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: blue }} activeDot={{ r: 3.5 }} isAnimationActive={false} />
+                  <Line yAxisId="m" type="monotone" dataKey="contribucion" name="Contribución" stroke={green} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: green }} activeDot={{ r: 3.5 }} isAnimationActive={false} />
+                  <Line yAxisId="p" type="monotone" dataKey="mc" name="MC %" stroke={orange} strokeWidth={1.6} strokeDasharray="4 3" dot={{ r: 2, strokeWidth: 0, fill: orange }} activeDot={{ r: 3.5 }} connectNulls isAnimationActive={false} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </div>

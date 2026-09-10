@@ -228,3 +228,45 @@ export async function compartir(texto, { titulo = 'Disponibilidad y precio' } = 
   if (!w) window.location.href = url;
   return 'whatsapp';
 }
+
+// ─── Sell In consolidado · resumen del mes por canal (Dirección Comercial) ───
+const CANAL_TXT = { MAYOREO: 'Mayoreo', DISTRIBUIDOR: 'Distribuidor', 'E-COMMERCE': 'E-commerce', MOSTRADOR: 'Mostrador', 'RETAIL PROPIOS': 'Retail propios', 'RETAIL REPRESENTADOS': 'Retail representados', OTROS: 'Otros' };
+/** 'RETAIL PROPIOS' → 'Retail propios' (mapa fijo; lo demás capitalizado). */
+export function canalTexto(canal) {
+  const k = String(canal || '').trim().toUpperCase();
+  if (CANAL_TXT[k]) return CANAL_TXT[k];
+  const s = k.toLowerCase();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Otros';
+}
+
+/**
+ * Resumen del mes por canal, SIN información sensible (ni márgenes ni costos ni cartera).
+ * { mes (1-12), anio, mtd, cuota, ytd, yoyYtd (0-100), canales: [{ canal, monto, cuota?, yoy? }], marca }
+ *
+ *   *Acteck · Sell In Septiembre 2026*
+ *   Facturado: $39.1 mdp · 58% de cuota
+ *   Acumulado 2026: $412.3 mdp (+7% vs 2025)
+ *
+ *   Por canal:
+ *   • Mayoreo · $5.6 mdp · 58% de cuota        ← si el canal no tiene cuota, va el YoY: "· +12% vs 2025"
+ */
+export function textoResumenMesCanal({ mes, anio, mtd, cuota, ytd, yoyYtd, canales = [], marca = 'Acteck' } = {}) {
+  const m = MESES_LARGO[(Number(mes) || 1) - 1];
+  const conCuota = esNum(cuota) && Number(cuota) > 0;
+  const lineas = [
+    `*${marca} · Sell In ${m} ${anio}*`,
+    `Facturado: ${mdp(mtd)}${conCuota ? ` · ${pctEntero((Number(mtd) / Number(cuota)) * 100)} de cuota` : ''}`,
+    `Acumulado ${anio}: ${mdp(ytd)}${esNum(yoyYtd) ? `${yoyTxt(yoyYtd)}${anio - 1})` : ''}`,
+  ];
+  const lista = (canales || []).filter((c) => esNum(c.monto) && Number(c.monto) !== 0).slice().sort((a, b) => Number(b.monto) - Number(a.monto));
+  if (lista.length) {
+    lineas.push('', 'Por canal:');
+    lista.forEach((c) => {
+      const cola = esNum(c.cuota) && Number(c.cuota) > 0
+        ? ` · ${pctEntero((Number(c.monto) / Number(c.cuota)) * 100)} de cuota`
+        : esNum(c.yoy) ? ` · ${Number(c.yoy) >= 0 ? '+' : ''}${Math.round(Number(c.yoy))}% vs ${anio - 1}` : '';
+      lineas.push(`• ${canalTexto(c.canal)} · ${mdp(c.monto)}${cola}`);
+    });
+  }
+  return lineas.join('\n');
+}

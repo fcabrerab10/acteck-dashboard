@@ -1,15 +1,18 @@
 // Tabla compacta · header sticky en uppercase muted, hairlines, cifras tabulares, fila 26px.
 // columnas: [{ key, label, align:'left'|'right'|'center', width, render?(row), sort?:bool, sum?:bool }]
 // filas: objetos · onRowClick · orden {col, dir} + onSort · totales (fila final calculada de sum:true o pasada).
+// grupos (opcional): fila superior de cabecera [{ label, colSpan, color }] — p. ej. un bloque por año en tablas multi-año.
 import React from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 
-export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id ?? i, onRowClick, orden, onSort, totales, maxHeight, vacio = 'Sin datos.', dense = false, renderExpandido, expandidoKey }) {
+const GRUPO_H = 24;
+
+export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id ?? i, onRowClick, orden, onSort, totales, maxHeight, vacio = 'Sin datos.', dense = false, renderExpandido, expandidoKey, grupos }) {
   const { theme } = useTheme();
   const hair = `1px solid ${theme.divider || theme.border}`;
-  const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: 0, background: theme.surface, zIndex: 1, whiteSpace: 'nowrap' };
+  const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, background: theme.surface, zIndex: 1, whiteSpace: 'nowrap' };
   const td = { padding: dense ? '3px 6px' : '5px 8px', borderBottom: `1px solid ${theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
   const alignOf = (c) => c.align || 'right';
   const tot = totales === undefined && columnas.some((c) => c.sum)
@@ -19,6 +22,15 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
     <div style={{ overflow: 'auto', maxHeight, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
+          {grupos && (
+            <tr>
+              {grupos.map((g, i) => (
+                <th key={i} colSpan={g.colSpan} style={{ ...th, top: 0, height: GRUPO_H, lineHeight: `${GRUPO_H}px`, padding: '0 8px', boxSizing: 'border-box', textAlign: 'center', borderBottom: 0, fontSize: 10.5, letterSpacing: '0.04em', color: g.color || th.color, boxShadow: g.label ? `inset 0 -2px 0 ${g.color || theme.border}` : 'none' }}>
+                  {g.label}
+                </th>
+              ))}
+            </tr>
+          )}
           <tr>
             {columnas.map((c) => {
               const sortable = c.sort && onSort; const active = orden?.col === c.key;

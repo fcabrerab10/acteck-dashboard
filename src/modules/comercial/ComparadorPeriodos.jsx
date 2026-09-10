@@ -2,6 +2,9 @@
 // Cliente: v_fact_cliente_mes + v_erp_medidas_cliente_mes. Global (clienteKey null):
 // v_facturacion_global_mensual + v_erp_medidas_mes. Movers (lazy al abrir):
 // facturacion_clientes por cliente · v_facturacion_global_sku_mes en global.
+// Cliente del ERP (clienteNombre / clienteCodigo, Análisis por Cliente 2026-09-11):
+// v_analisis_cliente_mes (fact_neta como monto) · movers desde mv_analisis_cliente_sku_mes por código.
+// ocultarSensible: esconde Contribución/MC (permiso `sensible`).
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { cachedQuery, fetchAllQ } from '../../lib/queries';
@@ -69,7 +72,8 @@ function periodosPreset(preset, anio, mes, libre) {
   }
 }
 
-export default function ComparadorPeriodos({ clienteKey = null }) {
+export default function ComparadorPeriodos({ clienteKey = null, clienteNombre = null, clienteCodigo = null, ocultarSensible = false }) {
+  const erpCliente = clienteNombre || clienteCodigo ? { nombre: clienteNombre, codigo: clienteCodigo } : null;
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
   const accent = theme.accent || '#007AFF', green = theme.green || '#34C759', red = theme.red || '#FF3B30';
@@ -93,11 +97,27 @@ export default function ComparadorPeriodos({ clienteKey = null }) {
       : supabase.from('v_facturacion_global_mensual').select('anio,mes,monto,piezas');
     let qMed = supabase.from(clienteKey ? 'v_erp_medidas_cliente_mes' : 'v_erp_medidas_mes').select('anio,mes,fact_neta,contribucion');
     if (clienteKey) qMed = qMed.eq('cliente_key', clienteKey);
+    if (erpCliente) {
+      // Cliente del ERP: una sola vista; se agrega por (anio, mes) por si el nombre tiene dos códigos.
+      let q = supabase.from('v_analisis_cliente_mes').select('anio,mes,fact_neta,piezas_venta_neta,contribucion');
+      q = erpCliente.codigo ? q.eq('cliente', erpCliente.codigo) : q.eq('cliente_nombre', erpCliente.nombre);
+      cachedQuery(q.order('anio').order('mes'))
+        .then(({ data }) => {
+          if (cancel) return;
+          const by = new Map();
+          (data || []).forEach((r) => { const k = `${r.anio}-${r.mes}`; const a = by.get(k) || { anio: N(r.anio), mes: N(r.mes), monto: 0, piezas: 0, fact_neta: 0, contribucion: 0 }; a.monto += N(r.fact_neta); a.fact_neta += N(r.fact_neta); a.piezas += N(r.piezas_venta_neta); a.contribucion += N(r.contribucion); by.set(k, a); });
+          const rows = Array.from(by.values());
+          setFact(rows); setMed(rows);
+        })
+        .catch(() => { if (!cancel) { setFact([]); setMed([]); } });
+      return () => { cancel = true; };
+    }
     Promise.all([cachedQuery(qFact.order('anio').order('mes')), cachedQuery(qMed.order('anio').order('mes'))])
       .then(([f, m]) => { if (!cancel) { setFact(f.data || []); setMed(m.data || []); } })
       .catch(() => { if (!cancel) { setFact([]); setMed([]); } });
     return () => { cancel = true; };
-  }, [clienteKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteKey, clienteNombre, clienteCodigo]);
 
   const ultimo = useMemo(() => {
     let best = null;
@@ -124,15 +144,18 @@ export default function ComparadorPeriodos({ clienteKey = null }) {
     let cancel = false;
     setSkuLoading(true);
     const years = yearsKey.split(',').map(Number);
-    const q = clienteKey
-      ? () => supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).in('anio', years)
-      : () => supabase.from('v_facturacion_global_sku_mes').select('sku,anio,mes,piezas,monto').in('anio', years);
-    fetchAllQ(q, { pageSize: clienteKey ? 500 : 1000, orderCol: 'sku', label: 'comparador-sku' })
-      .then((rows) => { if (!cancel) setSku({ key: yearsKey, rows }); })
+    const q = erpCliente
+      ? () => { let b = supabase.from('mv_analisis_cliente_sku_mes').select('articulo,anio,mes,piezas_venta_neta,fact_neta').in('anio', years); return erpCliente.codigo ? b.eq('cliente', erpCliente.codigo) : b.eq('cliente_nombre', erpCliente.nombre); }
+      : clienteKey
+        ? () => supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).in('anio', years)
+        : () => supabase.from('v_facturacion_global_sku_mes').select('sku,anio,mes,piezas,monto').in('anio', years);
+    fetchAllQ(q, { pageSize: clienteKey ? 500 : 1000, orderCol: erpCliente ? 'articulo' : 'sku', label: 'comparador-sku' })
+      .then((rows) => { if (!cancel) setSku({ key: yearsKey, rows: erpCliente ? rows.map((r) => ({ sku: r.articulo, anio: r.anio, mes: r.mes, piezas: r.piezas_venta_neta, monto: r.fact_neta })) : rows }); })
       .catch(() => { if (!cancel) setSku({ key: yearsKey, rows: [] }); })
       .finally(() => { if (!cancel) setSkuLoading(false); });
     return () => { cancel = true; };
-  }, [moversOpen, yearsKey, clienteKey, sku]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moversOpen, yearsKey, clienteKey, clienteNombre, clienteCodigo, sku]);
 
   const movers = useMemo(() => {
     if (!sku || periodos.length < 2) return null;
@@ -163,10 +186,10 @@ export default function ComparadorPeriodos({ clienteKey = null }) {
 
   const copiar = () => {
     if (!A || !B) return;
-    const nombre = clienteKey ? clienteKey.charAt(0).toUpperCase() + clienteKey.slice(1) : 'Global';
+    const nombre = erpCliente ? (erpCliente.nombre || erpCliente.codigo) : clienteKey ? clienteKey.charAt(0).toUpperCase() + clienteKey.slice(1) : 'Global';
     const l1 = `Sell In ${nombre} · ${labelPeriodo(periodos[0])} vs ${labelPeriodo(periodos[1])}${esM3 ? ` vs ${labelPeriodo(periodos[2])}` : ''}`;
     const l2 = `Facturación ${formatMXN(A.monto)} vs ${formatMXN(B.monto)} (${pctTxt(deltaPct(A.monto, B.monto))}) · Piezas ${int(A.piezas)} vs ${int(B.piezas)} (${pctTxt(deltaPct(A.piezas, B.piezas))})`;
-    const l3 = `Ticket promedio ${formatMXN(A.ticket || 0)} vs ${formatMXN(B.ticket || 0)}${A.hayMedidas && B.hayMedidas ? ` · Contribución ${formatMXN(A.contribucion)} vs ${formatMXN(B.contribucion)} (MC ${A.mc?.toFixed(1)}% vs ${B.mc?.toFixed(1)}%)` : ''}`;
+    const l3 = `Ticket promedio ${formatMXN(A.ticket || 0)} vs ${formatMXN(B.ticket || 0)}${!ocultarSensible && A.hayMedidas && B.hayMedidas ? ` · Contribución ${formatMXN(A.contribucion)} vs ${formatMXN(B.contribucion)} (MC ${A.mc?.toFixed(1)}% vs ${B.mc?.toFixed(1)}%)` : ''}`;
     navigator.clipboard?.writeText([l1, l2, l3].join('\n')).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1600); });
   };
 
@@ -289,7 +312,7 @@ export default function ComparadorPeriodos({ clienteKey = null }) {
             <Kpi k="Facturación" get={(t) => t.monto} fmtV={money} />
             <Kpi k="Piezas" get={(t) => t.piezas} fmtV={int} />
             <Kpi k="Ticket promedio" get={(t) => t.ticket} fmtV={(v) => (v == null ? '—' : `$${int(v)}`)} />
-            <Kpi k="Contribución" get={(t) => (t.hayMedidas ? t.contribucion : null)} fmtV={money} sub={(t) => (t.mc != null ? `MC ${t.mc.toFixed(1)}%` : 'sin medidas')} />
+            {!ocultarSensible && <Kpi k="Contribución" get={(t) => (t.hayMedidas ? t.contribucion : null)} fmtV={money} sub={(t) => (t.mc != null ? `MC ${t.mc.toFixed(1)}%` : 'sin medidas')} />}
           </div>
 
           {/* Mini gráfica · A y B lado a lado por posición de mes */}

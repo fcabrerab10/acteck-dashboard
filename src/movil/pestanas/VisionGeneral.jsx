@@ -12,6 +12,8 @@ import { Share2, Copy, Store, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerSensible } from '../../lib/permisos';
 import { TYPO } from '../../lib/themeTokens';
 import FrescuraPill from '../../components/FrescuraPill';
 import { useInicioData } from '../../modules/general/inicio/useInicioData';
@@ -28,6 +30,13 @@ import FichaProducto from '../FichaProducto';
 
 const STALE = 5 * 60 * 1000;
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
+
+// Sin permiso de información sensible: las frases de calc() mencionan margen y utilidad; se limpian aquí.
+const sinMargen = (t) => String(t || '').replace(/\s+con margen del [^%]*%/g, '');
+const sinUtilidad = (t) => String(t || '').split(' · ').filter((x) => !/^utilidad comercial/i.test(x)).join(' · ');
+// textoCierre() (lib/whatsapp) trae utilidad bruta y pronóstico UAI; sin permiso se quitan esas líneas.
+const LINEAS_SENSIBLES = /^(Utilidad bruta|Pronóstico UAI):/;
+const cierreSinSensible = (texto) => String(texto || '').split('\n').filter((l) => !LINEAS_SENSIBLES.test(l)).join('\n').replace(/\n{3,}/g, '\n\n');
 const CUENTAS_PL = ['utilidad_bruta', 'uaii_contable_sin_proyectos', 'total_gastos', 'total_productos_financieros', 'gastos_financieros'];
 
 function useVisionExtra(anio) {
@@ -74,6 +83,8 @@ function contribucionRenglones(rows) {
 export default function VisionGeneral() {
   const { theme } = useTheme();
   const nav = useNav();
+  const perfil = usePerfil() || nav?.perfil;
+  const sensible = puedeVerSensible(perfil); // márgenes, utilidad, contribución y costos
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
   const [modo, setModo] = useState('mes');
@@ -113,16 +124,22 @@ export default function VisionGeneral() {
       <Cabecera onVolver={nav.pop} derecha={<Segmented value={modo} onChange={setModo} options={MODOS} />} />
       <TituloGrande titulo="Visión General" sub={sub} />
 
-      <HeroM eyebrow={`Dirección general · ${periodo}`} frase={r.titulo} sub={r.sub}
-        stats={[
+      <HeroM eyebrow={`Dirección general · ${periodo}`} frase={sensible ? r.titulo : sinMargen(r.titulo)} sub={sensible ? r.sub : sinUtilidad(r.sub)}
+        stats={sensible ? [
           { k: modo === 'mes' ? 'Fact Neta MTD' : 'Fact Neta YTD', v: moneyCompact(r.cur.fact_neta), sub: r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota` : r.yoy != null ? `${deltaPct(r.yoy)} ${r.yoyLabel}` : 'sin cuota' },
           { k: 'Margen MC', v: r.cur.mc != null ? pct(r.cur.mc) : '—', sub: r.dMc != null ? `${r.dMc >= 0 ? '+' : ''}${r.dMc.toFixed(1)} pp vs ${anio - 1}` : undefined },
           { k: 'Utilidad com.', v: moneyCompact(r.cur.utilidad_comercial), sub: r.yoyUtilidad != null ? `${deltaPct(r.yoyUtilidad)} YoY` : undefined },
+        ] : [
+          { k: modo === 'mes' ? 'Fact Neta MTD' : 'Fact Neta YTD', v: moneyCompact(r.cur.fact_neta), sub: r.yoy != null ? `${deltaPct(r.yoy)} ${r.yoyLabel}` : `vs ${moneyCompact(r.prev.fact_neta)} en ${anio - 1}` },
+          { k: 'Cuota', v: r.pctCuota != null ? `${Math.round(r.pctCuota)}%` : '—', sub: r.cuotaPeriodo > 0 ? `de ${moneyCompact(r.cuotaPeriodo)}` : 'sin cuota cargada' },
+          { k: 'Piezas', v: N(r.cur.piezas).toLocaleString('es-MX'), sub: N(r.prev.piezas) ? `${N(r.prev.piezas).toLocaleString('es-MX')} en ${anio - 1}` : undefined },
         ]} />
 
       <KpiGrid style={{ marginTop: 12 }}>
         <KpiM eyebrow={`Fact Neta ${otroLabel}`} big={moneyCompact(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1} (${yoyOtroLabel})` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />
-        <KpiM eyebrow={`Contribución ${modo === 'mes' ? 'MTD' : 'YTD'}`} big={moneyCompact(r.cur.contribucion)} sub={r.cur.mc != null ? `MC ${pct(r.cur.mc)} · ${moneyCompact(r.prev.contribucion)} en ${anio - 1}` : undefined} />
+        {sensible
+          ? <KpiM eyebrow={`Contribución ${modo === 'mes' ? 'MTD' : 'YTD'}`} big={moneyCompact(r.cur.contribucion)} sub={r.cur.mc != null ? `MC ${pct(r.cur.mc)} · ${moneyCompact(r.prev.contribucion)} en ${anio - 1}` : undefined} />
+          : <KpiM eyebrow={`Fact Neta ${anio - 1}`} big={moneyCompact(r.prev.fact_neta)} sub={`mismo periodo · ${modo === 'mes' ? 'mes completo' : 'a mismo día'}`} />}
         <KpiM eyebrow="Cartera vencida" big={moneyCompact(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${moneyCompact(r.cartera.saldo)}${r.cartera.dso != null ? ` · DSO ${r.cartera.dso} d` : ''}` : 'sin saldo'} />
         <KpiM eyebrow="Inventario + tránsito" big={moneyCompact(r.inv.valor)} sub={`${r.inv.cobertura != null ? `${r.inv.cobertura} d · ` : ''}${moneyCompact(r.inv.transitoValor)} en camino`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={() => nav.push(<FichaProducto />, 'ficha')} />
       </KpiGrid>
@@ -130,7 +147,7 @@ export default function VisionGeneral() {
       <ListaAgrupada titulo={`Mix por canal · ${periodo}`} meta={r.canales.length || undefined} style={{ marginTop: 18 }} pie="Fact Neta del ERP · pill = % de la cuota del canal (cuotas_canales) o YoY. Toca un canal para ver sus clientes.">
         {r.canales.length === 0 && <Vacio icon={null} titulo="Sin ventas del ERP en el periodo" style={{ padding: 18 }} />}
         {r.canales.map((c) => (
-          <Fila key={c.canal} icon={Store} color={theme.accent} titulo={canalLabel(c.canal)} sub={`${r.totalCanales > 0 ? `${Math.round((c.fact / r.totalCanales) * 100)}% del total` : ''}${c.mc != null ? ` · MC ${pct(c.mc)}` : ''}${c.yoy != null && c.pct != null ? ` · ${deltaPct(c.yoy)} YoY` : ''}`}
+          <Fila key={c.canal} icon={Store} color={theme.accent} titulo={canalLabel(c.canal)} sub={`${r.totalCanales > 0 ? `${Math.round((c.fact / r.totalCanales) * 100)}% del total` : ''}${sensible && c.mc != null ? ` · MC ${pct(c.mc)}` : ''}${c.yoy != null && c.pct != null ? ` · ${deltaPct(c.yoy)} YoY` : ''}`}
             valor={moneyCompact(c.fact)} valorSub={c.cuota ? `de ${moneyCompact(c.cuota)}` : undefined}
             pill={c.pct != null ? { tone: tonoCuota(c.pct), label: `${Math.round(c.pct)}% cuota` } : { tone: tonoDelta(c.yoy), label: c.yoy != null ? `${deltaPct(c.yoy)} YoY` : 'nuevo' }} onClick={() => setCanalAbierto(c.canal)} />
         ))}
@@ -168,13 +185,14 @@ export default function VisionGeneral() {
         )}
       </HojaM>
 
-      <HojaCierre abierto={cierre} onClose={() => setCierre(false)} r={r} data={data} extra={extra} anio={anio} mesActual={mesActual} hoy={hoy} theme={theme} />
+      <HojaCierre abierto={cierre} onClose={() => setCierre(false)} r={r} data={data} extra={extra} anio={anio} mesActual={mesActual} hoy={hoy} theme={theme} sensible={sensible} />
     </>
   );
 }
 
-/** Hoja "Compartir cierre": mes, cobranza, comentario, pronóstico UAI (precalculado y editable) y el texto final. */
-function HojaCierre({ abierto, onClose, r, data, extra, anio, mesActual, hoy, theme }) {
+/** Hoja "Compartir cierre": mes, cobranza, comentario, pronóstico UAI (precalculado y editable) y el texto final.
+ *  Sin permiso sensible: sin UAI ni utilidad bruta; el texto lleva sólo ventas, presupuesto, alcance, cobranza, stock y días. */
+function HojaCierre({ abierto, onClose, r, data, extra, anio, mesActual, hoy, theme, sensible = true }) {
   const sugerido = hoy.getDate() <= 3 ? (mesActual === 1 ? { anio: anio - 1, mes: 12 } : { anio, mes: mesActual - 1 }) : { anio, mes: mesActual };
   const [sel, setSel] = useState(sugerido);
   const [cobranza, setCobranza] = useState('');
@@ -186,7 +204,7 @@ function HojaCierre({ abierto, onClose, r, data, extra, anio, mesActual, hoy, th
 
   // Estacionalidad: contribución del mismo mes del año anterior hasta el mismo día (renglones de erp_ventas)
   const { data: mismoDia } = useQuery({
-    queryKey: ['movil', 'contrib-mismo-dia', sel.anio - 1, sel.mes, dia], staleTime: STALE, enabled: abierto && enCurso,
+    queryKey: ['movil', 'contrib-mismo-dia', sel.anio - 1, sel.mes, dia], staleTime: STALE, enabled: abierto && enCurso && sensible,
     queryFn: async () => contribucionRenglones(await fetchAll('erp_ventas', 'movimiento_venta,instruccion,monto_venta_pesos,costo_venta_pesos', (q) => q.eq('anio', sel.anio - 1).eq('mes', sel.mes).lte('dia', dia))),
   });
 
@@ -214,7 +232,8 @@ function HojaCierre({ abierto, onClose, r, data, extra, anio, mesActual, hoy, th
   useEffect(() => { if (abierto) { setSel(sugerido); setEditado(false); } }, [abierto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const uaiNum = uaiTxt.trim() === '' || Number.isNaN(Number(uaiTxt)) ? null : Number(uaiTxt) * 1e6;
-  const texto = textoCierre({ mes: sel.mes, ventas: calc.ventas, presupuesto: calc.presupuesto, utilidadBruta: calc.contrib, pctMc: calc.pctMc, uai: uaiNum, cobranza, stock: calc.stock, diasInventario: calc.dias, comentario });
+  const textoCompleto = textoCierre({ mes: sel.mes, ventas: calc.ventas, presupuesto: calc.presupuesto, utilidadBruta: sensible ? calc.contrib : null, pctMc: sensible ? calc.pctMc : null, uai: sensible ? uaiNum : null, cobranza, stock: calc.stock, diasInventario: calc.dias, comentario });
+  const texto = sensible ? textoCompleto : cierreSinSensible(textoCompleto);
   const onCompartir = async () => { const res = await compartir(texto, { titulo: `Cierre de ${MESES_LARGO[sel.mes - 1]}` }); if (res === 'share') toast.ok('Compartido'); };
   const onCopiar = async () => { if (await copiar(texto)) toast.ok('Texto copiado'); else toast.error('No se pudo copiar'); };
 
@@ -232,6 +251,7 @@ function HojaCierre({ abierto, onClose, r, data, extra, anio, mesActual, hoy, th
         <div style={etiqueta}>Cobranza</div>
         <input value={cobranza} onChange={(e) => setCobranza(e.target.value)} placeholder="Texto libre, p. ej. 92% de la meta" style={campo} />
 
+        {sensible && <>
         <div style={etiqueta}>Pronóstico UAI (mdp)</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input inputMode="decimal" value={uaiTxt} onChange={(e) => { setUaiTxt(e.target.value); setEditado(true); }} placeholder="6.5" style={{ ...campo, fontFamily: MONO, maxWidth: 140 }} />
@@ -242,6 +262,7 @@ function HojaCierre({ abierto, onClose, r, data, extra, anio, mesActual, hoy, th
           contribución {calc.metodo === 'real' ? 'real' : 'proyectada'} {mdp(calc.proyectada)} · gastos promedio {calc.gastos.valor != null ? mdp(calc.gastos.valor) : '—'}{calc.rango ? ` (P&L ${calc.rango})` : ' (sin P&L cargado)'}
           {enCurso && calc.metodo !== 'real' ? ` · MTD ${mdp(calc.contrib)} al día ${dia} de ${diasMes}` : ''}
         </div>
+        </>}
 
         <div style={etiqueta}>Comentario</div>
         <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows={3} placeholder="Opcional · va al final del mensaje" style={{ ...campo, resize: 'vertical', minHeight: 70 }} />

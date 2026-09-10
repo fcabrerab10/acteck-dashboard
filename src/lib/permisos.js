@@ -87,6 +87,14 @@ export const puedeConfigurar = (perfil) => !!perfil?.es_super_admin;
 export const puedeActualizarDatos = (perfil) => !!perfil?.es_super_admin;
 
 /**
+ * ¿Puede ver información sensible (márgenes, utilidad, contribución y costos)?
+ * Flag global `permisos.sensible === true` (se asigna en Administración → ficha de usuario)
+ * o super admin. Se aplica pantalla por pantalla; hoy: Visión General (web y móvil).
+ */
+export const puedeVerSensible = (perfil) =>
+  !!perfil?.es_super_admin || perfil?.permisos?.sensible === true;
+
+/**
  * ¿Puede ver la pestaña Inicio (pagina 'inicio')? No tiene permiso propio:
  * la ve quien tenga vision_general o resumen_clientes, o el super admin.
  */

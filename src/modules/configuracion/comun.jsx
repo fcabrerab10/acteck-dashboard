@@ -39,12 +39,13 @@ export const permisosVacios = () => ({
   globales: Object.fromEntries(PESTANAS_GLOBALES.map((p) => [p.id, 'oculto'])),
 });
 
-/** Normaliza permisos de la BD (pueden faltar claves) sin perder valores existentes. */
+/** Normaliza permisos de la BD (pueden faltar claves) sin perder valores existentes.
+ *  `sensible` (bool): información sensible — márgenes, utilidad, contribución y costos (puedeVerSensible). */
 export function normalizarPermisos(p) {
   const base = permisosVacios();
   const clientes = { ...base.clientes };
   for (const c of CLIENTES) clientes[c.id] = { ...base.clientes[c.id], ...(p?.clientes?.[c.id] || {}) };
-  return { clientes, globales: { ...base.globales, ...(p?.globales || {}) } };
+  return { clientes, globales: { ...base.globales, ...(p?.globales || {}) }, sensible: p?.sensible === true };
 }
 
 export const nivelDe = (v) => (NIVELES.includes(v) ? v : 'oculto');

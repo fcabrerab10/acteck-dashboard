@@ -117,6 +117,7 @@ function FichaUsuario({ u, usuarios, actualizar, refetch, soyYo, ts }) {
     catch (e) { toast.error(`No se pudo guardar: ${e.message || e}`); }
   };
   const setGlobal = (id, nivel) => guardar({ ...permisos, globales: { ...permisos.globales, [id]: nivel } });
+  const setSensible = (on) => guardar({ ...permisos, sensible: !!on }, on ? 'Ya ve información sensible' : 'Información sensible oculta');
   const setCliente = (ck, pestana, nivel) => {
     const clientes = { ...permisos.clientes, [ck]: { ...permisos.clientes[ck], [pestana]: nivel } };
     if (ck === 'digitalife' && espejo) for (const k of ESPEJO) clientes[k] = { ...clientes.digitalife };
@@ -211,6 +212,18 @@ function FichaUsuario({ u, usuarios, actualizar, refetch, soyYo, ts }) {
           <Boton icon={Copy} onClick={() => setCopiar(true)} disabled={esSuper} title={esSuper ? 'El super admin no necesita permisos' : 'Copiar todos los permisos de otro usuario'}>Copiar permisos de…</Boton>
           <Boton icon={Eye} onClick={() => setVerComo(true)}>Ver como</Boton>
           <span style={{ ...sub, alignSelf: 'center', marginLeft: 'auto' }}>Cada cambio se guarda al instante.</span>
+        </div>
+      </Panel>
+
+      <Panel titulo="Información sensible" meta="márgenes, utilidad, contribución y costos" padding="6px 12px">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.005em' }}>Márgenes, utilidad, contribución y costos</span>
+            <span style={{ display: 'block', fontSize: 10.5, color: theme.textSubtle || theme.textMuted }}>
+              {esSuper ? 'Super admin: siempre visible.' : 'Sin esto ve ventas, cuotas, mix e inventario, pero no MC %, contribución, utilidad ni costos (Visión General; se irá aplicando pestaña por pestaña).'}
+            </span>
+          </span>
+          <Interruptor theme={theme} on={esSuper || permisos.sensible === true} onChange={esSuper ? undefined : setSensible} title={esSuper ? 'Super admin: acceso total por código' : 'Mostrar u ocultar información sensible'} />
         </div>
       </Panel>
 

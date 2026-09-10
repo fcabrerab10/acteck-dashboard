@@ -1,894 +1,476 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// Sell In consolidado · Dirección Comercial (plantilla V3, kit). Antes este archivo tenía una rama por cliente
+// (`clienteKey != null`) que App.jsx ya no usa: Digitalife → SellInClienteV2, Dicotech → SellInDicotech,
+// PCEL → SellInPcel. Se conserva el export default y la firma ({ clienteKey }) por compatibilidad con App.jsx.
+//
+// Datos (todo por lib/queries: cache 5 min + paginación paralela):
+//   v_sellin_global_sku_canal_mes  sku × canal × es_clave × año × mes (1 fetch por año seleccionado, 10K/página)
+//   roadmap_sku                    orden, marca, categoría, familia, roadmap
+//   v_cuota_global_mensual         Σ cuotas_mensuales.cuota_ideal · cuotas_canales (TOTAL/12 y por canal) si existe
+//   v_sellin_global_sku_anio_erp   MC % por SKU y año (sólo con permiso `sensible`)
+//   v_inventario_comercial         disponible por SKU (filtro "sólo con stock")
+// El drill de cada SKU (sellin/DrillSku.jsx) carga lo suyo al abrir.
+import React, { useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Share2, Copy, RotateCcw } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { Search, Download, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown, Calendar, TrendingUp, Target, Activity } from 'lucide-react';
-import SellInDrillDown, { DrillDownBoundary } from './SellInDrillDown';
-import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente, puedeVerPestanaGlobal } from '../../lib/permisos';
-import {
-  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
-  CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
-} from 'recharts';
-import { Cargando } from '../../components/kit';
-import { fetchAll as fetchAllCentral } from '../../lib/queries';
+import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
+import { useRoadmap, fetchAll, fetchAllQ, cachedQuery } from '../../lib/queries';
+import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Cargando, toast } from '../../components/kit';
+import ExportMenu from '../../components/ExportMenu';
+import SinAcceso from '../../components/SinAcceso';
 import ComparadorPeriodos from './ComparadorPeriodos';
+import { textoResumenMesCanal, compartir, copiar } from '../../lib/whatsapp';
+import Buscador from './sellin/Buscador';
+import Filtros from './sellin/Filtros';
+import DrillSku from './sellin/DrillSku';
+import { MESES, MESES_LARGO, normalizar, tokens, coincide, capitalizar, canalLabel, canalTone, N, fmtInt, fmtPct, fmtMoneyShort, pctDelta, anioColor, roadmapTone, CAT_COLORS } from './sellin/textos';
 
-const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-
-const CLIENTES_META = {
-  dicotech:   { nombre: 'Dicotech',   marca: 'Acteck',              accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' },
-  pcel:       { nombre: 'PCEL',       marca: 'Acteck',              accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' },
-  digitalife: { nombre: 'Digitalife', marca: 'Acteck / Balam Rush', accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' },
-};
-const CAT_COLORS = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#94A3B8', '#F97316'];
-
-// ROADMAP colors iOS · mismo mapeo semántico, palette Apple system
-const ROADMAP_COLOR = {
-  RMI:  { bg: 'rgba(90,200,250,0.18)', text: '#0E5A80' },   // iOS teal
-  RML:  { bg: 'rgba(175,82,222,0.14)', text: '#6B2F94' },   // iOS purple
-  2026: { bg: 'rgba(255,149,0,0.14)',  text: '#8A4A00' },   // iOS orange
-  RMS:  { bg: 'rgba(255,45,85,0.14)',  text: '#8F1330' },   // iOS pink
-};
-// Versiones para dark mode
-const ROADMAP_COLOR_DARK = {
-  RMI:  { bg: 'rgba(100,210,255,0.20)', text: '#7DDEFF' },
-  RML:  { bg: 'rgba(191,90,242,0.20)',  text: '#D9A2FF' },
-  2026: { bg: 'rgba(255,159,10,0.20)',  text: '#FFBB4D' },
-  RMS:  { bg: 'rgba(255,55,95,0.20)',   text: '#FF7A99' },
-};
-
-const fmtInt = (n) => (n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('es-MX'));
-const fmtMoneyShort = (n) => {
-  if (n == null || !isFinite(n)) return '—';
-  const a = Math.abs(n);
-  if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-  if (a >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
-  return '$' + Math.round(n);
-};
-
-const PAGE = 1000;
-// Delegado al motor paginado PARALELO central (lib/queries.js).
-async function fetchAll(table, select, applyFilter = (q) => q) {
-  return fetchAllCentral(table, select, applyFilter);
+// ─── Datos ───
+function useFacturacionGlobal(anios) {
+  return useQuery({
+    queryKey: ['sellin_global', 'sku_canal_mes', anios],
+    queryFn: async () => {
+      // 1 petición por año (≈16K filas/año; PostgREST devuelve máx. 10K por página) → 2 páginas por año, en paralelo.
+      const partes = await Promise.all(anios.map((y) => fetchAllQ(
+        () => supabase.from('v_sellin_global_sku_canal_mes').select('sku,canal,es_clave,anio,mes,piezas,monto').eq('anio', y),
+        { pageSize: 10000, orderCol: 'sku', label: `v_sellin_global_sku_canal_mes·${y}` },
+      )));
+      return partes.flat();
+    },
+  });
 }
-
-function MultiSelect({ label, options, selected, onChange, width = 160 }) {
-  const [open, setOpen] = useState(false);
-  const ref = React.useRef(null);
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-  const summary = selected.size === 0 ? `${label}: todas` : `${label}: ${selected.size}`;
-  const toggle = (v) => {
-    const next = new Set(selected);
-    if (next.has(v)) next.delete(v); else next.add(v);
-    onChange(next);
-  };
-  return (
-    <div className="relative" ref={ref} style={{ width }}>
-      <button onClick={() => setOpen((o) => !o)}
-        className="w-full h-8 px-2.5 border border-gray-200 rounded-lg text-xs bg-white flex items-center justify-between gap-2 hover:border-gray-300">
-        <span className="truncate text-gray-700">{summary}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-auto">
-          <div className="flex items-center justify-between px-2 py-1.5 text-[11px] border-b border-gray-100 sticky top-0 bg-white">
-            <button className="text-sky-600 hover:underline" onClick={() => onChange(new Set(options))}>Todas</button>
-            <button className="text-gray-500 hover:underline" onClick={() => onChange(new Set())}>Limpiar</button>
-          </div>
-          {options.map((o) => {
-            const sel = selected.has(o);
-            return (
-              <button key={o} onClick={() => toggle(o)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-gray-50 text-left">
-                <span className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${sel ? 'bg-sky-500 border-sky-500' : 'border-gray-300'}`}>
-                  {sel && <Check className="w-3 h-3 text-white" />}
-                </span>
-                <span className="truncate">{o}</span>
-              </button>
-            );
-          })}
-          {options.length === 0 && <div className="px-2 py-2 text-xs text-gray-400">Sin opciones</div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function SellInCliente({ clienteKey }) {
-  const perfil = usePerfil();
-  const permitido = clienteKey
-    ? puedeVerPestanaCliente(perfil, clienteKey, 'sellIn')
-    : puedeVerPestanaGlobal(perfil, 'sell_in');
-  if (!permitido) {
-    return <SinAcceso motivo={clienteKey ? `No tienes acceso a Sell In de ${clienteKey}.` : 'No tienes acceso a Sell In.'} />;
-  }
-  const { theme } = useTheme();
-  const CLIENTE_KEY = clienteKey;
-  const esGlobal = !CLIENTE_KEY;
-  const meta = esGlobal
-    ? { nombre: 'Dirección Comercial', marca: 'Consolidado de todos los clientes', accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' }
-    : (CLIENTES_META[CLIENTE_KEY] || CLIENTES_META.dicotech);
-  const ACCENT = meta.accent;
-  const hoy = new Date();
-  const anioActual = hoy.getFullYear();
-  const anioPrev = anioActual - 1;
-  const mesActual = hoy.getMonth() + 1;
-
-  const [loading, setLoading] = useState(true);
-  const [facturacion, setFacturacion] = useState([]);
-  const [roadmap, setRoadmap] = useState([]);
-  const [cuotas, setCuotas] = useState([]);
-  const [busqueda, setBusqueda] = useState('');
-  const [marcaSel, setMarcaSel] = useState(new Set());
-  const [roadmapSel, setRoadmapSel] = useState(new Set());
-  const [categoriaSel, setCategoriaSel] = useState(new Set());
-  const [orden, setOrden] = useState({ col: null, dir: null }); // col: 'promedio' | 'total' | null
-  const [skuAbierto, setSkuAbierto] = useState(null);
-  const [familiaSel, setFamiliaSel] = useState(null); // familia normalizada (Cap) o null = todas
-
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const facturacionPromise = esGlobal
-        ? fetchAll('v_facturacion_global_sku_mes', 'sku,anio,mes,piezas,monto',
-            (q) => q.in('anio', [anioPrev, anioActual]))
-        : fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
-            (q) => q.eq('cliente_key', CLIENTE_KEY).in('anio', [anioPrev, anioActual]));
-      const cuotasPromise = esGlobal
-        ? fetchAll('v_cuota_global_mensual', 'mes,anio,cuota_min,cuota_ideal',
-            (q) => q.eq('anio', anioActual))
-        : fetchAll('cuotas_mensuales', 'mes,anio,cuota_min,cuota_ideal',
-            (q) => q.eq('cliente', CLIENTE_KEY).eq('anio', anioActual));
-      const [fact, rdmp, ct] = await Promise.all([
-        facturacionPromise,
-        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
-        cuotasPromise,
+function useCuotasGlobal(anio) {
+  return useQuery({
+    queryKey: ['sellin_global', 'cuotas', anio],
+    queryFn: async () => {
+      const [mensual, canales] = await Promise.all([
+        fetchAll('v_cuota_global_mensual', 'anio,mes,cuota_min,cuota_ideal', (q) => q.eq('anio', anio)),
+        cachedQuery(supabase.from('cuotas_canales').select('dimension_tipo,dimension_valor,meta_facturacion').eq('anio', anio)).then((r) => r.data || []).catch(() => []),
       ]);
-      setFacturacion(fact);
-      setRoadmap(rdmp);
-      setCuotas(ct);
-      setLoading(false);
-    })();
-  }, [anioActual, anioPrev, CLIENTE_KEY, esGlobal]);
+      return { mensual: mensual || [], canales };
+    },
+  });
+}
+function useErpSkuAnio(anios, enabled) {
+  return useQuery({
+    queryKey: ['sellin_global', 'erp_sku_anio', anios],
+    enabled,
+    queryFn: () => fetchAllQ(
+      () => supabase.from('v_sellin_global_sku_anio_erp').select('sku,anio,fact_neta,contribucion,pct_mc,piezas').in('anio', anios),
+      { pageSize: 10000, orderCol: 'sku', label: 'v_sellin_global_sku_anio_erp' },
+    ),
+  });
+}
+function useStockSku() {
+  return useQuery({ queryKey: ['sellin_global', 'stock'], queryFn: () => fetchAll('v_inventario_comercial', 'sku,disponible') });
+}
+function useAnioMinimo() {
+  return useQuery({
+    queryKey: ['sellin_global', 'anio_min'],
+    queryFn: async () => { const { data } = await cachedQuery(supabase.from('facturacion_clientes').select('anio').order('anio', { ascending: true }).limit(1)); return Number(data?.[0]?.anio) || null; },
+  });
+}
 
-  const roadmapMap = useMemo(() => {
-    const m = new Map();
-    for (const r of roadmap) m.set(r.sku, r);
-    return m;
-  }, [roadmap]);
+const emptyAnios = (anios) => Object.fromEntries(anios.map((y) => [y, Array(12).fill(0)]));
 
-  const cuotaPorMes = useMemo(() => {
-    const m = new Map();
-    for (const c of cuotas) m.set(c.mes, { min: Number(c.cuota_min) || 0, ideal: Number(c.cuota_ideal) || 0 });
-    return m;
-  }, [cuotas]);
+export default function SellInCliente({ clienteKey = null }) {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'sell_in')) return <SinAcceso motivo="No tienes acceso a Sell In." />;
+  return <SellInGlobal sensible={puedeVerSensible(perfil)} clienteKey={clienteKey} />;
+}
 
-  const cuotaAnual = useMemo(() => {
-    let min = 0, ideal = 0;
-    for (const c of cuotas) { min += Number(c.cuota_min) || 0; ideal += Number(c.cuota_ideal) || 0; }
-    return { min, ideal };
-  }, [cuotas]);
+function SellInGlobal({ sensible }) {
+  const { theme } = useTheme();
+  const rootRef = useRef(null);
+  const hoy = new Date();
+  const anio = hoy.getFullYear(), anioPrev = anio - 1, mesActual = hoy.getMonth() + 1;
+  const diasMes = new Date(anio, mesActual, 0).getDate();
+  const diasRestantes = Math.max(0, diasMes - hoy.getDate());
 
-  // Facturación filtrada por familia seleccionada (todo lo demás intacto)
-  const familiaNormFor = (sku) => {
-    const fam = (roadmapMap.get(sku)?.familia || 'Sin familia').trim();
-    return fam.charAt(0).toUpperCase() + fam.slice(1).toLowerCase();
-  };
-  const facturacionFilt = useMemo(() => {
-    if (!familiaSel) return facturacion;
-    return facturacion.filter((r) => familiaNormFor(r.sku) === familiaSel);
-  }, [facturacion, familiaSel, roadmapMap]);
+  // ── Estado ──
+  const [aniosSel, setAniosSel] = useState(() => new Set([anioPrev, anio]));
+  const [consolidado, setConsolidado] = useState(true); // true = todos los canales · false = sólo clientes clave (digitalife/pcel/dicotech)
+  const [busqueda, setBusqueda] = useState('');
+  const [sel, setSel] = useState({ marca: new Set(), categoria: new Set(), rdmp: new Set(), canal: new Set() });
+  const [flags, setFlags] = useState({ ventaMes: false, stock: false });
+  const [orden, setOrden] = useState(null); // { col, dir } · null = orden del roadmap
+  const [skuAbierto, setSkuAbierto] = useState(null);
+  const [familiaSel, setFamiliaSel] = useState(null);
 
-  const mensualPorAnio = useMemo(() => {
-    const m = { [anioPrev]: Array(12).fill(0), [anioActual]: Array(12).fill(0) };
-    const p = { [anioPrev]: Array(12).fill(0), [anioActual]: Array(12).fill(0) };
-    for (const r of facturacionFilt) {
-      const y = r.anio, i = r.mes - 1;
-      if (i < 0 || i > 11) continue;
-      m[y][i] += Number(r.monto) || 0;
-      p[y][i] += Number(r.piezas) || 0;
+  const aniosSelOrd = useMemo(() => Array.from(aniosSel).sort((a, b) => a - b), [aniosSel]);
+  const aniosFetch = useMemo(() => Array.from(new Set([...aniosSel, anio, anioPrev])).sort((a, b) => a - b), [aniosSel, anio, anioPrev]);
+  const { data: anioMin } = useAnioMinimo();
+  const aniosDisponibles = useMemo(() => { const desde = Math.max(anioMin || anio - 1, anio - 3); const out = []; for (let y = desde; y <= anio; y++) out.push(y); return out; }, [anioMin, anio]);
+  const toggleAnio = (y) => setAniosSel((prev) => { const n = new Set(prev); if (n.has(y)) { if (n.size === 1) return prev; n.delete(y); } else n.add(y); return n; });
+
+  // ── Datos ──
+  const { data: fact = [], isLoading: lFact, error: eFact } = useFacturacionGlobal(aniosFetch);
+  const { data: roadmap = [], isLoading: lRoad } = useRoadmap();
+  const { data: cuotasData, isLoading: lCuotas } = useCuotasGlobal(anio);
+  const { data: erp = [], isFetching: lErp } = useErpSkuAnio(aniosFetch, sensible);
+  const { data: stock = [] } = useStockSku();
+  const loading = lFact || lRoad || lCuotas;
+
+  // ── Cuotas: cuotas_canales TOTAL/12 (si existe) · si no Σ cuotas_mensuales.cuota_ideal ──
+  const cuotas = useMemo(() => {
+    const porMes = new Map();
+    for (const c of cuotasData?.mensual || []) porMes.set(Number(c.mes), { min: N(c.cuota_min), ideal: N(c.cuota_ideal) });
+    const total = (cuotasData?.canales || []).find((c) => /total/i.test(c.dimension_tipo || '') || /total/i.test(c.dimension_valor || ''));
+    const porCanal = new Map();
+    for (const c of cuotasData?.canales || []) if (/canal/i.test(c.dimension_tipo || '') && c.dimension_valor) porCanal.set(String(c.dimension_valor).toUpperCase(), N(c.meta_facturacion) / 12);
+    const mes = (m) => (total ? N(total.meta_facturacion) / 12 : porMes.get(m)?.ideal || 0);
+    const ytd = Array.from({ length: mesActual }, (_, i) => mes(i + 1)).reduce((a, b) => a + b, 0);
+    const anual = Array.from({ length: 12 }, (_, i) => mes(i + 1)).reduce((a, b) => a + b, 0);
+    return { mes, ytd, anual, porCanal, fuente: total ? 'cuotas_canales' : 'cuotas_mensuales' };
+  }, [cuotasData, mesActual]);
+
+  // ── Catálogo ──
+  const roadmapMap = useMemo(() => new Map(roadmap.map((r) => [r.sku, r])), [roadmap]);
+  const familiaDe = (sku) => capitalizar(roadmapMap.get(sku)?.familia || 'Sin familia');
+  const stockMap = useMemo(() => new Map(stock.map((s) => [s.sku, N(s.disponible)])), [stock]);
+  const erpMap = useMemo(() => { const m = new Map(); for (const r of erp) m.set(`${r.sku}|${r.anio}`, r); return m; }, [erp]);
+
+  // ── Agregados globales (todos los canales, todos los clientes) para hero / KPIs / chart ──
+  const global = useMemo(() => {
+    const monto = emptyAnios(aniosFetch), piezas = emptyAnios(aniosFetch), montoFam = emptyAnios(aniosFetch);
+    const canal = new Map(); // canal → { [y]: monto[12] }
+    const skusAnio = new Set();
+    for (const r of fact) {
+      const y = r.anio, i = r.mes - 1; if (!monto[y] || i < 0 || i > 11) continue;
+      const m = N(r.monto), p = N(r.piezas);
+      monto[y][i] += m; piezas[y][i] += p;
+      if (!familiaSel || familiaDe(r.sku) === familiaSel) montoFam[y][i] += m;
+      if (y === anio && p > 0) skusAnio.add(r.sku);
+      const ck = String(r.canal || 'otros').toUpperCase();
+      if (!canal.has(ck)) canal.set(ck, emptyAnios(aniosFetch));
+      canal.get(ck)[y][i] += m;
     }
-    return { monto: m, piezas: p };
-  }, [facturacionFilt, anioPrev, anioActual]);
+    return { monto, piezas, montoFam, canal, skusAnio: skusAnio.size };
+  }, [fact, aniosFetch, anio, familiaSel, roadmapMap]);
 
-  const chartData = useMemo(() => MESES.map((label, i) => {
-    const cuota = cuotaPorMes.get(i + 1);
-    return {
-      mes: label,
-      monto2025: Math.round(mensualPorAnio.monto[anioPrev][i]),
-      monto2026: Math.round(mensualPorAnio.monto[anioActual][i]) || null,
-      cuotaIdeal: cuota ? cuota.ideal : null,
-      cuotaMin: cuota ? cuota.min : null,
-    };
-  }), [mensualPorAnio, anioPrev, anioActual, cuotaPorMes]);
+  const sum = (arr, hasta = 12) => arr.slice(0, hasta).reduce((a, b) => a + b, 0);
+  const mtd = global.monto[anio][mesActual - 1], mtdPz = global.piezas[anio][mesActual - 1];
+  const mtdPrev = global.monto[anioPrev][mesActual - 1], mtdPzPrev = global.piezas[anioPrev][mesActual - 1];
+  const ytd = sum(global.monto[anio], mesActual), ytdPz = sum(global.piezas[anio], mesActual);
+  const ytdPrev = sum(global.monto[anioPrev], mesActual);
+  const cuotaMes = cuotas.mes(mesActual);
+  const pctMTD = cuotaMes ? (mtd / cuotaMes) * 100 : null;
+  const pctYTD = cuotas.ytd ? (ytd / cuotas.ytd) * 100 : null;
+  const yoyMes = pctDelta(mtd, mtdPrev), yoyYtd = pctDelta(ytd, ytdPrev);
+  const momIdx = mesActual - 2;
+  const momPrev = momIdx < 0 ? global.monto[anioPrev][11] : global.monto[anio][momIdx];
+  const momPzPrev = momIdx < 0 ? global.piezas[anioPrev][11] : global.piezas[anio][momIdx];
+  const mom = pctDelta(mtd, momPrev);
+  const momLabel = momIdx < 0 ? `${MESES_LARGO[11]} ${anioPrev}` : `${MESES_LARGO[momIdx]} ${anio}`;
+  const mesLargo = MESES_LARGO[mesActual - 1];
+  const green = theme.green || '#34C759', red = theme.red || '#FF3B30', orange = theme.orange || '#FF9500', blue = theme.accent || '#007AFF';
+  const tonoPct = (p) => (p == null ? 'gray' : p >= 100 ? 'green' : p >= 85 ? 'blue' : p >= 60 ? 'orange' : 'red');
 
-  const totalYTD = useMemo(() => {
-    let monto = 0, piezas = 0;
-    for (let i = 0; i < mesActual; i++) {
-      monto += mensualPorAnio.monto[anioActual][i];
-      piezas += mensualPorAnio.piezas[anioActual][i];
-    }
-    return { monto, piezas };
-  }, [mensualPorAnio, anioActual, mesActual]);
+  const frase = pctMTD != null
+    ? (pctMTD >= 100
+      ? `${mesLargo} ya cumplió la cuota: ${fmtMoneyShort(mtd)} facturados, ${pctMTD.toFixed(0)} % del objetivo${diasRestantes ? ` con ${diasRestantes} días por delante` : ''}.`
+      : `${mesLargo} va al ${pctMTD.toFixed(0)} % de la cuota; faltan ${fmtMoneyShort(cuotaMes - mtd)}${diasRestantes ? ` con ${diasRestantes} día${diasRestantes === 1 ? '' : 's'} por delante` : ' y el mes cerró'}.`)
+    : `${mesLargo} lleva ${fmtMoneyShort(mtd)} facturados${yoyMes != null ? `, ${yoyMes >= 0 ? 'arriba' : 'abajo'} ${Math.abs(yoyMes).toFixed(0)} % de ${mesLargo} ${anioPrev}` : ''}.`;
 
-  const cuotaYTD = useMemo(() => {
-    let min = 0, ideal = 0;
-    for (let i = 0; i < mesActual; i++) {
-      const c = cuotaPorMes.get(i + 1);
-      if (c) { min += c.min; ideal += c.ideal; }
-    }
-    return { min, ideal };
-  }, [cuotaPorMes, mesActual]);
+  // ── Por canal (hero → compartir) ──
+  const canales = useMemo(() => Array.from(global.canal.entries()).map(([c, m]) => ({
+    canal: c, monto: m[anio][mesActual - 1], prev: m[anioPrev][mesActual - 1], ytd: sum(m[anio], mesActual),
+    cuota: cuotas.porCanal.get(c) || null, yoy: pctDelta(m[anio][mesActual - 1], m[anioPrev][mesActual - 1]),
+  })).filter((c) => c.monto || c.prev).sort((a, b) => b.monto - a.monto), [global, anio, anioPrev, mesActual, cuotas]);
+  const textoResumen = () => textoResumenMesCanal({ mes: mesActual, anio, mtd, cuota: cuotaMes || null, ytd, yoyYtd, canales });
+  const onCompartirResumen = async () => { const r = await compartir(textoResumen(), { titulo: `Sell In ${mesLargo} ${anio}` }); if (r === 'share') toast.ok('Compartido'); };
+  const onCopiarResumen = async () => { if (await copiar(textoResumen())) toast.ok('Resumen copiado'); else toast.error('No se pudo copiar'); };
 
-  const mesActualData = useMemo(() => ({
-    monto: mensualPorAnio.monto[anioActual][mesActual - 1],
-    piezas: mensualPorAnio.piezas[anioActual][mesActual - 1],
-    prevMonto: mensualPorAnio.monto[anioPrev][mesActual - 1],
-    prevPiezas: mensualPorAnio.piezas[anioPrev][mesActual - 1],
-    cuota: cuotaPorMes.get(mesActual),
-  }), [mensualPorAnio, anioActual, anioPrev, mesActual, cuotaPorMes]);
-
-  const skusFacturados = useMemo(() => {
-    const set = new Set();
-    for (const r of facturacionFilt) if (r.anio === anioActual) set.add(r.sku);
-    return set;
-  }, [facturacionFilt, anioActual]);
-
-  const familiasYTD = useMemo(() => {
+  // ── Chart + familias ──
+  const chartData = useMemo(() => MESES.map((label, i) => ({ mes: label, prev: Math.round(global.montoFam[anioPrev][i]), act: i < mesActual ? Math.round(global.montoFam[anio][i]) : null, cuota: cuotas.mes(i + 1) || null })), [global, anio, anioPrev, mesActual, cuotas]);
+  const familias = useMemo(() => {
     const map = new Map();
-    for (const r of facturacion) {
-      if (r.anio !== anioActual || r.mes > mesActual) continue;
-      const fam = (roadmapMap.get(r.sku)?.familia || 'Sin familia').trim();
-      const norm = fam.charAt(0).toUpperCase() + fam.slice(1).toLowerCase();
-      if (!map.has(norm)) map.set(norm, { name: norm, monto: 0, piezas: 0, skus: new Set() });
-      const it = map.get(norm);
-      it.monto += Number(r.monto) || 0;
-      it.piezas += Number(r.piezas) || 0;
-      it.skus.add(r.sku);
+    for (const r of fact) {
+      if (r.anio !== anio || r.mes > mesActual) continue;
+      const f = familiaDe(r.sku);
+      if (!map.has(f)) map.set(f, { name: f, monto: 0, skus: new Set() });
+      const it = map.get(f); it.monto += N(r.monto); it.skus.add(r.sku);
     }
     const arr = Array.from(map.values()).map((v) => ({ ...v, skus: v.skus.size })).sort((a, b) => b.monto - a.monto);
     const tot = arr.reduce((s, x) => s + x.monto, 0);
-    return arr.map((v, i) => ({ ...v, pct: tot ? (v.monto / tot * 100) : 0, color: CAT_COLORS[i % CAT_COLORS.length] }));
-  }, [facturacion, roadmapMap, anioActual, mesActual]);
+    return arr.map((v, i) => ({ ...v, pct: tot ? (v.monto / tot) * 100 : 0, color: CAT_COLORS[i % CAT_COLORS.length] }));
+  }, [fact, anio, mesActual, roadmapMap]);
 
-  const marcasOpciones = useMemo(() => Array.from(new Set(roadmap.map((r) => r.marca).filter(Boolean))).sort(), [roadmap]);
-  const roadmapOpciones = useMemo(() => Array.from(new Set(roadmap.map((r) => r.rdmp).filter(Boolean))).sort(), [roadmap]);
-  const categoriaOpciones = useMemo(() => {
-    const set = new Set();
+  // ── Tabla por SKU: piezas por sku × año × mes según consolidado / canal ──
+  const porSku = useMemo(() => {
+    const m = new Map(); // sku → { piezas: {y: [12]}, monto: {y:[12]}, canales: Set }
+    for (const r of fact) {
+      if (!consolidado && !r.es_clave) continue;
+      const ck = String(r.canal || 'otros').toUpperCase();
+      if (sel.canal.size > 0 && !sel.canal.has(ck)) continue;
+      if (!m.has(r.sku)) m.set(r.sku, { piezas: emptyAnios(aniosFetch), monto: emptyAnios(aniosFetch), canales: new Set() });
+      const it = m.get(r.sku); const i = r.mes - 1;
+      if (it.piezas[r.anio] && i >= 0 && i < 12) { it.piezas[r.anio][i] += N(r.piezas); it.monto[r.anio][i] += N(r.monto); }
+      it.canales.add(ck);
+    }
+    return m;
+  }, [fact, consolidado, sel.canal, aniosFetch]);
+  // canales por SKU sin el filtro de canal (para los conteos de la pill Canal)
+  const canalesSku = useMemo(() => { const m = new Map(); for (const r of fact) { if (!consolidado && !r.es_clave) continue; if (!m.has(r.sku)) m.set(r.sku, new Set()); m.get(r.sku).add(String(r.canal || 'otros').toUpperCase()); } return m; }, [fact, consolidado]);
+
+  const candidatos = useMemo(() => {
+    const toks = tokens(busqueda);
+    const out = [];
     for (const r of roadmap) {
-      const c = (r.categoria || '').trim();
-      if (c) set.add(c.charAt(0).toUpperCase() + c.slice(1).toLowerCase());
+      const catCap = capitalizar(r.categoria);
+      const hay = normalizar(`${r.sku} ${r.descripcion} ${r.marca} ${catCap} ${r.familia} ${r.rdmp}`);
+      if (toks.length && !coincide(hay, toks)) continue;
+      if (familiaSel && capitalizar(r.familia || 'Sin familia') !== familiaSel) continue;
+      const d = porSku.get(r.sku);
+      const pzAct = d?.piezas[anio] || Array(12).fill(0);
+      out.push({ ...r, categoriaCap: catCap, rdmp: r.rdmp || '', canales: canalesSku.get(r.sku) || new Set(), ventaMes: pzAct[mesActual - 1] > 0, stock: (stockMap.get(r.sku) || 0) > 0, d });
     }
-    return Array.from(set).sort();
-  }, [roadmap]);
+    return out;
+  }, [roadmap, busqueda, familiaSel, porSku, canalesSku, stockMap, anio, mesActual]);
 
-  const matrizSku = useMemo(() => {
-    const map = new Map();
-    for (const r of facturacionFilt) {
-      if (r.anio !== anioActual) continue;
-      if (!map.has(r.sku)) map.set(r.sku, Array(12).fill(0));
-      map.get(r.sku)[r.mes - 1] += Number(r.piezas) || 0;
-    }
-    return map;
-  }, [facturacionFilt, anioActual]);
+  const pasa = (r, omitir) => (
+    (omitir === 'marca' || sel.marca.size === 0 || sel.marca.has(r.marca || '—'))
+    && (omitir === 'categoria' || sel.categoria.size === 0 || sel.categoria.has(r.categoriaCap || '—'))
+    && (omitir === 'rdmp' || sel.rdmp.size === 0 || sel.rdmp.has(r.rdmp || '—'))
+    && (omitir === 'canal' || sel.canal.size === 0 || Array.from(sel.canal).some((c) => r.canales.has(c)))
+    && (omitir === 'ventaMes' || !flags.ventaMes || r.ventaMes)
+    && (omitir === 'stock' || !flags.stock || r.stock)
+  );
 
-  const roadmapOrdenado = useMemo(() => {
-    if (!esGlobal) return roadmap;
-    return [...roadmap].sort((a, b) => {
-      const sa = a.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(a.sort_order);
-      const sb = b.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(b.sort_order);
-      if (sa !== sb) return sa - sb;
-      return String(a.sku || '').localeCompare(String(b.sku || ''));
-    });
-  }, [roadmap, esGlobal]);
+  const grupos = useMemo(() => {
+    const conteo = (campo, omitir, valorDe) => {
+      const m = new Map();
+      for (const r of candidatos) { if (!pasa(r, omitir)) continue; const vs = valorDe(r); for (const v of vs) m.set(v, (m.get(v) || 0) + 1); }
+      return m;
+    };
+    const opciones = (m, extra = new Set(), label = (v) => v, tone) => Array.from(new Set([...m.keys(), ...extra])).sort().map((v) => ({ id: v, label: label(v), n: m.get(v) || 0, tone: tone ? tone(v) : undefined }));
+    const todosCanales = new Set(); for (const s of canalesSku.values()) for (const c of s) todosCanales.add(c);
+    return [
+      { id: 'marca', label: 'Marca', sel: sel.marca, opciones: opciones(conteo('marca', 'marca', (r) => [r.marca || '—']), sel.marca) },
+      { id: 'categoria', label: 'Categoría', sel: sel.categoria, opciones: opciones(conteo('categoria', 'categoria', (r) => [r.categoriaCap || '—']), sel.categoria) },
+      { id: 'rdmp', label: 'Roadmap', sel: sel.rdmp, opciones: opciones(conteo('rdmp', 'rdmp', (r) => [r.rdmp || '—']), sel.rdmp, (v) => v, (v) => roadmapTone(v)) },
+      { id: 'canal', label: 'Canal', sel: sel.canal, opciones: opciones(conteo('canal', 'canal', (r) => Array.from(r.canales)), new Set([...sel.canal, ...todosCanales]), canalLabel, canalTone) },
+    ];
+  }, [candidatos, sel, flags, canalesSku]);
+  const togglesFiltro = useMemo(() => [
+    { id: 'ventaMes', label: `Sólo con venta en ${MESES[mesActual - 1]}`, on: flags.ventaMes, n: candidatos.filter((r) => pasa(r, 'ventaMes') && r.ventaMes).length },
+    { id: 'stock', label: 'Sólo con stock', on: flags.stock, n: candidatos.filter((r) => pasa(r, 'stock') && r.stock).length },
+  ], [candidatos, sel, flags, mesActual]);
+  const activos = sel.marca.size + sel.categoria.size + sel.rdmp.size + sel.canal.size + (flags.ventaMes ? 1 : 0) + (flags.stock ? 1 : 0);
+  const onToggleSel = (g, v) => setSel((p) => { const n = new Set(p[g]); if (n.has(v)) n.delete(v); else n.add(v); return { ...p, [g]: n }; });
+  const limpiar = () => { setSel({ marca: new Set(), categoria: new Set(), rdmp: new Set(), canal: new Set() }); setFlags({ ventaMes: false, stock: false }); };
 
-  const normText = (s) => String(s || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toUpperCase();
-
-  const filasTabla = useMemo(() => {
-    const terms = normText(busqueda).split(/\s+/).filter(Boolean);
+  const filas = useMemo(() => {
     const rows = [];
-    for (const r of roadmapOrdenado) {
-      if (!esGlobal && !skusFacturados.has(r.sku)) continue;
-      if (marcaSel.size > 0 && !marcaSel.has(r.marca)) continue;
-      if (roadmapSel.size > 0 && !roadmapSel.has(r.rdmp)) continue;
-      if (familiaSel) {
-        const famNorm = ((r.familia || 'Sin familia').trim());
-        const famCap = famNorm.charAt(0).toUpperCase() + famNorm.slice(1).toLowerCase();
-        if (famCap !== familiaSel) continue;
-      }
-      const catNorm = ((r.categoria || '').trim());
-      const catCap = catNorm ? catNorm.charAt(0).toUpperCase() + catNorm.slice(1).toLowerCase() : '';
-      if (categoriaSel.size > 0 && !categoriaSel.has(catCap)) continue;
-      if (esGlobal) {
-        if (terms.length > 0) {
-          const hay = normText(`${r.sku} ${r.descripcion} ${r.marca} ${catCap} ${r.familia} ${r.rdmp}`);
-          if (!terms.every((t) => hay.includes(t))) continue;
-        }
-      } else {
-        const q = busqueda.trim().toUpperCase();
-        if (q) {
-          const hay = String(r.sku || '').toUpperCase().includes(q)
-                   || String(r.descripcion || '').toUpperCase().includes(q);
-          if (!hay) continue;
-        }
-      }
-      const piezas = matrizSku.get(r.sku) || Array(12).fill(0);
-      const total = piezas.reduce((a, b) => a + b, 0);
-      const cerrados = piezas.slice(0, mesActual - 1);
-      const conVenta = cerrados.filter((v) => v > 0);
-      const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
-      rows.push({ ...r, categoriaCap: catCap, piezas, total, promedio });
+    for (const r of candidatos) {
+      if (!pasa(r)) continue;
+      const pz = r.d?.piezas || emptyAnios(aniosFetch);
+      const row = { ...r, piezasPorAnio: pz };
+      let total = 0;
+      for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) { const v = pz[y]?.[i] || 0; row[`m_${y}_${i}`] = v; total += v; }
+      const cerrados = (pz[anio] || []).slice(0, mesActual - 1).filter((v) => v > 0);
+      row.promedio = cerrados.length ? cerrados.reduce((a, b) => a + b, 0) / cerrados.length : 0;
+      row.total = total;
+      const ytdA = (pz[anio] || []).slice(0, mesActual).reduce((a, b) => a + b, 0), ytdP = (pz[anioPrev] || []).slice(0, mesActual).reduce((a, b) => a + b, 0);
+      row.ytdPz = ytdA; row.ytdPzPrev = ytdP; row.yoy = pctDelta(ytdA, ytdP);
+      const e = erpMap.get(`${r.sku}|${anio}`);
+      row.mc = e && e.pct_mc != null ? Number(e.pct_mc) * 100 : null; row.factNeta = e ? N(e.fact_neta) : 0; row.contrib = e ? N(e.contribucion) : 0;
+      rows.push(row);
     }
-    if (orden.col && orden.dir) {
-      const factor = orden.dir === 'asc' ? 1 : -1;
-      const strCols = new Set(['marca', 'sku', 'descripcion', 'rdmp']);
-      const mesMatch = /^mes-(\d+)$/.exec(orden.col);
-      if (strCols.has(orden.col)) {
-        rows.sort((a, b) => String(a[orden.col] || '').localeCompare(String(b[orden.col] || '')) * factor);
-      } else if (mesMatch) {
-        const i = Number(mesMatch[1]);
-        rows.sort((a, b) => ((a.piezas[i] || 0) - (b.piezas[i] || 0)) * factor);
-      } else {
-        rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
-      }
+    if (orden?.col) {
+      const f = orden.dir === 'asc' ? 1 : -1;
+      const str = new Set(['marca', 'sku', 'descripcion', 'rdmp']);
+      rows.sort((a, b) => (str.has(orden.col) ? String(a[orden.col] || '').localeCompare(String(b[orden.col] || '')) : ((a[orden.col] ?? -Infinity) - (b[orden.col] ?? -Infinity))) * f);
     }
     return rows;
-  }, [roadmapOrdenado, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, familiaSel, matrizSku, orden, esGlobal]);
+  }, [candidatos, sel, flags, aniosSelOrd, aniosFetch, anio, anioPrev, mesActual, erpMap, orden]);
 
-  const totalesFila = useMemo(() => {
-    const t = Array(12).fill(0);
-    for (const r of filasTabla) for (let i = 0; i < 12; i++) t[i] += r.piezas[i];
-    const total = t.reduce((a, b) => a + b, 0);
-    const cerrados = t.slice(0, mesActual - 1);
-    const conVenta = cerrados.filter((v) => v > 0);
-    const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
-    return { mes: t, total, promedio };
-  }, [filasTabla, mesActual]);
+  const totales = useMemo(() => {
+    const t = { promedio: 0, total: 0, ytdPz: 0, ytdPzPrev: 0, factNeta: 0, contrib: 0 };
+    for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) t[`m_${y}_${i}`] = 0;
+    for (const r of filas) { for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) t[`m_${y}_${i}`] += r[`m_${y}_${i}`]; t.total += r.total; t.ytdPz += r.ytdPz; t.ytdPzPrev += r.ytdPzPrev; t.factNeta += r.factNeta; t.contrib += r.contrib; }
+    const cerr = aniosSelOrd.includes(anio) ? Array.from({ length: Math.max(0, mesActual - 1) }, (_, i) => t[`m_${anio}_${i}`]).filter((v) => v > 0) : [];
+    t.promedio = cerr.length ? cerr.reduce((a, b) => a + b, 0) / cerr.length : 0;
+    t.yoy = pctDelta(t.ytdPz, t.ytdPzPrev);
+    t.mc = t.factNeta ? (t.contrib / t.factNeta) * 100 : null;
+    return t;
+  }, [filas, aniosSelOrd, anio, mesActual]);
+  const maxCelda = useMemo(() => { let m = 0; for (const r of filas) for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) if (r[`m_${y}_${i}`] > m) m = r[`m_${y}_${i}`]; return m || 1; }, [filas, aniosSelOrd]);
 
-  const toggleOrden = (col) => {
-    setOrden((prev) => {
-      if (prev.col !== col) return { col, dir: 'desc' };
-      if (prev.dir === 'desc') return { col, dir: 'asc' };
-      return { col: null, dir: null };
-    });
-  };
-
-  const SortHeader = ({ col, label }) => {
-    const active = orden.col === col;
-    const Icon = !active ? ArrowUpDown : orden.dir === 'asc' ? ArrowUp : ArrowDown;
-    return (
-      <button onClick={() => toggleOrden(col)}
-        className={`inline-flex items-center gap-1 hover:text-gray-700 ${active ? 'text-sky-700' : 'text-gray-500'}`}>
-        {label}
-        <Icon className="w-3 h-3" />
-      </button>
-    );
-  };
-
-  const maxCelda = useMemo(() => {
-    let m = 0;
-    for (const r of filasTabla) for (const v of r.piezas) if (v > m) m = v;
-    return m || 1;
-  }, [filasTabla]);
-
-  // Pill Apple · iOS blue con 4 niveles de intensidad
-  const isDarkTable = theme.mode === 'dark';
-  const heatClass = (v) => {
-    if (v == null || v === 0) return null;
-    if (v < 0) {
-      // Negativos = rojo iOS
-      return { bg: isDarkTable ? 'rgba(255,69,58,0.22)' : 'rgba(255,59,48,0.16)', color: theme.red || '#FF3B30', weight: 600 };
-    }
-    const r = v / maxCelda;
-    const b = theme.accent || (isDarkTable ? '#0A84FF' : '#007AFF');
-    if (r > 0.75) return { bg: b, color: '#FFFFFF', weight: 600 };
-    if (r > 0.50) return { bg: isDarkTable ? 'rgba(10,132,255,0.45)' : 'rgba(0,122,255,0.35)', color: isDarkTable ? '#FFFFFF' : theme.text, weight: 600 };
-    if (r > 0.25) return { bg: isDarkTable ? 'rgba(10,132,255,0.25)' : 'rgba(0,122,255,0.18)', color: theme.text };
-    return { bg: isDarkTable ? 'rgba(10,132,255,0.12)' : 'rgba(0,122,255,0.08)', color: theme.textMuted };
-  };
-
-  const exportarExcel = async () => {
-    // xlsx-js-style (~850 KB) sólo se descarga al exportar, no en el bundle inicial.
-    const xlsxMod = await import('xlsx-js-style');
-    const XLSX = xlsxMod.default || xlsxMod;
-    const HEADERS = ['Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap', ...MESES, 'Promedio', 'Total'];
-    const rows = filasTabla.map((r) => [
-      r.marca || '', r.sku || '', r.descripcion || '', r.categoriaCap || '', r.rdmp || '',
-      ...r.piezas.map((v) => v || null),
-      Math.round(r.promedio) || null,
-      r.total,
-    ]);
-    const totRow = ['TOTAL', `${filasTabla.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Math.round(totalesFila.promedio) || null, totalesFila.total];
-    const titulo = `Sell In ${meta.nombre} · ${anioActual}`;
-    const aoa = [
-      [titulo, ...Array(HEADERS.length - 1).fill('')],
-      HEADERS, ...rows, totRow,
+  const onSort = (col) => setOrden((p) => (p?.col !== col ? { col, dir: 'desc' } : p.dir === 'desc' ? { col, dir: 'asc' } : null));
+  const columnas = useMemo(() => {
+    const cols = [
+      { key: 'marca', label: 'Marca', align: 'left', width: 70, sort: true, maxWidth: 80, render: (r) => r.marca || '—' },
+      { key: 'sku', label: 'SKU', align: 'left', width: 96, sort: true, mono: true, bold: true },
+      { key: 'descripcion', label: 'Descripción', align: 'left', sort: true, maxWidth: 300, render: (r) => <span title={r.descripcion}>{r.descripcion || '—'}</span> },
+      { key: 'rdmp', label: 'Roadmap', align: 'center', width: 64, sort: true, render: (r) => (r.rdmp ? <Pill tone={roadmapTone(r.rdmp)} size="xs">{r.rdmp}</Pill> : <span style={{ color: theme.textSubtle }}>—</span>) },
     ];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    const headStyle = {
-      font: { bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { patternType: 'solid', fgColor: { rgb: '000000' } },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-    };
-    const titStyle = { ...headStyle, font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 14 } };
-    for (let c = 0; c < HEADERS.length; c++) {
-      const t = XLSX.utils.encode_cell({ r: 0, c });
-      if (!ws[t]) ws[t] = { v: '', t: 's' };
-      ws[t].s = titStyle;
-      const h = XLSX.utils.encode_cell({ r: 1, c });
-      if (ws[h]) ws[h].s = headStyle;
+    for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) {
+      const key = `m_${y}_${i}`;
+      cols.push({ key, label: MESES[i], align: 'right', width: 44, sort: true, render: (r) => <HeatCell v={r[key]} max={maxCelda} />, renderTotal: (v) => (v ? fmtInt(v) : '—') });
     }
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: HEADERS.length - 1 } }];
-    ws['!rows'] = [{ hpt: 26 }, { hpt: 24 }];
-    for (let i = 0; i < rows.length; i++) {
-      for (let c = 5; c < HEADERS.length; c++) {
-        const a = XLSX.utils.encode_cell({ r: i + 2, c });
-        if (ws[a] && typeof ws[a].v === 'number') ws[a].z = '#,##0';
-      }
-    }
-    ws['!cols'] = [
-      { wch: 10 }, { wch: 14 }, { wch: 50 }, { wch: 16 }, { wch: 9 },
-      ...MESES.map(() => ({ wch: 8 })), { wch: 10 }, { wch: 10 },
+    cols.push({ key: 'promedio', label: `Prom ${String(anio).slice(2)}`, align: 'right', width: 58, sort: true, render: (r) => (r.promedio ? fmtInt(r.promedio) : '—'), renderTotal: (v) => (v ? fmtInt(v) : '—') });
+    cols.push({ key: 'total', label: 'Total', align: 'right', width: 64, sort: true, bold: true, render: (r) => fmtInt(r.total), renderTotal: (v) => fmtInt(v) });
+    cols.push({ key: 'yoy', label: 'Δ YoY', align: 'right', width: 70, sort: true, render: (r) => (r.ytdPz || r.ytdPzPrev ? <span title={`ene–${MESES[mesActual - 1]}: ${fmtInt(r.ytdPz)} vs ${fmtInt(r.ytdPzPrev)} pz`}><DeltaPill value={r.yoy} /></span> : <span style={{ color: theme.textSubtle }}>—</span>), renderTotal: (v) => <DeltaPill value={v} /> });
+    if (sensible) cols.push({ key: 'mc', label: `MC % ${String(anio).slice(2)}`, align: 'right', width: 62, sort: true, render: (r) => (r.mc == null ? <span style={{ color: theme.textSubtle }}>{lErp ? '…' : '—'}</span> : <span style={{ color: r.mc >= 25 ? green : r.mc >= 15 ? theme.text : orange, fontWeight: 600 }}>{fmtPct(r.mc, 1)}</span>), renderTotal: (v) => (v == null ? '—' : fmtPct(v, 1)) });
+    return cols;
+  }, [aniosSelOrd, maxCelda, sensible, anio, mesActual, theme, lErp]);
+  const grupos2 = useMemo(() => [
+    { label: '', colSpan: 4 },
+    ...aniosSelOrd.map((y) => ({ label: y === anio ? `${y} · en curso` : y, colSpan: 12, color: anioColor(y, aniosSelOrd, theme) })),
+    { label: '', colSpan: 3 + (sensible ? 1 : 0) },
+  ], [aniosSelOrd, anio, theme, sensible]);
+
+  // ── Excel ──
+  const excel = () => {
+    const columnasX = [
+      { label: 'Marca', key: 'marca', tipo: 'texto', ancho: 10 }, { label: 'SKU', key: 'sku', tipo: 'texto', ancho: 14 }, { label: 'Descripción', key: 'descripcion', tipo: 'texto', ancho: 50 },
+      { label: 'Categoría', key: 'categoriaCap', tipo: 'texto', ancho: 16 }, { label: 'Roadmap', key: 'rdmp', tipo: 'texto', ancho: 9 },
+      ...aniosSelOrd.flatMap((y) => MESES.map((m, i) => ({ label: `${m} ${y}`, key: `m_${y}_${i}`, tipo: 'numero', ancho: 8 }))),
+      { label: `Prom ${anio}`, key: 'promedio', tipo: 'numero', ancho: 10 }, { label: 'Total', key: 'total', tipo: 'numero', ancho: 10 }, { label: 'Δ YoY %', key: 'yoy', tipo: 'numero', ancho: 9 },
+      ...(sensible ? [{ label: `MC % ${anio}`, key: 'mc', tipo: 'numero', ancho: 9 }] : []),
     ];
-    ws['!freeze'] = { xSplit: 5, ySplit: 2 };
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Sell In');
-    XLSX.writeFile(wb, `Sell In ${meta.nombre} ${anioActual}.xlsx`);
+    const filasX = filas.map((r) => { const o = { marca: r.marca || '', sku: r.sku, descripcion: r.descripcion || '', categoriaCap: r.categoriaCap || '', rdmp: r.rdmp || '', promedio: Math.round(r.promedio) || null, total: r.total || null, yoy: r.yoy != null ? Math.round(r.yoy) : null, mc: r.mc != null ? Math.round(r.mc * 10) / 10 : null }; aniosSelOrd.forEach((y) => MESES.forEach((_, i) => { o[`m_${y}_${i}`] = r[`m_${y}_${i}`] || null; })); return o; });
+    const totalesX = { marca: 'TOTAL', sku: `${filas.length} SKUs`, promedio: Math.round(totales.promedio) || null, total: totales.total, yoy: totales.yoy != null ? Math.round(totales.yoy) : null, mc: totales.mc != null ? Math.round(totales.mc * 10) / 10 : null };
+    aniosSelOrd.forEach((y) => MESES.forEach((_, i) => { totalesX[`m_${y}_${i}`] = totales[`m_${y}_${i}`] || null; }));
+    return { titulo: `Sell In consolidado${consolidado ? '' : ' · Clientes clave'}`, archivo: `Sell In consolidado ${aniosSelOrd.join('-')}`, hojas: [{ nombre: 'Detalle por SKU', subtitulo: `${aniosSelOrd.join(' · ')}${activos ? ` · ${activos} filtro${activos === 1 ? '' : 's'}` : ''}${busqueda ? ` · "${busqueda}"` : ''}`, columnas: columnasX, filas: filasX, totales: totalesX }] };
   };
 
-  if (loading) {
-    return <Cargando pantalla="sellInGlobal" label={`Cargando Sell In de ${meta.nombre}…`} sub="Trayendo facturación, inventario y roadmap" minHeight={480} />;
-  }
+  if (loading) return <Cargando pantalla="sellInGlobal" label="Cargando Sell In consolidado…" sub="Facturación por canal, roadmap y cuotas" minHeight={520} />;
+  if (eFact) return <div style={{ padding: 20, color: red, fontFamily: TYPO.fontText }}>No se pudo cargar la facturación: {String(eFact.message || eFact)}</div>;
 
-  const pctMTD = mesActualData.cuota?.ideal ? mesActualData.monto / mesActualData.cuota.ideal * 100 : null;
-  const pctYTD = cuotaYTD.ideal ? totalYTD.monto / cuotaYTD.ideal * 100 : null;
-  const yoyMonto = mesActualData.prevMonto ? ((mesActualData.monto - mesActualData.prevMonto) / mesActualData.prevMonto) * 100 : null;
-  const yoyPiezas = mesActualData.prevPiezas ? mesActualData.piezas - mesActualData.prevPiezas : null;
-
-  // MoM: mes actual vs mes anterior del MISMO año (si mesActual === 1 usa dic anterior)
-  const momMesIdx = mesActual - 2; // 0-indexed
-  const usePrevYearForMoM = momMesIdx < 0;
-  const momMontoPrev = usePrevYearForMoM
-    ? mensualPorAnio.monto[anioPrev][11]
-    : mensualPorAnio.monto[anioActual][momMesIdx];
-  const momPiezasPrev = usePrevYearForMoM
-    ? mensualPorAnio.piezas[anioPrev][11]
-    : mensualPorAnio.piezas[anioActual][momMesIdx];
-  const momMontoPct = momMontoPrev ? ((mesActualData.monto - momMontoPrev) / momMontoPrev * 100) : null;
-  const momPiezasDelta = momPiezasPrev ? mesActualData.piezas - momPiezasPrev : null;
-  const momMesAnteriorLabel = usePrevYearForMoM
-    ? `${MESES_LARGO[11]} ${anioPrev}`
-    : `${MESES_LARGO[momMesIdx]} ${anioActual}`;
-
-  const KPI = ({ label, badge, badgeTone, value, valueSub, sub, progress, progressTone, extra }) => {
-    const tones = {
-      good: 'bg-emerald-50 text-emerald-700',
-      warn: 'bg-amber-50 text-amber-700',
-      bad: 'bg-rose-50 text-rose-700',
-      neutral: 'bg-gray-100 text-gray-600',
-    };
-    const bars = { good: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-500', neutral: 'bg-gray-400' };
-    return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium mb-2">
-          <span>{label}</span>
-          {badge && <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${tones[badgeTone] || tones.neutral}`}>{badge}</span>}
-        </div>
-        <div className="text-[24px] font-semibold text-gray-800 tabular-nums leading-tight">
-          {value}{valueSub && <span className="text-gray-400 font-medium"> {valueSub}</span>}
-        </div>
-        {progress != null && (
-          <div className="mt-3">
-            <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${bars[progressTone] || bars.neutral}`}
-                style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
-            </div>
-          </div>
-        )}
-        {sub && <div className="mt-2 text-[11px] text-gray-500 flex justify-between items-center">{sub}</div>}
-        {extra && <div className="text-[11px] text-gray-500 mt-1">{extra}</div>}
-      </div>
-    );
-  };
-
-  // ── Helpers Apple ──
-  const isDark = theme.mode === 'dark';
-  const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
-  const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
-  const invMuted = isDark ? 'rgba(29,29,31,0.72)' : 'rgba(245,245,247,0.72)';
-  const green = theme.green || '#34C759';
-  const red = theme.red || '#FF3B30';
-  const blue = theme.accent || '#007AFF';
-  const orange = theme.orange || '#FF9500';
-
-  const KpiApple = ({ inverse, Icon, badgeCol, lbl, val, delta, deltaCol, sub }) => (
-    <div style={{
-      background: inverse ? invBg : theme.surface,
-      color: inverse ? invText : theme.text,
-      border: inverse ? 'none' : `1px solid ${theme.border}`,
-      borderRadius: 14, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10,
-      minHeight: 60, fontFamily: TYPO.fontText,
-    }}>
-      <div style={{ width: 26, height: 26, borderRadius: 8, background: `${badgeCol}22`, color: badgeCol, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon style={{ width: 13, height: 13 }} strokeWidth={1.8} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: inverse ? invMuted : theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2 }}>
-          <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: inverse ? invText : theme.text }}>{val}</p>
-          {delta && <span style={{ fontSize: 11, fontWeight: 500, color: deltaCol, fontVariantNumeric: 'tabular-nums' }}>{delta}</span>}
-        </div>
-        {sub && <p style={{ fontSize: 10, color: inverse ? invMuted : theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>{sub}</p>}
-      </div>
+  const segAnios = (
+    <div role="group" aria-label="Años" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: 2, background: theme.mode === 'dark' ? 'rgba(120,120,128,0.24)' : 'rgba(120,120,128,0.12)', borderRadius: 9, height: 30 }}>
+      {aniosDisponibles.map((y) => { const on = aniosSel.has(y); const col = anioColor(y, aniosSelOrd, theme); return (
+        <button key={y} type="button" onClick={() => toggleAnio(y)} aria-pressed={on} title={on ? 'Quitar año' : 'Agregar año'}
+          style={{ padding: '4px 12px', borderRadius: 7, cursor: 'pointer', border: 0, background: on ? (theme.mode === 'dark' ? 'rgba(99,99,102,0.9)' : '#FFFFFF') : 'transparent', color: on ? col : (theme.mode === 'dark' ? 'rgba(235,235,245,0.60)' : 'rgba(60,60,67,0.60)'), boxShadow: on ? '0 3px 8px rgba(0,0,0,0.12), 0 3px 1px rgba(0,0,0,0.04)' : 'none', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: on ? 700 : 500, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', transition: 'all 180ms cubic-bezier(0.4,0,0.2,1)' }}>{y}</button>
+      ); })}
     </div>
   );
 
   return (
-    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
-      {/* Header apple */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, padding: '0 4px', marginBottom: 4 }}>
-        <div>
-          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
-            Bloque · Sell In · YTD ene–{MESES[mesActual - 1]} {anioActual}
-          </p>
-          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
-            Sell In · Facturación {esGlobal ? 'consolidada' : `al cliente`}.
-          </h2>
-          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
-            {esGlobal ? `${facturacion.length.toLocaleString('es-MX')} rows · Fuente ERP Acteck` : `${meta.nombre} · ${meta.marca}`} · <strong style={{ color: theme.text, fontWeight: 500 }}>{formatMXN(totalYTD.monto)}</strong> YTD
-          </p>
-        </div>
-      </div>
-
-      {/* KPI row · alternado inverse (2do y 4to) */}
-      <div className={`grid grid-cols-1 ${esGlobal ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'} gap-2.5`}>
-        <KpiApple
-          Icon={Calendar} badgeCol={orange}
-          lbl={`${MESES_LARGO[mesActual - 1]} MTD · ${pctMTD != null ? pctMTD.toFixed(0) + '% cuota' : 'sin cuota'}`}
-          val={fmtMoneyShort(mesActualData.monto)}
-          delta={mesActualData.cuota ? `/ ${fmtMoneyShort(mesActualData.cuota.ideal)}` : null}
-          deltaCol={pctMTD == null ? theme.textMuted : pctMTD >= 90 ? green : pctMTD >= 60 ? orange : red}
-          sub={`${fmtInt(mesActualData.piezas)} piezas`}
-        />
-        <KpiApple inverse
-          Icon={TrendingUp} badgeCol={blue}
-          lbl={`YTD ${anioActual} · ${pctYTD != null ? pctYTD.toFixed(0) + '% cuota' : 'sin cuota'}`}
-          val={fmtMoneyShort(totalYTD.monto)}
-          delta={cuotaYTD.ideal ? `/ ${fmtMoneyShort(cuotaYTD.ideal)}` : null}
-          deltaCol={pctYTD == null ? invMuted : pctYTD >= 90 ? green : pctYTD >= 60 ? orange : red}
-          sub={`${fmtInt(totalYTD.piezas)} piezas · ${skusFacturados.size} SKUs`}
-        />
-        <KpiApple
-          Icon={Activity} badgeCol={theme.pink || '#FF2D55'}
-          lbl={`${MESES_LARGO[mesActual - 1]} vs ${anioPrev} (YoY)`}
-          val={fmtMoneyShort(mesActualData.monto)}
-          delta={yoyMonto != null ? `${yoyMonto >= 0 ? '↑' : '↓'}${Math.abs(yoyMonto).toFixed(1)}%` : null}
-          deltaCol={yoyMonto == null ? theme.textMuted : yoyMonto >= 0 ? green : red}
-          sub={`vs ${fmtMoneyShort(mesActualData.prevMonto)}${yoyPiezas != null ? ` · ${yoyPiezas >= 0 ? '↑' : '↓'} ${fmtInt(Math.abs(yoyPiezas))} pz` : ''}`}
-        />
-        {esGlobal && (
-          <KpiApple inverse
-            Icon={Target} badgeCol={theme.purple || '#AF52DE'}
-            lbl={`vs ${momMesAnteriorLabel} (MoM)`}
-            val={fmtMoneyShort(mesActualData.monto)}
-            delta={momMontoPct != null ? `${momMontoPct >= 0 ? '↑' : '↓'}${Math.abs(momMontoPct).toFixed(1)}%` : null}
-            deltaCol={momMontoPct == null ? invMuted : momMontoPct >= 0 ? green : red}
-            sub={`vs ${fmtMoneyShort(momMontoPrev)}${momPiezasDelta != null ? ` · ${momPiezasDelta >= 0 ? '↑' : '↓'} ${fmtInt(Math.abs(momPiezasDelta))} pz` : ''}`}
-          />
-        )}
-      </div>
-
-      {/* Comparador de periodos · A vs B (presets + libre) */}
-      <ComparadorPeriodos clienteKey={CLIENTE_KEY} />
-
-      {/* Chart AreaChart Apple Health + Composición familia · misma card */}
-      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-              <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>Evolución mensual.</h4>
-              <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: blue }} />{anioActual}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
-                {cuotaAnual.ideal > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: orange }} />Cuota</span>}
-              </div>
-            </div>
-            <div style={{ width: '100%', height: 200 }}>
-              <ResponsiveContainer>
-                <AreaChart data={chartData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="fillSellIn" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={blue} stopOpacity={0.20} />
-                      <stop offset="100%" stopColor={blue} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-                  <XAxis dataKey="mes" tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-                  <YAxis tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} width={44} />
-                  <Tooltip formatter={(v) => formatMXN(v)} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-                  {/* Cuota como línea dashed superpuesta */}
-                  {cuotaAnual.ideal > 0 && <Area type="monotone" dataKey="cuotaIdeal" stroke={orange} strokeWidth={1.4} strokeDasharray="4 3" fill="none" dot={false} isAnimationActive={false} />}
-                  <Area type="monotone" dataKey="monto2025" stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
-                  <Area type="monotone" dataKey="monto2026" stroke={blue} strokeWidth={2.2} fill="url(#fillSellIn)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2 }} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+    <div ref={rootRef} data-stagger style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
+      {/* Hero */}
+      <Hero eyebrow={`Dirección Comercial · Sell In consolidado · ${mesLargo} ${anio}`} titulo={frase}
+        sub={`Facturación de todos los clientes y canales (ERP) · cuota ${cuotas.fuente === 'cuotas_canales' ? 'anual TOTAL / 12' : 'Σ cuota ideal de los clientes'} · ${fmtInt(global.skusAnio)} SKUs con venta en ${anio}`}
+        stats={[
+          { k: `${MESES[mesActual - 1]} MTD`, v: fmtMoneyShort(mtd), sub: cuotaMes ? `${pctMTD.toFixed(0)} % de ${fmtMoneyShort(cuotaMes)}` : `${fmtInt(mtdPz)} pz`, color: pctMTD == null ? undefined : pctMTD >= 100 ? green : pctMTD < 60 ? orange : undefined },
+          { k: `YTD ${anio}`, v: fmtMoneyShort(ytd), sub: yoyYtd != null ? `${yoyYtd >= 0 ? '↑' : '↓'} ${Math.abs(yoyYtd).toFixed(1)} % vs ${anioPrev}` : `${fmtInt(ytdPz)} pz`, color: yoyYtd == null ? undefined : yoyYtd >= 0 ? green : red },
+          { k: 'Cuota del mes', v: cuotaMes ? fmtMoneyShort(cuotaMes) : '—', sub: cuotaMes ? `faltan ${fmtMoneyShort(Math.max(0, cuotaMes - mtd))}` : 'sin cuota cargada' },
+        ]}>
+        <div style={{ marginTop: 10, maxWidth: 460 }}>
+          <div style={{ position: 'relative', height: 5, borderRadius: 999, background: theme.mode === 'dark' ? 'rgba(29,29,31,0.16)' : 'rgba(245,245,247,0.18)', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${Math.min(100, Math.max(0, pctMTD ?? 0))}%`, background: pctMTD == null ? theme.textMuted : pctMTD >= 100 ? green : pctMTD >= 85 ? blue : pctMTD >= 60 ? orange : red, borderRadius: 999, transition: 'width 600ms cubic-bezier(0.32,0.72,0,1)' }} />
+            {pctMTD != null && <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(100, (hoy.getDate() / diasMes) * 100)}%`, width: 1, background: theme.mode === 'dark' ? 'rgba(29,29,31,0.6)' : 'rgba(245,245,247,0.7)' }} title="Avance del calendario" />}
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <Boton primario icon={Share2} onClick={onCompartirResumen} title="WhatsApp / compartir · sin datos sensibles">Compartir resumen del mes por canal</Boton>
+            <Boton icon={Copy} onClick={onCopiarResumen} title="Copiar el resumen">Copiar</Boton>
+            <span style={{ fontSize: 10.5, color: theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)' }}>{canales.length} canales · día {hoy.getDate()} de {diasMes}</span>
+          </div>
+        </div>
+      </Hero>
 
-          <div style={{ borderLeft: `1px solid ${theme.border}`, paddingLeft: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-              <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
-                Composición familia.
-                {familiaSel && (
-                  <button onClick={() => setFamiliaSel(null)}
-                    style={{ marginLeft: 8, background: theme.text, color: theme.surface, border: 0, borderRadius: 999, padding: '2px 10px', fontSize: 10, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {familiaSel} · ✕
-                  </button>
-                )}
-              </h4>
-              <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{familiasYTD.length} · click filtra</span>
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+        <KpiCard eyebrow={`${mesLargo} MTD`} badge={{ l: pctMTD != null ? `${pctMTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctMTD) }} big={fmtMoneyShort(mtd)} bigSmall={cuotaMes ? `/ ${fmtMoneyShort(cuotaMes)}` : undefined} sub={`${fmtInt(mtdPz)} piezas`} progress={pctMTD ?? undefined} />
+        <KpiCard eyebrow={`YTD ${anio} · ene–${MESES[mesActual - 1]}`} badge={{ l: pctYTD != null ? `${pctYTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctYTD) }} big={fmtMoneyShort(ytd)} bigSmall={cuotas.ytd ? `/ ${fmtMoneyShort(cuotas.ytd)}` : undefined} sub={`${fmtInt(ytdPz)} piezas · ${fmtInt(global.skusAnio)} SKUs`} progress={pctYTD ?? undefined} />
+        <KpiCard eyebrow={`${mesLargo} vs ${anioPrev} · YoY`} badge={yoyMes != null ? { l: `${yoyMes >= 0 ? '↑' : '↓'} ${Math.abs(yoyMes).toFixed(1)} %`, tone: yoyMes >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(mtd)} bigSmall={`vs ${fmtMoneyShort(mtdPrev)}`} bigColor={yoyMes == null ? undefined : yoyMes >= 0 ? green : red} sub={mtdPzPrev ? `${mtdPz >= mtdPzPrev ? '↑' : '↓'} ${fmtInt(Math.abs(mtdPz - mtdPzPrev))} pz vs ${MESES[mesActual - 1]} ${anioPrev}` : `${fmtInt(mtdPz)} pz`} />
+        <KpiCard eyebrow={`vs ${momLabel} · MoM`} badge={mom != null ? { l: `${mom >= 0 ? '↑' : '↓'} ${Math.abs(mom).toFixed(1)} %`, tone: mom >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(mtd)} bigSmall={`vs ${fmtMoneyShort(momPrev)}`} bigColor={mom == null ? undefined : mom >= 0 ? green : red} sub={momPzPrev ? `${mtdPz >= momPzPrev ? '↑' : '↓'} ${fmtInt(Math.abs(mtdPz - momPzPrev))} pz · mes completo vs parcial` : `${fmtInt(mtdPz)} pz`} />
+      </div>
+
+      {/* Comparador de periodos */}
+      <ComparadorPeriodos clienteKey={null} />
+
+      {/* Evolución mensual + composición por familia */}
+      <Panel titulo="Evolución mensual" meta={`${anio} vs ${anioPrev} · monto facturado${familiaSel ? ` · familia ${familiaSel}` : ''}`}
+        acciones={familiaSel ? <Boton size="sm" icon={RotateCcw} onClick={() => setFamiliaSel(null)}>Todas las familias</Boton> : (
+          <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: blue }} />{anio}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
+            {cuotas.anual > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: orange }} />Cuota</span>}
+          </div>
+        )}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 20 }}>
+          <div style={{ width: '100%', height: 210 }}>
+            <ResponsiveContainer>
+              <AreaChart data={chartData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
+                <defs><linearGradient id="fillSellInGlobal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={blue} stopOpacity={0.2} /><stop offset="100%" stopColor={blue} stopOpacity={0} /></linearGradient></defs>
+                <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+                <XAxis dataKey="mes" tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+                <YAxis tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} width={48} />
+                <Tooltip formatter={(v, n) => [formatMXN(v), n === 'act' ? anio : n === 'prev' ? anioPrev : 'Cuota']} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+                {cuotas.anual > 0 && !familiaSel && <Area type="monotone" dataKey="cuota" stroke={orange} strokeWidth={1.4} strokeDasharray="4 3" fill="none" dot={false} isAnimationActive={false} />}
+                <Area type="monotone" dataKey="prev" stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="act" stroke={blue} strokeWidth={2.2} fill="url(#fillSellInGlobal)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2 }} isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ borderLeft: `1px solid ${theme.divider || theme.border}`, paddingLeft: 18, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text }}>Composición por familia · YTD</span>
+              <span style={{ fontSize: 10, color: theme.textMuted }}>{familias.length} · clic filtra</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '112px 1fr', gap: 12, alignItems: 'center' }}>
-              <div style={{ position: 'relative', width: 112, height: 112 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '108px minmax(0, 1fr)', gap: 12, alignItems: 'center' }}>
+              <div style={{ position: 'relative', width: 108, height: 108 }}>
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie data={familiasYTD} dataKey="monto" cx="50%" cy="50%" innerRadius={36} outerRadius={54} paddingAngle={1} stroke="none"
-                         onClick={(d) => setFamiliaSel(familiaSel === d.name ? null : d.name)}
-                         cursor="pointer" isAnimationActive={false}>
-                      {familiasYTD.map((c, i) => (
-                        <Cell key={i} fill={c.color}
-                              opacity={familiaSel && familiaSel !== c.name ? 0.25 : 1}
-                              stroke={familiaSel === c.name ? theme.text : 'none'}
-                              strokeWidth={familiaSel === c.name ? 2 : 0} />
-                      ))}
+                    <Pie data={familias} dataKey="monto" cx="50%" cy="50%" innerRadius={34} outerRadius={52} paddingAngle={1} stroke="none" onClick={(d) => setFamiliaSel(familiaSel === d.name ? null : d.name)} cursor="pointer" isAnimationActive={false}>
+                      {familias.map((c, i) => <Cell key={i} fill={c.color} opacity={familiaSel && familiaSel !== c.name ? 0.25 : 1} stroke={familiaSel === c.name ? theme.text : 'none'} strokeWidth={familiaSel === c.name ? 2 : 0} />)}
                     </Pie>
                     <Tooltip formatter={(v) => formatMXN(v)} contentStyle={{ fontSize: 11, borderRadius: 8, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                  <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{familiaSel || 'Total'}</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtMoneyShort(totalYTD.monto)}</div>
+                  <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{familiaSel || 'Total'}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{fmtMoneyShort(familiaSel ? familias.find((f) => f.name === familiaSel)?.monto || 0 : ytd)}</div>
                 </div>
               </div>
-              <div style={{ display: 'grid', gap: 3 }}>
-                {familiasYTD.slice(0, 5).map((c, i) => {
-                  const active = familiaSel === c.name;
-                  const dim = familiaSel && !active;
-                  return (
-                    <div key={c.name}
-                      onClick={() => setFamiliaSel(active ? null : c.name)}
-                      style={{ display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 55px 40px', alignItems: 'center', gap: 6, padding: '2px 4px', borderRadius: 6, cursor: 'pointer',
-                        background: active ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : 'transparent',
-                        opacity: dim ? 0.5 : 1, transition: 'background 120ms, opacity 120ms' }}>
-                      <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
-                      <span style={{ width: 6, height: 6, borderRadius: 2, background: c.color }} />
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.name}>{c.name}</span>
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoneyShort(c.monto)}</span>
-                      <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{c.pct.toFixed(1)}%</span>
-                    </div>
-                  );
-                })}
-                {familiasYTD.length > 5 && !familiaSel && (
-                  <div style={{ padding: '2px 4px', display: 'grid', gridTemplateColumns: '12px 6px 1fr', alignItems: 'center', gap: 6, opacity: 0.6 }}>
-                    <span></span><span></span>
-                    <span style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>+ {familiasYTD.length - 5} familias más</span>
+              <div style={{ display: 'grid', gap: 2 }}>
+                {familias.slice(0, 6).map((c, i) => { const on = familiaSel === c.name; return (
+                  <div key={c.name} onClick={() => setFamiliaSel(on ? null : c.name)} style={{ display: 'grid', gridTemplateColumns: '14px 6px minmax(0,1fr) 56px 40px', alignItems: 'center', gap: 6, padding: '2px 4px', borderRadius: 6, cursor: 'pointer', background: on ? (theme.surfaceHover || 'rgba(0,0,0,0.04)') : 'transparent', opacity: familiaSel && !on ? 0.5 : 1, transition: 'background 120ms, opacity 120ms' }}>
+                    <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: c.color }} />
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${c.name} · ${c.skus} SKUs`}>{c.name}</span>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoneyShort(c.monto)}</span>
+                    <span style={{ fontSize: 9.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{c.pct.toFixed(1)}%</span>
                   </div>
-                )}
+                ); })}
+                {familias.length > 6 && <div style={{ padding: '2px 4px 0 26px', fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>+ {familias.length - 6} familias más</div>}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </Panel>
 
-      {/* Tabla detalle SKU */}
-      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, background: theme.surface, flexWrap: 'wrap' }}>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 px-2 bg-white border border-gray-200 rounded-lg h-8 flex-1 min-w-0 max-w-xs">
-              <Search className="w-3.5 h-3.5 text-gray-400" />
-              <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar SKU o descripción…"
-                className="flex-1 outline-none text-xs bg-transparent min-w-0" />
-            </div>
-            <MultiSelect label="Marca" options={marcasOpciones} selected={marcaSel} onChange={setMarcaSel} width={140} />
-            <MultiSelect label="Roadmap" options={roadmapOpciones} selected={roadmapSel} onChange={setRoadmapSel} width={130} />
-            <MultiSelect label="Categoría" options={categoriaOpciones} selected={categoriaSel} onChange={setCategoriaSel} width={160} />
+      {/* Tabla por SKU */}
+      <Panel titulo="Detalle por SKU" meta={`${fmtInt(filas.length)} de ${fmtInt(candidatos.length)} SKUs · piezas · orden ${orden ? 'personalizado' : 'roadmap'}`} padding="8px 10px 10px"
+        acciones={(
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {orden && <Boton icon={RotateCcw} onClick={() => setOrden(null)} title="Volver al orden del roadmap">Orden roadmap</Boton>}
+            {segAnios}
+            <Segmented value={consolidado ? 'todos' : 'clave'} onChange={(v) => setConsolidado(v === 'todos')}
+              options={[{ id: 'todos', label: 'Todos los canales', title: 'Todos los clientes y canales del ERP' }, { id: 'clave', label: 'Clientes clave', title: 'Sólo Digitalife, PCEL y Dicotech' }]} />
+            <ExportMenu titulo="Sell In consolidado" subtitulo={aniosSelOrd.join(' · ')} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-gray-500">{filasTabla.length} SKUs</span>
-            {esGlobal && orden.col && (
-              <button onClick={() => setOrden({ col: null, dir: null })}
-                title="Restablecer el orden original del roadmap"
-                className="inline-flex items-center gap-1 h-8 px-2.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                Restablecer orden
-              </button>
-            )}
-            <button onClick={exportarExcel} disabled={filasTabla.length === 0}
-              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-40">
-              <Download className="w-3.5 h-3.5" /> Exportar Excel
-            </button>
+        )}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Buscador value={busqueda} onChange={setBusqueda} resultados={`${filas.length} SKU${filas.length === 1 ? '' : 's'}`} />
+            <span style={{ fontSize: 10.5, color: theme.textMuted }}>Cualquier palabra, cualquier orden, sin acentos · descripción, marca, categoría, familia, roadmap o parte del SKU</span>
           </div>
+          <Filtros grupos={grupos} toggles={togglesFiltro} onToggle={onToggleSel} onToggleFlag={(id) => setFlags((f) => ({ ...f, [id]: !f[id] }))} onLimpiar={limpiar} activos={activos} />
+          <TablaCompacta columnas={columnas} grupos={grupos2} filas={filas} rowKey={(r) => r.sku} totales={totales} maxHeight="72vh" dense
+            orden={orden || undefined} onSort={onSort} onRowClick={(r) => setSkuAbierto((s) => (s === r.sku ? null : r.sku))} expandidoKey={skuAbierto}
+            vacio={busqueda || activos ? 'Ningún SKU coincide con la búsqueda y los filtros.' : 'Sin SKUs en el roadmap.'}
+            renderExpandido={(r) => <DrillSku sku={r.sku} info={r} anio={anio} anioPrev={anioPrev} mesActual={mesActual} sensible={sensible} />} />
         </div>
-        <div className="overflow-auto" style={{ maxHeight: esGlobal ? '82vh' : '65vh' }}>
-          <table className="w-full text-[11px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead>
-              <tr>
-                {[
-                  { label: 'Marca',       align: 'left'   },
-                  { label: 'SKU',         align: 'left'   },
-                  { label: 'Descripción', align: 'left'   },
-                  { label: 'Roadmap',     align: 'center' },
-                  ...MESES.map((m) => ({ label: m, align: 'right' })),
-                  ...(esGlobal ? [{ label: 'Trend', align: 'center' }] : []),
-                  { label: 'Promedio', align: 'right', sort: 'promedio' },
-                  { label: 'Total',    align: 'right', sort: 'total' },
-                ].map((h, i) => (
-                  <th key={i}
-                    style={{
-                      textAlign: h.align, padding: '8px 6px',
-                      fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9,
-                      textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
-                      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
-                      borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
-                    }}>
-                    {h.sort ? <SortHeader col={h.sort} label={h.label} /> : h.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filasTabla.map((r) => {
-                const rmpTheme = isDarkTable ? ROADMAP_COLOR_DARK : ROADMAP_COLOR;
-                const rmp = rmpTheme[r.rdmp] || { bg: 'rgba(0,0,0,0.05)', text: theme.textMuted };
-                const abierto = esGlobal && skuAbierto === r.sku;
-                return (
-                  <React.Fragment key={r.sku}>
-                    <tr
-                      onClick={esGlobal ? () => setSkuAbierto(abierto ? null : r.sku) : undefined}
-                      style={{
-                        borderTop: `1px solid ${theme.border}`,
-                        background: abierto ? (isDarkTable ? 'rgba(10,132,255,0.10)' : 'rgba(0,122,255,0.06)') : 'transparent',
-                        cursor: esGlobal ? 'pointer' : 'default',
-                      }}
-                      onMouseEnter={(e) => { if (!abierto) e.currentTarget.style.background = isDarkTable ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
-                      onMouseLeave={(e) => { if (!abierto) e.currentTarget.style.background = 'transparent'; }}>
-                      <td style={{ padding: '4px 6px', color: theme.textMuted, fontSize: 10, whiteSpace: 'nowrap', fontFamily: TYPO.fontText, width: esGlobal ? 60 : 70 }}>{r.marca || '—'}</td>
-                      <td style={{ padding: '4px 6px', color: theme.text, fontSize: 10, fontWeight: 600, fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', whiteSpace: 'nowrap', width: esGlobal ? 88 : 96 }}>
-                        {esGlobal ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <ChevronRight style={{ width: 12, height: 12, color: theme.accent || '#007AFF', flexShrink: 0, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }} />
-                            {r.sku}
-                          </span>
-                        ) : r.sku}
-                      </td>
-                      <td style={{ padding: '4px 6px', color: theme.text, fontSize: 11, fontWeight: 500, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: esGlobal ? 220 : 280 }} title={r.descripcion}>
-                        {r.descripcion || '—'}
-                      </td>
-                      <td style={{ padding: '4px 6px', textAlign: 'center', width: 70 }}>
-                        {r.rdmp && (
-                          <span style={{
-                            fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600,
-                            padding: '3px 8px', borderRadius: 999,
-                            background: rmp.bg, color: rmp.text,
-                            textTransform: 'uppercase', letterSpacing: '0.06em',
-                            display: 'inline-block',
-                          }}>{r.rdmp}</span>
-                        )}
-                      </td>
-                      {r.piezas.map((v, i) => {
-                        const h = heatClass(v);
-                        return (
-                          <td key={i} style={{
-                            padding: '3px 3px', textAlign: 'right', whiteSpace: 'nowrap',
-                            width: esGlobal ? 44 : 56, fontVariantNumeric: 'tabular-nums',
-                          }}>
-                            {v ? (
-                              <span style={{
-                                display: 'inline-block', padding: '3px 8px', borderRadius: 999,
-                                fontFamily: TYPO.fontText, fontSize: 11,
-                                background: h?.bg || 'transparent',
-                                color: h?.color || theme.textMuted,
-                                fontWeight: h?.weight || 500,
-                                minWidth: 32, textAlign: 'center',
-                              }}>{fmtInt(v)}</span>
-                            ) : (
-                              <span style={{ color: theme.textSubtle, fontFamily: TYPO.fontText, fontSize: 11 }}>—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      {esGlobal && (
-                        <td style={{ padding: '3px 2px', textAlign: 'center', width: 56 }}>
-                          <RowSparkline piezas={r.piezas} mesActual={mesActual} />
-                        </td>
-                      )}
-                      <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, background: theme.bg, fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500, width: esGlobal ? 60 : 70 }}>
-                        {r.promedio ? fmtInt(r.promedio) : '—'}
-                      </td>
-                      <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.text, background: theme.bg, fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em', width: esGlobal ? 64 : 70 }}>
-                        {fmtInt(r.total)}
-                      </td>
-                    </tr>
-                    {abierto && (
-                      <tr>
-                        <td colSpan={esGlobal ? 19 : 18} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
-                          <DrillDownBoundary sku={r.sku}>
-                            <SellInDrillDown
-                              sku={r.sku}
-                              marca={r.marca}
-                              descripcion={r.descripcion}
-                              categoria={r.categoriaCap}
-                              familia={r.familia}
-                              rdmp={r.rdmp}
-                              anioActual={anioActual}
-                              anioPrev={anioPrev}
-                              mesActual={mesActual}
-                            />
-                          </DrillDownBoundary>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              <tr style={{ borderTop: `2px solid ${theme.border}`, background: theme.bg }}>
-                <td colSpan={4} style={{ padding: '8px 10px', fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.text }}>
-                  Total · {filasTabla.length} SKUs
-                </td>
-                {totalesFila.mes.map((v, i) => (
-                  <td key={i} style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: v ? theme.text : theme.textSubtle, letterSpacing: '-0.005em' }}>
-                    {v ? fmtInt(v) : '—'}
-                  </td>
-                ))}
-                {esGlobal && (
-                  <td style={{ padding: '8px 2px', textAlign: 'center' }}>
-                    <RowSparkline piezas={totalesFila.mes} mesActual={mesActual} />
-                  </td>
-                )}
-                <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text }}>
-                  {totalesFila.promedio ? fmtInt(totalesFila.promedio) : '—'}
-                </td>
-                <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 700, color: theme.text, letterSpacing: '-0.01em' }}>
-                  {fmtInt(totalesFila.total)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </Panel>
     </div>
   );
 }
-
-// Sparkline compacto por fila (12 meses). Marca los meses cerrados en cyan
-// y los futuros en gris. Punto en el último mes cerrado.
-function RowSparkline({ piezas, mesActual }) {
-  const closed = Math.max(0, mesActual - 1);
-  const max = Math.max(1, ...piezas);
-  const y = (v) => 18 - (v / max) * 16;
-  const x = (i) => 2 + i * 4;
-  const pts = piezas.map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)},${y(v || 0)}`).join(" ");
-  const lastIdx = closed > 0 ? closed - 1 : 0;
-  return (
-    <svg viewBox="0 0 50 20" preserveAspectRatio="none"
-      style={{ width: 50, height: 20, display: "block", margin: "0 auto" }}>
-      {pts && <path d={pts} stroke="#0EA5E9" strokeWidth="1.4" fill="none"
-        strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />}
-      {piezas[lastIdx] > 0 && (
-        <circle cx={x(lastIdx)} cy={y(piezas[lastIdx] || 0)} r="1.6" fill="#0EA5E9" />
-      )}
-    </svg>
-  );
-}
-

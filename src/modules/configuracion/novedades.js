@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.6.0', fecha: '2026-09-10', titulo: 'Visión General, Análisis por Cliente y Sell In consolidado',
+    items: [
+      'Permiso "Información sensible" en Administración: sin él no se ven márgenes, contribución ni costos.',
+      'Visión General: cuota del mes en el hero, mix por canal, marca y categoría, rentabilidad en líneas e inventario con KPIs básicos.',
+      'Análisis por Cliente: tabla por código ERP con medidas completas, drill con tendencia, grupo "Otros · compra ocasional" y Pareto.',
+      'Sell In consolidado: tabla por SKU multi-año, buscador por palabras sin acentos, filtros con conteo, drill del SKU con clientes, disponibilidad y precios, y "Compartir resumen del mes por canal".',
+    ],
+  },
+  {
     version: '3.3.0', fecha: '2026-09-10', titulo: 'Administración',
     items: [
       'Configuración pasa a Administración: Usuarios y permisos · Datos · Notificaciones del equipo · Sistema.',

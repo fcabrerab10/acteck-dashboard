@@ -2,20 +2,20 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaGlobal } from '../../lib/permisos';
+import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import {
   Activity, TrendingUp,
-  Wallet, Package, Receipt, Target, ShoppingBag, Ship, X,
+  Wallet, Package, Receipt, Target, ShoppingBag, X,
 } from 'lucide-react';
 import {
-  BarChart, Bar, Cell,
+  BarChart, Bar,
   AreaChart, Area,
   XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
 } from 'recharts';
 import { cachedQuery } from '../../lib/queries';
-import { Cargando } from '../../components/kit';
+import { Cargando, KpiCard } from '../../components/kit';
 import RentabilidadBloque from './RentabilidadBloque';
 import ExportMenu from '../../components/ExportMenu';
 import Pill, { toneColors } from '../../components/kit/Pill';
@@ -88,7 +88,7 @@ function colorCanalIOS(theme, key, fallbackIdx = 0) {
 }
 
 // ────────── MixDonut · donut + ranking interactivo (hover cruzado) ──────────
-function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, puedeSeleccionar }) {
+function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, puedeSeleccionar, sensible = false }) {
   const { theme } = useTheme();
   const [hover, setHover] = useState(null);
   const items = [...(bloques || [])].sort((a, b) => (b.venta || 0) - (a.venta || 0));
@@ -182,7 +182,7 @@ function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, 
               onMouseLeave={() => setHover(null)}
               onClick={() => puedeSeleccionar && onSelect(it.key)}
               style={{
-                display: 'grid', gridTemplateColumns: '18px 10px minmax(0, 1fr) 90px 70px', alignItems: 'center', gap: 10,
+                display: 'grid', gridTemplateColumns: sensible ? '18px 10px minmax(0, 1fr) 80px 70px 58px' : '18px 10px minmax(0, 1fr) 90px 70px', alignItems: 'center', gap: 10,
                 padding: '6px 8px', borderRadius: 10,
                 background: active ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)') : 'transparent',
                 opacity: dim ? 0.5 : 1,
@@ -206,6 +206,11 @@ function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, 
                   </span>
                 )}
               </div>
+              {sensible && (
+                <span title="Margen de contribución YTD (contribución / Fact Neta)" style={{ fontSize: 10.5, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, color: it.mc == null ? theme.textSubtle : it.mc < 0 ? red : theme.textMuted }}>
+                  {it.mc == null ? '—' : `MC ${it.mc.toFixed(1)}%`}
+                </span>
+              )}
             </div>
           );
         })}
@@ -214,8 +219,8 @@ function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, 
   );
 }
 
-// ────────── MiniKpiRow · 3 cards horizontales 84px · Inventario · Cartera · Sell Out ──────────
-function MiniKpiRow({ inventario, ventaProm, sellOutMes, sellMensual, anio }) {
+// ────────── MiniKpiRow · 3 cards horizontales 84px · Inventario · Cartera (próximamente) · Sell Out (próximamente) ──────────
+function MiniKpiRow({ inventario, ventaProm }) {
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
   const invBg = theme.surfaceInverse;
@@ -227,36 +232,15 @@ function MiniKpiRow({ inventario, ventaProm, sellOutMes, sellMensual, anio }) {
   const red = theme.red;
   const pink = theme.pink;
 
-  // ── Ring cobertura
+  // ── Ring cobertura (días a la venta promedio mensual YTD; misma fórmula que el bloque Inventario)
   const dias = (ventaProm > 0 && inventario?.valor_inventario)
-    ? Math.round((Number(inventario.valor_inventario) / ventaProm) * 30 / 30) // días equivalentes
+    ? Math.round((Number(inventario.valor_inventario) / ventaProm) * 30)
     : null;
-  const diasCap = dias == null ? null : Math.min(90, dias);
-  const ringPct = diasCap == null ? 0 : Math.min(1, diasCap / 45);
-  const ringCol = dias == null ? theme.textMuted : (dias < 15 ? red : dias > 60 ? theme.orange : green);
+  const diasCap = dias == null ? null : Math.min(180, dias);
+  const ringPct = diasCap == null ? 0 : Math.min(1, diasCap / 120);
+  const ringCol = dias == null ? theme.textMuted : (dias < 60 ? red : dias > 120 ? theme.orange : green);
   const R = 15, C = 2 * Math.PI * R;
   const ringDash = C, ringOffset = C * (1 - ringPct);
-
-  // ── Sparkline sellout últimos 6 meses
-  const sparkPts = (() => {
-    if (!sellMensual?.length) return [];
-    const byMes = {};
-    sellMensual.forEach((r) => { const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.importe) || 0); });
-    const meses = Object.keys(byMes).map(Number).sort((a, b) => a - b);
-    return meses.slice(-6).map((m) => byMes[m]);
-  })();
-  const sparkPath = (() => {
-    if (sparkPts.length < 2) return '';
-    const max = Math.max(...sparkPts, 0.001);
-    const min = Math.min(...sparkPts);
-    const range = max - min || 1;
-    return sparkPts.map((v, i) => {
-      const x = (i / (sparkPts.length - 1)) * 72;
-      const y = 20 - ((v - min) / range) * 16;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-  })();
-  const sparkLast = sparkPts.length ? { x: 72, y: 20 - ((sparkPts[sparkPts.length - 1] - Math.min(...sparkPts)) / (Math.max(...sparkPts) - Math.min(...sparkPts) || 1)) * 16 } : null;
 
   const CardShell = ({ inverse, children }) => (
     <div style={{
@@ -320,43 +304,22 @@ function MiniKpiRow({ inventario, ventaProm, sellOutMes, sellMensual, anio }) {
         </div>
       </CardShell>
 
-      {/* ③ Sell Out · mini spark 6m */}
+      {/* ③ Sell Out del mes · próximamente (el detalle vive en el bloque Sell Out) */}
       <CardShell>
         <IconBadge icon={ShoppingBag} color={pink} size={32} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0, color: theme.textMuted }}>
-            Sell Out {MESES_LBL[sellOutMes.mesEfectivo - 1]}
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0, color: theme.textMuted }}>Sell Out del mes</p>
+          <p style={{ fontSize: 22, fontWeight: 500, margin: '2px 0 0', color: theme.text, opacity: 0.7, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.02em', lineHeight: 1 }}>
+            Próximamente
           </p>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2 }}>
-            <p style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
-              {fmtCompact(sellOutMes.total)}
-            </p>
-            {sellOutMes.deltaYoY != null && (
-              <span style={{ fontSize: 11, fontWeight: 500, color: sellOutMes.deltaYoY >= 0 ? green : red, fontVariantNumeric: 'tabular-nums' }}>
-                {sellOutMes.deltaYoY >= 0 ? '↑' : '↓'} {Math.abs(sellOutMes.deltaYoY).toFixed(1)}%
-              </span>
-            )}
-          </div>
-          <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
-            YTD {fmtCompact(sellOutMes.ytd)}
+          <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontStyle: 'italic' }}>
+            Pendiente definir el cierre mensual
           </p>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-          {sparkPts.length >= 2 ? (
-            <svg width="72" height="22" style={{ display: 'block' }}>
-              <path d={sparkPath} fill="none" stroke={pink} strokeWidth="1.5" strokeLinecap="round" />
-              {sparkLast && <circle cx={sparkLast.x} cy={sparkLast.y} r="2" fill={pink} />}
-            </svg>
-          ) : (
-            <div style={{ width: 72, height: 22 }} />
-          )}
-          <span style={{ fontSize: 10, color: theme.textMuted }}>6 meses</span>
         </div>
       </CardShell>
     </div>
   );
 }
-
 // ────────── Formateadores ──────────
 const fmtCompact = (n) => {
   if (n == null || isNaN(n)) return '—';
@@ -380,37 +343,43 @@ const sumYTDPor = (rows, fn, mesMax) => rows
   .filter((r) => Number(r.mes) <= mesMax)
   .reduce((s, r) => s + (Number(fn(r)) || 0), 0);
 
+// ────────── Dimensiones del mix ──────────
+const DIMENSIONES = [
+  { id: 'canal',     label: 'Canal' },
+  { id: 'marca',     label: 'Marca' },
+  { id: 'categoria', label: 'Categoría' },
+];
+const DIM_LABEL = { canal: 'Canal', marca: 'Marca', categoria: 'Categoría' };
+const DIM_COLS = 'mes,dimension,valor,venta,piezas,contribucion';
+const N = (v) => Number(v) || 0;
+// Filas de v_vision_factura_dimension_mes → { mes, key, venta, piezas, contribucion } para una dimensión.
+const filasDim = (rows, dim) => (rows || [])
+  .filter((r) => r.dimension === dim)
+  .map((r) => ({ mes: N(r.mes), key: r.valor || 'Otros', venta: N(r.venta), piezas: N(r.piezas), contribucion: N(r.contribucion) }));
+
 // ────────── Componente principal ──────────
 export default function VisionGeneral() {
   const perfil = usePerfil();
   if (!puedeVerPestanaGlobal(perfil, 'vision_general')) {
     return <SinAcceso motivo="No tienes acceso a Visión General." />;
   }
+  const sensible = puedeVerSensible(perfil); // márgenes, contribución y costos
   const { theme } = useTheme();
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);
   const rootRef = useRef(null); // raíz para exportar PDF
   const [dimension, setDimension] = useState('canal'); // 'canal' | 'marca' | 'categoria'
 
-  // Datos por dimensión (carga reactiva)
-  const [margenAct, setMargenAct] = useState([]);
-  const [margenPrev, setMargenPrev] = useState([]);
-  const [margenPrev2, setMargenPrev2] = useState([]);
-  const [clientesDim, setClientesDim] = useState([]);
+  // v_vision_factura_dimension_mes (MV): las 3 dimensiones del año elegido y de los 2 anteriores
+  const [dimAct, setDimAct] = useState([]);
+  const [dimPrev, setDimPrev] = useState([]);
+  const [dimPrev2, setDimPrev2] = useState([]);
+  const [clientesDim, setClientesDim] = useState([]);     // v_vision_factura_clientes (drill por canal, como siempre)
+  const [clientesDrill, setClientesDrill] = useState([]); // v_vision_factura_dimension_clientes (bloque abierto: marca/categoría + MC %)
   const [inventario, setInventario] = useState(null);
-  const [inventarioMarca, setInventarioMarca] = useState([]);
-  const [inventarioFamilia, setInventarioFamilia] = useState([]);
   const [caminoResumen, setCaminoResumen] = useState([]);
-  const [caminoCalendario, setCaminoCalendario] = useState([]);
-  const [caminoProximas, setCaminoProximas] = useState([]);
-  const [caminoSemanal, setCaminoSemanal] = useState([]);
-  const [caminoRetrasadas, setCaminoRetrasadas] = useState([]);
-  const [caminoProveedores, setCaminoProveedores] = useState([]);
-  const [caminoAgotados, setCaminoAgotados] = useState([]);
-  const [caminoLeadtime, setCaminoLeadtime] = useState(null);
-  const [comprasYTD, setComprasYTD] = useState([]);
-  const [cartera, setCartera] = useState([]);
-  const [cuotas, setCuotas] = useState([]);
+  const [cuotas, setCuotas] = useState([]);               // cuotas_canales (TOTAL anual)
+  const [cuotasMensuales, setCuotasMensuales] = useState([]); // Σ cuotas_mensuales.cuota_ideal (respaldo, misma regla que Inicio)
   const [loading, setLoading] = useState(true);
 
   const [sellCanal, setSellCanal] = useState([]);
@@ -438,34 +407,23 @@ export default function VisionGeneral() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Carga por dimensión + año
+  // ── Carga por año (la dimensión se resuelve en memoria: la MV trae las 3)
   useEffect(() => {
     setLoading(true);
     setBloqueExpandido(null);
     (async () => {
-      // Fuente: facturacion_clientes = Fact Neta oficial reconstruida desde erp_ventas
-      // (refresh_facturacion_clientes). Rentabilidad: RentabilidadBloque (v_erp_medidas_mes).
-      // Por ahora solo soportamos dimension='canal' — marca/categoría
-      // requieren ventas_erp completo con marca/familia.
-      const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx, cSem, cRet, cProv, cAgo, cLT, cYTD,
+      // Fact Neta oficial (Factura + Com.Ext33 + devoluciones sin nota de crédito) desde erp_ventas,
+      // materializada por (anio, mes, dimension, valor). Rentabilidad: RentabilidadBloque (v_erp_medidas_mes).
+      const [a, p, p2, c, inv, q, qm, cRes,
              sCan, sCanPrev, sMay, sRot, sMen, sMenPrev, sSkus, sCli, sPromo, sPromoSkus] = await Promise.all([
-        cachedQuery(supabase.from('v_vision_factura_canal').select('mes,venta,piezas,canal').eq('anio', anio)),
-        cachedQuery(supabase.from('v_vision_factura_canal').select('mes,venta,piezas,canal').eq('anio', anio - 1)),
-        cachedQuery(supabase.from('v_vision_factura_canal').select('mes,venta,piezas,canal').eq('anio', anio - 2)),
+        cachedQuery(supabase.from('v_vision_factura_dimension_mes').select(DIM_COLS).eq('anio', anio)),
+        cachedQuery(supabase.from('v_vision_factura_dimension_mes').select(DIM_COLS).eq('anio', anio - 1)),
+        cachedQuery(supabase.from('v_vision_factura_dimension_mes').select(DIM_COLS).eq('anio', anio - 2)),
         cachedQuery(supabase.from('v_vision_factura_clientes').select('cliente_nombre,canal,venta,piezas,meses_activos').eq('anio', anio)),
         cachedQuery(supabase.from('v_vision_inventario_global').select('valor_inventario,skus_con_stock,piezas_disponibles,skus_agotados').single()),
-        cachedQuery(supabase.from('v_vision_inventario_marca').select('marca,valor').order('valor', { ascending: false, nullsFirst: false })),
-        Promise.resolve({ data: [] }), // v_vision_cartera_consolidada: la UI no lee ninguna columna (CarteraCard / calendario / próximas no se renderizan). Posición conservada para no desalinear el destructuring.
         cachedQuery(supabase.from('cuotas_canales').select('dimension_tipo,meta_facturacion').eq('anio', anio)),
+        supabase.from('cuotas_mensuales').select('mes,cuota_ideal').eq('anio', anio), // la app la escribe: sin cache
         cachedQuery(supabase.from('v_vision_camino_resumen').select('bucket_estatus,valor_mxn,piezas,pos')),
-        Promise.resolve({ data: [] }), // v_vision_camino_calendario: la UI no lee ninguna columna (CarteraCard / calendario / próximas no se renderizan). Posición conservada para no desalinear el destructuring.
-        Promise.resolve({ data: [] }), // v_vision_camino_proximas: la UI no lee ninguna columna (CarteraCard / calendario / próximas no se renderizan). Posición conservada para no desalinear el destructuring.
-        cachedQuery(supabase.from('v_vision_camino_semanal').select('semana,valor_mxn,piezas').limit(12)),
-        cachedQuery(supabase.from('v_vision_camino_retrasadas').select('valor_mxn,movid,dias_retraso,dias_desde_emision')),
-        cachedQuery(supabase.from('v_vision_camino_proveedores').select('proveedor,valor_mxn').limit(8)),
-        cachedQuery(supabase.from('v_vision_camino_agotados').select('articulo,pzs_camino,movid,eta_estimada,dias_para_llegar').limit(10)),
-        cachedQuery(supabase.from('v_vision_camino_leadtime').select('lt_total,lt_produccion,lt_transito,lt_aduana').single()),
-        cachedQuery(supabase.from('v_vision_camino_compras_ytd').select('anio,valor_mxn,pos')),
         cachedQuery(supabase.from('v_vision_sellout_canal').select('canal_sellout,importe,clientes_finales,skus').eq('anio', anio)),
         cachedQuery(supabase.from('v_vision_sellout_canal').select('canal_sellout,importe,clientes_finales,skus').eq('anio', anio - 1)),
         cachedQuery(supabase.from('v_vision_sellout_mayoristas').select('mayorista,importe,canal_sellout,clientes_finales,skus').eq('anio', anio).order('importe', { ascending: false })),
@@ -477,41 +435,14 @@ export default function VisionGeneral() {
         cachedQuery(supabase.from('v_vision_sellout_promos').select('campania,skus_campania,sellout_en_promo,sellout_fuera_promo,sellout_promo_mes_prev').single()),
         cachedQuery(supabase.from('v_vision_sellout_promos_top_skus').select('sku,promo_pct,piezas,importe').order('importe', { ascending: false }).limit(5)),
       ]);
-      setMargenAct(a.data || []);
-      setMargenPrev(p.data || []);
-      setMargenPrev2(p2.data || []);
+      setDimAct(a.data || []);
+      setDimPrev(p.data || []);
+      setDimPrev2(p2.data || []);
       setClientesDim(c.data || []);
       setInventario(inv.data || null);
-      setInventarioMarca(invMarca.data || []);
-      // Composición por familia (join inventario_acteck × roadmap_sku)
-      try {
-        const [{ data: skusRoad }, { data: skusInv }] = await Promise.all([
-          supabase.from('roadmap_sku').select('sku, familia'),
-          cachedQuery(supabase.from('inventario_acteck').select('sku, valor_mxn')),
-        ]);
-        if (skusRoad && skusInv) {
-          const famMap = new Map((skusRoad || []).map((r) => [String(r.sku), r.familia || 'Sin familia']));
-          const byFam = {};
-          (skusInv || []).forEach((i) => {
-            const fam = famMap.get(String(i.sku)) || 'Sin familia';
-            if (!byFam[fam]) byFam[fam] = { familia: fam, valor: 0, skus: 0 };
-            byFam[fam].valor += Number(i.valor_mxn) || 0;
-            byFam[fam].skus += 1;
-          });
-          setInventarioFamilia(Object.values(byFam).filter((f) => f.valor > 0).sort((a, b) => b.valor - a.valor));
-        }
-      } catch (e) { /* familia opcional */ }
-      setCartera(cart.data || []);
       setCuotas(q.data || []);
+      setCuotasMensuales(qm.data || []);
       setCaminoResumen(cRes.data || []);
-      setCaminoCalendario(cCal.data || []);
-      setCaminoProximas(cProx.data || []);
-      setCaminoSemanal(cSem.data || []);
-      setCaminoRetrasadas(cRet.data || []);
-      setCaminoProveedores(cProv.data || []);
-      setCaminoAgotados(cAgo.data || []);
-      setCaminoLeadtime(cLT.data || null);
-      setComprasYTD(cYTD.data || []);
       setSellCanal(sCan.data || []);
       setSellCanalPrev(sCanPrev.data || []);
       setSellMayoristas(sMay.data || []);
@@ -524,51 +455,67 @@ export default function VisionGeneral() {
       setSellPromosSkus(sPromoSkus.data || []);
       setLoading(false);
     })();
-  }, [anio, dimension]);
+  }, [anio]);
+
+  // ── Drill del bloque abierto: clientes que compran esa marca/categoría (o canal) + contribución para MC %
+  useEffect(() => {
+    if (!bloqueExpandido) { setClientesDrill([]); return undefined; }
+    let cancel = false;
+    cachedQuery(
+      supabase.from('v_vision_factura_dimension_clientes')
+        .select('cliente_nombre,cliente_key,venta,piezas,meses_activos,contribucion')
+        .eq('anio', anio).eq('dimension', dimension).eq('valor', bloqueExpandido)
+        .order('venta', { ascending: false }).limit(200),
+    ).then(({ data }) => { if (!cancel) setClientesDrill(data || []); })
+      .catch(() => { if (!cancel) setClientesDrill([]); });
+    return () => { cancel = true; };
+  }, [bloqueExpandido, dimension, anio]);
+
+  // ── Filas por dimensión: canal para hero/tendencia (total del negocio), la elegida para el mix
+  const canalAct   = useMemo(() => filasDim(dimAct, 'canal'), [dimAct]);
+  const canalPrev  = useMemo(() => filasDim(dimPrev, 'canal'), [dimPrev]);
+  const canalPrev2 = useMemo(() => filasDim(dimPrev2, 'canal'), [dimPrev2]);
+  const selAct  = useMemo(() => filasDim(dimAct, dimension), [dimAct, dimension]);
+  const selPrev = useMemo(() => filasDim(dimPrev, dimension), [dimPrev, dimension]);
 
   // ── Mes máximo con datos
   const mesMax = useMemo(() => {
     let m = 0;
-    margenAct.forEach((r) => { if (Number(r.mes) > m) m = Number(r.mes); });
+    canalAct.forEach((r) => { if (r.mes > m) m = r.mes; });
     return m || 12;
-  }, [margenAct]);
+  }, [canalAct]);
 
-  // Siempre dimension = 'canal' por ahora (facturacion_clientes no trae marca/categoría).
-  const dimKey = 'canal';
-
-  // ── KPIs Hero (Venta YTD, Mes actual, Run-rate, # clientes activos)
-  // Margen/costo viven en RentabilidadBloque (v_erp_medidas_mes).
+  // ── KPIs Hero (Venta YTD, mes actual, cuota del mes, # clientes activos)
+  // Margen/costo viven en RentabilidadBloque (v_erp_medidas_mes, sólo con permiso sensible).
   const kpis = useMemo(() => {
-    const ventaYTD   = sumYTDPor(margenAct, (r) => r.venta, mesMax);
-    const piezasYTD  = sumYTDPor(margenAct, (r) => r.piezas, mesMax);
-    const ventaPrev  = sumYTDPor(margenPrev, (r) => r.venta, mesMax);
-    const ventaPrev2 = sumYTDPor(margenPrev2, (r) => r.venta, mesMax);
+    const ventaYTD   = sumYTDPor(canalAct, (r) => r.venta, mesMax);
+    const piezasYTD  = sumYTDPor(canalAct, (r) => r.piezas, mesMax);
+    const ventaPrev  = sumYTDPor(canalPrev, (r) => r.venta, mesMax);
+    const ventaPrev2 = sumYTDPor(canalPrev2, (r) => r.venta, mesMax);
 
     // Mes actual (no acumulado)
-    const ventaMes  = margenAct.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
-    const ventaMesPrev = margenPrev.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
+    const ventaMes  = canalAct.filter((r) => r.mes === mesMax).reduce((s, r) => s + r.venta, 0);
+    const ventaMesPrev = canalPrev.filter((r) => r.mes === mesMax).reduce((s, r) => s + r.venta, 0);
 
     // # clientes activos YTD
     const nClientesActivos = new Set(clientesDim.map((c) => c.cliente_nombre)).size;
 
     // Mejor / peor mes YTD (por total ventas del mes)
     const ventaPorMes = {};
-    margenAct.filter((r) => Number(r.mes) <= mesMax).forEach((r) => {
-      const m = Number(r.mes);
-      ventaPorMes[m] = (ventaPorMes[m] || 0) + (Number(r.venta) || 0);
-    });
+    canalAct.filter((r) => r.mes <= mesMax).forEach((r) => { ventaPorMes[r.mes] = (ventaPorMes[r.mes] || 0) + r.venta; });
     const mesesArr = Object.entries(ventaPorMes).map(([m, v]) => ({ mes: Number(m), venta: v }));
     const mejorMes = mesesArr.length ? mesesArr.reduce((a, b) => (b.venta > a.venta ? b : a)) : null;
     const peorMes  = mesesArr.length ? mesesArr.reduce((a, b) => (b.venta < a.venta ? b : a)) : null;
     const promedioMes = mesesArr.length ? ventaYTD / mesesArr.length : 0;
 
-    // Run-rate: proyección lineal del año basada en YTD
-    const runRate = mesMax > 0 ? ventaYTD * 12 / mesMax : 0;
-
-    // Cuota total
-    const cuotaTotal = cuotas.find((c) => c.dimension_tipo === 'TOTAL')?.meta_facturacion;
-    const cumplYTD = cuotaTotal > 0 ? (ventaYTD / cuotaTotal) * 100 : null;
-    const gapVsRunRate = cuotaTotal > 0 ? runRate - cuotaTotal : null;
+    // Cuota · misma regla que Inicio: cuotas_canales TOTAL (anual / 12) o, si no hay, Σ cuotas_mensuales.cuota_ideal del mes
+    const totalRow = cuotas.find((c) => String(c.dimension_tipo).toUpperCase() === 'TOTAL');
+    const cuotaAnualRow = N(totalRow?.meta_facturacion);
+    const sumCuotaMensual = (fn) => cuotasMensuales.filter(fn).reduce((s, c) => s + N(c.cuota_ideal), 0);
+    const cuotaAnual = cuotaAnualRow > 0 ? cuotaAnualRow : sumCuotaMensual(() => true);
+    const cuotaMes   = cuotaAnualRow > 0 ? cuotaAnualRow / 12 : sumCuotaMensual((c) => N(c.mes) === mesMax);
+    const cuotaYTD   = cuotaAnualRow > 0 ? (cuotaAnualRow * mesMax) / 12 : sumCuotaMensual((c) => N(c.mes) <= mesMax);
+    const cuotaFuente = cuotaAnualRow > 0 ? 'cuotas_canales' : cuotasMensuales.length ? 'cuotas_mensuales' : null;
 
     return {
       ventaYTD, piezasYTD, ventaPrev, ventaPrev2,
@@ -578,37 +525,24 @@ export default function VisionGeneral() {
       deltaVenta:  ventaPrev > 0 ? ((ventaYTD - ventaPrev) / ventaPrev) * 100 : null,
       deltaVenta2: ventaPrev2 > 0 ? ((ventaYTD - ventaPrev2) / ventaPrev2) * 100 : null,
       deltaMes:    ventaMesPrev > 0 ? ((ventaMes - ventaMesPrev) / ventaMesPrev) * 100 : null,
-      runRate,
-      cuotaTotal,
-      cumplYTD,
-      gapVsRunRate,
-      gapVsCuota: cuotaTotal > 0 ? cuotaTotal - ventaYTD : null,
+      cuotaAnual, cuotaMes, cuotaYTD, cuotaFuente,
+      cumplMes:  cuotaMes > 0 ? (ventaMes / cuotaMes) * 100 : null,
+      faltanteMes: cuotaMes > 0 ? cuotaMes - ventaMes : null,
+      cumplYTD:  cuotaYTD > 0 ? (ventaYTD / cuotaYTD) * 100 : null,
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [margenAct, margenPrev, margenPrev2, clientesDim, cuotas, mesMax]);
+  }, [canalAct, canalPrev, canalPrev2, clientesDim, cuotas, cuotasMensuales, mesMax]);
 
-  // ── Bloques por canal (sin margen — pendiente de fórmula)
+  // ── Bloques de la dimensión elegida (share, Δ YoY, MC % si hay permiso)
   const bloques = useMemo(() => {
     const m = new Map();
-    margenAct
-      .filter((r) => Number(r.mes) <= mesMax)
-      .forEach((r) => {
-        const k = r[dimKey] || 'Otros';
-        if (!m.has(k)) m.set(k, { key: k, venta: 0, piezas: 0, byMes: {} });
-        const it = m.get(k);
-        it.venta  += Number(r.venta) || 0;
-        it.piezas += Number(r.piezas) || 0;
-        const ms = Number(r.mes);
-        it.byMes[ms] = (it.byMes[ms] || 0) + (Number(r.venta) || 0);
-      });
-    // Δ YoY
+    selAct.filter((r) => r.mes <= mesMax).forEach((r) => {
+      if (!m.has(r.key)) m.set(r.key, { key: r.key, venta: 0, piezas: 0, contribucion: 0, byMes: {} });
+      const it = m.get(r.key);
+      it.venta += r.venta; it.piezas += r.piezas; it.contribucion += r.contribucion;
+      it.byMes[r.mes] = (it.byMes[r.mes] || 0) + r.venta;
+    });
     const prevMap = new Map();
-    margenPrev
-      .filter((r) => Number(r.mes) <= mesMax)
-      .forEach((r) => {
-        const k = r[dimKey] || 'Otros';
-        prevMap.set(k, (prevMap.get(k) || 0) + (Number(r.venta) || 0));
-      });
+    selPrev.filter((r) => r.mes <= mesMax).forEach((r) => prevMap.set(r.key, (prevMap.get(r.key) || 0) + r.venta));
     const totalActual = Array.from(m.values()).reduce((s, c) => s + c.venta, 0);
     return Array.from(m.values())
       .map((it) => {
@@ -617,57 +551,43 @@ export default function VisionGeneral() {
           ...it,
           share: totalActual > 0 ? (it.venta / totalActual) * 100 : 0,
           deltaYoY: prev > 0 ? ((it.venta - prev) / prev) * 100 : null,
-          pctMargen: null,
-          spark: Array.from({ length: mesMax }, (_, i) => Number(it.byMes[i + 1]) || 0),
+          mc: sensible && it.venta ? (it.contribucion / it.venta) * 100 : null,
+          spark: Array.from({ length: mesMax }, (_, i) => N(it.byMes[i + 1])),
         };
       })
       .sort((a, b) => b.venta - a.venta);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [margenAct, margenPrev, dimKey, mesMax]);
+  }, [selAct, selPrev, mesMax, sensible]);
 
-  // ── Clientes del canal expandido (drill-down)
+  // ── Clientes del bloque expandido: canal → v_vision_factura_clientes (como siempre); marca/categoría → drill de la MV
   const clientesDelBloque = useMemo(() => {
     if (!bloqueExpandido) return [];
-    return clientesDim
-      .filter((c) => c.canal === bloqueExpandido)
+    const base = dimension === 'canal'
+      ? clientesDim.filter((c) => String(c.canal || '').toUpperCase() === String(bloqueExpandido).toUpperCase())
+      : clientesDrill;
+    return base
       .filter((c) => c.cliente_nombre && c.cliente_nombre !== 'Sin nombre')
-      .sort((a, b) => Number(b.venta || 0) - Number(a.venta || 0));
-  }, [clientesDim, bloqueExpandido]);
+      .sort((a, b) => N(b.venta) - N(a.venta));
+  }, [clientesDim, clientesDrill, bloqueExpandido, dimension]);
+  const mcPorCliente = useMemo(() => {
+    if (!sensible) return new Map();
+    return new Map(clientesDrill.map((c) => [c.cliente_nombre, N(c.venta) ? (N(c.contribucion) / N(c.venta)) * 100 : null]));
+  }, [clientesDrill, sensible]);
 
-  // ── Tendencia 3 años para gráfica
+  // ── Tendencia 3 años (total del negocio; igual en las 3 dimensiones)
   const tendencia = useMemo(() => {
     const sumarPorMes = (rows) => {
       const arr = Array(12).fill(null);
-      rows.forEach((r) => {
-        const m = Number(r.mes);
-        if (m < 1 || m > 12) return;
-        arr[m - 1] = (arr[m - 1] || 0) + (Number(r.venta) || 0);
-      });
+      rows.forEach((r) => { if (r.mes < 1 || r.mes > 12) return; arr[r.mes - 1] = (arr[r.mes - 1] || 0) + r.venta; });
       return arr;
     };
-    const act = sumarPorMes(margenAct);
-    const pr1 = sumarPorMes(margenPrev);
-    const pr2 = sumarPorMes(margenPrev2);
+    const act = sumarPorMes(canalAct), pr1 = sumarPorMes(canalPrev), pr2 = sumarPorMes(canalPrev2);
     return Array.from({ length: 12 }, (_, i) => ({
       mes: MESES_LBL[i],
       [`${anio}`]: act[i],
       [`${anio - 1}`]: pr1[i],
       [`${anio - 2}`]: pr2[i],
     }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [margenAct, margenPrev, margenPrev2, anio]);
-
-  // ── Cartera consolidada
-  const carteraResumen = useMemo(() => {
-    const total = cartera.reduce((s, c) => s + (Number(c.saldo_actual) || 0), 0);
-    const vencido = cartera.reduce((s, c) => s + (Number(c.saldo_vencido) || 0), 0);
-    const aging0_30 = cartera.reduce((s, c) => s + (Number(c.aging_d0_30) || 0), 0);
-    const aging31_60 = cartera.reduce((s, c) => s + (Number(c.aging_d31_60) || 0), 0);
-    const aging61_90 = cartera.reduce((s, c) => s + (Number(c.aging_d61_90) || 0), 0);
-    const agingMas90 = cartera.reduce((s, c) => s + (Number(c.aging_mas90) || 0), 0);
-    return { total, vencido, aging0_30, aging31_60, aging61_90, agingMas90,
-             pctVencido: total > 0 ? (vencido / total) * 100 : null };
-  }, [cartera]);
+  }, [canalAct, canalPrev, canalPrev2, anio]);
 
   // ── Sell-out del último mes cerrado + comparativo mismo mes año anterior
   //   - Si mesMax coincide con el mes calendario actual, usamos mesMax-1
@@ -699,7 +619,7 @@ export default function VisionGeneral() {
   if (loading) {
     return <Cargando pantalla="visionGeneral" label="Cargando visión general…" sub="Trayendo facturación, inventario y sell out" />;
   }
-  if (margenAct.length === 0) {
+  if (canalAct.length === 0) {
     return (
       <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, background: theme.bg, minHeight: '100%', fontFamily: TYPO.fontText }}>
         <Activity style={{ width: 48, height: 48, color: theme.textSubtle, margin: '0 auto 16px', strokeWidth: 1.5 }} />
@@ -709,23 +629,27 @@ export default function VisionGeneral() {
     );
   }
 
-  // Excel: mix por canal + tendencia mensual 3 años
+  const dimLbl = DIM_LABEL[dimension];
+  const colorBloque = (key) => colorCanalIOS(theme, key, Math.max(0, bloques.findIndex((b) => b.key === key)));
+
+  // Excel: mix por dimensión + tendencia mensual 3 años
   const excelVision = () => ({
     titulo: `Visión general ${anio}`,
     archivo: `Vision general ${anio}`,
     hojas: [
       {
-        nombre: 'Mix por canal',
+        nombre: `Mix por ${dimLbl.toLowerCase()}`,
         subtitulo: `YTD ene–${MESES_LBL[mesMax - 1]} ${anio}`,
         columnas: [
-          { label: 'Canal', key: 'key', tipo: 'texto', ancho: 22 },
+          { label: dimLbl, key: 'key', tipo: 'texto', ancho: 22 },
           { label: 'Venta YTD', key: 'venta', tipo: 'moneda', ancho: 16 },
           { label: 'Piezas', key: 'piezas', tipo: 'numero', ancho: 12 },
           { label: 'Share', key: 'share', tipo: 'pct', ancho: 9 },
           { label: 'Δ YoY', key: 'deltaYoY', tipo: 'pct', ancho: 9 },
+          ...(sensible ? [{ label: 'MC %', key: 'mc', tipo: 'pct', ancho: 9 }] : []),
           ...Array.from({ length: mesMax }, (_, i) => ({ label: MESES_LBL[i], key: `m${i + 1}`, tipo: 'moneda', ancho: 13 })),
         ],
-        filas: bloques.map((b) => ({ key: b.key, venta: b.venta, piezas: b.piezas, share: b.share, deltaYoY: b.deltaYoY, ...Object.fromEntries(Array.from({ length: mesMax }, (_, i) => [`m${i + 1}`, b.byMes[i + 1] || null])) })),
+        filas: bloques.map((b) => ({ key: b.key, venta: b.venta, piezas: b.piezas, share: b.share, deltaYoY: b.deltaYoY, mc: b.mc, ...Object.fromEntries(Array.from({ length: mesMax }, (_, i) => [`m${i + 1}`, b.byMes[i + 1] || null])) })),
         totales: { key: 'TOTAL', venta: bloques.reduce((s, b) => s + b.venta, 0), piezas: bloques.reduce((s, b) => s + b.piezas, 0), ...Object.fromEntries(Array.from({ length: mesMax }, (_, i) => [`m${i + 1}`, bloques.reduce((s, b) => s + (b.byMes[i + 1] || 0), 0)])) },
       },
       {
@@ -753,7 +677,7 @@ export default function VisionGeneral() {
             fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em',
             color: theme.textMuted, marginBottom: 6, fontFamily: TYPO.fontText, fontWeight: 500,
           }}>
-            Dirección Comercial · YTD ene–{MESES_LBL[mesMax - 1]} {anio}
+            Dirección Comercial · YTD ene–{MESES_LBL[mesMax - 1]} {anio} · vs {anio - 1}
           </p>
           <h2 style={{
             fontSize: 'clamp(32px, 4vw, 44px)', fontWeight: 600, letterSpacing: '-0.035em',
@@ -778,34 +702,26 @@ export default function VisionGeneral() {
         <ExportMenu titulo="Visión general" subtitulo={`YTD ene–${MESES_LBL[mesMax - 1]} ${anio}`} excel={excelVision} pdf={{ ref: rootRef }} size="md" style={{ alignSelf: 'flex-end', marginBottom: 2 }} />
       </div>
 
-      {/* HERO 3-col: Facturación grande · Mes inverse · Run-rate */}
+      {/* HERO: Facturación grande · Mes en curso · Cuota del mes */}
       <HeroCard kpis={kpis} anio={anio} mesMaxLabel={MESES_FULL[mesMax - 1]} />
 
-      {/* KPIs mini · Compacto B · horizontal 84px con viz derecha */}
-      <MiniKpiRow
-        inventario={inventario}
-        ventaProm={kpis.ventaYTD > 0 ? kpis.ventaYTD / mesMax : 0}
-        sellOutMes={sellOutMes}
-        sellMensual={sellMensual}
-        anio={anio}
-      />
+      {/* KPIs mini · Inventario · Cartera (próximamente) · Sell Out (próximamente) */}
+      <MiniKpiRow inventario={inventario} ventaProm={kpis.ventaYTD > 0 ? kpis.ventaYTD / mesMax : 0} />
 
-      {/* Rentabilidad · medidas del director (v_erp_medidas_mes) */}
-      <RentabilidadBloque anio={anio} mesMax={mesMax} />
+      {/* Rentabilidad · medidas del director (v_erp_medidas_mes) · sólo con permiso de información sensible */}
+      {sensible && <RentabilidadBloque anio={anio} mesMax={mesMax} />}
 
       {/* Toggle dimensión */}
       <div className="flex items-center gap-3 px-1 mt-2 flex-wrap">
         <span style={{ fontSize: 11, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.12em', fontFamily: TYPO.fontText }}>Ver mix por</span>
         <Segmented
           value={dimension}
-          onChange={setDimension}
-          options={[
-            { id: 'canal',     label: 'Canal' },
-            { id: 'marca',     label: 'Marca',     disabled: true, title: 'Pendiente — requiere ventas_erp completo con marca/familia' },
-            { id: 'categoria', label: 'Categoría', disabled: true, title: 'Pendiente — requiere ventas_erp completo con marca/familia' },
-          ]}
+          onChange={(d) => { setDimension(d); setBloqueExpandido(null); }}
+          options={DIMENSIONES.map((d) => ({ ...d, badge: bloques.length && d.id === dimension ? bloques.length : undefined }))}
         />
-        <Pill tone="gray">Marca / Categoría pendientes</Pill>
+        <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted, fontFamily: TYPO.fontText }}>
+          Fact Neta del ERP por {dimLbl.toLowerCase()} · toca un bloque para ver sus clientes
+        </span>
       </div>
 
       {/* Mix + Tendencia · misma fila */}
@@ -817,16 +733,18 @@ export default function VisionGeneral() {
           anio={anio}
           expandido={bloqueExpandido}
           onSelect={(k) => setBloqueExpandido(bloqueExpandido === k ? null : k)}
-          puedeSeleccionar={dimension === 'canal'}
+          puedeSeleccionar
+          sensible={sensible}
         />
         <TendenciaCard data={tendencia} anio={anio} mesMax={mesMax} />
       </div>
 
-      {/* Drill-down de clientes del bloque expandido (solo dimension=canal) */}
-      {bloqueExpandido && dimension === 'canal' && (
-        <ClientesPanel canal={bloqueExpandido} clientes={clientesDelBloque}
-          mensualAct={margenAct} mensualPrev={margenPrev}
-          anio={anio} mesMax={mesMax}
+      {/* Drill-down de clientes del bloque expandido */}
+      {bloqueExpandido && (
+        <ClientesPanel dimension={dimension} valor={bloqueExpandido} color={colorBloque(bloqueExpandido)}
+          clientes={clientesDelBloque} mcPorCliente={mcPorCliente}
+          mensualAct={selAct} mensualPrev={selPrev}
+          anio={anio} mesMax={mesMax} sensible={sensible}
           onClose={() => setBloqueExpandido(null)} />
       )}
 
@@ -841,26 +759,15 @@ export default function VisionGeneral() {
         anio={anio} mesMax={mesMax}
       />
 
-      {/* Sección de inventario */}
-      <InventarioSection inventario={inventario}
-        inventarioMarca={inventarioMarca}
-        inventarioFamilia={inventarioFamilia}
-        caminoResumen={caminoResumen}
-        caminoCalendario={caminoCalendario}
-        caminoProximas={caminoProximas}
-        caminoSemanal={caminoSemanal}
-        caminoRetrasadas={caminoRetrasadas}
-        caminoProveedores={caminoProveedores}
-        caminoAgotados={caminoAgotados}
-        caminoLeadtime={caminoLeadtime}
-        comprasYTD={comprasYTD}
-        anio={anio}
+      {/* Sección de inventario · KPIs básicos */}
+      <InventarioSection inventario={inventario} caminoResumen={caminoResumen}
         ventaPromMes={mesMax > 0 ? kpis.ventaYTD / mesMax : 0} />
 
       <p style={{ fontSize: 11, color: theme.textSubtle, padding: '0 8px', fontFamily: TYPO.fontText }}>
-        Fuente: facturacion_clientes = Fact Neta oficial (Factura + Com.Ext33 + devoluciones sin nota de crédito),
-        reconstruida desde el ERP renglón a renglón; rentabilidad según las medidas del director; inventario_acteck
-        (almacenes comerciales). Cartera pendiente de fuente.
+        Fuente: erp_ventas renglón a renglón = Fact Neta oficial (Factura + Com.Ext33 + devoluciones sin nota de crédito),
+        materializada por canal, marca y categoría (categoría del ERP con respaldo en roadmap_sku);
+        {sensible ? ' rentabilidad y MC % según las medidas del director;' : ''} cuota de {kpis.cuotaFuente || 'cuotas_canales / cuotas_mensuales (sin cargar)'};
+        inventario_acteck (almacenes comerciales). Cartera pendiente de fuente.
       </p>
     </div>
   );
@@ -879,6 +786,7 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
   const heroBadgeBg = withAlpha(heroBadgeCol, theme.mode === 'dark' ? 0.18 : 0.24);
   const green = theme.green;
   const red = theme.red;
+  const orange = theme.orange;
 
   const cell = (label, val, delta, deltaCol) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '2px 0' }}>
@@ -887,6 +795,12 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
       {delta && <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: deltaCol || invMuted }}>{delta}</span>}
     </div>
   );
+
+  // Cuota del mes: color por avance (misma escala que KpiCard del kit)
+  const tieneCuota = kpis.cuotaMes > 0;
+  const cumpl = kpis.cumplMes;
+  const cuotaCol = !tieneCuota || cumpl == null ? theme.text : cumpl >= 100 ? green : cumpl >= 85 ? theme.text : orange;
+  const mesLower = mesMaxLabel.toLowerCase();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -917,7 +831,9 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
                 {kpis.deltaVenta >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaVenta).toFixed(1)}%
               </span>
             )}
-            <span style={{ fontSize: 12, color: invMuted, fontVariantNumeric: 'tabular-nums' }}>vs {fmtCompact(kpis.ventaPrev)} en {anio - 1}</span>
+            <span style={{ fontSize: 12, color: invMuted, fontVariantNumeric: 'tabular-nums' }}>
+              {kpis.ventaPrev > 0 ? `vs ${fmtCompact(kpis.ventaPrev)} en ${anio - 1}` : `sin datos de ${anio - 1} para comparar`}
+            </span>
             {kpis.promedioMes > 0 && (
               <>
                 <span style={{ fontSize: 12, color: invMuted }}>·</span>
@@ -927,7 +843,7 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
           </div>
         </div>
 
-        {/* Rail 2x2 · vs 2025, vs 2024, mejor mes, peor mes */}
+        {/* Rail 2x2 · vs año anterior, vs hace 2, mejor mes, peor mes */}
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px',
           paddingLeft: 24, borderLeft: `1px solid ${invDivider}`,
@@ -952,12 +868,12 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
           {kpis.peorMes && cell(
             'Peor mes YTD',
             fmtCompact(kpis.peorMes.venta),
-            MESES_FULL[kpis.peorMes.mes - 1] + (kpis.peorMes.mes === kpis.mejorMes?.mes ? '' : '')
+            MESES_FULL[kpis.peorMes.mes - 1]
           )}
         </div>
       </div>
 
-      {/* ② + ③ · 2 cards blancas flat con badge inline */}
+      {/* ② Mes en curso · ③ Cuota del mes */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div style={{
           background: theme.surface, borderRadius: 12, padding: '16px 18px', border,
@@ -977,7 +893,7 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
               )}
             </div>
             <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
-              vs {mesMaxLabel.toLowerCase()} {anio - 1} · {fmtCompact(kpis.ventaMesPrev)}
+              {kpis.ventaMesPrev > 0 ? `vs ${mesLower} ${anio - 1} · ${fmtCompact(kpis.ventaMesPrev)}` : `sin ${mesLower} ${anio - 1} para comparar`}
             </p>
           </div>
         </div>
@@ -988,25 +904,31 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
           <IconBadge icon={Target} color={theme.purple} size={36} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 11, margin: 0, color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>
-              {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
+              Cuota de {mesLower}{tieneCuota ? ` · ${fmtCompact(kpis.cuotaMes)}` : ''}
             </p>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 2 }}>
-              <p style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
-                {fmtCompact(kpis.runRate)}
+              <p style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', margin: 0, color: cuotaCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+                {tieneCuota ? fmtPct(cumpl) : '—'}
               </p>
-              {kpis.cuotaTotal > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 500, color: kpis.gapVsRunRate >= 0 ? green : red, fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtPctDelta(kpis.cumplYTD - 100)}
+              {tieneCuota && (
+                <span style={{ fontSize: 12, fontWeight: 500, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCompact(kpis.ventaMes)} facturado
                 </span>
               )}
             </div>
-            {kpis.cuotaTotal > 0 ? (
-              <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
-                Meta {fmtCompact(kpis.cuotaTotal)} · YTD {fmtCompact(kpis.ventaYTD)}
-              </p>
+            {tieneCuota ? (
+              <>
+                <div style={{ marginTop: 6, height: 3, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, cumpl || 0))}%`, background: cuotaCol === theme.text ? theme.accent : cuotaCol, borderRadius: 999, transition: 'width 600ms' }} />
+                </div>
+                <p style={{ fontSize: 11, color: theme.textMuted, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+                  {kpis.faltanteMes > 0 ? `Faltan ${fmtCompact(kpis.faltanteMes)}` : `Superada por ${fmtCompact(-kpis.faltanteMes)}`}
+                  {kpis.cumplYTD != null ? ` · YTD ${fmtPct(kpis.cumplYTD)} de ${fmtCompact(kpis.cuotaYTD)}` : ''}
+                </p>
+              </>
             ) : (
               <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontStyle: 'italic' }}>
-                Sin cuota cargada · agrega en cuotas_canales
+                Sin cuota cargada · cuotas_canales (TOTAL) o cuotas_mensuales
               </p>
             )}
           </div>
@@ -1016,42 +938,51 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
   );
 }
 
-// ────────── Drill-down: detalle del canal con chart y clientes ──────────
-function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax, onClose }) {
+// ────────── Drill-down: detalle del bloque (canal / marca / categoría) con chart y clientes ──────────
+function ClientesPanel({ dimension, valor, color, clientes, mcPorCliente, mensualAct, mensualPrev, anio, mesMax, sensible, onClose }) {
   const { theme } = useTheme();
-  const totalCanal = clientes.reduce((s, c) => s + (Number(c.venta) || 0), 0);
-  const canalCol = colorCanalIOS(theme, canal);
+  const totalBloque = clientes.reduce((s, c) => s + (Number(c.venta) || 0), 0);
+  const canalCol = color || colorCanalIOS(theme, valor);
+  const dimLbl = (DIM_LABEL[dimension] || 'Canal').toLowerCase();
 
-  const ytdAct  = mensualAct.filter((r) => r.canal === canal && Number(r.mes) <= mesMax)
-    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
-  const ytdPrev = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) <= mesMax)
-    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
+  const act = mensualAct.filter((r) => r.key === valor);
+  const prev = mensualPrev.filter((r) => r.key === valor);
+  const ytdAct  = act.filter((r) => r.mes <= mesMax).reduce((s, r) => s + r.venta, 0);
+  const ytdPrev = prev.filter((r) => r.mes <= mesMax).reduce((s, r) => s + r.venta, 0);
   const delta = ytdPrev > 0 ? ((ytdAct - ytdPrev) / ytdPrev) * 100 : null;
-  const ventaMes  = mensualAct.filter((r) => r.canal === canal && Number(r.mes) === mesMax)
-    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
-  const ventaMesPrev = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) === mesMax)
-    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
+  const ventaMes  = act.filter((r) => r.mes === mesMax).reduce((s, r) => s + r.venta, 0);
+  const ventaMesPrev = prev.filter((r) => r.mes === mesMax).reduce((s, r) => s + r.venta, 0);
   const deltaMes = ventaMesPrev > 0 ? ((ventaMes - ventaMesPrev) / ventaMesPrev) * 100 : null;
-  const totalNegocio = mensualAct.reduce((s, r) => s + (Number(r.venta) || 0), 0) || 1;
-  const shareCanal = (ytdAct / totalNegocio) * 100;
+  const totalNegocio = mensualAct.filter((r) => r.mes <= mesMax).reduce((s, r) => s + r.venta, 0) || 1;
+  const shareBloque = (ytdAct / totalNegocio) * 100;
+  // MC % del bloque (sólo sensible): contribución / fact neta YTD, y Δ pp vs año anterior
+  const contribAct = act.filter((r) => r.mes <= mesMax).reduce((s, r) => s + r.contribucion, 0);
+  const contribPrev = prev.filter((r) => r.mes <= mesMax).reduce((s, r) => s + r.contribucion, 0);
+  const mcAct = sensible && ytdAct ? (contribAct / ytdAct) * 100 : null;
+  const mcPrev = sensible && ytdPrev ? (contribPrev / ytdPrev) * 100 : null;
+  const dMc = mcAct != null && mcPrev != null ? mcAct - mcPrev : null;
 
   const trendData = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
-    const a = mensualAct.filter((r) => r.canal === canal && Number(r.mes) === m).reduce((s, r) => s + (Number(r.venta) || 0), 0);
-    const p = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) === m).reduce((s, r) => s + (Number(r.venta) || 0), 0);
+    const a = act.filter((r) => r.mes === m).reduce((s, r) => s + r.venta, 0);
+    const p = prev.filter((r) => r.mes === m).reduce((s, r) => s + r.venta, 0);
     return { mes: MESES_LBL[i], [`${anio - 1}`]: p || null, [`${anio}`]: m <= mesMax ? (a || null) : null };
   });
 
   const green = theme.green;
   const red = theme.red;
 
-  const KBox = ({ lbl, val, sub, subColor, last }) => (
-    <div style={{ padding: '2px 14px', borderRight: last ? 'none' : `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
-      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
-      <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: subColor || theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{val}</p>
-      {sub && <p style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{sub}</p>}
+  const KBox = ({ lbl, val, sub, subColor, valColor, last }) => (
+    <div style={{ padding: '2px 14px', borderRight: last ? 'none' : `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lbl}</p>
+      <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: valColor || subColor || theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{val}</p>
+      {sub && <p style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</p>}
     </div>
   );
+  const th = (label, align = 'left', width) => (
+    <th style={{ textAlign: align, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width }}>{label}</th>
+  );
+  const td = { padding: '5px 8px', fontSize: 12, textAlign: 'right', color: theme.text, borderBottom: `1px solid ${theme.border}` };
 
   return (
     <div style={{
@@ -1061,24 +992,30 @@ function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax,
       {/* Header inline */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
         <span style={{ width: 10, height: 10, borderRadius: 3, background: canalCol, flexShrink: 0 }} />
-        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>{canal}</span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>{valor}</span>
+        <Pill tone="gray" size="xs">{dimLbl}</Pill>
         <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
-          · {clientes.length} clientes · {shareCanal.toFixed(1)}% del negocio total
+          · {clientes.length} clientes · {shareBloque.toFixed(1)}% del negocio total
         </span>
         <button onClick={onClose} title="Cerrar" style={{ marginLeft: 'auto', background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 4, lineHeight: 1 }}>
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* 4 KPIs sin bg · separados por dividers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
-        <KBox lbl={`YTD ${anio}`} val={fmtCompact(ytdAct)} sub={`vs ${fmtCompact(ytdPrev)} en ${anio - 1}`} />
+      {/* KPIs sin bg · separados por dividers (+ MC % con permiso sensible) */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${sensible ? 5 : 4}, minmax(0, 1fr))`, marginBottom: 12 }}>
+        <KBox lbl={`YTD ${anio}`} val={fmtCompact(ytdAct)} sub={ytdPrev > 0 ? `vs ${fmtCompact(ytdPrev)} en ${anio - 1}` : `sin ${anio - 1}`} />
         <KBox lbl={`YTD ${anio - 1}`} val={fmtCompact(ytdPrev)} sub={`${mesMax} meses cerrados`} />
         <KBox lbl="Δ YoY" val={delta == null ? '—' : fmtPctDelta(delta)} sub={delta == null ? '' : `${delta >= 0 ? '+' : ''}${fmtCompact(ytdAct - ytdPrev)} vs prev`} subColor={delta == null ? theme.textMuted : delta >= 0 ? green : red} />
-        <KBox lbl={`${MESES_FULL[mesMax - 1]} ${anio}`} val={fmtCompact(ventaMes)} sub={deltaMes != null ? `${deltaMes >= 0 ? '↑' : '↓'} ${Math.abs(deltaMes).toFixed(1)}% YoY` : ''} subColor={deltaMes == null ? theme.textMuted : deltaMes >= 0 ? green : red} last />
+        <KBox lbl={`${MESES_FULL[mesMax - 1]} ${anio}`} val={fmtCompact(ventaMes)} sub={deltaMes != null ? `${deltaMes >= 0 ? '↑' : '↓'} ${Math.abs(deltaMes).toFixed(1)}% YoY` : ''} subColor={deltaMes == null ? theme.textMuted : deltaMes >= 0 ? green : red} last={!sensible} />
+        {sensible && (
+          <KBox lbl="MC % YTD" val={mcAct == null ? '—' : fmtPct(mcAct)} valColor={theme.text}
+            sub={dMc != null ? `${dMc >= 0 ? '+' : '−'}${Math.abs(dMc).toFixed(1)} pp vs ${anio - 1} · ${fmtCompact(contribAct)}` : fmtCompact(contribAct) + ' contribución'}
+            subColor={dMc == null ? theme.textMuted : dMc >= 0 ? green : red} last />
+        )}
       </div>
 
-      {/* Area chart Apple Health style · 2025 vs 2026 */}
+      {/* Bar chart · año anterior vs año elegido */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '8px 0 6px' }}>
         <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Facturación mensual · {anio - 1} vs {anio}</p>
         <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
@@ -1099,30 +1036,34 @@ function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax,
         </ResponsiveContainer>
       </div>
 
-      {clientes.length > 0 && (
+      {clientes.length > 0 ? (
         <>
-          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '4px 0 6px' }}>Top clientes · YTD {anio}</p>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '4px 0 6px' }}>
+            Top clientes · YTD {anio}{dimension !== 'canal' ? ` · compran ${valor}` : ''}
+          </p>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 24 }}>#</th>
-                <th style={{ textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}` }}>Cliente</th>
-                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 100 }}>Venta YTD</th>
-                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 110 }}>% del canal</th>
-                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 80 }}>Piezas</th>
-                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 60 }}>Meses</th>
+                {th('#', 'left', 24)}
+                {th('Cliente')}
+                {th('Venta YTD', 'right', 100)}
+                {th(`% del ${dimLbl}`, 'right', 110)}
+                {sensible && th('MC %', 'right', 64)}
+                {th('Piezas', 'right', 80)}
+                {th('Meses', 'right', 60)}
               </tr>
             </thead>
             <tbody>
               {clientes.slice(0, 25).map((c, i) => {
                 const venta = Number(c.venta) || 0;
-                const share = totalCanal > 0 ? (venta / totalCanal) * 100 : 0;
+                const share = totalBloque > 0 ? (venta / totalBloque) * 100 : 0;
+                const mc = sensible ? mcPorCliente?.get(c.cliente_nombre) : null;
                 return (
                   <tr key={c.cliente_nombre + i}>
-                    <td style={{ padding: '5px 8px', fontSize: 11, color: theme.textSubtle, fontWeight: 500, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
-                    <td style={{ padding: '5px 8px', fontSize: 12, color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 500, letterSpacing: '-0.005em', borderBottom: `1px solid ${theme.border}`, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.cliente_nombre}>{c.cliente_nombre}</td>
-                    <td style={{ padding: '5px 8px', fontSize: 13, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>{fmtCompact(venta)}</td>
-                    <td style={{ padding: '5px 8px', fontSize: 12, textAlign: 'right', color: theme.text, borderBottom: `1px solid ${theme.border}` }}>
+                    <td style={{ ...td, textAlign: 'left', fontSize: 11, color: theme.textSubtle, fontWeight: 500 }}>{i + 1}</td>
+                    <td style={{ ...td, textAlign: 'left', fontFamily: TYPO.fontDisplay, fontWeight: 500, letterSpacing: '-0.005em', maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.cliente_nombre}>{c.cliente_nombre}</td>
+                    <td style={{ ...td, fontSize: 13, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em' }}>{fmtCompact(venta)}</td>
+                    <td style={td}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
                         <span>{share.toFixed(1)}%</span>
                         <span style={{ width: 40, height: 4, background: theme.border, borderRadius: 999, position: 'relative', overflow: 'hidden' }}>
@@ -1130,19 +1071,21 @@ function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax,
                         </span>
                       </span>
                     </td>
-                    <td style={{ padding: '5px 8px', fontSize: 12, textAlign: 'right', color: theme.text, borderBottom: `1px solid ${theme.border}` }}>{fmtInt(c.piezas)}</td>
-                    <td style={{ padding: '5px 8px', fontSize: 12, textAlign: 'right', color: theme.text, borderBottom: `1px solid ${theme.border}` }}>{c.meses_activos || '—'}</td>
+                    {sensible && <td style={{ ...td, color: mc == null ? theme.textMuted : mc < 0 ? red : theme.text }}>{mc == null ? '—' : fmtPct(mc)}</td>}
+                    <td style={td}>{fmtInt(c.piezas)}</td>
+                    <td style={td}>{c.meses_activos || '—'}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </>
+      ) : (
+        <p style={{ fontSize: 12, color: theme.textMuted, fontStyle: 'italic', margin: '4px 0 0' }}>Sin clientes con facturación en este bloque.</p>
       )}
     </div>
   );
 }
-
 // ────────── Tendencia 3 años ──────────
 function TendenciaCard({ data, anio, mesMax }) {
   const { theme } = useTheme();
@@ -1179,198 +1122,32 @@ function TendenciaCard({ data, anio, mesMax }) {
   );
 }
 
-// ────────── Sección de Inventario ──────────
-// ────────── Mini donut compacto reutilizable (marca / familia) ──────────
-function InventarioMiniDonut({ title, meta, items, valueKey = 'valor', labelKey = 'marca', colorFn, centerLabel, centerValue, centerSub, emptyMsg }) {
+// ────────── Sección de Inventario · KPIs básicos (kit KpiCard) ──────────
+// Fuentes: v_vision_inventario_global (almacenes comerciales) y v_vision_camino_resumen (Master Embarques).
+const BUCKETS_EN_CAMINO = ['produccion', 'transito', 'pendiente_modular', 'por_zarpar', 'por_consolidar'];
+
+function InventarioSection({ inventario, caminoResumen, ventaPromMes }) {
   const { theme } = useTheme();
-  const [hover, setHover] = useState(null);
-  const list = (items || []).filter((it) => (Number(it[valueKey]) || 0) > 0);
-  if (list.length === 0) {
-    return (
-      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 18px', fontFamily: TYPO.fontText, minHeight: 168, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-          <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>{title}</h4>
-          <span style={{ fontSize: 10, color: theme.textMuted }}>{meta}</span>
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.textMuted, fontSize: 12, fontStyle: 'italic' }}>{emptyMsg || 'Sin datos'}</div>
-      </div>
-    );
-  }
-  const total = list.reduce((s, it) => s + (Number(it[valueKey]) || 0), 0) || 1;
-  const R = 42, CIRC = 2 * Math.PI * R;
-  let offsetAcc = 0;
-  const arcs = list.slice(0, 8).map((it, i) => {
-    const pct = (Number(it[valueKey]) || 0) / total;
-    const len = pct * CIRC;
-    const dash = `${len} ${CIRC}`;
-    const dashOffset = -offsetAcc;
-    offsetAcc += len;
-    return { key: it[labelKey], color: colorFn(it[labelKey], i), dash, dashOffset };
-  });
-  const top = list.slice(0, 4);
-  const rest = list.slice(4);
-  const restVal = rest.reduce((s, it) => s + (Number(it[valueKey]) || 0), 0);
+  const green = theme.green, orange = theme.orange, red = theme.red;
 
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 18px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>{title}</h4>
-        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{meta}</span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '112px 1fr', gap: 16, alignItems: 'center' }}>
-        <div style={{ position: 'relative', width: 112, height: 112 }}>
-          <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-            <circle cx="50" cy="50" r={R} fill="none" stroke={theme.border} strokeWidth="10" />
-            {arcs.map((a) => {
-              const active = hover === a.key;
-              const other = hover && !active;
-              return (
-                <circle key={a.key} cx="50" cy="50" r={R} fill="none"
-                  stroke={a.color} strokeWidth={active ? 12 : 10}
-                  strokeDasharray={a.dash} strokeDashoffset={a.dashOffset}
-                  opacity={other ? 0.25 : 1}
-                  style={{ transition: 'stroke-width 120ms, opacity 120ms' }}
-                  onMouseEnter={() => setHover(a.key)}
-                  onMouseLeave={() => setHover(null)}
-                />
-              );
-            })}
-          </svg>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            {(() => {
-              const sel = list.find((it) => it[labelKey] === hover);
-              if (sel) {
-                const pct = ((Number(sel[valueKey]) || 0) / total) * 100;
-                return (
-                  <>
-                    <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{sel[labelKey]}</div>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(sel[valueKey])}</div>
-                    <div style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{pct.toFixed(1)}%</div>
-                  </>
-                );
-              }
-              return (
-                <>
-                  <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{centerLabel}</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{centerValue}</div>
-                  {centerSub && <div style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{centerSub}</div>}
-                </>
-              );
-            })()}
-          </div>
-        </div>
-        <div style={{ display: 'grid', gap: 1 }}>
-          {top.map((it, i) => {
-            const col = colorFn(it[labelKey], i);
-            const pct = ((Number(it[valueKey]) || 0) / total) * 100;
-            const active = hover === it[labelKey];
-            const dim = hover && !active;
-            return (
-              <div key={it[labelKey]}
-                onMouseEnter={() => setHover(it[labelKey])}
-                onMouseLeave={() => setHover(null)}
-                style={{
-                  display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 60px 40px', alignItems: 'center', gap: 6,
-                  padding: '3px 4px', borderRadius: 6,
-                  opacity: dim ? 0.5 : 1, transition: 'opacity 120ms',
-                }}>
-                <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
-                <span style={{ width: 6, height: 6, borderRadius: 2, background: col }} />
-                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, textTransform: 'uppercase', letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it[labelKey]}</span>
-                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em', textAlign: 'right' }}>{fmtCompact(it[valueKey])}</span>
-                <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{pct.toFixed(1)}%</span>
-              </div>
-            );
-          })}
-          {rest.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 60px 40px', alignItems: 'center', gap: 6, padding: '3px 4px', opacity: 0.6 }}>
-              <span></span><span></span>
-              <span style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>+ {rest.length} más</span>
-              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtCompact(restVal)}</span>
-              <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{((restVal / total) * 100).toFixed(1)}%</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InventarioSection({ inventario, inventarioMarca, inventarioFamilia, caminoResumen, caminoCalendario, caminoProximas, caminoSemanal, caminoRetrasadas, caminoProveedores, caminoAgotados, caminoLeadtime, comprasYTD, anio, ventaPromMes }) {
-  const { theme } = useTheme();
-  // Unificado en los 3 temas: surface + strip lateral color paleta.
-  const cardBgFor = () => theme.surface;
-  const cardTitleFor = () => theme.text;
-  const cardLabelFor = () => theme.textMuted;
-  const cardBorder = `1px solid ${theme.border}`;
-  // Buckets de estatus en orden de pipeline + total agregado
-  const BUCKET_LABELS = {
-    produccion:        { label: 'En producción',      tone: 'orange' },
-    transito:          { label: 'Tránsito marítimo',  tone: 'blue' },
-    pendiente_modular: { label: 'Pendiente modular',  tone: 'purple' },
-    por_zarpar:        { label: 'Por zarpar',         tone: 'pink' },
-    por_consolidar:    { label: 'Por consolidar',     tone: 'gray' },
-    sin_embarque:      { label: 'Sin embarque',       tone: 'gray' },
-    otro:              { label: 'Otro',               tone: 'gray' },
-  };
-  const BUCKET_ORDER = ['produccion', 'transito', 'pendiente_modular', 'por_zarpar', 'por_consolidar'];
-  const resumenMap = new Map(caminoResumen.map((r) => [r.bucket_estatus, r]));
-  const totalEnCamino = caminoResumen
-    .filter((r) => ['produccion','transito','pendiente_modular','por_zarpar','por_consolidar'].includes(r.bucket_estatus))
-    .reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);
-  const totalPiezasEnCamino = caminoResumen
-    .filter((r) => ['produccion','transito','pendiente_modular','por_zarpar','por_consolidar'].includes(r.bucket_estatus))
-    .reduce((s, r) => s + (Number(r.piezas) || 0), 0);
-  const totalPosEnCamino = caminoResumen
-    .filter((r) => ['produccion','transito','pendiente_modular','por_zarpar','por_consolidar'].includes(r.bucket_estatus))
-    .reduce((s, r) => s + (Number(r.pos) || 0), 0);
-  const sinEmbarque = resumenMap.get('sin_embarque');
-  const tieneCamino = totalEnCamino > 0 || totalPosEnCamino > 0;
-
-  // KPIs strip
   const valorInv = Number(inventario?.valor_inventario) || 0;
   const piezas   = Number(inventario?.piezas_disponibles) || 0;
   const skus     = Number(inventario?.skus_con_stock) || 0;
   const agotados = Number(inventario?.skus_agotados) || 0;
-  const diasCob  = ventaPromMes > 0 ? Math.round(valorInv / ventaPromMes * 30) : null;
-  const cobLbl   = diasCob == null ? '—'
-                  : diasCob < 60  ? 'Bajo'
-                  : diasCob > 120 ? 'Alto'
-                  : 'Sano';
+  const diasCob  = ventaPromMes > 0 && valorInv > 0 ? Math.round((valorInv / ventaPromMes) * 30) : null;
+  const cob = diasCob == null ? { l: '—', tone: 'gray', col: undefined }
+    : diasCob < 60 ? { l: 'Bajo', tone: 'red', col: red }
+    : diasCob > 120 ? { l: 'Alto', tone: 'orange', col: orange }
+    : { l: 'Sano', tone: 'green', col: green };
 
-  // Filtra marcas y agrupa pequeñas en "Otros"
-  const totalMarca = inventarioMarca.reduce((s, m) => s + (Number(m.valor) || 0), 0);
-  const marcasTop = inventarioMarca
-    .filter((m) => (Number(m.valor) || 0) > 0)
-    .slice(0, 5);
-  const otrasMarcasVal = inventarioMarca
-    .slice(5)
-    .reduce((s, m) => s + (Number(m.valor) || 0), 0);
-  const marcasParaDonut = otrasMarcasVal > 0
-    ? [...marcasTop, { marca: 'Otras marcas', valor: otrasMarcasVal, skus: 0 }]
-    : marcasTop;
-  const MARCA_COLOR = {
-    'ACTECK': theme.purple,
-    'BALAM RUSH': theme.orange,
-    'MOBIFREE': theme.accent,
-    'SWANN': theme.teal,
-    'EVOROK': theme.yellow,
-    'Sin marca': theme.textMuted,
-    'Otras marcas': theme.textSubtle,
-  };
-  const colorMarca = (m) => MARCA_COLOR[String(m).toUpperCase()] || MARCA_COLOR[m] || theme.pink;
-
-  // Color helpers iOS palette para donuts
-  const IOS_ORDER = [theme.accent, theme.orange, theme.purple, theme.pink, theme.green, theme.teal, theme.indigo, theme.yellow, theme.red].filter(Boolean);
-  const colorMarcaIOS = (m, i) => {
-    const map = { 'ACTECK': theme.accent, 'BALAM RUSH': theme.orange, 'MOBIFREE': theme.purple, 'SWANN': theme.teal, 'EVOROK': theme.pink, 'Sin marca': theme.textMuted, 'Otras marcas': theme.textMuted };
-    return map[String(m).toUpperCase()] || map[m] || IOS_ORDER[i % IOS_ORDER.length];
-  };
-  const colorFamiliaIOS = (_f, i) => IOS_ORDER[i % IOS_ORDER.length];
+  const camino = (caminoResumen || []).filter((r) => BUCKETS_EN_CAMINO.includes(r.bucket_estatus));
+  const valorTransito  = camino.reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);
+  const posTransito    = camino.reduce((s, r) => s + (Number(r.pos) || 0), 0);
+  const piezasTransito = camino.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+  const pctStock = valorInv > 0 ? Math.round((valorTransito / valorInv) * 100) : null;
 
   return (
     <div className="space-y-2.5">
-      {/* Header estilo Apple */}
       <div className="flex items-baseline justify-between px-1">
         <div>
           <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', color: theme.textMuted, fontWeight: 600, marginBottom: 2, fontFamily: TYPO.fontText }}>Bloque · Inventario</p>
@@ -1379,372 +1156,25 @@ function InventarioSection({ inventario, inventarioMarca, inventarioFamilia, cam
           </h3>
         </div>
         <p style={{ fontSize: 11, color: theme.textMuted, margin: 0, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
-          Cobertura ~{diasCob != null ? diasCob : '—'} días · {fmtInt(agotados)} SKUs agotados
+          Almacenes comerciales · Master Embarques
         </p>
       </div>
 
-      {/* Banner retrasadas (si aplica) */}
-      {caminoRetrasadas.length > 0 && (
-        <RetrasadasBanner retrasadas={caminoRetrasadas} />
-      )}
-
-      {/* Row 1: Marca donut + Familia donut + KPIs stack (3-col) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr', gap: 10 }}>
-        <InventarioMiniDonut
-          title="Por marca"
-          meta={`${marcasParaDonut.length} · ${fmtCompact(totalMarca)}`}
-          items={marcasParaDonut}
-          valueKey="valor" labelKey="marca"
-          colorFn={colorMarcaIOS}
-          centerLabel="Total" centerValue={fmtCompact(totalMarca)} centerSub={`${fmtInt(skus)} SKUs`}
-          emptyMsg="Sin datos de marca"
-        />
-        <InventarioMiniDonut
-          title="Por familia"
-          meta={inventarioFamilia.length > 0 ? `${inventarioFamilia.length} · roadmap_sku` : 'roadmap_sku'}
-          items={inventarioFamilia}
-          valueKey="valor" labelKey="familia"
-          colorFn={colorFamiliaIOS}
-          centerLabel="Familias" centerValue={String(inventarioFamilia.length || 0)} centerSub="activas"
-          emptyMsg="Requiere roadmap_sku cargado"
-        />
-        <InventarioKpiStack
-          valorTransito={totalEnCamino} posTransito={totalPosEnCamino} pctStock={valorInv > 0 ? Math.round((totalEnCamino / valorInv) * 100) : 0}
-          leadtime={caminoLeadtime}
-          comprasYTD={comprasYTD} anio={anio}
-        />
-      </div>
-
-      {/* Row 2: Lead time por etapa + Estatus actual */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10 }}>
-        {caminoLeadtime && caminoLeadtime.lt_total > 0 ? (
-          <LeadtimeEtapasCompact lt={caminoLeadtime} />
-        ) : (
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            Sin datos de lead time
-          </div>
-        )}
-        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', fontFamily: TYPO.fontText }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Por estatus actual</h4>
-            <span style={{ fontSize: 10, color: theme.textMuted }}>5 buckets</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-            {BUCKET_ORDER.map((k) => {
-              const cfg = BUCKET_LABELS[k];
-              const r = resumenMap.get(k);
-              const val = Number(r?.valor_mxn) || 0;
-              const iosCol = ({
-                produccion: theme.orange, transito: theme.accent, pendiente_modular: theme.indigo, por_zarpar: theme.pink, por_consolidar: theme.textMuted,
-              })[k] || theme.textMuted;
-              return (
-                <div key={k} style={{
-                  background: theme.surface, border: `1px solid ${theme.border}`,
-                  borderLeft: `3px solid ${iosCol}`,
-                  borderRadius: 10, padding: '8px 10px', fontFamily: TYPO.fontText,
-                }}>
-                  <p style={{ fontSize: 9, color: theme.textMuted, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{cfg.label}</p>
-                  <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-                    {val > 0 ? fmtCompact(val) : '—'}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 3: Concentración semanal + Top proveedores + Agotados */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 10 }}>
-        {caminoSemanal.length > 0 ? (
-          <ConcentracionSemanalCompact semanas={caminoSemanal} />
-        ) : (
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 128 }}>
-            Sin datos de concentración semanal
-          </div>
-        )}
-        {caminoProveedores.length > 0 ? (
-          <TopProveedoresCompact proveedores={caminoProveedores} totalCamino={totalEnCamino} />
-        ) : (
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 128 }}>
-            Sin datos de proveedores
-          </div>
-        )}
-        {caminoAgotados.length > 0 ? (
-          <AgotadosCompact agotados={caminoAgotados} />
-        ) : (
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 128 }}>
-            Sin SKUs agotados con orden
-          </div>
-        )}
-      </div>
-
-      {/* Sin embarque asignado (legacy inline) */}
-      {sinEmbarque && Number(sinEmbarque.valor_mxn) > 0 && (
-        <div style={{
-          background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 12, padding: '10px 14px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-          fontFamily: TYPO.fontText,
-        }}>
-          <div>
-            <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: theme.text }}>
-              {fmtInt(sinEmbarque.pos)} POs sin embarque asignado en Master
-            </p>
-            <p style={{ fontSize: 10, margin: '2px 0 0', color: theme.textMuted, fontStyle: 'italic' }}>
-              Probablemente compras nacionales o aún sin mapear en Master Embarques.
-            </p>
-          </div>
-          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{fmtCompact(sinEmbarque.valor_mxn)}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ────────── Componentes helpers Inventario Opción B ──────────
-function InventarioKpiStack({ valorTransito, posTransito, pctStock, leadtime, comprasYTD, anio }) {
-  const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const invBg = theme.surfaceInverse;
-  const invText = theme.textOnInverse;
-  const invMuted = isDark ? 'rgba(29,29,31,0.7)' : 'rgba(245,245,247,0.72)';
-  const red = theme.red;
-  const green = theme.green;
-  const ytdAct = comprasYTD.find((r) => r.anio === anio);
-  const ytdPrev = comprasYTD.find((r) => r.anio === anio - 1);
-  const valorYTD = Number(ytdAct?.valor_mxn) || 0;
-  const valorYTDPrev = Number(ytdPrev?.valor_mxn) || 0;
-  const deltaYoY = valorYTDPrev > 0 ? ((valorYTD - valorYTDPrev) / valorYTDPrev) * 100 : null;
-
-  const Row = ({ inverse, badgeBg, badgeCol, Icon, lbl, val, sub, subColor }) => (
-    <div style={{
-      background: inverse ? invBg : theme.surface,
-      color: inverse ? invText : theme.text,
-      border: inverse ? 'none' : `1px solid ${theme.border}`,
-      borderRadius: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10,
-      fontFamily: TYPO.fontText,
-    }}>
-      <div style={{ width: 26, height: 26, borderRadius: 8, background: badgeBg, color: badgeCol, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon style={{ width: 13, height: 13 }} strokeWidth={1.8} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: inverse ? invMuted : theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
-        <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', margin: '1px 0 0', fontVariantNumeric: 'tabular-nums', color: inverse ? invText : theme.text }}>
-          {val} {sub && <span style={{ fontSize: 10, color: subColor || (inverse ? invMuted : theme.textMuted), fontWeight: 500 }}>{sub}</span>}
-        </p>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr 1fr', gap: 10 }}>
-      <Row badgeBg={`${theme.accent}22`} badgeCol={theme.accent} Icon={Ship}
-        lbl={`Valor en tránsito · ${fmtInt(posTransito)} POs`}
-        val={fmtCompact(valorTransito)}
-        sub={pctStock > 0 ? `· ${pctStock}% del stock` : ''}
-      />
-      <Row inverse badgeBg={isDark ? 'rgba(255,159,10,0.20)' : `${theme.orange}33`} badgeCol={theme.orange} Icon={Package}
-        lbl="Lead time promedio"
-        val={leadtime?.lt_total != null ? `${leadtime.lt_total} días` : '—'}
-      />
-      <Row badgeBg={`${theme.purple}22`} badgeCol={theme.purple} Icon={ShoppingBag}
-        lbl={`Compras YTD ${anio} · ${fmtInt(ytdAct?.pos || 0)} PO`}
-        val={fmtCompact(valorYTD)}
-        sub={deltaYoY != null ? `${deltaYoY >= 0 ? '↑' : '↓'}${Math.abs(deltaYoY).toFixed(0)}%` : ''}
-        subColor={deltaYoY == null ? undefined : deltaYoY >= 0 ? green : red}
-      />
-    </div>
-  );
-}
-
-function LeadtimeEtapasCompact({ lt }) {
-  const { theme } = useTheme();
-  const total = Number(lt.lt_total) || 1;
-  const etapas = [
-    { lbl: '1 · Producción', val: Number(lt.lt_produccion) || 0, color: theme.orange },
-    // v_vision_camino_leadtime expone lt_transito (eta_puerto − etd), no lt_maritimo.
-    { lbl: '2 · Marítimo', val: Number(lt.lt_transito ?? lt.lt_maritimo) || 0, color: theme.accent },
-    { lbl: '3 · Aduana → CEDIS', val: Number(lt.lt_aduana) || 0, color: theme.green },
-  ];
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Lead time por etapa</h4>
-        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{lt.lt_total}d</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {etapas.map((e) => {
-          const pct = Math.round((e.val / total) * 100);
-          return (
-            <div key={e.lbl}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
-                  {e.lbl} · <strong style={{ color: theme.text }}>{e.val}d</strong>
-                </span>
-                <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
-              </div>
-              <div style={{ height: 4, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${pct}%`, background: e.color, borderRadius: 999 }} />
-              </div>
-            </div>
-          );
-        })}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
+        <KpiCard eyebrow="Inventario comercial" big={fmtCompact(valorInv)} sub={`${fmtInt(piezas)} piezas disponibles`} />
+        <KpiCard eyebrow="SKUs con stock" big={fmtInt(skus)} sub="con existencia en almacenes comerciales" />
+        <KpiCard eyebrow="Cobertura" big={diasCob != null ? `${fmtInt(diasCob)} d` : '—'} bigColor={cob.col}
+          badge={diasCob != null ? { tone: cob.tone, l: cob.l } : undefined}
+          sub={ventaPromMes > 0 ? `a ${fmtCompact(ventaPromMes)}/mes de venta promedio YTD` : 'sin venta promedio'} />
+        <KpiCard eyebrow="En tránsito" big={fmtCompact(valorTransito)} bigSmall={`${fmtInt(posTransito)} POs`}
+          sub={`${fmtInt(piezasTransito)} pzs · producción, por zarpar y en mar${pctStock != null ? ` · ${pctStock}% del stock` : ''}`} />
+        <KpiCard eyebrow="Agotados con demanda" big={fmtInt(agotados)} bigColor={agotados > 0 ? red : undefined}
+          badge={agotados > 0 ? { tone: 'red', l: 'atender' } : { tone: 'green', l: 'ok' }}
+          sub="sin stock y con venta en los últimos 90 días" />
       </div>
     </div>
   );
 }
-
-function ConcentracionSemanalCompact({ semanas }) {
-  const { theme } = useTheme();
-  // v_vision_camino_semanal expone `semana` (date, lunes de la semana); no hay semana_label.
-  const fmtSem = (d) => {
-    if (!d) return '—';
-    const dt = new Date(String(d).length === 10 ? `${d}T00:00:00` : d);
-    return Number.isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-  };
-  const data = (semanas || []).slice(0, 12).map((s) => ({ semana: s.semana_label || fmtSem(s.semana), valor: Number(s.valor_mxn) || 0, piezas: Number(s.piezas) || 0 }));
-  const max = Math.max(...data.map((d) => d.valor), 1);
-  const maxSemana = data.find((d) => d.valor === max);
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Concentración semanal</h4>
-        {maxSemana && <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>Pico: {maxSemana.semana} · {fmtCompact(max)}</span>}
-      </div>
-      <div style={{ width: '100%', height: 98 }}>
-        <ResponsiveContainer>
-          <BarChart data={data} margin={{ top: 6, right: 4, left: -6, bottom: 0 }} barCategoryGap="20%">
-            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-            <XAxis dataKey="semana" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
-            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-            <Bar dataKey="valor" radius={[7, 7, 0, 0]} isAnimationActive={false}>
-              {data.map((d, i) => <Cell key={i} fill={d.valor === max ? theme.orange : theme.accent} fillOpacity={d.valor === max ? 1 : 0.75} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function TopProveedoresCompact({ proveedores, totalCamino }) {
-  const { theme } = useTheme();
-  const top = (proveedores || []).slice(0, 4);
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Top proveedores</h4>
-        <span style={{ fontSize: 10, color: theme.textMuted }}>tránsito</span>
-      </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}`, width: 16 }}>#</th>
-            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>Proveedor</th>
-            <th style={{ textAlign: 'right', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>Valor</th>
-          </tr>
-        </thead>
-        <tbody>
-          {top.map((p, i) => (
-            <tr key={(p.proveedor || '') + i}>
-              <td style={{ padding: '3px 6px', fontSize: 10, color: theme.textSubtle, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
-              <td style={{ padding: '3px 6px', fontSize: 11, color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 500, letterSpacing: '-0.005em', borderBottom: `1px solid ${theme.border}`, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.proveedor}>{p.proveedor}</td>
-              <td style={{ padding: '3px 6px', fontSize: 12, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>{fmtCompact(p.valor_mxn || p.valor)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function AgotadosCompact({ agotados }) {
-  const { theme } = useTheme();
-  const top = (agotados || []).slice(0, 4);
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Agotados con orden</h4>
-        <span style={{ fontSize: 10, color: theme.textMuted }}>{agotados.length} SKUs</span>
-      </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}`, width: 16 }}>#</th>
-            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>SKU</th>
-            <th style={{ textAlign: 'right', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>Llega</th>
-          </tr>
-        </thead>
-        <tbody>
-          {top.map((a, i) => {
-            // v_vision_camino_agotados expone articulo / eta_estimada (text) /
-            // dias_para_llegar / pzs_camino — no sku / eta_cedis / eta_puerto.
-            const sku = a.articulo || a.sku || '';
-            const etaRaw = a.eta_estimada || a.eta_cedis || a.eta_puerto || null;
-            const etaDate = etaRaw ? new Date(String(etaRaw).length === 10 ? `${etaRaw}T00:00:00` : etaRaw) : null;
-            const etaTxt = etaDate && !Number.isNaN(etaDate.getTime())
-              ? etaDate.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
-              : (etaRaw ? String(etaRaw) : '—');
-            const dias = Number(a.dias_para_llegar);
-            return (
-              <tr key={sku + i}>
-                <td style={{ padding: '3px 6px', fontSize: 10, color: theme.textSubtle, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
-                <td style={{ padding: '3px 6px', fontSize: 11, color: theme.text, fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', letterSpacing: 0, borderBottom: `1px solid ${theme.border}` }}>
-                  {sku}
-                  {Number(a.pzs_camino) > 0 && <span style={{ marginLeft: 6, fontSize: 9.5, color: theme.textMuted, fontFamily: TYPO.fontText }}>{Number(a.pzs_camino).toLocaleString('es-MX')} pz</span>}
-                </td>
-                <td style={{ padding: '3px 6px', fontSize: 12, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }} title={Number.isFinite(dias) ? `${dias} días` : undefined}>
-                  {etaTxt}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-
-// ────────── Sub-componentes del bloque 'Inventario en camino' ──────────
-
-function RetrasadasBanner({ retrasadas }) {
-  const { theme } = useTheme();
-  const total = retrasadas.reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);
-  const top = retrasadas.slice(0, 2);
-  const restante = retrasadas.length - top.length;
-  return (
-    <div style={{
-      background: theme.surface,
-      border: `1px solid ${theme.border}`,
-      borderLeft: `4px solid ${theme.red}`,
-      borderRadius: 10,
-      padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12,
-      fontFamily: TYPO.fontText,
-    }}>
-      <i className="ti ti-alert-triangle" style={{ fontSize: 22, color: theme.red, flex: 'none' }} aria-hidden="true" />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 12, margin: 0, color: theme.text, fontWeight: 500 }}>
-          {retrasadas.length} {retrasadas.length === 1 ? 'PO' : 'POs'} en retraso · {fmtCompact(total)} atrapados
-        </p>
-        <p style={{ fontSize: 11, margin: '2px 0 0', color: theme.textMuted }}>
-          {top.map((r, i) => (
-            <span key={r.movid}>
-              {i > 0 && ' · '}
-              <strong>{r.movid}</strong> {r.dias_retraso}d retraso ({r.dias_desde_emision}d desde emisión) {fmtCompact(r.valor_mxn)}
-            </span>
-          ))}
-          {restante > 0 && ` · y ${restante} más`}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════
-// Bloque Sell Out
-// ══════════════════════════════════════════════════
 const CANAL_SELLOUT_META = {
   mayoreo:      { label: 'Mayoreo',       tone: 'purple', nota: 'Con lag 90d · 13 mayoristas' },
   distribuidor: { label: 'Distribuidor',  tone: 'blue',   nota: 'Con lag 90d · Digitalife · PCEL · Dicotech' },
