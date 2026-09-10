@@ -1,24 +1,31 @@
-// Inventario global · V3. Hero narrativo → 4 KpiCard → tabla SKU × almacén
-// (TablaCompacta + HeatCell, drill por SKU) → secundario plegable (CEDIS / estatus / tipos).
-// Datos: inventario/useInventarioDatos.js · constantes y formatos: inventario/constantes.js.
+// Inventario global · V3. Hero narrativo → 4 KpiCard → tabla SKU × almacén (buscador por
+// palabras + pills de filtro facetadas, canasta para compartir, drill por SKU) → Próximos
+// arribos → Tendencia (histórico diario) → secundario plegable (CEDIS / estatus / tipos).
+// Datos: inventario/useInventarioDatos.js · filtros: inventario/filtros.js · compartir: inventario/compartir.js.
+// Sensible (permisos.puedeVerSensible): sin él la pantalla se lee en piezas y días; nada de $ a costo.
 import React, { useMemo, useRef, useState } from 'react';
-import { Search, SlidersHorizontal, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight, Share2, X } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
+import FrescuraPill from '../../components/FrescuraPill';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaGlobal } from '../../lib/permisos';
-import { Hero, KpiCard, Pill, Segmented, TablaCompacta, HeatCell, Panel, Boton, SkeletonPantalla, toast } from '../../components/kit';
+import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
+import { Hero, KpiCard, Pill, Segmented, TablaCompacta, HeatCell, Panel, Boton, SkeletonPantalla, toast, elevation } from '../../components/kit';
 import { EASE, DUR } from '../../lib/motion';
 import useInventarioDatos from './inventario/useInventarioDatos';
 import SkuDrillDown from './inventario/SkuDrillDown';
 import ResumenSecundario from './inventario/ResumenSecundario';
-import FiltrosInventario from './inventario/FiltrosInventario';
+import FiltrosPills from './inventario/FiltrosPills';
+import ProximosArribos from './inventario/ProximosArribos';
+import HistoricoPanel, { fotoHace } from './inventario/HistoricoPanel';
+import CompartirHoja from './inventario/CompartirHoja';
+import { FILTROS_VACIOS, estadoDe, pasaTodos, facetas as calcularFacetas, nActivos as contarActivos } from './inventario/filtros';
 import {
-  NOMBRES_ALMACEN, CEDIS_CORTO, CEDIS_LISTA, ALMACENES_GRID, shortAlmacen, tipoDe, esComercial,
+  NOMBRES_ALMACEN, CEDIS_CORTO, ALMACENES_GRID, shortAlmacen, tipoDe, esComercial,
   COBERTURA_CRITICA, COBERTURA_SOBRESTOCK, N,
-  fmtCompact, fmtInt, fmtDias, fmtFechaCorta, diasHasta, tonoCobertura,
+  fmtCompact, fmtInt, fmtDias, fmtFechaCorta, diasHasta, tonoCobertura, normalizar, tokensBusqueda,
 } from './inventario/constantes';
 
 const MAX_FILAS = 300;
@@ -28,36 +35,76 @@ export default function InventarioGlobal() {
   if (!puedeVerPestanaGlobal(perfil, 'inventario_global')) {
     return <SinAcceso motivo="No tienes acceso a Inventario." />;
   }
-  return <InventarioGlobalPantalla />;
+  return <InventarioGlobalPantalla sensible={puedeVerSensible(perfil)} />;
 }
 
-function InventarioGlobalPantalla() {
+// SKU × almacén enriquecido (descripción, tránsito, lead time, demanda, cobertura, estado, índice de búsqueda)
+function agregarSkus(filas, { descripciones, transito, leadTime, demanda }) {
+  const m = new Map();
+  filas.forEach((r) => {
+    const sku = r.articulo;
+    if (!sku) return;
+    if (!m.has(sku)) m.set(sku, { sku, byAlm: {}, totalPz: 0, totalDisp: 0, totalRes: 0, valor: 0, costoRef: 0, cedisSet: new Set() });
+    const it = m.get(sku);
+    const alm = Number(r.no_almacen);
+    const pz = N(r.inventario), disp = N(r.disponible), res = Math.max(0, pz - disp), val = N(r.costoinventario);
+    if (!it.byAlm[alm]) it.byAlm[alm] = { pz: 0, disp: 0, res: 0, valor: 0, cedis: r.cedis };
+    it.byAlm[alm].pz += pz; it.byAlm[alm].disp += disp; it.byAlm[alm].res += res; it.byAlm[alm].valor += val;
+    it.totalPz += pz; it.totalDisp += disp; it.totalRes += res; it.valor += val;
+    it.costoRef = Math.max(it.costoRef, N(r.costopromedio));
+    if (pz > 0 && r.cedis) it.cedisSet.add(r.cedis);
+  });
+  return Array.from(m.values()).map((it) => {
+    const d = descripciones.get(it.sku) || {};
+    const tr = transito.get(it.sku) || null;
+    const lt = leadTime.get(it.sku) || null;
+    const demandaMes = demanda.get(it.sku) || 0;
+    const costo = it.totalPz > 0 ? it.valor / it.totalPz : it.costoRef;
+    const transitoPz = tr ? tr.cantidad : 0;
+    const coberturaDias = demandaMes > 0 ? it.totalPz / (demandaMes / 30) : null;
+    const tieneStock = it.totalPz > 0;
+    const diasEta = tr?.eta ? diasHasta(tr.eta) : null;
+    const agotado = !tieneStock && demandaMes > 0;
+    const critico = tieneStock && coberturaDias != null && coberturaDias < COBERTURA_CRITICA;
+    const sobrestock = tieneStock && coberturaDias != null && coberturaDias > COBERTURA_SOBRESTOCK;
+    // Se agota antes de que llegue su tránsito: hay embarque pendiente y la cobertura no alcanza a la ETA
+    const riesgo = transitoPz > 0 && (agotado || (critico && diasEta != null && coberturaDias < Math.max(diasEta, 0)));
+    const row = {
+      ...it,
+      descripcion: d.descripcion || '', marca: d.marca || '', familia: d.familia || '', rdmp: d.rdmp || '', categoria: d.categoria || '',
+      transito: tr, transitoPz, transitoPos: tr ? tr.pos.length : 0, transitoEta: tr?.eta || null, transitoValor: transitoPz * costo, costo,
+      leadTime: lt, demandaMes, coberturaDias, agotado, critico, sobrestock, riesgo, tieneStock,
+    };
+    row.estado = estadoDe(row);
+    // Índice de búsqueda: SKU + descripción + marca + familia + categoría, sin acentos ni mayúsculas
+    row.indice = normalizar(`${row.sku} ${row.descripcion} ${row.marca} ${row.familia} ${row.categoria}`);
+    return row;
+  });
+}
+
+function InventarioGlobalPantalla({ sensible }) {
   const { theme } = useTheme();
   const rootRef = useRef(null); // raíz para exportar PDF
-  const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, mesesRef } = useInventarioDatos();
+  const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, mesesRef } = useInventarioDatos();
 
   // Alcance
   const [soloComerciales, setSoloComerciales] = useState(true);
   const [cedisFiltro, setCedisFiltro] = useState('TODOS');
-  // Filtros de tabla
+  // Filtros de tabla (pills facetadas) + buscador
   const [busqueda, setBusqueda] = useState('');
-  const [estadoFiltro, setEstadoFiltro] = useState('todos');
-  const [marcaFiltro, setMarcaFiltro] = useState(() => new Set());     // Set de marcas · vacío = todas
-  const [familiaFiltro, setFamiliaFiltro] = useState('');              // '' = todas
-  const [roadmapFiltro, setRoadmapFiltro] = useState(() => new Set()); // Set de rdmp · vacío = todos
-  const [soloConStock, setSoloConStock] = useState(false);
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  const [filtros, setFiltros] = useState(FILTROS_VACIOS);
   const [orden, setOrden] = useState({ col: 'valor', dir: 'desc' });
   const [skuAbierto, setSkuAbierto] = useState(null);
   const [exportando, setExportando] = useState(false);
+  // Canasta para compartir varios SKUs · compartirSkus = lista abierta en la hoja
+  const [canasta, setCanasta] = useState(() => new Set());
+  const [compartirSkus, setCompartirSkus] = useState(null);
+
+  const f = useMemo(() => ({ ...filtros, tokens: tokensBusqueda(busqueda) }), [filtros, busqueda]);
 
   // ── Filas efectivas según alcance ──
-  const filasEfectivas = useMemo(() => filas.filter((r) => {
-    if (!r.cedis) return false; // ignoramos sin CEDIS asignado
-    if (soloComerciales && !esComercial(Number(r.no_almacen))) return false;
-    if (cedisFiltro !== 'TODOS' && r.cedis !== cedisFiltro) return false;
-    return true;
-  }), [filas, soloComerciales, cedisFiltro]);
+  const filasAlcance = useMemo(() => filas.filter((r) => r.cedis && (!soloComerciales || esComercial(Number(r.no_almacen)))), [filas, soloComerciales]);
+  const filasEfectivas = useMemo(() => (cedisFiltro === 'TODOS' ? filasAlcance : filasAlcance.filter((r) => r.cedis === cedisFiltro)), [filasAlcance, cedisFiltro]);
 
   const kpis = useMemo(() => {
     let valor = 0, piezas = 0;
@@ -79,9 +126,9 @@ function InventarioGlobalPantalla() {
       if (r.articulo) it.skus.add(r.articulo);
       it.almacenes.add(r.no_almacen);
     });
-    const total = Array.from(m.values()).reduce((s, x) => s + x.valor, 0);
-    return Array.from(m.values()).map((it) => ({ ...it, skus: it.skus.size, almacenes: it.almacenes.size, share: total > 0 ? (it.valor / total) * 100 : 0 })).sort((a, b) => b.valor - a.valor);
-  }, [filasEfectivas]);
+    const total = Array.from(m.values()).reduce((s, x) => s + (sensible ? x.valor : x.piezas), 0);
+    return Array.from(m.values()).map((it) => ({ ...it, skus: it.skus.size, almacenes: it.almacenes.size, share: total > 0 ? ((sensible ? it.valor : it.piezas) / total) * 100 : 0 })).sort((a, b) => (sensible ? b.valor - a.valor : b.piezas - a.piezas));
+  }, [filasEfectivas, sensible]);
 
   const porTipo = useMemo(() => {
     const m = new Map();
@@ -92,67 +139,18 @@ function InventarioGlobalPantalla() {
       it.valor += N(r.costoinventario); it.piezas += N(r.inventario);
       if (r.articulo) it.skus.add(r.articulo);
     });
-    const total = Array.from(m.values()).reduce((s, x) => s + x.valor, 0);
-    return Array.from(m.values()).map((it) => ({ ...it, skus: it.skus.size, share: total > 0 ? (it.valor / total) * 100 : 0 })).sort((a, b) => b.valor - a.valor);
-  }, [filasEfectivas]);
+    const total = Array.from(m.values()).reduce((s, x) => s + (sensible ? x.valor : x.piezas), 0);
+    return Array.from(m.values()).map((it) => ({ ...it, skus: it.skus.size, share: total > 0 ? ((sensible ? it.valor : it.piezas) / total) * 100 : 0 })).sort((a, b) => (sensible ? b.valor - a.valor : b.piezas - a.piezas));
+  }, [filasEfectivas, sensible]);
 
-  // ── SKU × almacén enriquecido (descripción, tránsito, lead time, demanda, cobertura) ──
-  const skuRows = useMemo(() => {
-    const m = new Map();
-    filasEfectivas.forEach((r) => {
-      const sku = r.articulo;
-      if (!sku) return;
-      if (!m.has(sku)) m.set(sku, { sku, byAlm: {}, totalPz: 0, totalDisp: 0, totalRes: 0, valor: 0, costoRef: 0 });
-      const it = m.get(sku);
-      const alm = Number(r.no_almacen);
-      const pz = N(r.inventario), disp = N(r.disponible), res = Math.max(0, pz - disp), val = N(r.costoinventario);
-      if (!it.byAlm[alm]) it.byAlm[alm] = { pz: 0, disp: 0, res: 0, valor: 0, cedis: r.cedis };
-      it.byAlm[alm].pz += pz; it.byAlm[alm].disp += disp; it.byAlm[alm].res += res; it.byAlm[alm].valor += val;
-      it.totalPz += pz; it.totalDisp += disp; it.totalRes += res; it.valor += val;
-      it.costoRef = Math.max(it.costoRef, N(r.costopromedio));
-    });
-    return Array.from(m.values()).map((it) => {
-      const d = descripciones.get(it.sku) || {};
-      const tr = transito.get(it.sku) || null;
-      const lt = leadTime.get(it.sku) || null;
-      const demandaMes = demanda.get(it.sku) || 0;
-      const costo = it.totalPz > 0 ? it.valor / it.totalPz : it.costoRef;
-      const transitoPz = tr ? tr.cantidad : 0;
-      const coberturaDias = demandaMes > 0 ? it.totalPz / (demandaMes / 30) : null;
-      const tieneStock = it.totalPz > 0;
-      const diasEta = tr?.eta ? diasHasta(tr.eta) : null;
-      const agotado = !tieneStock && demandaMes > 0;
-      const critico = tieneStock && coberturaDias != null && coberturaDias < COBERTURA_CRITICA;
-      const sobrestock = tieneStock && coberturaDias != null && coberturaDias > COBERTURA_SOBRESTOCK;
-      // Se agota antes de que llegue su tránsito: hay embarque pendiente y la cobertura no alcanza a la ETA
-      const riesgo = transitoPz > 0 && (agotado || (critico && diasEta != null && coberturaDias < Math.max(diasEta, 0)));
-      return {
-        ...it,
-        descripcion: d.descripcion || '', marca: d.marca || '', familia: d.familia || '', rdmp: d.rdmp || '', categoria: d.categoria || '',
-        transito: tr, transitoPz, transitoPos: tr ? tr.pos.length : 0, transitoEta: tr?.eta || null, transitoValor: transitoPz * costo,
-        leadTime: lt, demandaMes, coberturaDias, agotado, critico, sobrestock, riesgo, tieneStock,
-      };
-    });
-  }, [filasEfectivas, descripciones, transito, leadTime, demanda]);
+  // ── SKU × almacén enriquecido: con el CEDIS elegido (pantalla) y sin él (conteo de la pill CEDIS) ──
+  const ctx = useMemo(() => ({ descripciones, transito, leadTime, demanda }), [descripciones, transito, leadTime, demanda]);
+  const skuRowsTodos = useMemo(() => agregarSkus(filasAlcance, ctx), [filasAlcance, ctx]);
+  const skuRows = useMemo(() => (cedisFiltro === 'TODOS' ? skuRowsTodos : agregarSkus(filasEfectivas, ctx)), [skuRowsTodos, filasEfectivas, cedisFiltro, ctx]);
 
-  // Opciones de filtros (derivadas de la data)
-  const opcionesFiltros = useMemo(() => {
-    const marcas = new Set(), familias = new Set(), roadmaps = new Set();
-    for (const [, d] of descripciones) {
-      if (d.marca) marcas.add(String(d.marca).trim());
-      if (d.familia) familias.add(String(d.familia).trim());
-      if (d.rdmp) roadmaps.add(String(d.rdmp).trim().toUpperCase());
-    }
-    return { marcas: Array.from(marcas).sort(), familias: Array.from(familias).sort(), roadmaps: Array.from(roadmaps).sort() };
-  }, [descripciones]);
-
-  // Universo = alcance + marca/familia/roadmap (hero y KPIs se calculan aquí)
-  const universo = useMemo(() => skuRows.filter((r) => {
-    if (marcaFiltro.size > 0 && !marcaFiltro.has(String(r.marca || '').trim().toLowerCase())) return false;
-    if (familiaFiltro && String(r.familia || '').trim().toLowerCase() !== familiaFiltro.toLowerCase()) return false;
-    if (roadmapFiltro.size > 0 && !roadmapFiltro.has(String(r.rdmp || '').toUpperCase())) return false;
-    return true;
-  }), [skuRows, marcaFiltro, familiaFiltro, roadmapFiltro]);
+  // Universo = alcance + marca/familia/roadmap (hero y KPIs se calculan aquí; ignora búsqueda, estado, stock y tránsito)
+  const fUniverso = useMemo(() => ({ ...f, tokens: [], estado: new Set(), soloStock: false, soloTransito: false }), [f]);
+  const universo = useMemo(() => skuRows.filter((r) => pasaTodos(r, fUniverso, null)), [skuRows, fUniverso]);
 
   const resumen = useMemo(() => {
     const conStock = universo.filter((r) => r.tieneStock);
@@ -169,6 +167,7 @@ function InventarioGlobalPantalla() {
     const transitoPos = new Set(enTransito.flatMap((r) => r.transito.pos.map((p) => p.po))).size;
     const transitoEta = enTransito.reduce((m, r) => (r.transitoEta && (!m || r.transitoEta < m) ? r.transitoEta : m), null);
     const valorSobre = sobre.reduce((s, r) => s + r.valor, 0);
+    const piezasSobre = sobre.reduce((s, r) => s + r.totalPz, 0);
     const demandaPerdida = agotados.reduce((s, r) => s + r.demandaMes, 0);
     const conLt = universo.filter((r) => r.leadTime && r.leadTime.muestras > 0);
     const ltPond = conLt.reduce((s, r) => s + r.leadTime.dias * r.leadTime.muestras, 0) / (conLt.reduce((s, r) => s + r.leadTime.muestras, 0) || 1);
@@ -181,24 +180,16 @@ function InventarioGlobalPantalla() {
     return {
       valor, piezas, nSkus: universo.length, conStock: conStock.length,
       agotados: agotados.length, criticos: criticos.length, sobrestock: sobre.length, enTransito: enTransito.length, riesgo: riesgo.length,
-      cobertura, transitoValor, transitoPz, transitoPos, transitoEta, valorSobre, demandaPerdida,
+      cobertura, demDia, transitoValor, transitoPz, transitoPos, transitoEta, valorSobre, piezasSobre, demandaPerdida,
       leadTime: conLt.length ? ltPond : null, ltMin, ltMax, nLt: conLt.length,
       reservado, valorReservado, disponible: piezas - reservado, valorDisponible: Math.max(0, valor - valorReservado),
       pctReservado: piezas > 0 ? (reservado / piezas) * 100 : 0,
     };
   }, [universo]);
 
-  // ── Tabla: búsqueda + estado + sólo con stock + orden ──
+  // ── Tabla: todos los filtros + orden (el orden no cambia: valor desc por defecto) ──
   const filasTabla = useMemo(() => {
-    let arr = universo;
-    const q = busqueda.trim().toUpperCase();
-    if (q) arr = arr.filter((r) => `${r.sku} ${r.descripcion} ${r.marca} ${r.familia} ${r.categoria}`.toUpperCase().includes(q));
-    if (soloConStock) arr = arr.filter((r) => r.tieneStock);
-    if (estadoFiltro === 'riesgo') arr = arr.filter((r) => r.riesgo);
-    else if (estadoFiltro === 'agotados') arr = arr.filter((r) => r.agotado);
-    else if (estadoFiltro === 'criticos') arr = arr.filter((r) => r.critico);
-    else if (estadoFiltro === 'sobrestock') arr = arr.filter((r) => r.sobrestock);
-    else if (estadoFiltro === 'transito') arr = arr.filter((r) => r.transitoPz > 0);
+    const arr = skuRows.filter((r) => pasaTodos(r, f, null));
     const { col, dir } = orden;
     const sgn = dir === 'asc' ? 1 : -1;
     const get = (r) => {
@@ -212,7 +203,15 @@ function InventarioGlobalPantalla() {
       if (va === vb) return b.valor - a.valor;
       return sgn * ((va ?? -Infinity) - (vb ?? -Infinity));
     });
-  }, [universo, busqueda, soloConStock, estadoFiltro, orden]);
+  }, [skuRows, f, orden]);
+
+  // Facetas (conteos con los demás filtros aplicados) y conteo por CEDIS (sobre todos los CEDIS)
+  const facetas = useMemo(() => calcularFacetas(skuRows, f), [skuRows, f]);
+  const cedisConteo = useMemo(() => {
+    const m = new Map();
+    skuRowsTodos.forEach((r) => { if (!pasaTodos(r, f, null)) return; r.cedisSet.forEach((c) => m.set(c, (m.get(c) || 0) + 1)); });
+    return m;
+  }, [skuRowsTodos, f]);
 
   const maxCelda = useMemo(() => {
     let m = 0;
@@ -233,12 +232,19 @@ function InventarioGlobalPantalla() {
     return t;
   }, [filasTabla]);
 
-  const nFiltrosActivos = (marcaFiltro.size > 0 ? 1 : 0) + (familiaFiltro ? 1 : 0) + (roadmapFiltro.size > 0 ? 1 : 0) + (soloConStock ? 1 : 0);
-  const limpiarFiltros = () => { setMarcaFiltro(new Set()); setFamiliaFiltro(''); setRoadmapFiltro(new Set()); setSoloConStock(false); };
+  const nFiltrosActivos = contarActivos(filtros) + (cedisFiltro !== 'TODOS' ? 1 : 0);
+  const limpiarFiltros = () => { setFiltros(FILTROS_VACIOS()); setCedisFiltro('TODOS'); setBusqueda(''); };
+  const toggleFiltro = (grupo, id) => setFiltros((prev) => { const next = new Set(prev[grupo]); if (next.has(id)) next.delete(id); else next.add(id); return { ...prev, [grupo]: next }; });
+  const soloEstado = (id) => setFiltros((prev) => ({ ...prev, estado: prev.estado.size === 1 && prev.estado.has(id) ? new Set() : new Set([id]) }));
   const onSort = (col) => setOrden((o) => (o.col === col ? { col, dir: o.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'sku' || col === 'descripcion' || col === 'marca' ? 'asc' : 'desc' }));
-  const toggleEstado = (id) => setEstadoFiltro((e) => (e === id ? 'todos' : id));
 
-  // ── Export Excel (respeta filtros y orden aplicados) ──
+  // Canasta
+  const toggleCanasta = (sku) => setCanasta((prev) => { const next = new Set(prev); if (next.has(sku)) next.delete(sku); else next.add(sku); return next; });
+  const porSku = useMemo(() => new Map(skuRowsTodos.map((r) => [r.sku, r])), [skuRowsTodos]);
+  const filasCompartir = useMemo(() => (compartirSkus || []).map((s) => porSku.get(s)).filter(Boolean), [compartirSkus, porSku]);
+  const abrirCompartirCanasta = () => { if (canasta.size) setCompartirSkus([...canasta]); };
+
+  // ── Export Excel (respeta filtros y orden aplicados; sin $ si no hay permiso sensible) ──
   const handleExport = async () => {
     setExportando(true);
     try {
@@ -253,17 +259,14 @@ function InventarioGlobalPantalla() {
         base['ETA tránsito'] = r.transitoEta || '';
         base['Demanda pz/mes'] = Math.round(r.demandaMes || 0);
         base['Cobertura días'] = r.coberturaDias == null ? '' : Math.round(r.coberturaDias);
+        base['Estado'] = r.riesgo ? 'Riesgo' : r.estado || '';
         base['Lead time días'] = r.leadTime ? r.leadTime.dias : '';
-        base['Valor'] = Number(r.valor || 0);
+        if (sensible) { base['Costo promedio'] = Number(r.costo || 0); base['Valor'] = Number(r.valor || 0); }
         return base;
       });
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [
-        { wch: 14 }, { wch: 14 }, { wch: 46 }, { wch: 18 }, { wch: 18 }, { wch: 10 },
-        ...ALMACENES_GRID.map(() => ({ wch: 12 })),
-        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
-      ];
       const header = Object.keys(rows[0] || { SKU: '' });
+      ws['!cols'] = header.map((h) => ({ wch: h === 'Descripción' ? 46 : h === 'Familia' || h === 'Categoría' ? 18 : 13 }));
       header.forEach((h, i) => {
         const cell = ws[XLSX.utils.encode_cell({ r: 0, c: i })];
         if (cell) cell.s = { font: { bold: true, sz: 11, color: { rgb: 'FFFFFFFF' } }, fill: { fgColor: { rgb: 'FF007AFF' } }, alignment: { vertical: 'center', horizontal: 'left' } };
@@ -282,6 +285,17 @@ function InventarioGlobalPantalla() {
     }
   };
 
+  // ── Histórico: comparativo vs hace 30 días (o la primera foto) ──
+  const hist30 = useMemo(() => {
+    if (!historico?.length) return null;
+    const ultimo = historico[historico.length - 1];
+    const ref = fotoHace(historico, 30);
+    if (!ref || ref.fecha === ultimo.fecha) return { solo: historico.length, desde: historico[0].fecha };
+    const pct = (k) => (N(ref[k]) > 0 ? ((N(ultimo[k]) - N(ref[k])) / N(ref[k])) * 100 : null);
+    return { ref, pctValor: pct('valor'), pctPiezas: pct('piezas') };
+  }, [historico]);
+  const fmtDelta = (p) => (p == null ? null : `${p > 0 ? '+' : ''}${p.toFixed(1)}% vs hace 30 d`);
+
   // ── Hero narrativo (frase por reglas) ──
   const hero = useMemo(() => {
     const r = resumen;
@@ -294,15 +308,15 @@ function InventarioGlobalPantalla() {
     else if (cob != null && cob > COBERTURA_SOBRESTOCK) { titulo = `Sobre-stock: ${cob} días de cobertura.`; }
     else if (cob != null) { titulo = `Cobertura sana: ${cob} días.`; }
     else if (enriqueciendo) { titulo = 'Inventario Acteck · calculando cobertura…'; }
-    else { titulo = `Inventario Acteck · ${fmtCompact(r.valor)}.`; }
+    else { titulo = `Inventario Acteck · ${sensible ? fmtCompact(r.valor) : `${fmtInt(r.piezas)} pz`}.`; }
     const partes = [];
     if (r.riesgo > 0 && r.agotados > 0) partes.push(`${fmtInt(r.agotados)} agotados con demanda`);
     if (r.criticos > 0 && r.riesgo > 0) partes.push(`${fmtInt(r.criticos)} críticos (< ${COBERTURA_CRITICA} d)`);
-    if (r.sobrestock > 0) partes.push(`${fmtInt(r.sobrestock)} en sobre-stock (> ${COBERTURA_SOBRESTOCK} d) por ${fmtCompact(r.valorSobre)}`);
+    if (r.sobrestock > 0) partes.push(`${fmtInt(r.sobrestock)} en sobre-stock (> ${COBERTURA_SOBRESTOCK} d)${sensible ? ` por ${fmtCompact(r.valorSobre)}` : ` · ${fmtInt(r.piezasSobre)} pz`}`);
     if (r.enTransito > 0) partes.push(`${fmtInt(r.enTransito)} SKUs con tránsito${r.transitoEta ? ` · próximo arribo ${fmtFechaCorta(r.transitoEta)}` : ''}`);
     const sub = partes.length ? partes.join(' · ') + '.' : `${fmtInt(r.piezas)} pz en ${kpis.almacenes} almacenes de ${kpis.nCEDIS} CEDIS · demanda = ERP, promedio de ${mesesRef.length} meses cerrados.`;
     return { titulo, sub };
-  }, [resumen, kpis, enriqueciendo, mesesRef.length]);
+  }, [resumen, kpis, enriqueciendo, mesesRef.length, sensible]);
 
   const colorTono = { red: theme.red, orange: theme.orange, green: theme.green, gray: theme.textMuted };
 
@@ -313,7 +327,7 @@ function InventarioGlobalPantalla() {
     return (
       <div style={{ padding: '10px 6px', background: theme.bg, minHeight: '100%' }}>
         <Panel titulo="Inventario" meta="sin datos">
-          <p style={{ margin: 0, fontSize: 12.5, color: theme.textMuted, fontFamily: TYPO.fontText }}>No hay datos. Sube el archivo ERP en /uploads.html.</p>
+          <p style={{ margin: 0, fontSize: 12.5, color: theme.textMuted, fontFamily: TYPO.fontText }}>No hay datos de inventario. El puente SQL (Mac mini) lo carga cada hora; revisa Administración → Datos.</p>
         </Panel>
       </div>
     );
@@ -321,10 +335,20 @@ function InventarioGlobalPantalla() {
 
   const alcanceLabel = `${soloComerciales ? 'Sólo comerciales' : 'Todos los almacenes'}${cedisFiltro !== 'TODOS' ? ` · ${CEDIS_CORTO[cedisFiltro] || cedisFiltro}` : ''}`;
   const tonoCob = tonoCobertura(resumen.cobertura, resumen.conStock > 0);
+  const subHistorico = hist30
+    ? hist30.solo ? (hist30.solo === 1 ? 'histórico desde hoy' : `histórico desde ${fmtFechaCorta(hist30.desde)}`) : fmtDelta(sensible ? hist30.pctValor : hist30.pctPiezas)
+    : null;
 
   // ── Columnas de la tabla ──
   const dash = <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>;
   const columnas = [
+    {
+      key: 'sel', label: <span title="Canasta: junta SKUs para compartir su disponibilidad en un solo mensaje">☐</span>, width: 28, align: 'center',
+      render: (r) => (
+        <input type="checkbox" checked={canasta.has(r.sku)} onChange={() => toggleCanasta(r.sku)} onClick={(e) => e.stopPropagation()}
+          title={canasta.has(r.sku) ? 'Quitar de la canasta' : 'Añadir a la canasta para compartir'} style={{ accentColor: theme.accent, cursor: 'pointer', margin: 0, verticalAlign: 'middle' }} />
+      ),
+    },
     { key: 'marca', label: 'Marca', align: 'left', width: 70, sort: true, render: (r) => <span style={{ color: theme.textMuted, fontSize: 10.5 }}>{r.marca || '—'}</span> },
     {
       key: 'sku', label: 'SKU', align: 'left', width: 110, mono: true, bold: true, sort: true,
@@ -359,17 +383,9 @@ function InventarioGlobalPantalla() {
       },
       renderTotal: (v) => (v == null ? '—' : `${fmtInt(v)} d`),
     },
-    { key: 'valor', label: 'Valor', width: 80, sort: true, bold: true, render: (r) => fmtCompact(r.valor), renderTotal: (v) => fmtCompact(v) },
+    ...(sensible ? [{ key: 'valor', label: 'Valor', width: 80, sort: true, bold: true, render: (r) => fmtCompact(r.valor), renderTotal: (v) => fmtCompact(v) }] : []),
   ];
-
-  const opcionesEstado = [
-    { id: 'todos', label: 'Todos' },
-    { id: 'riesgo', label: 'Riesgo', badge: resumen.riesgo || undefined, title: 'Se agotan antes de que llegue su tránsito' },
-    { id: 'agotados', label: 'Agotados', badge: resumen.agotados || undefined, title: 'Sin stock y con demanda ERP' },
-    { id: 'criticos', label: 'Críticos', badge: resumen.criticos || undefined, title: `Menos de ${COBERTURA_CRITICA} días de cobertura` },
-    { id: 'sobrestock', label: 'Sobre-stock', badge: resumen.sobrestock || undefined, title: `Más de ${COBERTURA_SOBRESTOCK} días de cobertura` },
-    { id: 'transito', label: 'Tránsito', badge: resumen.enTransito || undefined, title: 'Con embarques pendientes' },
-  ];
+  const kpiActivo = (id) => (filtros.estado.size === 1 && filtros.estado.has(id) ? { borderColor: theme.accent } : undefined);
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
@@ -379,36 +395,38 @@ function InventarioGlobalPantalla() {
           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>Dirección Comercial · Snapshot actual</span>
           {enriqueciendo && <Pill tone="gray" size="xs" dot>cargando tránsito, lead time y demanda…</Pill>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <Segmented value={soloComerciales ? 'com' : 'todos'} onChange={(v) => setSoloComerciales(v === 'com')}
-            options={[{ id: 'com', label: 'Sólo comerciales' }, { id: 'todos', label: 'Todos los almacenes' }]} />
-          <Segmented value={cedisFiltro} onChange={setCedisFiltro}
-            options={[{ id: 'TODOS', label: 'Todos los CEDIS' }, ...CEDIS_LISTA.map((c) => ({ id: c, label: CEDIS_CORTO[c] }))]} />
-        </div>
+        <Segmented value={soloComerciales ? 'com' : 'todos'} onChange={(v) => setSoloComerciales(v === 'com')}
+          options={[{ id: 'com', label: 'Sólo comerciales' }, { id: 'todos', label: 'Todos los almacenes' }]} />
       </div>
 
       {/* Hero narrativo */}
       <Hero eyebrow={`Inventario Acteck · ${alcanceLabel}`} titulo={hero.titulo} sub={hero.sub}
         stats={[
-          { k: 'Valor comercial', v: fmtCompact(resumen.valor), sub: `${fmtInt(resumen.piezas)} pz a costo` },
+          sensible
+            ? { k: 'Valor comercial', v: fmtCompact(resumen.valor), sub: subHistorico || `${fmtInt(resumen.piezas)} pz a costo` }
+            : { k: 'Piezas', v: fmtInt(resumen.piezas), sub: subHistorico || `${fmtInt(resumen.disponible)} disponibles` },
           { k: 'SKUs con stock', v: fmtInt(resumen.conStock), sub: `de ${fmtInt(resumen.nSkus)} SKUs` },
           { k: 'Cobertura', v: resumen.cobertura != null ? `${fmtInt(resumen.cobertura)} d` : enriqueciendo ? '…' : '—', sub: 'ritmo ERP · 3 meses', color: resumen.cobertura != null ? colorTono[tonoCob] : undefined },
-        ]} />
+        ]}>
+        <div style={{ marginTop: 8 }}><FrescuraPill pantalla="inventarioGlobal" inverso /></div>
+      </Hero>
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
         <KpiCard eyebrow="Agotados" badge={{ tone: resumen.agotados > 0 ? 'red' : 'green', l: resumen.agotados > 0 ? 'Con demanda' : 'OK' }}
           big={fmtInt(resumen.agotados)} bigSmall="SKUs" bigColor={resumen.agotados > 0 ? theme.red : theme.text}
           sub={resumen.agotados > 0 ? `${fmtInt(resumen.demandaPerdida)} pz/mes de demanda sin stock` : 'ningún SKU con demanda en cero'}
-          onClick={() => toggleEstado('agotados')} style={estadoFiltro === 'agotados' ? { borderColor: theme.accent } : undefined} />
+          onClick={() => soloEstado('Agotado')} style={kpiActivo('Agotado')} />
         <KpiCard eyebrow="En tránsito" badge={{ tone: 'blue', l: `${fmtInt(resumen.transitoPos)} PO${resumen.transitoPos === 1 ? '' : 's'}` }}
-          big={fmtCompact(resumen.transitoValor)} bigSmall={`${fmtInt(resumen.transitoPz)} pz`}
+          big={sensible ? fmtCompact(resumen.transitoValor) : fmtInt(resumen.transitoPz)} bigSmall={sensible ? `${fmtInt(resumen.transitoPz)} pz` : 'pz'}
           sub={resumen.enTransito > 0 ? `${fmtInt(resumen.enTransito)} SKUs · próximo arribo ${fmtFechaCorta(resumen.transitoEta)}${resumen.riesgo > 0 ? ` · ${fmtInt(resumen.riesgo)} en riesgo` : ''}` : 'sin embarques pendientes'}
-          onClick={() => toggleEstado('transito')} style={estadoFiltro === 'transito' ? { borderColor: theme.accent } : undefined} />
+          onClick={() => setFiltros((p) => ({ ...p, soloTransito: !p.soloTransito }))} style={filtros.soloTransito ? { borderColor: theme.accent } : undefined} />
         <KpiCard eyebrow={`Sobre-stock > ${COBERTURA_SOBRESTOCK} días`} badge={{ tone: resumen.sobrestock > 0 ? 'orange' : 'green', l: resumen.sobrestock > 0 ? 'Inmovilizado' : 'OK' }}
           big={fmtInt(resumen.sobrestock)} bigSmall="SKUs" bigColor={resumen.sobrestock > 0 ? theme.orange : theme.text}
-          sub={resumen.sobrestock > 0 ? `${fmtCompact(resumen.valorSobre)} a costo · ${resumen.valor > 0 ? ((resumen.valorSobre / resumen.valor) * 100).toFixed(0) : 0}% del valor` : 'sin SKUs con exceso de cobertura'}
-          onClick={() => toggleEstado('sobrestock')} style={estadoFiltro === 'sobrestock' ? { borderColor: theme.accent } : undefined} />
+          sub={resumen.sobrestock > 0
+            ? (sensible ? `${fmtCompact(resumen.valorSobre)} a costo · ${resumen.valor > 0 ? ((resumen.valorSobre / resumen.valor) * 100).toFixed(0) : 0}% del valor` : `${fmtInt(resumen.piezasSobre)} pz · ${resumen.piezas > 0 ? ((resumen.piezasSobre / resumen.piezas) * 100).toFixed(0) : 0}% de las piezas`)
+            : 'sin SKUs con exceso de cobertura'}
+          onClick={() => soloEstado('Sobre-stock')} style={kpiActivo('Sobre-stock')} />
         <KpiCard eyebrow="Lead time" badge={{ tone: 'gray', l: `${fmtInt(resumen.nLt)} SKUs` }}
           big={resumen.leadTime != null ? fmtDias(resumen.leadTime) : '—'} bigSmall="promedio"
           sub={resumen.leadTime != null ? `${fmtInt(resumen.ltMin)}–${fmtInt(resumen.ltMax)} d de emisión a CEDIS · embarques concluidos` : 'sin historial de embarques'} />
@@ -419,28 +437,22 @@ function InventarioGlobalPantalla() {
         padding={0}
         acciones={<ExportMenu titulo="Inventario" subtitulo={`${fmtInt(filasTabla.length)} SKUs · ${ALMACENES_GRID.length} almacenes`} excel={handleExport} pdf={{ ref: rootRef }} deshabilitado={exportando || filasTabla.length === 0} size="md" />}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 30, flex: 1, minWidth: 180, maxWidth: 280 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${busqueda ? theme.accent : theme.border}`, borderRadius: 999, height: 30, flex: 1, minWidth: 220, maxWidth: 360 }}>
             <Search size={12} style={{ color: theme.textMuted, flexShrink: 0 }} />
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar SKU, marca, familia…"
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar: palabras en cualquier orden, sin acentos (mouse inalambrico negro, parte del SKU…)"
               style={{ border: 0, outline: 0, background: 'transparent', fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, flex: 1, minWidth: 0 }} />
+            {busqueda && <X size={12} style={{ color: theme.textMuted, cursor: 'pointer', flexShrink: 0 }} onClick={() => setBusqueda('')} />}
           </div>
-          <Segmented options={opcionesEstado} value={estadoFiltro} onChange={setEstadoFiltro} />
-          <Boton icon={SlidersHorizontal} onClick={() => setFiltrosAbiertos((v) => !v)} primario={filtrosAbiertos || nFiltrosActivos > 0}>
-            Filtros{nFiltrosActivos > 0 ? ` · ${nFiltrosActivos}` : ''}
-          </Boton>
           <span style={{ fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-            {fmtInt(filasTabla.length)} de {fmtInt(universo.length)} SKUs
+            {fmtInt(filasTabla.length)} de {fmtInt(skuRows.length)} SKUs{canasta.size ? ` · ${fmtInt(canasta.size)} en la canasta` : ''}
           </span>
         </div>
 
-        {filtrosAbiertos && (
-          <FiltrosInventario opciones={opcionesFiltros}
-            marca={marcaFiltro} setMarca={setMarcaFiltro}
-            familia={familiaFiltro} setFamilia={setFamiliaFiltro}
-            roadmap={roadmapFiltro} setRoadmap={setRoadmapFiltro}
-            soloConStock={soloConStock} setSoloConStock={setSoloConStock}
-            nActivos={nFiltrosActivos} onLimpiar={limpiarFiltros} />
-        )}
+        <FiltrosPills f={f} facetas={facetas} cedis={cedisFiltro} cedisConteo={cedisConteo} onCedis={setCedisFiltro}
+          onToggle={toggleFiltro}
+          onSoloStock={(v) => setFiltros((p) => ({ ...p, soloStock: v }))}
+          onSoloTransito={(v) => setFiltros((p) => ({ ...p, soloTransito: v }))}
+          nActivos={nFiltrosActivos} onLimpiar={limpiarFiltros} />
 
         <TablaCompacta
           columnas={columnas}
@@ -449,10 +461,10 @@ function InventarioGlobalPantalla() {
           orden={orden} onSort={onSort}
           totales={totales}
           maxHeight="62vh"
-          vacio={enriqueciendo && estadoFiltro !== 'todos' ? 'Calculando cobertura y tránsito…' : 'Sin SKUs con estos filtros.'}
+          vacio={enriqueciendo && filtros.estado.size ? 'Calculando cobertura y tránsito…' : 'Sin SKUs con estos filtros.'}
           onRowClick={(r) => setSkuAbierto((s) => (s === r.sku ? null : r.sku))}
           expandidoKey={skuAbierto}
-          renderExpandido={(r) => <SkuDrillDown row={r} almacenes={ALMACENES_GRID} />}
+          renderExpandido={(r) => <SkuDrillDown row={r} almacenes={ALMACENES_GRID} sensible={sensible} onCompartir={(sku) => setCompartirSkus([sku])} enCanasta={canasta.has(r.sku)} onToggleCanasta={toggleCanasta} />}
         />
         {filasTabla.length > MAX_FILAS && (
           <div style={{ padding: '8px 12px', textAlign: 'center', fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
@@ -461,8 +473,27 @@ function InventarioGlobalPantalla() {
         )}
       </Panel>
 
+      {/* Próximos arribos (POs con ETA en 7/14/30 días, cruzados con la cobertura) */}
+      <ProximosArribos transito={transito} skuRows={skuRows} descripciones={descripciones}
+        onVerSku={(sku) => { setFiltros(FILTROS_VACIOS()); setBusqueda(sku); setSkuAbierto(sku); rootRef.current?.querySelector('input')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
+
+      {/* Tendencia (histórico diario) */}
+      <HistoricoPanel historico={historico} demandaDia={resumen.demDia} sensible={sensible} />
+
       {/* Secundario */}
-      <ResumenSecundario porCedis={porCedis} porTipo={porTipo} kpis={kpis} insights={resumen} cedisFiltro={cedisFiltro} onCedis={setCedisFiltro} />
+      <ResumenSecundario porCedis={porCedis} porTipo={porTipo} kpis={kpis} insights={resumen} cedisFiltro={cedisFiltro} onCedis={setCedisFiltro} sensible={sensible} />
+
+      {/* Canasta flotante */}
+      {canasta.size > 0 && (
+        <div style={{ position: 'fixed', right: 22, bottom: 22, zIndex: 60, display: 'flex', alignItems: 'center', gap: 6, padding: 6, borderRadius: 999, background: theme.surface, border: `1px solid ${theme.border}`, boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText }}>
+          <Boton icon={Share2} primario size="md" onClick={abrirCompartirCanasta}>Compartir {fmtInt(canasta.size)} SKU{canasta.size === 1 ? '' : 's'}</Boton>
+          <Boton icon={X} size="md" onClick={() => setCanasta(new Set())} title="Vaciar la canasta">Vaciar</Boton>
+        </div>
+      )}
+
+      {/* Hoja compartir (1 SKU desde el drill o N desde la canasta) */}
+      <CompartirHoja abierto={!!compartirSkus} rows={filasCompartir} onClose={() => setCompartirSkus(null)}
+        onQuitar={(sku) => { setCompartirSkus((l) => (l || []).filter((s) => s !== sku)); setCanasta((prev) => { const n = new Set(prev); n.delete(sku); return n; }); }} />
     </div>
   );
 }

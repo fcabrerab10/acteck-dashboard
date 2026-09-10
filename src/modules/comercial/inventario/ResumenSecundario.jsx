@@ -10,26 +10,28 @@ import { CEDIS_CORTO, fmtCompact, fmtInt, fmtFechaCorta } from './constantes';
 // Un solo acento: intensidades por ranking (sin paleta de colores)
 const OPACIDAD = [1, 0.55, 0.3, 0.18, 0.12, 0.08];
 
-export default function ResumenSecundario({ porCedis, porTipo, kpis, insights, cedisFiltro, onCedis }) {
+export default function ResumenSecundario({ porCedis, porTipo, kpis, insights, cedisFiltro, onCedis, sensible = true }) {
   const { theme } = useTheme();
+  // Sin permiso sensible: todo en piezas (nada de valor a costo).
+  const $ = (v, pz) => (sensible ? fmtCompact(v) : `${fmtInt(pz)} pz`);
   const accent = theme.accent, green = theme.green, orange = theme.orange;
-  const total = porCedis.reduce((s, c) => s + c.valor, 0) || 1;
+  const total = porCedis.reduce((s, c) => s + (sensible ? c.valor : c.piezas), 0) || 1;
   const C = 2 * Math.PI * 42;
   let acc = 0;
-  const arcos = porCedis.map((c, i) => { const len = (c.valor / total) * C; const off = -acc; acc += len; return { ...c, len, off, op: OPACIDAD[Math.min(i, OPACIDAD.length - 1)] }; });
+  const arcos = porCedis.map((c, i) => { const len = ((sensible ? c.valor : c.piezas) / total) * C; const off = -acc; acc += len; return { ...c, len, off, op: OPACIDAD[Math.min(i, OPACIDAD.length - 1)] }; });
 
   const estatus = [
-    { tone: 'green', col: green, label: 'Comercial disponible', sub: `${fmtInt(kpis.skus)} SKUs · ${kpis.almacenes} alm.`, val: fmtCompact(insights.valorDisponible), vsub: `${fmtInt(insights.disponible)} pz` },
-    { tone: 'orange', col: orange, label: 'Reservado', sub: 'órdenes en curso', val: fmtCompact(insights.valorReservado), vsub: `${fmtInt(insights.reservado)} pz · ${insights.pctReservado.toFixed(1)}%` },
-    { tone: 'blue', col: accent, label: 'En tránsito', sub: insights.transitoEta ? `próximo arribo ${fmtFechaCorta(insights.transitoEta)}` : 'sin embarques pendientes', val: fmtCompact(insights.transitoValor), vsub: `${fmtInt(insights.transitoPz)} pz · ${insights.transitoPos} POs` },
+    { tone: 'green', col: green, label: 'Comercial disponible', sub: `${fmtInt(kpis.skus)} SKUs · ${kpis.almacenes} alm.`, val: sensible ? fmtCompact(insights.valorDisponible) : `${fmtInt(insights.disponible)} pz`, vsub: sensible ? `${fmtInt(insights.disponible)} pz` : `${fmtInt(kpis.skus)} SKUs` },
+    { tone: 'orange', col: orange, label: 'Reservado', sub: 'órdenes en curso', val: sensible ? fmtCompact(insights.valorReservado) : `${fmtInt(insights.reservado)} pz`, vsub: sensible ? `${fmtInt(insights.reservado)} pz · ${insights.pctReservado.toFixed(1)}%` : `${insights.pctReservado.toFixed(1)}% del total` },
+    { tone: 'blue', col: accent, label: 'En tránsito', sub: insights.transitoEta ? `próximo arribo ${fmtFechaCorta(insights.transitoEta)}` : 'sin embarques pendientes', val: sensible ? fmtCompact(insights.transitoValor) : `${fmtInt(insights.transitoPz)} pz`, vsub: sensible ? `${fmtInt(insights.transitoPz)} pz · ${insights.transitoPos} POs` : `${insights.transitoPos} POs` },
   ];
 
   const colsTipo = [
     { key: 'tipo', label: 'Tipo de almacén', align: 'left' },
     { key: 'skus', label: 'SKUs', render: (r) => fmtInt(r.skus) },
     { key: 'piezas', label: 'Piezas', render: (r) => fmtInt(r.piezas), sum: true, renderTotal: (v) => fmtInt(v) },
-    { key: 'valor', label: 'Valor', render: (r) => fmtCompact(r.valor), sum: true, renderTotal: (v) => fmtCompact(v), bold: true },
-    { key: 'share', label: '% valor', render: (r) => <Pill tone={r.share >= 50 ? 'blue' : 'gray'} size="xs">{r.share.toFixed(1)}%</Pill> },
+    ...(sensible ? [{ key: 'valor', label: 'Valor', render: (r) => fmtCompact(r.valor), sum: true, renderTotal: (v) => fmtCompact(v), bold: true }] : []),
+    { key: 'share', label: sensible ? '% valor' : '% piezas', render: (r) => <Pill tone={r.share >= 50 ? 'blue' : 'gray'} size="xs">{r.share.toFixed(1)}%</Pill> },
   ];
 
   return (
@@ -47,13 +49,13 @@ export default function ResumenSecundario({ porCedis, porTipo, kpis, insights, c
                     strokeDasharray={`${c.len} ${C - c.len}`} strokeDashoffset={c.off}
                     style={{ opacity: cedisFiltro !== 'TODOS' && cedisFiltro !== c.cedis ? c.op * 0.25 : c.op, cursor: 'pointer', transition: `opacity ${DUR.state}ms ${EASE}` }}
                     onClick={() => onCedis(cedisFiltro === c.cedis ? 'TODOS' : c.cedis)}>
-                    <title>{CEDIS_CORTO[c.cedis] || c.cedis} · {fmtCompact(c.valor)} · {c.share.toFixed(1)}%</title>
+                    <title>{CEDIS_CORTO[c.cedis] || c.cedis} · {$(c.valor, c.piezas)} · {c.share.toFixed(1)}%</title>
                   </circle>
                 ))}
               </svg>
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                 <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Total</span>
-                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{fmtCompact(kpis.valor)}</span>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{$(kpis.valor, kpis.piezas)}</span>
                 <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{kpis.nCEDIS} CEDIS · {kpis.almacenes} alm</span>
               </div>
             </div>
@@ -68,7 +70,7 @@ export default function ResumenSecundario({ porCedis, porTipo, kpis, insights, c
                       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text }}>{CEDIS_CORTO[c.cedis] || c.cedis}</div>
                       <div style={{ fontSize: 9.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(c.skus)} SKUs · {c.almacenes} alm.</div>
                     </div>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtCompact(c.valor)}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{$(c.valor, c.piezas)}</div>
                     <div style={{ fontSize: 9.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{c.share.toFixed(1)}%</div>
                   </div>
                 );
@@ -79,7 +81,7 @@ export default function ResumenSecundario({ porCedis, porTipo, kpis, insights, c
 
         {/* Estatus del stock */}
         <div>
-          <Titulo theme={theme} t="Estatus del stock" m="valor comercial a costo" />
+          <Titulo theme={theme} t="Estatus del stock" m={sensible ? "valor comercial a costo" : "piezas comerciales"} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {estatus.map((it, idx) => (
               <div key={it.label} style={{ display: 'grid', gridTemplateColumns: '8px 1fr auto', gap: 10, alignItems: 'center', padding: '8px 4px', borderBottom: idx < estatus.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
@@ -99,7 +101,7 @@ export default function ResumenSecundario({ porCedis, porTipo, kpis, insights, c
 
         {/* Tipos de almacén */}
         <div style={{ gridColumn: '1 / -1' }}>
-          <Titulo theme={theme} t="Por tipo de almacén" m={`${porTipo[0]?.tipo || '—'} domina con ${porTipo[0] ? porTipo[0].share.toFixed(0) : 0}% del valor`} />
+          <Titulo theme={theme} t="Por tipo de almacén" m={`${porTipo[0]?.tipo || '—'} domina con ${porTipo[0] ? porTipo[0].share.toFixed(0) : 0}% ${sensible ? 'del valor' : 'de las piezas'}`} />
           <TablaCompacta columnas={colsTipo} filas={porTipo} rowKey={(r) => r.tipo} dense />
         </div>
       </div>

@@ -116,6 +116,17 @@ export async function finalizeErpVentas(anios, { dryRun = false } = {}) {
   return { resumen };
 }
 
+/** Paso posterior a inventario_acteck: foto del día en inventario_historico (rpc SECURITY DEFINER,
+ *  sólo service_role). Idempotente: la última corrida del día CDMX deja la foto de cierre.
+ *  Sólo DIRECTO; en modo vía Vercel se omite (la migración 20260911_inventario_historico explica el porqué). */
+export async function snapshotInventario({ dryRun = false } = {}) {
+  if (dryRun) return { dryRun: true };
+  if (!DIRECTO) { log('  (snapshot_inventario_diario omitido: requiere SUPABASE_SERVICE_ROLE_KEY)'); return { omitido: true }; }
+  const r = await sb.rpc('snapshot_inventario_diario', {});
+  log(`  snapshot_inventario_diario: ${JSON.stringify(r)}`);
+  return r;
+}
+
 /** Deja rastro en sync_events / sync_status (historial del uploader). */
 export async function logSyncEvent(table, ev, { dryRun = false } = {}) {
   if (dryRun) return;

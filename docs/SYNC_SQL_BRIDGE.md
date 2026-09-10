@@ -196,6 +196,8 @@ cd ~/acteck/acteck-dashboard && git pull --rebase && cd bridge && npm ci
 ```
 No hay que reinstalar los agentes salvo que cambien los plists (`./launchd/install.sh`). **2026-09-11: sí hay que reinstalar** para que aparezca `com.acteck.sync.solicitudes` (latido + "Pedir corrida").
 
+**2026-09-11 · histórico diario de inventario.** Tras cada carga de `inventario` el puente llama al RPC `snapshot_inventario_diario()` (migración `20260911_inventario_historico.sql`), que guarda la foto del día CDMX en `inventario_historico` (la corrida de las 19:00 deja el cierre). Requiere `git pull` en la Mac mini y modo DIRECTO (service role key); no cambian los plists. pg_cron no está habilitado en Supabase; si algún día se habilita, la migración trae el `cron.schedule` equivalente.
+
 ## Problemas comunes
 
 | Síntoma | Causa · solución |

@@ -28,7 +28,8 @@ export const SILUETAS = {
   sellOut: [hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(0,1fr)', [chart(240), panel(6)]), panel(3, { alto: 160 }), tabla(14, 8)],
   sellOutDicotech: [hero(4), kpis(5), grid('minmax(0,1.35fr) minmax(0,1fr)', [chart(240), panel(6)]), grid('minmax(0,0.55fr) minmax(0,1.45fr)', [panel(5), tabla(8, 4)]), grid('1fr 1fr', [tabla(6, 3), tabla(6, 3)]), tabla(8, 8, { alto: 320 }), tabla(12, 8)],
 
-  inventarioGlobal: [fila(3, 32), hero(3), kpis(4), fila(4, 46), tabla(16, 9), panel(1, { alto: 44 })],
+  inventarioGlobal: [fila(2, 32), hero(3), kpis(4), fila(3, 30), fila(6, 24), fila(8, 24), tabla(16, 11), panel(4, { alto: 200 }), grid('1fr 1fr', [chart(150), chart(150)]), panel(1, { alto: 44 })],
+  inventarioDrill: [fila(5, 22), grid('minmax(0,1.2fr) minmax(0,1fr)', [tabla(8, 4, { alto: 220 }), panel(5, { alto: 220 })])],
   cobranza: [hero(3), kpis(4), grid('repeat(2, minmax(0,1fr))', [chart(150), panel(6)]), fila(3, 28), tabla(12, 7), panel(1, { alto: 44 })],
   cobranzaGlobal: [hero(3), kpis(4), tabla(10, 6)],
   pagos: [hero(3), kpis(4), fila(5, 32), fila(4, 26), tabla(10, 8), panel(1, { alto: 44 }), panel(1, { alto: 44 })],

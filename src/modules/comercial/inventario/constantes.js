@@ -138,3 +138,12 @@ export const etiquetaCobertura = (dias, stock) => {
   if (dias > COBERTURA_SOBRESTOCK) return 'Sobre-stock';
   return 'Sana';
 };
+
+// ── Búsqueda por palabras (cualquier orden, sin acentos, sin mayúsculas) ──
+// 'Inalámbrico' → 'inalambrico'. Se usa tanto para indexar la fila como para la consulta.
+export const normalizar = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+// 'mouse inalambrico negro' → ['mouse', 'inalambrico', 'negro'] (tokens vacíos fuera).
+export const tokensBusqueda = (q) => normalizar(q).split(/\s+/).filter(Boolean);
+// true si TODOS los tokens aparecen (en cualquier orden) dentro del texto ya normalizado.
+export const coincideTokens = (textoNormalizado, tokens) => tokens.every((t) => textoNormalizado.includes(t));
+export const MONO = '"SF Mono", ui-monospace, Menlo, monospace';

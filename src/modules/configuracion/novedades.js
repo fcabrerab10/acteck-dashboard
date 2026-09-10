@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.7.0', fecha: '2026-09-10', titulo: 'Inventario',
+    items: [
+      'Buscador por palabras sin acentos y filtros con conteo (estado, CEDIS, marca, familia, roadmap, con stock, con tránsito).',
+      'Costos y valor a costo sólo con el permiso "Información sensible"; sin él la pantalla se lee en piezas y días.',
+      'Drill del SKU con "Compartir disponibilidad" (lista de precios obligatoria), precios vigentes por lista y quién lo compra.',
+      'Canasta de SKUs para compartir varios en un solo mensaje, panel de próximos arribos (7/14/30 días) e histórico diario del inventario.',
+    ],
+  },
+  {
     version: '3.6.0', fecha: '2026-09-10', titulo: 'Visión General, Análisis por Cliente y Sell In consolidado',
     items: [
       'Permiso "Información sensible" en Administración: sin él no se ven márgenes, contribución ni costos.',

@@ -1,8 +1,8 @@
 // Carga de datos de Inventario global · una sola fuente para la pantalla.
 // 1) inventario_acteck (bloquea el render) · 2) enriquecimientos en paralelo,
 // sin bloquear: descripciones (roadmap_sku), tránsito (v_transito_sku),
-// lead time (v_lead_time_sku) y demanda ERP (facturacion_clientes, 3 meses
-// cerrados). Todo pasa por lib/queries.js salvo roadmap_sku (la app la
+// lead time (v_lead_time_sku), demanda ERP (facturacion_clientes, 3 meses
+// cerrados) e histórico diario (v_inventario_historico_dia). Todo pasa por lib/queries.js salvo roadmap_sku (la app la
 // escribe → sin cache).
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
@@ -25,6 +25,7 @@ export default function useInventarioDatos() {
   const [transito, setTransito] = useState(() => new Map());
   const [leadTime, setLeadTime] = useState(() => new Map());
   const [demanda, setDemanda] = useState(() => new Map());
+  const [historico, setHistorico] = useState([]);
   const [enriqueciendo, setEnriqueciendo] = useState(true);
 
   useEffect(() => {
@@ -109,16 +110,22 @@ export default function useInventarioDatos() {
         })
         .catch((e) => { console.warn('[InventarioGlobal] facturacion_clientes', e); return new Map(); });
 
-      const [mDesc, mTr, mLt, mDem] = await Promise.all([pDesc, pTransito, pLead, pDemanda]);
+      // Histórico diario · v_inventario_historico_dia (1 fila por día, sólo comerciales)
+      const pHist = fetchAll('v_inventario_historico_dia', 'fecha,piezas,disponible,valor,skus_con_stock')
+        .then((rows) => (rows || []).filter((r) => r.fecha).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))))
+        .catch((e) => { console.warn('[InventarioGlobal] v_inventario_historico_dia', e); return []; });
+
+      const [mDesc, mTr, mLt, mDem, hist] = await Promise.all([pDesc, pTransito, pLead, pDemanda, pHist]);
       if (cancel) return;
       setDescripciones(mDesc);
       setTransito(mTr);
       setLeadTime(mLt);
       setDemanda(mDem);
+      setHistorico(hist);
       setEnriqueciendo(false);
     })();
     return () => { cancel = true; };
   }, []);
 
-  return { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, mesesRef: mesesCerrados() };
+  return { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, mesesRef: mesesCerrados() };
 }

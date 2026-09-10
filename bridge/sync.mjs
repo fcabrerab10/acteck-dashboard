@@ -18,7 +18,7 @@
 // del uploader) con filas, duración y errores.
 import * as M from './lib/mappers.mjs';
 import { readView, testServer, closeAll } from './lib/mssql.mjs';
-import { upsertRows, finalizeErpVentas, logSyncEvent, ping, describirTransporte, DIRECTO, latido, leerSolicitudes, actualizarSolicitud } from './lib/api.mjs';
+import { upsertRows, finalizeErpVentas, snapshotInventario, logSyncEvent, ping, describirTransporte, DIRECTO, latido, leerSolicitudes, actualizarSolicitud } from './lib/api.mjs';
 import { readFileSync } from 'node:fs';
 import { leerHoja, listarHojas, describirModo } from './lib/sheets.mjs';
 import { upsertEmbarquesCompras } from './lib/embarques.mjs';
@@ -82,7 +82,9 @@ const FUENTES = {
       const { rows, leidas } = await readView('ERP', env('ERP_VIEW_INVENTARIO', 'Vw_TablaH_Inventario'), { top, mapRow: M.erpInventario });
       log(`  inventario: ${leidas} leídas → ${rows.length} válidas`);
       await upsertRows('inventario_acteck', 'articulo,no_almacen', rows, { deleteAll: true, dryRun });
-      return { filas: rows.length, detalles: { leidas } };
+      // Foto diaria (inventario_historico): idempotente, la corrida de las 19:00 deja el cierre del día.
+      const foto = await snapshotInventario({ dryRun }).catch((e) => { log(`  (snapshot_inventario_diario falló: ${e.message})`); return null; });
+      return { filas: rows.length, detalles: { leidas, ...(foto?.fecha ? { foto: foto.fecha } : {}) } };
     },
   },
   precios: {
