@@ -10,7 +10,7 @@ import { elevation, bordeFlotante } from '../../lib/elevation';
 import { esNodoActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
 import { Hoja, IconoApp, FilaAjustes, TituloSeccion, BotonFav, hairline, hoverBg, esMidnight, esMarfil } from './comun';
 
-export const IPHONE_PADDING_INFERIOR = 72;
+export const IPHONE_PADDING_INFERIOR = 88;
 
 export default function BarraIphone({ arbol, favoritos, toggleFavorito, estado, onNavegar, onAbrirPaleta, campana, datosClientes }) {
   const { theme } = useTheme();
@@ -39,7 +39,7 @@ export default function BarraIphone({ arbol, favoritos, toggleFavorito, estado, 
     <>
       <nav aria-label="Navegación" style={{
         position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(14px + env(safe-area-inset-bottom))', zIndex: 50,
-        height: 44, padding: '0 6px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 2,
+        height: 56, padding: '0 8px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 440,
         background: dark ? 'rgba(28,28,30,0.78)' : esMarfil(theme) ? 'rgba(255,251,244,0.82)' : 'rgba(255,255,255,0.80)',
         backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
         border: bordeFlotante(theme), boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText,
@@ -50,13 +50,13 @@ export default function BarraIphone({ arbol, favoritos, toggleFavorito, estado, 
           return (
             <button key={e.id} type="button" onClick={e.onClick} title={e.label}
               style={{
-                height: 36, minWidth: 58, padding: '0 10px', border: 0, borderRadius: 999, cursor: 'pointer',
-                display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
-                background: on ? `${theme.accent}1F` : 'transparent', color: on ? theme.accent : theme.textMuted,
+                height: 44, minWidth: 80, padding: '0 14px', border: 0, borderRadius: 999, cursor: 'pointer',
+                display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+                background: on ? (theme.surfaceInverse || '#000') : 'transparent', color: on ? (theme.textOnInverse || '#F5F5F7') : theme.textMuted,
                 transition: `background ${DUR.state}ms ${EASE}, color ${DUR.state}ms ${EASE}`,
               }}>
-              <Icon size={17} strokeWidth={on ? 2.2 : 1.9} />
-              <span style={{ fontSize: 9.5, fontWeight: on ? 600 : 500, letterSpacing: '0.01em' }}>{e.label}</span>
+              <Icon size={19} strokeWidth={on ? 2.2 : 1.9} />
+              <span style={{ fontSize: 10.5, fontWeight: on ? 600 : 500, letterSpacing: '0.01em', fontFamily: TYPO.fontDisplay }}>{e.label}</span>
             </button>
           );
         })}

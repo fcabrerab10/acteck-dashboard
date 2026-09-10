@@ -101,13 +101,14 @@ export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPr
 // ═════════ Topbar (fila sticky) · modos Sidebar e iPhone ═════════
 export default function Topbar(props) {
   const { theme } = useTheme();
-  const { modoPresent } = props;
+  const { modoPresent, marca } = props;
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 40, pointerEvents: 'none',
-      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10,
-      padding: '8px 16px 0', maxWidth: 1600, margin: '0 auto', width: '100%', fontFamily: TYPO.fontText,
+      display: 'flex', alignItems: 'center', justifyContent: marca ? 'space-between' : 'flex-end', gap: 10,
+      padding: marca ? '10px 20px 0' : '8px 16px 0', maxWidth: marca ? 1040 : 1600, margin: '0 auto', width: '100%', fontFamily: TYPO.fontText,
     }}>
+      {marca}
       {modoPresent && (
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999, pointerEvents: 'auto',

@@ -5,6 +5,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { useTheme } from '../../lib/themeContext';
 import { usePreferencias } from '../../lib/preferencias';
 import Topbar from '../Topbar';
+import { TYPO } from '../../lib/themeTokens';
 import CentroNotificaciones from '../notificaciones';
 import { construirArbol, resolverFavoritos, irANodo } from './arbol';
 import BarraApple from './BarraApple';
@@ -76,8 +77,9 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
     cuerpo = (
       <div className="font-sans" style={{ ...fondo, display: 'flex', flexDirection: 'column', height: '100vh' }}>
         <main style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: `calc(${IPHONE_PADDING_INFERIOR}px + env(safe-area-inset-bottom))` }}>
-          <Topbar {...chrome} mostrarBuscar />
-          {children}
+          <Topbar {...chrome} mostrarBuscar marca={<MarcaIphone theme={theme} titulo={tituloDe(arbol, estado)} />} />
+          {/* Como una app de iPad: columna centrada con márgenes generosos */}
+          <div style={{ maxWidth: 1040, margin: '0 auto', width: '100%' }}>{children}</div>
         </main>
         <BarraIphone {...comunNav} campana={<CentroNotificaciones onNavegar={navegar} />} />
       </div>
@@ -99,5 +101,25 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
       {cuerpo}
       {flotantes}
     </NavContext.Provider>
+  );
+}
+
+
+// ── Modo iPhone · marca + título grande de la pestaña activa (como Notas/Ajustes en iPad) ──
+function tituloDe(arbol, estado) {
+  try {
+    const todos = (arbol || []).flatMap((g) => g.nodos || []);
+    const n = todos.find((x) => (estado?.clienteActivo ? x.clienteKey === estado.clienteActivo && x.pagina === estado.paginaActiva : !x.clienteKey && x.pagina === estado?.paginaActiva));
+    if (!n) return estado?.paginaActiva === 'configuracion' ? 'Configuración' : '';
+    const cli = estado?.clienteActivo ? (todos.find((x) => x.tipo === 'cliente' && x.clienteKey === estado.clienteActivo && x.pagina === 'home')?.label || '') : '';
+    return cli && n.pagina !== 'home' ? `${n.label} · ${cli}` : (cli || n.label);
+  } catch { return ''; }
+}
+function MarcaIphone({ theme, titulo }) {
+  return (
+    <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 10, marginRight: 'auto' }}>
+      <span style={{ width: 28, height: 28, borderRadius: 8, background: theme.key === 'midnight' ? theme.accent : theme.text, color: theme.key === 'midnight' ? '#000' : '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 13 }}>a</span>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{titulo || 'Acteck'}</span>
+    </div>
   );
 }

@@ -48,8 +48,8 @@ export function BotonFav({ theme, activo, visible = true, onToggle, size = 12, s
   const [hover, setHover] = useState(false);
   if (!activo && !visible) return null;
   return (
-    <button type="button" title={activo ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggle?.(); }}
+    <span role="button" tabIndex={0} title={activo ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggle?.(e); } }} onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggle?.(); }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         width: size + 10, height: size + 10, padding: 0, border: 0, borderRadius: 6, cursor: 'pointer', flexShrink: 0,
@@ -60,7 +60,7 @@ export function BotonFav({ theme, activo, visible = true, onToggle, size = 12, s
         ...style,
       }}>
       <Star size={size} strokeWidth={2} fill={activo ? 'currentColor' : 'none'} />
-    </button>
+    </span>
   );
 }
 
