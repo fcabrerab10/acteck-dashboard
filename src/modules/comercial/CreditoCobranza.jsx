@@ -380,7 +380,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
 
   // ═══ Early returns — ahora SÍ, después de todos los hooks ═══
   if (!DB_CONFIGURED) return <div className="p-6 text-gray-400 text-sm">Supabase no configurado.</div>;
-  if (loading)        return <Cargando label="Cargando estado de cuenta…" sub={`Trayendo cartera y facturas de ${clienteKey}`} minHeight={480} />;
+  if (loading)        return <Cargando pantalla="cobranza" label="Cargando estado de cuenta…" sub={`Trayendo cartera y facturas de ${clienteKey}`} minHeight={480} />;
   if (!estado) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">

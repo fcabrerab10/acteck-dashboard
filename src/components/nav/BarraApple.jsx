@@ -1,6 +1,6 @@
 // Barra superior oscura translúcida estilo apple.com · sin sidebar.
 // Ítems por grupo con mega-menú (grid de 4+ columnas: subgrupos + Favoritos), submenú de clientes,
-// a la derecha ⌘K · campana · avatar (ChromeDerecho oscuro).
+// a la izquierda el logotipo "acteck."; a la derecha ⌘K · avatar con contador (ChromeDerecho oscuro).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -8,7 +8,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { ChromeDerecho } from '../Topbar';
 import { esNodoActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
-import { BotonFav, PuntoCliente, esMidnight } from './comun';
+import { BotonFav, PuntoCliente, Logotipo, esMidnight } from './comun';
 
 export const BARRA_ALTO = 48;
 const CORTO = { direccionGeneral: 'General', direccionComercial: 'Comercial', clientesPropios: 'Clientes', interno: 'Interno', axon: 'Axon' };
@@ -56,10 +56,7 @@ export default function BarraApple({ arbol, favoritos, toggleFavorito, estado, o
         borderBottom: '1px solid rgba(255,255,255,0.08)', color: colorTexto, fontFamily: TYPO.fontText,
       }}>
         {/* Marca */}
-        <button type="button" onClick={() => inicio && irANodo(inicio, onNavegar)} title="Inicio" style={{ border: 0, background: 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0 8px 0 2px', color: '#FFF' }}>
-          <span style={{ width: 22, height: 22, borderRadius: 6, background: '#FFF', color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 11 }}>a</span>
-          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em' }}>Dashboard</span>
-        </button>
+        <Logotipo theme={theme} oscuro size={15} title="Inicio" onClick={() => inicio && irANodo(inicio, onNavegar)} style={{ padding: '0 8px 0 4px', cursor: 'pointer' }} />
         <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.14)', margin: '0 8px' }} />
 
         {inicio && (

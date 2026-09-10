@@ -35,15 +35,21 @@ export function ToggleIOS({ on, onChange, label }) {
   );
 }
 
-export default function PreferenciasNotificaciones({ onVolver }) {
+// Modo controlado (Administración → Notificaciones del equipo): `valor` + `onGuardar(next)` editan las
+// preferencias de OTRO usuario (el super admin escribe perfiles.preferencias.notif de ese perfil);
+// sin `onVolver` no se pinta la cabecera "Atrás".
+export default function PreferenciasNotificaciones({ onVolver, valor, onGuardar, pieTexto }) {
   const { theme } = useTheme();
-  const { data: prefsRemotas, isLoading } = usePreferenciasNotif();
+  const controlado = valor !== undefined;
+  const propias = usePreferenciasNotif();
+  const prefsRemotas = controlado ? normalizarPrefsNotif(valor) : propias.data;
+  const isLoading = controlado ? false : propias.isLoading;
   const [prefs, setPrefs] = useState(() => normalizarPrefsNotif(prefsRemotas));
   useEffect(() => { if (prefsRemotas) setPrefs(prefsRemotas); }, [prefsRemotas]);
 
   const guardar = async (next) => {
     setPrefs(next); // optimista en la vista
-    try { await guardarPreferenciasNotif(next); }
+    try { if (controlado) await onGuardar?.(normalizarPrefsNotif(next)); else await guardarPreferenciasNotif(next); }
     catch (e) { console.error('prefs notif:', e); toast.error('No se pudieron guardar las preferencias'); if (prefsRemotas) setPrefs(prefsRemotas); }
   };
   const setArea = (area, modo) => guardar({ ...prefs, areas: { ...prefs.areas, [area]: modo } });
@@ -60,13 +66,13 @@ export default function PreferenciasNotificaciones({ onVolver }) {
 
   return (
     <div style={{ fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '12px 12px 10px', borderBottom: `1px solid ${theme.border}` }}>
+      {onVolver && <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '12px 12px 10px', borderBottom: `1px solid ${theme.border}` }}>
         <button type="button" onClick={onVolver} title="Volver" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, border: 0, background: 'transparent', color: theme.accent || '#007AFF', fontFamily: TYPO.fontText, fontSize: 13, fontWeight: 500, cursor: 'pointer', padding: '2px 4px 2px 0' }}>
           <ChevronLeft size={16} /> Atrás
         </button>
         <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, marginLeft: 4 }}>Preferencias</span>
         {isLoading && <span style={{ fontSize: 11, color: theme.textSubtle, marginLeft: 'auto' }}>Cargando…</span>}
-      </div>
+      </div>}
 
       <div style={secTitulo}>Por área</div>
       {AREAS.map((area, i) => (
@@ -115,7 +121,7 @@ export default function PreferenciasNotificaciones({ onVolver }) {
         <div><div style={lbl}>Correo de críticas</div><div style={sub}>Las críticas nuevas llegan al momento, sin esperar el resumen.</div></div>
         <ToggleIOS on={prefs.criticas_correo} label="Correo de críticas" onChange={(v) => guardar({ ...prefs, criticas_correo: v })} />
       </div>
-      <div style={{ padding: '10px 16px 14px', fontSize: 11, color: theme.textSubtle, borderTop: `1px solid ${theme.border}` }}>Se guarda al instante en tu perfil.</div>
+      <div style={{ padding: '10px 16px 14px', fontSize: 11, color: theme.textSubtle, borderTop: `1px solid ${theme.border}` }}>{pieTexto || 'Se guarda al instante en tu perfil.'}</div>
     </div>
   );
 }

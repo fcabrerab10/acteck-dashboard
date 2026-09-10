@@ -448,7 +448,7 @@ export default function SellInCliente({ clienteKey }) {
   };
 
   if (loading) {
-    return <Cargando label={`Cargando Sell In de ${meta.nombre}…`} sub="Trayendo facturación, inventario y roadmap" minHeight={480} />;
+    return <Cargando pantalla="sellInGlobal" label={`Cargando Sell In de ${meta.nombre}…`} sub="Trayendo facturación, inventario y roadmap" minHeight={480} />;
   }
 
   const pctMTD = mesActualData.cuota?.ideal ? mesActualData.monto / mesActualData.cuota.ideal * 100 : null;

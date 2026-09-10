@@ -1833,7 +1833,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
   return (
     <div ref={rootRef} style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
-      {loading ? <SkeletonPantalla /> : (
+      {loading ? <SkeletonPantalla pantalla="pagos" /> : (
         <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
           {/* 1 · Hero narrativo */}

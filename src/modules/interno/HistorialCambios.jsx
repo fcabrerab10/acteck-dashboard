@@ -400,7 +400,7 @@ export default function HistorialCambios() {
       {/* ═══ Tabla ═══ */}
       <div style={{ background: theme.surface, border, borderRadius: 12, overflow: 'hidden' }}>
         {loading ? (
-          <Cargando label="Cargando historial…" sub="Leyendo auditoría de cambios" minHeight={260} />
+          <Cargando pantalla="historialCambios" label="Cargando historial…" sub="Leyendo auditoría de cambios" minHeight={260} />
         ) : error ? (
           <div style={{ padding: 24, color: P.red, fontSize: 12 }}>No se pudo leer la auditoría: {error}</div>
         ) : rows.length === 0 ? (

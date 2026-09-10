@@ -225,7 +225,7 @@ export const PESTANAS_GLOBALES = [
   { id: "historial_cambios",  label: "Historial de cambios",   desc: "Quién cambió qué y cuándo en lo que la app escribe" },
   { id: "axon_mexico",        label: "Axon de México",        desc: "Nueva empresa para gestión de e-commerce" },
   { id: "forecast_solicitudes", label: "Forecast — Solicitudes de Compra", desc: "Crear/editar solicitudes S&OP (⚠️ información delicada)" },
-  { id: "configuracion",      label: "Configuración",          desc: "Gestión de usuarios (⚠️ solo super admin)" },
+  { id: "configuracion",      label: "Administración",         desc: "Usuarios y permisos, datos, notificaciones del equipo y sistema (⚠️ solo super admin)" },
 ];
 
 /** Clientes del sistema. */

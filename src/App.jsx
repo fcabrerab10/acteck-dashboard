@@ -72,7 +72,8 @@ import { PageTransition } from './components/apple/AppleLoader';
 import { Cargando } from './components/kit';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
-import MobileShell from './components/MobileShell';
+import MobileShell from './components/MobileShell'; // legacy: sustituido por MovilApp (V3); se retira en la siguiente limpieza
+const MovilApp = lazy(() => import('./movil/MovilApp'));
 import BandejaAlertas from './components/BandejaAlertas';
 import { ToastHost } from './components/kit';
 // Pantallas mobile: lazy (sólo se descargan en iPhone/iPad, y sólo la que se abre).
@@ -568,7 +569,7 @@ export default function App() {
             margin: '0 auto',
           }}>
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
-          <Suspense fallback={<Cargando />}>
+          <Suspense fallback={<Cargando pantalla={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva} />}>
           {vistaActual === "configuracion" ? (
             puedeVerConfig
               ? (mobile
@@ -818,23 +819,12 @@ export default function App() {
       height: '100vh',
     }}>
 
-      {/* MOBILE SHELL — Fitness style (iPhone/iPad H+V) */}
-      {mobile && (
-        <MobileShell
-          clienteActivo={clienteActivo}
-          paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
-          vistaActual={vistaActual}
-          onNavegar={handleNavegar}
-          onCerrarSesion={handleLogout}
-          perfilUsuario={perfil}
-        />
-      )}
-
-      {/* CONTENIDO · móvil: MobileShell + main · desktop: NavShell (barra · sidebar · iphone) */}
+      {/* MÓVIL · app V3 desde cero (src/movil) · Inicio · Clientes · Alertas · Buscar · Más */}
       {mobile ? (
-        <main style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom))', minHeight: '100vh' }}>
-          {contenido}
-        </main>
+        <Suspense fallback={<Cargando fullscreen label="Cargando…" />}>
+          <MovilApp perfil={perfil} onCerrarSesion={handleLogout} />
+          <ToastHost />
+        </Suspense>
       ) : (
         <NavShell
           clienteActivo={clienteActivo}

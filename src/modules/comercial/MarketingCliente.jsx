@@ -296,7 +296,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   };
 
   // ─── Render ──────────────────────────────────────────────────
-  if (loading) return <SkeletonPantalla />;
+  if (loading) return <SkeletonPantalla pantalla="marketing" />;
 
   const mesLabel = MESES[mesSel - 1];
   const dTxt = (d) => (d === 0 ? 'hoy' : d === 1 ? 'mañana' : `en ${d} días`);

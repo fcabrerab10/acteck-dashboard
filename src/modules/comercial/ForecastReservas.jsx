@@ -456,7 +456,7 @@ export default function ForecastReservas() {
 
   // ─── Render ───────────────────────────────────────────────
   if (!DB_CONFIGURED) return <div style={{ padding: 40, color: theme.textMuted }}>DB no configurada.</div>;
-  if (loading) return <div style={{ padding: 40 }}><Cargando label="Cargando forecast…" /></div>;
+  if (loading) return <div style={{ padding: 40 }}><Cargando pantalla="forecastReservas" label="Cargando forecast…" /></div>;
   if (error) return (
     <div style={{ padding: 20, maxWidth: 720, margin: '40px auto', background: '#FBECEA', border: '1px solid #C0392B', borderRadius: 12, color: '#C0392B' }}>
       <b style={{ fontFamily: TYPO.fontDisplay, fontSize: 14 }}>Error cargando forecast</b>

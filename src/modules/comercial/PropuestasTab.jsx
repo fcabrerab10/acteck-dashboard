@@ -571,7 +571,7 @@ export default function PropuestasTab() {
 
   // ── Loading / error ──
   if (loading) {
-    return <Cargando label={`Cargando ${cliente?.label || 'cliente'}…`} sub="Trayendo inventario, sell-out, precios y roadmap" minHeight={480} />;
+    return <Cargando pantalla="propuestas" label={`Cargando ${cliente?.label || 'cliente'}…`} sub="Trayendo inventario, sell-out, precios y roadmap" minHeight={480} />;
   }
   if (error) {
     return (

@@ -327,7 +327,7 @@ export default function SellInPcel({ clienteKey }) {
   const heroBg = theme.heroCardBg || (isDark ? '#0A0A0C' : '#1C1C1E');
 
   if (loading) {
-    return <Cargando label="Cargando Sell In…" sub={`Trayendo facturación de ${clienteKey}`} minHeight={480} />;
+    return <Cargando pantalla="sellIn" label="Cargando Sell In…" sub={`Trayendo facturación de ${clienteKey}`} minHeight={480} />;
   }
 
   return (

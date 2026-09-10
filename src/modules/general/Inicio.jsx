@@ -35,7 +35,7 @@ export default function Inicio({ onNavegar }) {
   const r = useMemo(() => (data ? calcular(data, alertasQ.data || [], { anio, mesActual, hoy, modo }) : null), [data, alertasQ.data, anio, mesActual, hoy, modo]);
 
   if (!puedeVerInicio(perfil)) return <SinAcceso motivo="No tienes acceso a Inicio." />;
-  if (loading || (!r && !error)) return <SkeletonPantalla />;
+  if (loading || (!r && !error)) return <SkeletonPantalla pantalla="inicio" />;
   if (error) return <Panel titulo="No se pudo cargar Inicio"><div style={{ fontSize: 12, color: theme.red }}>{error}</div></Panel>;
 
   const ir = (ck, pagina) => (onNavegar ? () => onNavegar(ck, pagina) : undefined);

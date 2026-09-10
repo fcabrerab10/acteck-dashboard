@@ -1332,7 +1332,7 @@ export default function ForecastClientesTab() {
   }
 
   if (data.loading) {
-    return <Cargando label="Cargando S&OP…" sub="Trayendo forecast, cuotas y sell-in de los 3 clientes" minHeight={480} />;
+    return <Cargando pantalla="forecastClientes" label="Cargando S&OP…" sub="Trayendo forecast, cuotas y sell-in de los 3 clientes" minHeight={480} />;
   }
 
   const borradorActivo = sol.borradores.find((b) => b.id === borradorActivoId) || null;

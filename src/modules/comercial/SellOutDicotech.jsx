@@ -670,7 +670,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   const heroBg = theme.heroCardBg || (isDark ? '#0A0A0C' : '#1C1C1E');
 
   if (loading) {
-    return <Cargando label="Cargando Sell Out…" sub={`Trayendo sell out de ${clienteKey}`} minHeight={480} />;
+    return <Cargando pantalla="sellOutDicotech" label="Cargando Sell Out…" sub={`Trayendo sell out de ${clienteKey}`} minHeight={480} />;
   }
   if (fetchError) {
     return (

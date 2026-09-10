@@ -17,6 +17,10 @@ export const SELLOUT_POR_CLIENTE = {
 };
 const SELLOUT_DEFAULT = ['sellout_general'];
 
+// Fuentes de la vista que carga el puente SQL (Mac mini) sin intervención manual. Las demás
+// filas de v_fuentes_frescura son cargas manuales (importador central) o tablas que escribe la app.
+export const FUENTES_AUTOMATICAS = ['facturacion_clientes', 'erp_ventas', 'inventario_acteck', 'precios_sku', 'cuotas_mensuales', 'sellout_general', 'embarques_compras', 'programacion_arribos'];
+
 // pantalla → fuentes que la alimentan. Vacío = la pantalla no muestra pill
 // (p. ej. marketing: sus tablas las escribe la propia app, no son cargas).
 export const FUENTES_POR_PANTALLA = {

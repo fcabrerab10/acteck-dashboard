@@ -518,7 +518,7 @@ export default function AnalisisClientesGlobal() {
   , [clientesAct]);
 
   if (loading) {
-    return <Cargando label="Cargando análisis por cliente…" sub="Trayendo canales, cobertura y sell-in" minHeight={480} />;
+    return <Cargando pantalla="analisisClientes" label="Cargando análisis por cliente…" sub="Trayendo canales, cobertura y sell-in" minHeight={480} />;
   }
   if (canalAct.length === 0) {
     return (

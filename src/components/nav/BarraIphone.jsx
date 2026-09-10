@@ -1,6 +1,6 @@
 // Barra inferior flotante estilo iPhone (44 px, blur 24, radio 999, ELEV.flotante) con 5 entradas fijas:
 // Inicio · Clientes · Alertas · Buscar · Más. "Clientes" y "Más" abren hojas desde abajo (340 ms).
-// "Buscar" abre ⌘K y "Alertas" abre el centro de notificaciones (slot `campana`).
+// "Buscar" abre ⌘K y "Alertas" abre el centro de notificaciones (slot `campana`: CuerpoNotificaciones; recibe onCerrar).
 import React, { useMemo, useState } from 'react';
 import { LayoutGrid, Users, Bell, Search, Grid2x2, ChevronRight, X } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -89,7 +89,7 @@ export default function BarraIphone({ arbol, favoritos, toggleFavorito, estado, 
       {/* Hoja Alertas · centro de notificaciones (slot) */}
       <Hoja abierto={hoja === 'alertas'} onClose={() => setHoja(null)} titulo="Alertas" theme={theme} alto="70vh"
         acciones={<BotonCerrar theme={theme} onClick={() => setHoja(null)} />}>
-        <div style={{ padding: '4px 4px 8px' }}>{campana}</div>
+        <div style={{ padding: '4px 4px 8px' }}>{React.isValidElement(campana) ? React.cloneElement(campana, { onCerrar: () => setHoja(null) }) : campana}</div>
       </Hoja>
     </>
   );

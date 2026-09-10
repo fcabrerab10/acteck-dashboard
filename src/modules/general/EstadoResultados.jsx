@@ -298,7 +298,7 @@ export default function EstadoResultados() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [byCuenta, byCuentaPrev, mesDrillDown]);
 
-  if (loading) return <Cargando label="Cargando estado de resultados…" minHeight={480} />;
+  if (loading) return <Cargando pantalla="estadoResultados" label="Cargando estado de resultados…" minHeight={480} />;
   if (rows.length === 0) {
     return (
       <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted }}>

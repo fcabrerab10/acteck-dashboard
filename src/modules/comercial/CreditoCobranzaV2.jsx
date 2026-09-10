@@ -296,7 +296,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   })), [cortes]);
 
   // ── Render ─────────────────────────────────────────────────────────
-  if (loading) return <SkeletonPantalla />;
+  if (loading) return <SkeletonPantalla pantalla="cobranza" />;
 
   if (!estado) {
     return (

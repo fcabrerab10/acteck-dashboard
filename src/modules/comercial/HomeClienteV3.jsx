@@ -34,7 +34,7 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
   const top = useMemo(() => (r ? topSkus(data, r) : null), [data, r]);
 
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'home')) return <SinAcceso motivo={`No tienes acceso al Resumen de ${cfg.nombre}.`} />;
-  if (loading || (!r && !error)) return <SkeletonPantalla />;
+  if (loading || (!r && !error)) return <SkeletonPantalla pantalla="home" />;
   if (error) return <Panel titulo="No se pudo cargar el Resumen" meta={cfg.nombre}><div style={{ fontSize: 12, color: theme.red }}>{error}</div></Panel>;
 
   const ir = (pagina) => (onNavegar ? () => onNavegar(clienteKey, pagina) : undefined);

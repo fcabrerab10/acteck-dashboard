@@ -307,7 +307,7 @@ function InventarioGlobalPantalla() {
   const colorTono = { red: theme.red, orange: theme.orange, green: theme.green, gray: theme.textMuted };
 
   if (loading) {
-    return <div style={{ padding: '10px 6px', background: theme.bg, minHeight: '100%' }}><SkeletonPantalla /></div>;
+    return <div style={{ padding: '10px 6px', background: theme.bg, minHeight: '100%' }}><SkeletonPantalla pantalla="inventarioGlobal" /></div>;
   }
   if (filas.length === 0) {
     return (

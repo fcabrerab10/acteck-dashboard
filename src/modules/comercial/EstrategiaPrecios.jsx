@@ -361,7 +361,7 @@ export default function EstrategiaPrecios() {
   };
 
   if (loading) {
-    return <Cargando label="Cargando estrategia de precios…" sub="Trayendo listas, roadmap y sell-in por SKU" minHeight={480} />;
+    return <Cargando pantalla="estrategiaPrecios" label="Cargando estrategia de precios…" sub="Trayendo listas, roadmap y sell-in por SKU" minHeight={480} />;
   }
 
   // KPIs consolidados

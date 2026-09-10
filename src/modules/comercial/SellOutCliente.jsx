@@ -644,7 +644,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   };
 
   if (loading) {
-    return <Cargando label={`Cargando Sell Out de ${meta.nombre}…`} sub="Trayendo sellout, sucursales y clientes finales" minHeight={480} />;
+    return <Cargando pantalla="sellOut" label={`Cargando Sell Out de ${meta.nombre}…`} sub="Trayendo sellout, sucursales y clientes finales" minHeight={480} />;
   }
 
   return (

@@ -10,7 +10,8 @@ import { puedeActualizarDatos } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import { Hero, Panel, SkeletonPantalla } from '../../components/kit';
 import { useImportadorData } from './importador/useImportadorData';
-import { FUENTES, PUENTE } from './importador/config';
+import { PUENTE } from './importador/config';
+import { useFuentesConfig } from './importador/fuentesConfig';
 import { frescuraManual, latidoPuente, estadoAutomatica, relTiempo, fmtHora, fmtFechaHora } from './importador/frescura';
 import CargasAutomaticas from './importador/CargasAutomaticas';
 import CargasManuales from './importador/CargasManuales';
@@ -20,13 +21,16 @@ const fmtDia = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric
 export default function ActualizacionDatos({ perfil }) {
   const { theme } = useTheme();
   const { status, upload, error, loading, refetch } = useImportadorData();
+  const { fuentes } = useFuentesConfig();
 
   const r = useMemo(() => {
     if (!status) return null;
     const ahora = new Date();
-    const manuales = FUENTES.map((f) => ({ f, fr: frescuraManual(f, status, ahora, upload?.[f.statusKey]) }));
-    const atrasadas = manuales.filter((m) => m.fr.estado === 'atrasada' || m.fr.estado === 'sin_datos');
-    const alDia = manuales.filter((m) => m.fr.estado === 'ok' || m.fr.estado === 'cambio' || m.fr.estado === 'pronto').length;
+    const manuales = fuentes.map((f) => ({ f, fr: frescuraManual(f, status, ahora, upload?.[f.statusKey]) }));
+    // Sólo `atrasada` cuenta como atrasada (por_vencer sigue al día para el hero).
+    const atrasadas = manuales.filter((m) => m.fr.estado === 'atrasada');
+    const porVencer = manuales.filter((m) => m.fr.estado === 'por_vencer').length;
+    const alDia = manuales.length - atrasadas.length;
     const autos = PUENTE.map((row) => { const item = (status.items || []).find((x) => x.fuente === row.key); return { row, item, st: estadoAutomatica(row, item, status.eventos?.[row.key], ahora) }; });
     const autosOk = autos.filter((a) => a.st.texto === 'OK').length;
     const autosMal = autos.filter((a) => a.st.texto !== 'OK');
@@ -48,20 +52,20 @@ export default function ActualizacionDatos({ perfil }) {
       dot = atrasadas.some((m) => m.fr.diasAtraso >= 7) || autosMal.some((a) => a.st.texto === 'Error');
     } else {
       titulo = `Todo al día. Próxima corrida a las ${fmtHora(latido.proxima)}.`;
-      sub = `Automáticas ${autosOk}/${autos.length} · manuales ${alDia}/${manuales.length} · ${corridasHoy} corrida${corridasHoy === 1 ? '' : 's'} del puente hoy.`;
+      sub = `Automáticas ${autosOk}/${autos.length} · manuales ${alDia}/${manuales.length}${porVencer ? ` (${porVencer} por vencer)` : ''} · ${corridasHoy} corrida${corridasHoy === 1 ? '' : 's'} del puente hoy.`;
     }
-    return { manuales, atrasadas, alDia, autos, autosOk, corridasHoy, latido, ultima, titulo, sub, dot };
-  }, [status, upload]);
+    return { manuales, atrasadas, porVencer, alDia, autos, autosOk, corridasHoy, latido, ultima, titulo, sub, dot };
+  }, [status, upload, fuentes]);
 
   if (!puedeActualizarDatos(perfil)) return <SinAcceso motivo="Solo el Super Admin puede actualizar datos." />;
-  if (loading) return <SkeletonPantalla />;
+  if (loading) return <SkeletonPantalla pantalla="actualizacion" />;
   if (error && !status) return <Panel titulo="No se pudo cargar el importador"><div style={{ fontSize: 12, color: theme.red }}>{error}</div></Panel>;
 
   const total = r.manuales.length + r.autos.length;
   const stats = [
     { k: 'Al día', v: `${r.alDia + r.autosOk}/${total}`, sub: `${r.autosOk}/${r.autos.length} automáticas · ${r.alDia}/${r.manuales.length} manuales`, color: r.alDia + r.autosOk === total ? theme.green : undefined },
     { k: 'Corridas hoy', v: String(r.corridasHoy), sub: 'automáticas del puente' },
-    { k: 'Pendientes', v: String(r.atrasadas.length), sub: 'manuales atrasadas', color: r.atrasadas.length ? theme.orange : undefined },
+    { k: 'Pendientes', v: String(r.atrasadas.length), sub: r.porVencer ? `manuales atrasadas · ${r.porVencer} por vencer` : 'manuales atrasadas', color: r.atrasadas.length ? theme.red : r.porVencer ? theme.orange : undefined },
     { k: 'Última carga', v: r.ultima ? relTiempo(r.ultima.t) : '—', sub: r.ultima ? `${r.ultima.que}${r.ultima.quien ? ` · ${r.ultima.quien}` : ''}` : 'sin cargas' },
   ];
   const diaTxt = fmtDia.format(new Date()).replace(',', '');
@@ -71,7 +75,7 @@ export default function ActualizacionDatos({ perfil }) {
     <div data-stagger style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
       <Hero eyebrow={`Configuración · Importador central · ${latidoTxt} · ${diaTxt}`} titulo={r.titulo} sub={r.sub} dot={r.dot} stats={stats} />
       <CargasAutomaticas status={status} perfil={perfil} onRefetch={refetch} />
-      <CargasManuales status={status} upload={upload} onRefetch={refetch} />
+      <CargasManuales status={status} upload={upload} fuentes={fuentes} perfil={perfil} onRefetch={refetch} />
       <p style={{ fontSize: 10.5, color: theme.textSubtle || theme.textMuted, margin: '0 4px' }}>
         Se actualiza cada minuto. Ventas ERP trae sólo los últimos 45 días en cada corrida (carga completa: ./run.sh ventas --anios 2026). Los parsers de las cargas manuales viven en src/lib/parsers/; uploads.html queda como respaldo técnico.
       </p>

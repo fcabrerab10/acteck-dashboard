@@ -697,7 +697,7 @@ export default function VisionGeneral() {
   }, [sellMensual, sellMensualPrev, sellRotacion, mesMax, anio]);
 
   if (loading) {
-    return <Cargando label="Cargando visión general…" sub="Trayendo facturación, inventario y sell out" />;
+    return <Cargando pantalla="visionGeneral" label="Cargando visión general…" sub="Trayendo facturación, inventario y sell out" />;
   }
   if (margenAct.length === 0) {
     return (

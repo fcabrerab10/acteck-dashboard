@@ -10,7 +10,7 @@
 import {
   Home, LayoutGrid, Calculator, Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Target,
   BarChart3, ClipboardList, TrendingUp, FileCheck, Megaphone, Wallet, CreditCard, History, Building2,
-  Settings, RefreshCw, Users, Briefcase, Landmark, Store,
+  Shield, Users, Briefcase, Landmark, Store,
 } from 'lucide-react';
 import { puedeVerPaginaGlobal, puedeVerCliente, puedeVerPestanaCliente } from '../../lib/permisos';
 
@@ -77,19 +77,15 @@ const GRUPOS_BASE = [
       { pagina: 'adminInterna',     label: 'Pendientes & Calendario', icon: ClipboardList },
       { pagina: 'telemetria',       label: 'Actividad del equipo',    icon: Activity },
       { pagina: 'historialCambios', label: 'Historial de cambios',    icon: History },
+      // Administración (usuarios y permisos · datos · notificaciones del equipo · sistema). Sólo super admin;
+      // el importador central se abre desde Administración → Datos (y desde el avatar → Datos), no repite nodo.
+      { pagina: 'configuracion',    label: 'Administración',          icon: Shield },
     ],
   },
   {
     id: 'axon', label: 'Axon', icon: Store, color: '#FF9500',
     nodos: [
       { pagina: 'axonMexico', label: 'Axon de México', icon: Store },
-    ],
-  },
-  {
-    id: 'configuracion', label: 'Configuración', icon: Settings, color: '#8E8E93',
-    nodos: [
-      { pagina: 'configuracion', label: 'Configuración', icon: Settings },
-      { pagina: 'actualizacion', label: 'Actualizar datos', icon: RefreshCw },
     ],
   },
 ];

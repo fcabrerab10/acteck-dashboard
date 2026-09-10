@@ -1,23 +1,30 @@
-// Sidebar translúcida estilo iPad (Música / Notas / Ajustes).
-// Buscador arriba ("Buscar ⌘K"), sección FAVORITOS, grupos con título en versalitas, ítem activo con
-// fondo theme.accent y texto blanco, clientes con punto de color. Colapsa a 56 px (botón y automático < 1100 px).
-// El título grande de la pestaña lo pone cada pantalla.
+// Sidebar translúcida estilo iPad (Música / Notas / Ajustes) · chrome V3 opción C.
+// Cabecera = tarjeta de perfil (avatar 30 con foto, nombre, cargo; al tocarla abre el PanelAvatar) +
+// botón de colapsar. Buscador ("Buscar ⌘K"), sección FAVORITOS, grupos con título en versalitas, ítem
+// activo con fondo theme.accent y texto blanco, clientes con punto de color. Al pie: logotipo "acteck."
+// con la versión a la derecha. Colapsa a 56 px (botón y automático < 1100 px): sólo avatar arriba y
+// monograma "a." abajo. El título grande de la pestaña lo pone cada pantalla.
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
+import { versionLabel } from '../../lib/version';
+import { AvatarImg, usePerfilVivo } from '../../lib/avatar';
+import { cargoDe } from '../perfil/comun';
+import { abrirPanelAvatar } from '../perfil/PanelAvatar';
 import { esNodoActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
-import { Kbd, BotonFav, PuntoCliente, TituloSeccion, vidrio, hoverBg, hairline, esMidnight } from './comun';
+import { Kbd, BotonFav, PuntoCliente, TituloSeccion, Logotipo, Monograma, vidrio, hoverBg, hairline, esMidnight } from './comun';
 
 export const SIDEBAR_ANCHO = 232;
 export const SIDEBAR_COLAPSADA = 56;
 const LS_COLAPSO = 'nav_sidebar_colapsada_v1';
 const UMBRAL_AUTO = 1100;
 
-export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, onNavegar, onAbrirPaleta, densidad = 'comoda', modoPresent }) {
+export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, onNavegar, onAbrirPaleta, densidad = 'comoda', modoPresent, perfil: perfilProp }) {
   const { theme } = useTheme();
   const dark = esMidnight(theme);
+  const perfil = usePerfilVivo(perfilProp);
 
   // Colapso: manual (persistido) o automático por ancho (< 1100 px). El manual manda mientras no cambie el umbral.
   const [manual, setManual] = useState(() => { try { const v = localStorage.getItem(LS_COLAPSO); return v == null ? null : v === '1'; } catch { return null; } });
@@ -48,17 +55,9 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
       transition: `width ${DUR.content}ms ${EASE}, min-width ${DUR.content}ms ${EASE}`,
       position: 'relative', zIndex: 30,
     }}>
-      {/* Marca + colapso */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: colapsada ? '14px 0 8px' : '14px 12px 8px', justifyContent: colapsada ? 'center' : 'space-between', minHeight: 48 }}>
-        {!colapsada && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <Marca theme={theme} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.015em', lineHeight: 1.1, whiteSpace: 'nowrap' }}>Dashboard</div>
-              <div style={{ fontSize: 10, color: theme.textMuted, lineHeight: 1.2, whiteSpace: 'nowrap' }}>{modoPresent ? 'Presentación' : 'Acteck · Balam Rush'}</div>
-            </div>
-          </div>
-        )}
+      {/* Tarjeta de perfil + colapso */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: colapsada ? '12px 0 6px' : '10px 8px 6px 8px', flexDirection: colapsada ? 'column' : 'row', justifyContent: colapsada ? 'center' : 'space-between', minHeight: 48 }}>
+        <TarjetaPerfil theme={theme} perfil={perfil} colapsada={colapsada} modoPresent={modoPresent} onClick={() => abrirPanelAvatar()} />
         <BotonIcono theme={theme} title={colapsada ? 'Expandir menú' : 'Colapsar menú'} onClick={toggleColapso}>
           {colapsada ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
         </BotonIcono>
@@ -134,18 +133,41 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
           );
         })}
       </nav>
+
+      {/* Pie: logotipo + versión (colapsada: monograma) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: colapsada ? 'center' : 'space-between', gap: 8, padding: colapsada ? '8px 0 14px' : '8px 16px 14px', borderTop: `1px solid ${hairline(theme)}`, flexShrink: 0 }}>
+        {colapsada
+          ? <Monograma theme={theme} title={`Acteck Dashboard ${versionLabel()}`} />
+          : <>
+              <Logotipo theme={theme} size={15} title="Acteck Dashboard" />
+              <span title="Versión del dashboard" style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted, letterSpacing: '0.01em', whiteSpace: 'nowrap', userSelect: 'text' }}>{versionLabel()}</span>
+            </>}
+      </div>
     </aside>
   );
 }
 
-function Marca({ theme }) {
-  const dark = esMidnight(theme);
+function TarjetaPerfil({ theme, perfil, colapsada, modoPresent, onClick }) {
+  const [h, setH] = useState(false);
+  const nombre = perfil?.nombre || perfil?.email || 'Usuario';
+  const cargo = modoPresent ? 'Presentación' : cargoDe(perfil);
   return (
-    <span style={{
-      width: 26, height: 26, borderRadius: 7, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      background: dark ? theme.accent : theme.text, color: dark ? '#000' : (theme.textOnDark || '#F5F5F7'),
-      fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 12, boxShadow: dark ? `0 0 12px ${theme.accentGlow || 'rgba(10,132,255,0.3)'}` : 'none',
-    }}>a</span>
+    <button type="button" onClick={onClick} title={`${nombre} · perfil, avisos y datos`} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: colapsada ? '0 0 auto' : 1, border: 0, cursor: 'pointer', textAlign: 'left',
+        padding: colapsada ? 2 : '3px 6px 3px 3px', borderRadius: colapsada ? 999 : 9, background: h ? hoverBg(theme) : 'transparent',
+        color: theme.text, fontFamily: TYPO.fontText, transition: `background ${DUR.state}ms ${EASE}`,
+      }}>
+      <span style={{ display: 'inline-flex', borderRadius: 999, boxShadow: modoPresent ? `0 0 0 2px ${theme.green || '#34C759'}` : 'none', flexShrink: 0 }}>
+        <AvatarImg perfil={perfil} size={30} />
+      </span>
+      {!colapsada && (
+        <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombre}</span>
+          {cargo && <span style={{ fontSize: 10, color: modoPresent ? (theme.green || '#34C759') : theme.textMuted, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cargo}</span>}
+        </span>
+      )}
+    </button>
   );
 }
 

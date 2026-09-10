@@ -29,6 +29,32 @@ export const hoverBg = (theme) => (esMidnight(theme) ? 'rgba(255,255,255,0.06)' 
 export const suaveBg = (theme) => (esMidnight(theme) ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)');
 export const hairline = (theme) => (esMidnight(theme) ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)');
 
+/** Logotipo de palabra "acteck." · SF Display 600 con el punto en theme.accent (en Midnight cian).
+ *  `oscuro` fuerza texto blanco (barra apple.com). */
+export function Logotipo({ theme, size = 15, oscuro = false, style, onClick, title }) {
+  const punto = esMidnight(theme) ? (theme?.accentCyan || theme?.accent) : (theme?.accent || '#007AFF');
+  const Tag = onClick ? 'button' : 'span';
+  return (
+    <Tag type={onClick ? 'button' : undefined} onClick={onClick} title={title} style={{
+      border: 0, background: 'transparent', padding: 0, cursor: onClick ? 'pointer' : 'default',
+      fontFamily: TYPO.fontDisplay, fontSize: size, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1,
+      color: oscuro ? '#FFF' : theme?.text, whiteSpace: 'nowrap', userSelect: 'none', display: 'inline-flex', alignItems: 'baseline', ...style,
+    }}>acteck<span style={{ color: punto }}>.</span></Tag>
+  );
+}
+
+/** Monograma "a" (sidebar colapsada): sólo la letra, mismo peso, con el punto de color. */
+export function Monograma({ theme, size = 17, style, onClick, title }) {
+  const punto = esMidnight(theme) ? (theme?.accentCyan || theme?.accent) : (theme?.accent || '#007AFF');
+  const Tag = onClick ? 'button' : 'span';
+  return (
+    <Tag type={onClick ? 'button' : undefined} onClick={onClick} title={title} style={{
+      border: 0, background: 'transparent', padding: 0, cursor: onClick ? 'pointer' : 'default',
+      fontFamily: TYPO.fontDisplay, fontSize: size, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, color: theme?.text, userSelect: 'none', display: 'inline-flex', alignItems: 'baseline', ...style,
+    }}>a<span style={{ color: punto }}>.</span></Tag>
+  );
+}
+
 /** Tecla estilo macOS. */
 export function Kbd({ children, theme, oscuro = false, style }) {
   const dark = oscuro || esMidnight(theme);

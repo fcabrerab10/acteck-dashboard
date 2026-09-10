@@ -1,7 +1,7 @@
 // Catálogo de fuentes del importador central (Configuración → Actualización de datos).
 //   · PUENTE: cargas automáticas (Mac mini). Se leen de /api/status?type=sync (sync_status + sync_events).
 //   · GRUPOS / FUENTES: cargas manuales; cada fila tiene su parser en src/lib/parsers/ y
-//     una cadencia con la que se calcula el anillo de frescura.
+//     una cadencia (default; fuentes_config la sobreescribe) con la que se calcula el anillo de frescura.
 // Colores: sólo claves de theme.* (nunca hex aquí).
 
 export const ORIGEN_PUENTE = 'Puente SQL (Mac mini)';
@@ -31,19 +31,49 @@ export const GRUPOS = [
   { id: 'estados_cuenta', label: 'Estados de Cuenta', color: 'purple',    subtitle: 'Cortes semanales con aging por cliente' },
 ];
 
-// cadencia: { tipo:'semanal', dia: 1..6 (1 = lunes) } · { tipo:'mensual', dia: N } · { tipo:'cambio' }
-const LUNES = { tipo: 'semanal', dia: 1, label: 'lunes' };
-const MARTES = { tipo: 'semanal', dia: 2, label: 'martes' };
+// cadencia · { tipo:'semanal', dia: 1..7 (1 = lunes), tolerancia: N } · { tipo:'mensual', dia: N, tolerancia: N } · { tipo:'cambio' }
+//   · esperada el día `dia`; `por_vencer` desde ese día; `atrasada` cuando pasan `tolerancia` días sin carga.
+//   Estos son los DEFAULTS en código; la tabla `fuentes_config` (editable por super admin en la columna
+//   "Esperada") los sobreescribe por fuente. Ver estadoManual() en ./frescura.js.
+export const DIAS_SEMANA = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+export const TOLERANCIA_SEMANAL = 3;   // lunes → atrasada desde el jueves
+export const TOLERANCIA_MENSUAL = 10;  // día 10 → atrasada desde el 20
+const LUNES  = { tipo: 'semanal', dia: 1, tolerancia: TOLERANCIA_SEMANAL };
+const MARTES = { tipo: 'semanal', dia: 2, tolerancia: TOLERANCIA_SEMANAL };
+const CAMBIO = { tipo: 'cambio' };
 const EXCEL = '.xlsx,.xls', CSV = '.csv,.txt';
+
+/** Normaliza una cadencia (de código o de fuentes_config) rellenando tolerancia y acotando el día. */
+export function normalizarCadencia(c) {
+  if (!c || c.tipo === 'cambio') return CAMBIO;
+  if (c.tipo === 'mensual') return { tipo: 'mensual', dia: Math.min(28, Math.max(1, Number(c.dia) || 1)), tolerancia: Math.max(0, Number(c.tolerancia ?? TOLERANCIA_MENSUAL)) };
+  return { tipo: 'semanal', dia: Math.min(7, Math.max(1, Number(c.dia) || 1)), tolerancia: Math.max(0, Number(c.tolerancia ?? TOLERANCIA_SEMANAL)) };
+}
+
+/** Etiqueta corta: "lunes", "día 10", "cuando cambie". */
+export function labelCadencia(c) {
+  const n = normalizarCadencia(c);
+  if (n.tipo === 'cambio') return 'cuando cambie';
+  if (n.tipo === 'mensual') return `día ${n.dia}`;
+  return DIAS_SEMANA[n.dia - 1];
+}
+
+/** Etiqueta del límite: "atraso desde jueves" · "atraso desde el 20" · null. */
+export function labelLimite(c) {
+  const n = normalizarCadencia(c);
+  if (n.tipo === 'cambio') return null;
+  if (n.tipo === 'mensual') return `atraso desde el ${Math.min(31, n.dia + n.tolerancia)}`;
+  return `atraso desde ${DIAS_SEMANA[(n.dia - 1 + n.tolerancia) % 7]}`;
+}
 
 export const FUENTES = [
   // ── Globales ──
   { id: 'roadmap', grupo: 'globales', statusKey: 'roadmap', tipo: 'updated', titulo: 'Roadmap', parser: 'roadmap', accept: EXCEL, kind: 'Excel',
-    formato: ['Roadmap.xlsx · Hoja1', 'Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2 · replace completo'], cadencia: { tipo: 'cambio', label: 'cuando cambie' } },
+    formato: ['Roadmap.xlsx · Hoja1', 'Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2 · replace completo'], cadencia: CAMBIO },
   { id: 'estados-resultados', grupo: 'globales', statusKey: 'estados_resultados', tipo: 'mes', titulo: 'Estado de Resultados (P&L)', parser: 'estadosResultados', accept: EXCEL, kind: 'Excel',
-    formato: ['Cierre <período>.xlsx · hoja "Estado de Resultados"', 'sólo meses con valores · upsert por razón social, año, mes y cuenta'], cadencia: { tipo: 'mensual', dia: 10, label: 'día 10' } },
+    formato: ['Cierre <período>.xlsx · hoja "Estado de Resultados"', 'sólo meses con valores · upsert por razón social, año, mes y cuenta'], cadencia: { tipo: 'mensual', dia: 10, tolerancia: TOLERANCIA_MENSUAL } },
   { id: 'revko-sellout', grupo: 'globales', statusKey: 'revko_sellout', tipo: 'sellout', titulo: 'Sellout Acteck (Revko)', parser: 'revkoSellout', accept: CSV, kind: 'CSV',
-    formato: ['Reporte-SellOut_Ventas … Acteck_Revko.csv', 'semanal o mensual · mayorista DICOTECH · upsert por id determinista'], cadencia: { tipo: 'mensual', dia: 3, label: 'día 3' } },
+    formato: ['Reporte-SellOut_Ventas … Acteck_Revko.csv', 'semanal o mensual · mayorista DICOTECH · upsert por id determinista'], cadencia: MARTES },
   // ── Digitalife ──
   { id: 'digitalife-sellout', grupo: 'digitalife', statusKey: 'sellout_digitalife', tipo: 'sellout', titulo: 'Sell out histórico', parser: 'digitalifeSellout', accept: EXCEL, kind: 'Excel',
     formato: ['Historico Sellout Digitalife.xlsx · hoja "Sellout Digitalife"', 'append con dedup por fecha + parte + cantidad + total'], cadencia: LUNES,
@@ -52,7 +82,7 @@ export const FUENTES = [
     formato: ['Acteck_BalamRush_Inventario.xlsx · Hoja39', 'snapshot por (cliente, sku, año, semana)'], cadencia: LUNES },
   // ── PCEL ──
   { id: 'pcel-vm', grupo: 'pcel', statusKey: 'sellout_pcel', tipo: 'semana', titulo: 'Venta-marca semanal', parser: 'pcelVentaMarca', accept: EXCEL, kind: 'Excel',
-    formato: ['venta-marca-ACTECK.xlsx · "Ventas por Fabricante"', 'semana desde "Vta Semana N" · también mensual histórico y catálogo SKU'], cadencia: MARTES },
+    formato: ['venta-marca-ACTECK.xlsx · "Ventas por Fabricante"', 'semana desde "Vta Semana N" · también mensual histórico y catálogo SKU'], cadencia: LUNES },
   // ── Dicotech ──
   { id: 'dicotech-sellout', grupo: 'dicotech', statusKey: 'sellout_dicotech', tipo: 'sellout', titulo: 'Sell out semanal (CSV)', parser: 'dicotechSelloutSemanal', accept: CSV, kind: 'CSV',
     formato: ['Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', 'append a sellout_detalle · recalcula sellout_sku'], cadencia: LUNES },

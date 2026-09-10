@@ -6,7 +6,8 @@ import { useTheme } from '../../lib/themeContext';
 import { usePreferencias } from '../../lib/preferencias';
 import Topbar from '../Topbar';
 import { TYPO } from '../../lib/themeTokens';
-import CentroNotificaciones from '../notificaciones';
+import { CuerpoNotificaciones } from '../notificaciones';
+import { Logotipo } from './comun';
 import { construirArbol, resolverFavoritos, irANodo } from './arbol';
 import BarraApple from './BarraApple';
 import SidebarIpad from './SidebarIpad';
@@ -55,7 +56,7 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
 
   const ctx = useMemo(() => ({ onNavegar: navegar, favoritos, toggleFavorito, abrirPaleta, modo, arbol }), [navegar, favoritos, toggleFavorito, abrirPaleta, modo, arbol]);
   const chrome = { onNavegar: navegar, onCerrarSesion, perfilUsuario, modoPresent, onToggleModoPresent, onAbrirPaleta: abrirPaleta, onAbrirAtajos: () => setAtajos(true) };
-  const comunNav = { arbol, favoritos, toggleFavorito, estado, onNavegar: navegar, onAbrirPaleta: abrirPaleta, densidad: menu.densidad, modoPresent };
+  const comunNav = { arbol, favoritos, toggleFavorito, estado, onNavegar: navegar, onAbrirPaleta: abrirPaleta, densidad: menu.densidad, modoPresent, perfil: perfilUsuario };
 
   const fondo = { background: 'var(--t-bg, #F5F5F7)', color: theme.text };
   const flotantes = (
@@ -81,7 +82,7 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
           {/* Como una app de iPad: columna centrada con márgenes generosos */}
           <div style={{ maxWidth: 1040, margin: '0 auto', width: '100%' }}>{children}</div>
         </main>
-        <BarraIphone {...comunNav} campana={<CentroNotificaciones onNavegar={navegar} />} />
+        <BarraIphone {...comunNav} campana={<CuerpoNotificaciones onNavegar={navegar} maxAlto="60vh" />} />
       </div>
     );
   } else {
@@ -110,16 +111,21 @@ function tituloDe(arbol, estado) {
   try {
     const todos = (arbol || []).flatMap((g) => g.nodos || []);
     const n = todos.find((x) => (estado?.clienteActivo ? x.clienteKey === estado.clienteActivo && x.pagina === estado.paginaActiva : !x.clienteKey && x.pagina === estado?.paginaActiva));
-    if (!n) return estado?.paginaActiva === 'configuracion' ? 'Configuración' : '';
+    if (!n) return estado?.paginaActiva === 'configuracion' ? 'Administración' : '';
     const cli = estado?.clienteActivo ? (todos.find((x) => x.tipo === 'cliente' && x.clienteKey === estado.clienteActivo && x.pagina === 'home')?.label || '') : '';
     return cli && n.pagina !== 'home' ? `${n.label} · ${cli}` : (cli || n.label);
   } catch { return ''; }
 }
 function MarcaIphone({ theme, titulo }) {
   return (
-    <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 10, marginRight: 'auto' }}>
-      <span style={{ width: 28, height: 28, borderRadius: 8, background: theme.key === 'midnight' ? theme.accent : theme.text, color: theme.key === 'midnight' ? '#000' : '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 13 }}>a</span>
-      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{titulo || 'Acteck'}</span>
+    <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'baseline', gap: 8, marginRight: 'auto', minWidth: 0 }}>
+      <Logotipo theme={theme} size={16} />
+      {titulo && (
+        <>
+          <span style={{ fontSize: 13, color: theme.textSubtle || theme.textMuted }}>·</span>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo}</span>
+        </>
+      )}
     </div>
   );
 }
