@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import AppleLoader from '../../components/apple/AppleLoader';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
@@ -16,6 +15,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
 } from 'recharts';
 import { cachedQuery } from '../../lib/queries';
+import { Cargando } from '../../components/kit';
 import RentabilidadBloque from './RentabilidadBloque';
 import ExportMenu from '../../components/ExportMenu';
 import Pill, { toneColors } from '../../components/kit/Pill';
@@ -697,7 +697,7 @@ export default function VisionGeneral() {
   }, [sellMensual, sellMensualPrev, sellRotacion, mesMax, anio]);
 
   if (loading) {
-    return <AppleLoader label="Cargando visión general…" />;
+    return <Cargando label="Cargando visión general…" sub="Trayendo facturación, inventario y sell out" />;
   }
   if (margenAct.length === 0) {
     return (
