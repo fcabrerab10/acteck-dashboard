@@ -19,7 +19,7 @@ import { TYPO } from '../lib/themeTokens';
 import { elevation } from '../lib/elevation';
 import { supabase } from '../lib/supabase';
 import {
-  useAlertas, resolverAlerta, posponerAlerta, destinoAlerta, contarPorSeveridad, SEV_LABEL,
+  useAlertas, resolverAlerta, posponerAlerta, accionAlerta, ejecutarAccion, contarPorSeveridad, areaAlerta, AREA_LABEL, SEV_LABEL,
 } from '../lib/alertas';
 
 const MAX_COMPACTO = 6;
@@ -64,12 +64,8 @@ export default function BandejaAlertas({ clienteKey = null, compacto = false, on
   };
   const resolver = (a) => salir(a.id, async () => resolverAlerta(a.id, await emailActual(email)));
   const posponer = (a) => salir(a.id, () => posponerAlerta(a.id, 3));
-  const ir = (a) => {
-    const d = destinoAlerta(a);
-    if (!d) return;
-    if (d.url) { window.open(d.url, '_blank', 'noopener'); return; }
-    onNavegar?.(d.clienteKey, d.pagina, d);
-  };
+  // Acción directa del cron (`accion`) si existe; si no, el destino derivado del tipo.
+  const ir = (a) => ejecutarAccion(a, onNavegar);
 
   const pad = compacto ? '14px 16px' : '18px 22px';
   const card = {
@@ -116,7 +112,9 @@ export default function BandejaAlertas({ clienteKey = null, compacto = false, on
             const sale = saliendo.has(a.id);
             const col = colorSev(theme, a.severidad);
             const pill = a.sku || (a.cliente_key ? (NOMBRE[a.cliente_key] || a.cliente_key) : null);
-            const navegable = !!destinoAlerta(a);
+            const acc = accionAlerta(a);
+            const navegable = !!acc;
+            const area = AREA_LABEL[areaAlerta(a)];
             return (
               <div
                 key={a.id}
@@ -137,6 +135,7 @@ export default function BandejaAlertas({ clienteKey = null, compacto = false, on
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.titulo}</span>
                     {navegable && <ArrowUpRight size={11} color={theme.textSubtle} style={{ flexShrink: 0 }} />}
+                    {!compacto && area && <span style={{ fontSize: 10.5, color: theme.textSubtle, flexShrink: 0 }}>· {area}</span>}
                   </div>
                   {!compacto && a.detalle && (
                     <div style={{ fontSize: 11.5, color: theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{a.detalle}</div>
@@ -149,6 +148,11 @@ export default function BandejaAlertas({ clienteKey = null, compacto = false, on
                     fontFamily: a.sku ? '"SF Mono", ui-monospace, Menlo, monospace' : TYPO.fontText,
                     letterSpacing: a.sku ? 0 : '0.01em',
                   }}>{pill}</span>
+                )}
+                {acc && acc.label && acc.label !== 'Ver' && (
+                  <button onClick={() => ir(a)} title={acc.label} style={{ height: 24, padding: '0 9px', borderRadius: 999, border: `1px solid ${theme.accent || '#007AFF'}`, background: theme.accent || '#007AFF', color: '#FFF', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {acc.label}
+                  </button>
                 )}
                 <button onClick={() => posponer(a)} title="Posponer 3 días" style={btnIcon(theme.textMuted)}
                   onMouseEnter={(e) => { e.currentTarget.style.background = theme.surfaceHover; }}

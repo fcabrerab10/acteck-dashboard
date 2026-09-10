@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <pattern id="win" width="18" height="24" patternUnits="userSpaceOnUse">
+      <rect x="4" y="6" width="8" height="10" rx="1" fill="#EEF4F9"/>
+    </pattern>
+    <clipPath id="ventana"><rect x="112" y="96" width="800" height="464" rx="12"/></clipPath>
+  </defs>
+  <!-- pared -->
+  <rect width="1024" height="1024" fill="#ECE7DD"/>
+  <rect y="560" width="1024" height="464" fill="#DED8CC"/>
+  <!-- ventanal -->
+  <rect x="96" y="80" width="832" height="496" rx="18" fill="#F7F5F0"/>
+  <g clip-path="url(#ventana)">
+    <rect x="112" y="96" width="800" height="240" fill="#8FC3F0"/>
+    <rect x="112" y="336" width="800" height="224" fill="#CDE6FA"/>
+    <circle cx="760" cy="170" r="44" fill="#FFE27A"/><g fill="#FFFFFF" opacity="0.95"><rect x="180" y="200" width="150" height="34" rx="17"/><rect x="215" y="180" width="80" height="40" rx="20"/><rect x="560" y="140" width="120" height="30" rx="15"/><rect x="590" y="124" width="60" height="34" rx="17"/></g>
+    <rect x="120" y="310" width="60" height="250" fill="#AEBFD0"/><rect x="126" y="320" width="48" height="230" fill="url(#win)" opacity="0.55"/><rect x="190" y="260" width="44" height="300" fill="#AEBFD0"/><rect x="196" y="270" width="32" height="280" fill="url(#win)" opacity="0.55"/><rect x="244" y="340" width="70" height="220" fill="#AEBFD0"/><rect x="250" y="350" width="58" height="200" fill="url(#win)" opacity="0.55"/><rect x="324" y="230" width="50" height="330" fill="#AEBFD0"/><rect x="330" y="240" width="38" height="310" fill="url(#win)" opacity="0.55"/><rect x="384" y="300" width="64" height="260" fill="#AEBFD0"/><rect x="390" y="310" width="52" height="240" fill="url(#win)" opacity="0.55"/><rect x="458" y="200" width="56" height="360" fill="#AEBFD0"/><rect x="464" y="210" width="44" height="340" fill="url(#win)" opacity="0.55"/><rect x="524" y="320" width="72" height="240" fill="#AEBFD0"/><rect x="530" y="330" width="60" height="220" fill="url(#win)" opacity="0.55"/><rect x="606" y="250" width="48" height="310" fill="#AEBFD0"/><rect x="612" y="260" width="36" height="290" fill="url(#win)" opacity="0.55"/><rect x="664" y="290" width="66" height="270" fill="#AEBFD0"/><rect x="670" y="300" width="54" height="250" fill="url(#win)" opacity="0.55"/><rect x="740" y="220" width="54" height="340" fill="#AEBFD0"/><rect x="746" y="230" width="42" height="320" fill="url(#win)" opacity="0.55"/><rect x="804" y="330" width="70" height="230" fill="#AEBFD0"/><rect x="810" y="340" width="58" height="210" fill="url(#win)" opacity="0.55"/><rect x="884" y="270" width="40" height="290" fill="#AEBFD0"/><rect x="890" y="280" width="28" height="270" fill="url(#win)" opacity="0.55"/>
+    <rect x="136" y="410" width="48" height="150" fill="#7E93A9"/><rect x="142" y="420" width="36" height="130" fill="url(#win)" opacity="0.55"/><rect x="196" y="350" width="80" height="210" fill="#7E93A9"/><rect x="202" y="360" width="68" height="190" fill="url(#win)" opacity="0.55"/><rect x="290" y="440" width="56" height="120" fill="#7E93A9"/><rect x="296" y="450" width="44" height="100" fill="url(#win)" opacity="0.55"/><rect x="356" y="370" width="96" height="190" fill="#7E93A9"/><rect x="362" y="380" width="84" height="170" fill="url(#win)" opacity="0.55"/><rect x="462" y="400" width="60" height="160" fill="#7E93A9"/><rect x="468" y="410" width="48" height="140" fill="url(#win)" opacity="0.55"/><rect x="532" y="440" width="88" height="120" fill="#7E93A9"/><rect x="538" y="450" width="76" height="100" fill="url(#win)" opacity="0.55"/><rect x="630" y="360" width="70" height="200" fill="#7E93A9"/><rect x="636" y="370" width="58" height="180" fill="url(#win)" opacity="0.55"/><rect x="710" y="420" width="100" height="140" fill="#7E93A9"/><rect x="716" y="430" width="88" height="120" fill="url(#win)" opacity="0.55"/><rect x="820" y="380" width="64" height="180" fill="#7E93A9"/><rect x="826" y="390" width="52" height="160" fill="url(#win)" opacity="0.55"/><rect x="896" y="440" width="44" height="120" fill="#7E93A9"/><rect x="902" y="450" width="32" height="100" fill="url(#win)" opacity="0.55"/>
+    <rect x="112" y="540" width="800" height="20" fill="#7E93A9"/>
+  </g>
+  <rect x="508" y="96" width="8" height="464" fill="#F7F5F0"/>
+  <rect x="112" y="330" width="800" height="6" fill="#F7F5F0"/>
+  <!-- planta a la izquierda -->
+  <rect x="60" y="640" width="70" height="90" rx="10" fill="#8A5A33"/>
+  <g fill="#3E8E5A"><ellipse cx="95" cy="600" rx="30" ry="58"/><ellipse cx="60" cy="620" rx="24" ry="44" transform="rotate(-30 60 620)"/><ellipse cx="132" cy="618" rx="24" ry="44" transform="rotate(30 132 618)"/></g>
+  <!-- silla negra de respaldo alto -->
+  <rect x="332" y="250" width="360" height="600" rx="64" fill="#121214"/>
+  <rect x="358" y="280" width="308" height="540" rx="52" fill="#26262A" opacity="0.6"/>
+  <rect x="418" y="236" width="188" height="70" rx="30" fill="#121214"/>
+  <!-- cuello -->
+  <rect x="470" y="500" width="84" height="80" rx="20" fill="#D19E78"/>
+  <!-- torso: saco negro -->
+  <path d="M 512 560 C 440 560 350 585 322 632 L 336 790 L 688 790 L 702 632 C 674 585 584 560 512 560 Z" fill="#141416"/>
+  <path d="M 512 560 C 470 560 410 578 384 606 L 392 790 L 424 790 L 418 622 C 446 600 490 590 512 588 Z" fill="#232326"/>
+  <path d="M 512 560 C 554 560 614 578 640 606 L 632 790 L 600 790 L 606 622 C 578 600 534 590 512 588 Z" fill="#232326"/>
+  <!-- camisa blanca en V + corbata -->
+  <path d="M 452 552 L 512 700 L 572 552 L 556 546 L 512 636 L 468 546 Z" fill="#FFFFFF"/>
+  <path d="M 500 566 L 524 566 L 528 690 L 512 712 L 496 690 Z" fill="#2C4E86"/>
+  <!-- escritorio -->
+  <rect x="0" y="760" width="1024" height="264" fill="#A56D3E"/>
+  <rect x="0" y="760" width="1024" height="44" fill="#C48A55"/>
+  <rect x="0" y="800" width="1024" height="6" fill="#8A5A33"/>
+  <!-- laptop (derecha) -->
+  <path d="M 700 620 L 900 620 L 916 780 L 690 780 Z" fill="#C9CCD2"/>
+  <path d="M 714 634 L 888 634 L 902 766 L 704 766 Z" fill="#4A90E2"/>
+  <path d="M 660 780 L 940 780 L 960 812 L 640 812 Z" fill="#9DA2AA"/>
+  <!-- brazos y manos entrelazadas sobre el escritorio -->
+  <path d="M 326 640 L 262 770 L 334 804 L 452 772 L 398 642 Z" fill="#141416"/>
+  <path d="M 698 640 L 762 770 L 690 804 L 572 772 L 626 642 Z" fill="#141416"/>
+  <rect x="386" y="752" width="64" height="24" rx="8" transform="rotate(-12 418 764)" fill="#FFFFFF"/>
+  <rect x="574" y="752" width="64" height="24" rx="8" transform="rotate(12 606 764)" fill="#FFFFFF"/>
+  <ellipse cx="512" cy="790" rx="96" ry="34" fill="#E8B893"/>
+  <ellipse cx="470" cy="784" rx="50" ry="30" fill="#E8B893"/>
+  <ellipse cx="554" cy="784" rx="50" ry="30" fill="#E8B893"/>
+  <g stroke="#D19E78" stroke-width="5" stroke-linecap="round" fill="none">
+    <path d="M 478 776 q 14 -10 30 4"/><path d="M 496 790 q 14 -10 30 4"/><path d="M 514 804 q 14 -10 30 4"/>
+  </g>
+  <!-- taza -->
+  <rect x="150" y="700" width="60" height="72" rx="10" fill="#FFFFFF"/>
+  <path d="M 210 716 a 18 18 0 0 1 0 40" stroke="#FFFFFF" stroke-width="10" fill="none"/>
+</svg>

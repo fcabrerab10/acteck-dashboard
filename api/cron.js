@@ -5,13 +5,19 @@
 // Tareas:
 //   ?task=sync-master-embarques  → descarga Google Sheet y upserta a embarques_compras
 //   ?task=actualizar-fill-rates  → cruza OCs activas con ventas_erp
-//   ?task=generar-alertas        → bandeja "qué atender hoy" (tabla alertas)
+//   ?task=generar-alertas        → bandeja "qué atender hoy" (tabla alertas). Al final
+//                                  manda por correo las críticas nuevas (salvo dryRun).
+//   ?task=resumen-programado     → correo-resumen por usuario (perfiles.preferencias.notif)
+//                                  con las alertas activas no críticas de las áreas en modo
+//                                  'resumen' + críticas nuevas inmediatas. RESUMEN_DRY_RUN=1
+//                                  (o ?dryRun=1) devuelve el HTML/JSON sin enviar.
 //
 // ENV:
 //   SUPABASE_SERVICE_ROLE_KEY
 //   MASTER_EMBARQUES_SHEET_ID    (solo para sync)
 //   MASTER_EMBARQUES_SHEET_NAME  (opcional, default año actual)
 //   CRON_SECRET                  (opcional, si está valida header)
+//   RESUMEN_DRY_RUN=1            (no enviar correos en resumen-programado / críticas)
 
 const SB_URL = process.env.VITE_SUPABASE_URL || 'https://hrhccvuhnedahznewgaj.supabase.co';
 const SRK    = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -407,19 +413,26 @@ async function taskForecastAvisos() {
 // ═════════════════════ TASK · Recordatorio tracking pedidos ═════════════════════
 // Detecta OCs abiertas cuyo updated_at es > 24h y le manda email a Karolina
 // (con Cc a Fernando) listando cuántas necesitan atención.
-async function taskRecordatorioTracking() {
+// Desde 2026-09-11 la detección vive en `ocsTrackingPendientes()` y también
+// alimenta la alerta `oc_sin_actualizar` (área operacion) del centro de
+// notificaciones. Esta task se conserva por compatibilidad, pero si ya existe
+// una alerta activa de ese tipo NO manda su propio correo: el aviso llega por
+// el centro (campana) y por el resumen programado. Se puede retirar del
+// vercel.json cuando Karolina confirme que le basta con el centro.
+async function ocsTrackingPendientes() {
   const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
   const cutoffIso = new Date(cutoffMs).toISOString();
 
   // 1. OCs desactualizadas > 24h (sin importar estado por ahora)
   const ocRes = await fetch(
-    `${SB_URL}/rest/v1/oc_clientes?select=id,cliente_key,numero_oc,numero_oc_cliente,fecha_recibida,updated_at,monto_total&updated_at=lt.${cutoffIso}&order=updated_at.asc`,
+    `${SB_URL}/rest/v1/oc_clientes?select=id,cliente_key,numero_oc,numero_oc_cliente,fecha_recibida,updated_at&updated_at=lt.${cutoffIso}&order=updated_at.asc`,
     { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }
   );
   const ocs = await ocRes.json();
-  if (!Array.isArray(ocs) || ocs.length === 0) {
-    return { skip: 'No hay OCs desactualizadas', cutoff: cutoffIso };
-  }
+  // (oc_clientes no tiene monto_total; el select anterior lo pedía y PostgREST
+  // devolvía error → la task vieja siempre hacía skip.)
+  if (!Array.isArray(ocs)) throw new Error(`oc_clientes → ${JSON.stringify(ocs).slice(0, 200)}`);
+  if (ocs.length === 0) return { pendientes: [], total: 0, cutoffIso };
 
   // 2. Envíos para saber cuáles OCs ya están 100% entregadas (esas no cuentan)
   const ids = ocs.map((o) => o.id);
@@ -441,9 +454,24 @@ async function taskRecordatorioTracking() {
     return evs.some((e) => !e.fecha_entregada);
   });
 
+  return { pendientes, total: ocs.length, cutoffIso };
+}
+
+async function taskRecordatorioTracking() {
+  const { pendientes, total, cutoffIso } = await ocsTrackingPendientes();
+  if (total === 0) return { skip: 'No hay OCs desactualizadas', cutoff: cutoffIso };
   if (pendientes.length === 0) {
-    return { skip: 'Todas las desactualizadas ya están entregadas', total: ocs.length };
+    return { skip: 'Todas las desactualizadas ya están entregadas', total };
   }
+
+  // 2b. Si el centro de notificaciones ya tiene la alerta activa, no duplicar correo.
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/alertas?select=id&tipo=eq.oc_sin_actualizar&resuelta_at=is.null&limit=1`, { headers: SB_HEADERS() });
+    const activas = r.ok ? await r.json() : [];
+    if (Array.isArray(activas) && activas.length) {
+      return { skip: 'Alerta oc_sin_actualizar activa en el centro de notificaciones; no se manda correo aparte', pendientes: pendientes.length };
+    }
+  } catch { /* si falla la consulta, se manda el correo como antes */ }
 
   // 3. Enviar email
   const SMTP_USER = process.env.SMTP_USER;
@@ -461,12 +489,11 @@ async function taskRecordatorioTracking() {
   });
 
   const NOMBRE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech' };
-  const fmtMX = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n) || 0);
   const diasSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 
   const lista = pendientes.slice(0, 20).map((oc) => {
     const d = diasSince(oc.updated_at);
-    return `  · ${(NOMBRE[oc.cliente_key] || oc.cliente_key).padEnd(11)} ${(oc.numero_oc || '—').padEnd(14)} · sin update hace ${d}d · ${fmtMX(oc.monto_total)}`;
+    return `  · ${(NOMBRE[oc.cliente_key] || oc.cliente_key).padEnd(11)} ${(oc.numero_oc || oc.numero_oc_cliente || '—').padEnd(14)} · sin update hace ${d}d`;
   }).join('\n');
   const extra = pendientes.length > 20 ? `\n  ... y ${pendientes.length - 20} más` : '';
 
@@ -590,6 +617,9 @@ async function reglaStockVsTransito(hoy) {
       titulo: `${t.sku}: stock para ${cobertura.toFixed(1)} días, PO llega en ${diasLlegada}`,
       detalle: `${fmtN(disp)} pz disponibles · vende ${promDiario.toFixed(1)} pz/día · ${fmtN(t.cantidad)} pz en tránsito (${primerPO?.po || '—'}, ETA ${t.eta_mas_cercana}).`,
       cliente_key: null, sku: t.sku,
+      area: 'inventario',
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'inventarioGlobal', label: 'Ver inventario' },
+      caduca_at: t.eta_mas_cercana ? new Date(eta + 2 * 86400000).toISOString() : null, // 2 días tras la ETA ya no aplica
       valor: Number(cobertura.toFixed(1)),
       meta: { cobertura_dias: Number(cobertura.toFixed(1)), dias_llegada: diasLlegada, stock: disp, prom_diario: Number(promDiario.toFixed(2)), transito_qty: t.cantidad, eta: t.eta_mas_cercana, po: primerPO?.po || null, estatus_po: primerPO?.estatus || null, ventana_meses: meses.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`) },
     });
@@ -623,6 +653,9 @@ async function reglaCuotaEnRiesgo(hoy) {
       titulo: `${nombreCliente(c.cliente)} va al ${Math.round(ritmo * 100)} % del ritmo de cuota`,
       detalle: `${fmtMXN(facturado)} facturado al día ${hoy.dia} vs ${fmtMXN(esperado)} esperado · cuota ideal ${fmtMXN(ideal)} · proyección ${fmtMXN(proyeccion)}.`,
       cliente_key: c.cliente, sku: null,
+      area: 'ventas',
+      accion: { tipo: 'navegar', clienteKey: c.cliente, pagina: 'sellIn', label: 'Ver sell-in' },
+      caduca_at: new Date(Date.UTC(hoy.anio, hoy.mes, 1, 6)).toISOString(), // cierre de mes (00:00 CDMX del día 1)
       valor: Number((ritmo * 100).toFixed(1)),
       meta: { anio: hoy.anio, mes: hoy.mes, dia: hoy.dia, facturado_mtd: Math.round(facturado), esperado_mtd: Math.round(esperado), cuota_ideal: Math.round(ideal), cuota_min: Math.round(Number(c.cuota_min) || 0), proyeccion: Math.round(proyeccion), ritmo_pct: Number((ritmo * 100).toFixed(1)) },
     });
@@ -660,6 +693,9 @@ async function reglaDevolucionesAnormales(hoy) {
       titulo: `${nombreCliente(ck)}: devoluciones + RMA al ${(ratio * 100).toFixed(1)} % en ${periodoLbl(cerrado.anio, cerrado.mes)}`,
       detalle: `${fmtMXN(e.actual.dev)} sobre ${fmtMXN(e.actual.bruta)} de fact. bruta · promedio 6 meses previos ${(base * 100).toFixed(1)} % (${(base > 0 ? ratio / base : 0).toFixed(1)}×).`,
       cliente_key: ck, sku: null,
+      area: 'ventas',
+      accion: { tipo: 'navegar', clienteKey: CLIENTES_CUOTA.includes(ck) ? ck : null, pagina: 'sellIn', label: 'Ver sell-in' },
+      caduca_at: null,
       valor: Number((ratio * 100).toFixed(2)),
       meta: { anio: cerrado.anio, mes: cerrado.mes, fact_bruta: Math.round(e.actual.bruta), devoluciones_rmas: Math.round(e.actual.dev), ratio_pct: Number((ratio * 100).toFixed(2)), base_pct: Number((base * 100).toFixed(2)), veces: Number((base > 0 ? ratio / base : 0).toFixed(1)), meses_base: e.prevMeses },
     });
@@ -696,6 +732,9 @@ async function reglaRebatePorGenerar(hoy) {
       titulo: `Rebate Dicotech de ${MESES_LARGO[mes - 1]} ${anio} sin generar`,
       detalle: `Sell-in del mes ${fmtMXN(monto)} · no hay registro 'Rebate ${String(mes).padStart(2, '0')} ${MESES_LARGO[mes - 1]} ${anio}' en Pagos (ni generado ni "No aplica").`,
       cliente_key: 'dicotech', sku: null,
+      area: 'pagos',
+      accion: { tipo: 'navegar', clienteKey: 'dicotech', pagina: 'pagos', label: 'Generar' },
+      caduca_at: null,
       valor: Math.round(monto),
       meta: { anio, mes, sell_in: Math.round(monto), concepto_esperado: `Rebate ${String(mes).padStart(2, '0')} ${MESES_LARGO[mes - 1]} ${anio}` },
     });
@@ -732,6 +771,9 @@ async function reglaDatosSinActualizar() {
         + (f.periodo_max ? ` · último periodo con datos ${f.periodo_max}` : '')
         + '. Sube el archivo en uploads.html.',
       cliente_key: null, sku: null,
+      area: 'datos',
+      accion: { tipo: 'url', url: '/uploads.html', label: 'Subir' },
+      caduca_at: null,
       valor: dias,
       meta: { fuente: f.fuente, ultima_carga: ts, umbral_dias: f.umbral_dias, dias, periodo_max: f.periodo_max || null, filas: f.filas ?? null },
     });
@@ -739,7 +781,44 @@ async function reglaDatosSinActualizar() {
   return out;
 }
 
-export async function taskGenerarAlertas() {
+
+// ─── f. oc_sin_actualizar ───
+// OCs del Tracking Pedidos con > 24 h sin cambios y no entregadas al 100 %
+// (misma detección que taskRecordatorioTracking). Una alerta por cliente,
+// agrupable, con la lista en meta.ocs. Área operacion, severidad media.
+async function reglaOcSinActualizar() {
+  const { pendientes } = await ocsTrackingPendientes();
+  const porCliente = new Map();
+  for (const oc of pendientes) {
+    const k = oc.cliente_key || 'otros';
+    if (!porCliente.has(k)) porCliente.set(k, []);
+    porCliente.get(k).push(oc);
+  }
+  const out = [];
+  for (const [ck, ocs] of porCliente) {
+    ocs.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)));
+    const masVieja = Math.floor((Date.now() - new Date(ocs[0].updated_at).getTime()) / 86400000);
+    out.push({
+      tipo: 'oc_sin_actualizar', severidad: 'media',
+      clave: `oc_sin_actualizar|${ck}`,
+      titulo: `${nombreCliente(ck)}: ${ocs.length} OC${ocs.length === 1 ? '' : 's'} de tracking sin actualizar +24 h`,
+      detalle: `La más antigua lleva ${masVieja} d sin cambios. Revisa factura, envío o entrega en Tracking Pedidos.`,
+      cliente_key: ck, sku: null,
+      area: 'operacion',
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'ordenesCompra', label: 'Ver tracking' },
+      caduca_at: null,
+      valor: ocs.length,
+      meta: {
+        total: ocs.length, dias_max: masVieja,
+        ocs: ocs.slice(0, 50).map((o) => ({ id: o.id, oc: o.numero_oc || o.numero_oc_cliente || null, dias: Math.floor((Date.now() - new Date(o.updated_at).getTime()) / 86400000) })),
+      },
+    });
+  }
+  return out;
+}
+
+export { taskResumenProgramado, enviarCriticasNuevas };
+export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
   const REGLAS = [
     ['stock_vs_transito',      () => reglaStockVsTransito(hoy)],
@@ -747,6 +826,7 @@ export async function taskGenerarAlertas() {
     ['devoluciones_anormales', () => reglaDevolucionesAnormales(hoy)],
     ['rebate_por_generar',     () => reglaRebatePorGenerar(hoy)],
     ['datos_sin_actualizar',   () => reglaDatosSinActualizar()],
+    ['oc_sin_actualizar',      () => reglaOcSinActualizar()],
   ];
   const errores = [];
   const tiposEvaluados = new Set();
@@ -759,7 +839,7 @@ export async function taskGenerarAlertas() {
   });
 
   // Estado actual de la tabla
-  const existentes = await sbGetAll('alertas?select=id,clave,tipo,resuelta_at,resuelta_por,actualizada_at', 5000);
+  const existentes = await sbGetAll('alertas?select=id,clave,tipo,resuelta_at,resuelta_por,actualizada_at,caduca_at,meta', 5000);
   const porClave = new Map(existentes.map((a) => [a.clave, a]));
   const ahora = new Date().toISOString();
   const REABRIR_MS = 36 * 3600 * 1000;
@@ -773,8 +853,11 @@ export async function taskGenerarAlertas() {
   const clavesVigentes = new Set();
   for (const c of candidatas) {
     clavesVigentes.add(c.clave);
-    const base = { ...c, actualizada_at: ahora };
     const ex = porClave.get(c.clave);
+    // meta.notificada_at lo escribe resumen-programado; se conserva al re-upsertear
+    // (si la alerta se reabre tras resolverse, vuelve a contar como no notificada).
+    const notificada = ex && !ex.resuelta_at ? ex.meta?.notificada_at : null;
+    const base = { ...c, meta: notificada ? { ...c.meta, notificada_at: notificada } : c.meta, actualizada_at: ahora };
     if (!ex) { nuevas.push({ ...base, generada_at: ahora }); cnt(c.tipo, 'generadas'); continue; }
     if (ex.resuelta_at) {
       const lapso = Date.now() - new Date(ex.actualizada_at || 0).getTime();
@@ -801,8 +884,12 @@ export async function taskGenerarAlertas() {
   if (upserts.length) await postUpsert(upserts);
   if (reaperturas.length) await postUpsert(reaperturas);
 
-  // Auto-resolver: activas de tipos evaluados cuya condición ya no se cumple
-  const aResolver = existentes.filter((a) => !a.resuelta_at && tiposEvaluados.has(a.tipo) && !clavesVigentes.has(a.clave));
+  // Auto-resolver: activas de tipos evaluados cuya condición ya no se cumple,
+  // más las que ya caducaron (caduca_at < ahora) aunque su regla haya fallado.
+  const aResolver = existentes.filter((a) => !a.resuelta_at && (
+    (tiposEvaluados.has(a.tipo) && !clavesVigentes.has(a.clave))
+    || (a.caduca_at && a.caduca_at < ahora && !clavesVigentes.has(a.clave))
+  ));
   if (aResolver.length) {
     const r = await fetch(`${SB_URL}/rest/v1/alertas?id=in.(${aResolver.map((a) => a.id).join(',')})`, {
       method: 'PATCH',
@@ -814,7 +901,212 @@ export async function taskGenerarAlertas() {
   }
 
   const totales = Object.values(resumen).reduce((t, v) => ({ generadas: t.generadas + v.generadas, actualizadas: t.actualizadas + v.actualizadas, resueltas: t.resueltas + v.resueltas }), { generadas: 0, actualizadas: 0, resueltas: 0 });
-  return { ok: errores.length === 0, hoy: hoy.iso, candidatas: candidatas.length, totales, por_tipo: resumen, errores };
+
+  // Críticas nuevas → correo inmediato (sólo desde el cron real; la corrida
+  // local o con RESUMEN_DRY_RUN=1 no envía nada).
+  let criticas = null;
+  if (notificarCriticas) {
+    try { criticas = await enviarCriticasNuevas({ dryRun: esDryRun() }); }
+    catch (e) { errores.push({ tipo: 'criticas', error: String(e.message || e).slice(0, 300) }); }
+  }
+  return { ok: errores.length === 0, hoy: hoy.iso, candidatas: candidatas.length, totales, por_tipo: resumen, errores, ...(criticas ? { criticas } : {}) };
+}
+
+
+// ═════════════════════ TASK · Resumen programado (centro de notificaciones) ═══
+// Corre a la hora del resumen (vercel.json: 19:00 UTC = 13:00 CDMX; CDMX ya no
+// tiene horario de verano). Para cada perfil interno activo con correo:
+//   · preferencias.notif = { areas:{area:'inmediato'|'resumen'|'silencio'},
+//     clientes:[..]|null, resumen:{hora:'13:00', correo:true}, criticas_correo:true }
+//   · UN correo con las alertas activas NO críticas de las áreas en modo
+//     'resumen' (agrupadas por área, conteos, lo nuevo del día, lo resuelto solo)
+//   · críticas nuevas (sin meta.notificada_at) → correo aparte, inmediato, a
+//     quienes tengan criticas_correo (también lo dispara generar-alertas).
+// Registra meta.notificada_at en cada alerta enviada.
+// dryRun (RESUMEN_DRY_RUN=1 o ?dryRun=1): arma todo y lo devuelve sin enviar
+// ni marcar notificada_at.
+// ══════════════════════════════════════════════════════════════════════════════
+const AREAS_NOTIF = ['inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion'];
+const AREA_LABEL = { inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación' };
+const SEV_ORDEN_N = { critica: 0, alta: 1, media: 2, info: 3 };
+const SEV_COLOR = { critica: '#FF3B30', alta: '#FF9500', media: '#FFCC00', info: '#007AFF' };
+const APP_URL = process.env.APP_URL || 'https://acteck-dashboard.vercel.app';
+const esDryRun = () => process.env.RESUMEN_DRY_RUN === '1';
+
+function prefsNotif(perfil) {
+  const n = perfil?.preferencias?.notif || {};
+  const areas = {};
+  for (const a of AREAS_NOTIF) areas[a] = ['inmediato', 'resumen', 'silencio'].includes(n.areas?.[a]) ? n.areas[a] : 'resumen';
+  return {
+    areas,
+    clientes: Array.isArray(n.clientes) && n.clientes.length ? n.clientes : null,
+    resumen: { hora: n.resumen?.hora || '13:00', correo: n.resumen?.correo !== false },
+    criticas_correo: n.criticas_correo !== false,
+  };
+}
+const areaDe = (a) => a.area || ({ stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion' })[a.tipo] || 'operacion';
+const aplicaCliente = (a, prefs) => !prefs.clientes || !a.cliente_key || prefs.clientes.includes(a.cliente_key);
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ordenSev = (a, b) => (SEV_ORDEN_N[a.severidad] ?? 9) - (SEV_ORDEN_N[b.severidad] ?? 9) || String(b.actualizada_at || '').localeCompare(String(a.actualizada_at || ''));
+
+async function perfilesNotificables() {
+  const rows = await sbGetAll('perfiles?select=user_id,nombre,email,tipo,activo,estado,preferencias&activo=eq.true&tipo=eq.interno&email=not.is.null');
+  return rows.filter((p) => p.email && (p.estado == null || p.estado === 'activo'));
+}
+async function alertasActivas() {
+  const ahora = new Date().toISOString();
+  return sbGetAll(`alertas?select=id,tipo,severidad,titulo,detalle,cliente_key,sku,valor,meta,area,accion,generada_at,actualizada_at,snooze_hasta&resuelta_at=is.null&or=(snooze_hasta.is.null,snooze_hasta.lt.${ahora})`, 2000);
+}
+async function marcarNotificadas(alertas, ahora) {
+  const ids = alertas.map((a) => a.id);
+  for (let i = 0; i < alertas.length; i += 10) {
+    await Promise.all(alertas.slice(i, i + 10).map((a) => fetch(`${SB_URL}/rest/v1/alertas?id=eq.${a.id}`, {
+      method: 'PATCH',
+      headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ meta: { ...(a.meta || {}), notificada_at: ahora } }),
+    })));
+  }
+  return ids.length;
+}
+function crearTransporte() {
+  const SMTP_USER = process.env.SMTP_USER, SMTP_PASS = process.env.SMTP_PASS;
+  if (!SMTP_USER || !SMTP_PASS) return null;
+  return import('nodemailer').then(({ default: nodemailer }) => ({
+    from: `"Dashboard Acteck" <${SMTP_USER}>`,
+    transporter: nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: SMTP_USER, pass: SMTP_PASS.replace(/\s+/g, '') } }),
+  }));
+}
+
+// HTML de correo: tabla simple estilo iOS (inline styles, sin imágenes).
+function htmlAlerta(a) {
+  const acc = a.accion || {};
+  const href = acc.tipo === 'url' ? `${APP_URL}${acc.url}` : APP_URL;
+  const pill = a.sku || (a.cliente_key ? nombreCliente(a.cliente_key) : '');
+  return `<tr>
+    <td style="padding:8px 0 8px 14px;vertical-align:top;width:8px"><span style="display:inline-block;width:8px;height:8px;border-radius:99px;background:${SEV_COLOR[a.severidad] || '#8E8E93'}"></span></td>
+    <td style="padding:6px 10px;vertical-align:top;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#1D1D1F">
+      <div style="font-weight:600">${escapeHtml(a.titulo)}${pill ? ` <span style="font-weight:500;font-size:10.5px;color:#6E6E73;border:1px solid rgba(0,0,0,.1);border-radius:99px;padding:1px 7px;margin-left:4px">${escapeHtml(pill)}</span>` : ''}</div>
+      ${a.detalle ? `<div style="color:#6E6E73;font-size:12px;margin-top:2px">${escapeHtml(a.detalle)}</div>` : ''}
+    </td>
+    <td style="padding:6px 14px 6px 6px;vertical-align:top;text-align:right;white-space:nowrap"><a href="${href}" style="font:12px -apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#007AFF;text-decoration:none">${escapeHtml(acc.label || 'Ver')} ›</a></td>
+  </tr>`;
+}
+function htmlSeccion(titulo, sub, alertas, max = 12) {
+  const filas = alertas.slice(0, max).map(htmlAlerta).join('');
+  const mas = alertas.length > max ? `<tr><td colspan="3" style="padding:6px 14px 10px;font:12px -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#6E6E73">y ${alertas.length - max} más en el dashboard</td></tr>` : '';
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#FFFFFF;border:1px solid rgba(0,0,0,.06);border-radius:12px;margin:0 0 12px">
+    <tr><td colspan="3" style="padding:12px 14px 8px;border-bottom:1px solid rgba(0,0,0,.06)">
+      <span style="font:600 14px -apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#1D1D1F;letter-spacing:-.01em">${escapeHtml(titulo)}</span>
+      ${sub ? `<span style="font:12px -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#6E6E73;margin-left:8px">${escapeHtml(sub)}</span>` : ''}
+    </td></tr>${filas}${mas}</table>`;
+}
+function htmlCorreo({ titulo, intro, cuerpo }) {
+  return `<!doctype html><html><body style="margin:0;background:#F5F5F7;padding:24px 12px">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
+  <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%">
+    <tr><td style="padding:0 4px 14px">
+      <div style="font:600 22px -apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#1D1D1F;letter-spacing:-.025em">${escapeHtml(titulo)}</div>
+      <div style="font:13px -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#6E6E73;margin-top:4px">${escapeHtml(intro)}</div>
+    </td></tr>
+    <tr><td>${cuerpo}</td></tr>
+    <tr><td style="padding:10px 4px 0;font:11.5px -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#86868B">
+      Abre el <a href="${APP_URL}" style="color:#007AFF;text-decoration:none">dashboard</a> y toca la campana para resolver o posponer. Cambia qué recibes en ⚙️ del centro de notificaciones.
+    </td></tr>
+  </table></td></tr></table></body></html>`;
+}
+const textoAlertas = (alertas) => alertas.map((a) => `  · [${a.severidad}] ${a.titulo}${a.detalle ? ` — ${a.detalle}` : ''}`).join('\n');
+
+// Críticas nuevas (sin meta.notificada_at) → correo inmediato a quienes tengan criticas_correo.
+async function enviarCriticasNuevas({ dryRun = esDryRun() } = {}) {
+  const [perfiles, activas] = await Promise.all([perfilesNotificables(), alertasActivas()]);
+  const nuevas = activas.filter((a) => a.severidad === 'critica' && !a.meta?.notificada_at).sort(ordenSev);
+  if (!nuevas.length) return { skip: 'Sin críticas nuevas', enviados: [] };
+  const ahora = new Date().toISOString();
+  const transporte = dryRun ? null : await crearTransporte();
+  if (!dryRun && !transporte) return { error: 'SMTP_USER y SMTP_PASS no configurados', criticas: nuevas.length };
+  const enviados = [], previews = [];
+  const alcanzadas = new Set();
+  for (const p of perfiles) {
+    const prefs = prefsNotif(p);
+    if (!prefs.criticas_correo) continue;
+    const mias = nuevas.filter((a) => prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs));
+    if (!mias.length) continue;
+    mias.forEach((a) => alcanzadas.add(a.id));
+    const porArea = new Map();
+    for (const a of mias) { const k = areaDe(a); if (!porArea.has(k)) porArea.set(k, []); porArea.get(k).push(a); }
+    const cuerpo = [...porArea].map(([k, arr]) => htmlSeccion(AREA_LABEL[k] || k, `${arr.length} crítica${arr.length === 1 ? '' : 's'}`, arr, 15)).join('');
+    const subject = `🔴 ${mias.length} alerta${mias.length === 1 ? '' : 's'} crítica${mias.length === 1 ? '' : 's'} nueva${mias.length === 1 ? '' : 's'} · Dashboard Acteck`;
+    const html = htmlCorreo({ titulo: 'Alertas críticas', intro: `${mias.length} nueva${mias.length === 1 ? '' : 's'} desde el último aviso. Requieren decisión hoy.`, cuerpo });
+    const text = `Alertas críticas nuevas (${mias.length}):\n\n${textoAlertas(mias)}\n\n${APP_URL}`;
+    if (dryRun) { previews.push({ to: p.email, subject, ids: mias.map((a) => a.id), html, text }); continue; }
+    try {
+      const info = await transporte.transporter.sendMail({ from: transporte.from, to: p.email, subject, text, html });
+      enviados.push({ to: p.email, n: mias.length, msg_id: info.messageId });
+    } catch (e) { enviados.push({ to: p.email, n: mias.length, error: e.message }); }
+  }
+  let marcadas = 0;
+  if (!dryRun && alcanzadas.size) marcadas = await marcarNotificadas(nuevas.filter((a) => alcanzadas.has(a.id)), ahora);
+  return { dryRun, criticas_nuevas: nuevas.length, destinatarios: dryRun ? previews.length : enviados.length, marcadas, enviados, ...(dryRun ? { previews } : {}) };
+}
+
+async function taskResumenProgramado({ dryRun = esDryRun(), hora = null } = {}) {
+  const hoy = hoyCDMX();
+  const horaCDMX = hora ?? hoy.d.getHours();
+  const inicioDia = new Date(Date.UTC(hoy.anio, hoy.mes - 1, hoy.dia, 6)).toISOString(); // 00:00 CDMX (UTC-6)
+  const hace24 = new Date(Date.now() - 86400000).toISOString();
+  const ahora = new Date().toISOString();
+
+  const [perfiles, activas, resueltasSolas] = await Promise.all([
+    perfilesNotificables(),
+    alertasActivas(),
+    sbGetAll(`alertas?select=id,tipo,severidad,titulo,detalle,cliente_key,sku,area,resuelta_at&resuelta_por=eq.sistema&resuelta_at=gte.${hace24}&order=resuelta_at.desc`, 500),
+  ]);
+  activas.sort(ordenSev);
+  const transporte = dryRun ? null : await crearTransporte();
+  if (!dryRun && !transporte) return { error: 'SMTP_USER y SMTP_PASS no configurados' };
+
+  const enviados = [], previews = [], omitidos = [];
+  const incluidas = new Set();
+  for (const p of perfiles) {
+    const prefs = prefsNotif(p);
+    if (!prefs.resumen.correo) { omitidos.push({ to: p.email, motivo: 'resumen.correo = false' }); continue; }
+    const horaPref = Number(String(prefs.resumen.hora).split(':')[0]);
+    if (Number.isFinite(horaPref) && horaPref !== horaCDMX) { omitidos.push({ to: p.email, motivo: `hora ${prefs.resumen.hora} ≠ ${horaCDMX}:00` }); continue; }
+    const mias = activas.filter((a) => a.severidad !== 'critica' && prefs.areas[areaDe(a)] === 'resumen' && aplicaCliente(a, prefs));
+    const criticasPend = activas.filter((a) => a.severidad === 'critica' && prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs));
+    const resueltas = resueltasSolas.filter((a) => prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs));
+    if (!mias.length && !resueltas.length && !criticasPend.length) { omitidos.push({ to: p.email, motivo: 'sin alertas para su configuración' }); continue; }
+
+    const porArea = new Map();
+    for (const a of mias) { const k = areaDe(a); if (!porArea.has(k)) porArea.set(k, []); porArea.get(k).push(a); }
+    const nuevasHoy = mias.filter((a) => a.generada_at >= inicioDia);
+    const secciones = [];
+    if (criticasPend.length) secciones.push(`<div style="font:12px -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#B00020;padding:0 4px 10px">${criticasPend.length} crítica${criticasPend.length === 1 ? '' : 's'} sigue${criticasPend.length === 1 ? '' : 'n'} abierta${criticasPend.length === 1 ? '' : 's'} (avisadas por separado).</div>`);
+    for (const k of AREAS_NOTIF) {
+      const arr = porArea.get(k); if (!arr) continue;
+      const nuevas = arr.filter((a) => a.generada_at >= inicioDia).length;
+      secciones.push(htmlSeccion(AREA_LABEL[k], `${arr.length} activa${arr.length === 1 ? '' : 's'}${nuevas ? ` · ${nuevas} nueva${nuevas === 1 ? '' : 's'} hoy` : ''}`, arr));
+    }
+    if (resueltas.length) secciones.push(htmlSeccion('Se resolvieron solas', `${resueltas.length} en las últimas 24 h`, resueltas.map((a) => ({ ...a, severidad: 'info', detalle: null, accion: { label: 'Ver' } })), 8));
+    const conteos = [...porArea].map(([k, arr]) => `${AREA_LABEL[k]} ${arr.length}`).join(' · ');
+    const subject = `Resumen ${hoy.dia} ${MESES_CORTO[hoy.mes - 1]} · ${mias.length} pendiente${mias.length === 1 ? '' : 's'}${nuevasHoy.length ? ` · ${nuevasHoy.length} nueva${nuevasHoy.length === 1 ? '' : 's'}` : ''} · Dashboard Acteck`;
+    const html = htmlCorreo({ titulo: `Resumen del ${hoy.dia} de ${MESES_LARGO[hoy.mes - 1].toLowerCase()}`, intro: conteos || 'Nada pendiente en tus áreas.', cuerpo: secciones.join('') });
+    const text = `Resumen ${hoy.iso}\n${conteos}\n\n${[...porArea].map(([k, arr]) => `${AREA_LABEL[k]} (${arr.length})\n${textoAlertas(arr)}`).join('\n\n')}${resueltas.length ? `\n\nSe resolvieron solas (${resueltas.length}):\n${textoAlertas(resueltas)}` : ''}\n\n${APP_URL}`;
+    mias.forEach((a) => incluidas.add(a.id));
+    const resumenJson = { to: p.email, subject, total: mias.length, nuevas_hoy: nuevasHoy.length, criticas_abiertas: criticasPend.length, resueltas_solas: resueltas.length, por_area: Object.fromEntries([...porArea].map(([k, arr]) => [k, arr.length])) };
+    if (dryRun) { previews.push({ ...resumenJson, html, text }); continue; }
+    try {
+      const info = await transporte.transporter.sendMail({ from: transporte.from, to: p.email, subject, text, html });
+      enviados.push({ ...resumenJson, msg_id: info.messageId });
+    } catch (e) { enviados.push({ ...resumenJson, error: e.message }); }
+  }
+
+  let marcadas = 0;
+  if (!dryRun && incluidas.size) marcadas = await marcarNotificadas(activas.filter((a) => incluidas.has(a.id) && !a.meta?.notificada_at), ahora);
+
+  // Críticas nuevas que no se hayan avisado aún (por si generar-alertas no las mandó).
+  const criticas = await enviarCriticasNuevas({ dryRun });
+  return { dryRun, hoy: hoy.iso, hora: horaCDMX, perfiles: perfiles.length, enviados, omitidos, marcadas, criticas, ...(dryRun ? { previews } : {}) };
 }
 
 export default async function handler(req, res) {
@@ -841,11 +1133,16 @@ export default async function handler(req, res) {
     } else if (task === 'forecast-avisos') {
       result = await taskForecastAvisos();
     } else if (task === 'generar-alertas') {
-      result = await taskGenerarAlertas();
+      result = await taskGenerarAlertas({ notificarCriticas: true });
+    } else if (task === 'resumen-programado') {
+      const q = req.query || {};
+      const dryRun = esDryRun() || q.dryRun === '1';
+      const hora = q.hora != null && q.hora !== '' ? Number(q.hora) : null;
+      result = await taskResumenProgramado({ dryRun, hora: Number.isFinite(hora) ? hora : null });
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | resumen-programado[&dryRun=1&hora=13]',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

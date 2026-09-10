@@ -1,3 +1,5 @@
+// LEGACY (2026-09-11): ya no se monta. La navegación vive en src/components/nav/ (NavShell · arbol.js).
+// Se conserva sólo por el export CLIENTES que aún referencian módulos viejos; no añadir pestañas aquí.
 import { useState, useEffect } from 'react';
 import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,

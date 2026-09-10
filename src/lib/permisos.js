@@ -86,6 +86,49 @@ export const puedeConfigurar = (perfil) => !!perfil?.es_super_admin;
 /** ¿Puede subir/actualizar datos (/uploads.html)? Solo super_admin. */
 export const puedeActualizarDatos = (perfil) => !!perfil?.es_super_admin;
 
+/**
+ * ¿Puede ver la pestaña Inicio (pagina 'inicio')? No tiene permiso propio:
+ * la ve quien tenga vision_general o resumen_clientes, o el super admin.
+ */
+export const puedeVerInicio = (perfil) =>
+  !!perfil?.es_super_admin
+  || puedeVerPestanaGlobal(perfil, "vision_general")
+  || puedeVerPestanaGlobal(perfil, "resumen_clientes");
+
+/** Mapa página del menú → permiso global (las páginas de cliente usan puedeVerPestanaCliente). */
+export const PAGINA_A_PERMISO_GLOBAL = {
+  inicio:           "vision_general", // o resumen_clientes · ver puedeVerInicio()
+  historialCambios: "historial_cambios",
+  resumenClientes:  "resumen_clientes",
+  estadoResultados: "estado_resultados",
+  visionGeneral:    "vision_general",
+  analisisClientes: "analisis_clientes",
+  sellIn:           "sell_in",
+  sellOut:          "sell_out",
+  inventarioGlobal: "inventario_global",
+  cobranzaGlobal:   "cobranza_global",
+  forecastClientes: "forecast_clientes",
+  estrategiaPrecios:"estrategia_precios",
+  forecastReservas: "forecast_reservas",
+  ordenesCompra:    "ordenes_compra",
+  adminInterna:     "admin_interna",
+  telemetria:       "__super_admin_only__",
+  propuestas:       "propuestas",
+  axonMexico:       "axon_mexico",
+  configuracion:    "__super_admin_only__",
+};
+
+/** ¿Puede ver una página global del menú? Resuelve el mapa de arriba (+ Inicio). */
+export const puedeVerPaginaGlobal = (perfil, paginaId) => {
+  if (!perfil) return false;
+  if (perfil.es_super_admin) return true;
+  if (paginaId === "inicio") return puedeVerInicio(perfil);
+  const permiso = PAGINA_A_PERMISO_GLOBAL[paginaId];
+  if (permiso === "__super_admin_only__") return false;
+  if (!permiso) return false;
+  return puedeVerPestanaGlobal(perfil, permiso);
+};
+
 // ═══ Compat con código viejo (marcadas para depreciar) ═══
 //
 // Estos helpers existen para no romper componentes que aún no se refactoran.

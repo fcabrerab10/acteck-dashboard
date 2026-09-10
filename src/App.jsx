@@ -4,8 +4,11 @@ import { apiFetch } from './lib/apiFetch';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { useTelemetry, telemetria } from './lib/telemetry';
-import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar, Topbar, OfflineBadge } from './components';
-import { CLIENTES as SIDEBAR_CLIENTES } from './components/Sidebar';
+import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, OfflineBadge } from './components';
+// Navegación V3: NavShell elige el modo (barra · sidebar · iphone) según perfiles.preferencias.
+import NavShell from './components/nav/NavShell';
+import { CLIENTES_NAV as SIDEBAR_CLIENTES, construirArbol, nodosPlanos } from './components/nav/arbol';
+import { hidratarPreferencias, getPreferencias } from './lib/preferencias';
 import { Toaster } from './lib/toast';
 import {
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
@@ -38,6 +41,7 @@ const SellOutClienteV2       = lazy(() => import('./modules/comercial/SellOutCli
 const SellOutDicotech        = lazy(() => import('./modules/comercial/SellOutDicotech'));
 const SellOutPcel            = lazy(() => import('./modules/comercial/SellOutPcel'));
 const EstadoResultados       = lazy(() => import('./modules/general/EstadoResultados'));
+const Inicio                 = lazy(() => import('./modules/general/Inicio')); // pestaña por defecto (V3 · 2026-09-11)
 const VisionGeneral          = lazy(() => import('./modules/comercial/VisionGeneral'));
 const ReporteTab             = lazy(() => import('./modules/comercial/ReporteTab'));
 const ResumenClientesTab     = lazy(() => import('./modules/comercial/ResumenClientesTab'));
@@ -60,6 +64,7 @@ import {
   puedeVerPestana,
   puedeVerPestanaCliente,
   puedeVerPestanaGlobal,
+  puedeVerInicio,
 } from './lib/permisos';
 import { PerfilContext } from './lib/perfilContext';
 import { ThemeProvider } from './lib/themeContext';
@@ -344,14 +349,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
-      try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
+      try { return localStorage.getItem('nav_pagina') || 'inicio'; } catch { return 'inicio'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
-        const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']);
+        const pag = localStorage.getItem('nav_pagina') || 'inicio';
+        const globals = new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -359,6 +364,23 @@ export default function App() {
     const [vistaActual, setVistaActual] = useState(() => {
       try { return localStorage.getItem('nav_vista') || null; } catch { return null; }
     });
+    // Pestaña al entrar: preferencia menu.inicio ('inicio' | 'ultima'). Se aplica una vez por login.
+    // Si el perfil no puede ver Inicio, cae a la primera pestaña visible de su árbol.
+    const arranqueAplicado = React.useRef(null);
+    React.useEffect(() => {
+      if (!perfil?.user_id || arranqueAplicado.current === perfil.user_id) return;
+      arranqueAplicado.current = perfil.user_id;
+      hidratarPreferencias(perfil);
+      const abrirEn = getPreferencias()?.menu?.inicio || 'inicio';
+      const irA = (c, p) => { setVistaActual(null); setClienteActivo(c); setPaginaActiva(p); };
+      if (abrirEn === 'inicio') {
+        if (puedeVerInicio(perfil)) irA(null, 'inicio');
+        else { const n = nodosPlanos(construirArbol(perfil)).find((x) => x.tipo !== 'enlace'); if (n) irA(n.clienteKey || null, n.pagina); }
+      } else if (paginaActiva === 'inicio' && !puedeVerInicio(perfil)) {
+        const n = nodosPlanos(construirArbol(perfil)).find((x) => x.tipo !== 'enlace'); if (n) irA(n.clienteKey || null, n.pagina);
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [perfil?.user_id]);
     // Telemetría global: login/logout + heartbeats cada 60s
     useTelemetry();
     React.useEffect(() => {
@@ -530,47 +552,8 @@ export default function App() {
   if (authLoading) return <Cargando fullscreen label="Cargando…" sub="Iniciando el dashboard" />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
 
-
-  return (
-    <PerfilContext.Provider value={perfil}>
-    <ThemeProvider perfil={perfil}>
-    <div className="font-sans" style={{
-      background: 'var(--t-bg, #F5F5F7)',
-      display: mobile ? 'block' : 'flex',
-      height: '100vh',
-    }}>
-
-      {/* Sidebar desktop eliminada — la navegación vive en Topbar */}
-
-      {/* MOBILE SHELL — Fitness style (iPhone/iPad H+V) */}
-      {mobile && (
-        <MobileShell
-          clienteActivo={clienteActivo}
-          paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
-          vistaActual={vistaActual}
-          onNavegar={handleNavegar}
-          onCerrarSesion={handleLogout}
-          perfilUsuario={perfil}
-        />
-      )}
-
-      {/* CONTENIDO */}
-      <main className={mobile ? '' : 'flex-1 overflow-y-auto'} style={mobile ? {
-        paddingBottom: 'calc(96px + env(safe-area-inset-bottom))',
-        minHeight: '100vh',
-      } : undefined}>
-          {!mobile && (
-            <Topbar
-              clienteActivo={clienteActivo}
-              paginaActiva={paginaActiva}
-              vistaActual={vistaActual}
-              onNavegar={handleNavegar}
-              onCerrarSesion={handleLogout}
-              perfilUsuario={perfil}
-              modoPresent={modoPresent}
-              onToggleModoPresent={() => setModoPresent(v => !v)}
-            />
-          )}
+  // Contenido de la pantalla activa (mismo bloque para móvil y desktop; el chrome lo pone MobileShell o NavShell).
+  const contenido = (
           <div className="w-full" style={{
             padding: mobile ? '12px 16px' : '4px 24px 16px',
             maxWidth: mobile ? '100%' : 1600,
@@ -588,6 +571,13 @@ export default function App() {
             <>
             {/* Banner modo presentaci³n */}
         { /* Banner removed */ }
+          {paginaActiva === "inicio" && !clienteActivo && (
+            puedeVerInicio(perfil)
+              ? (mobile
+                  ? <MobileHome perfil={perfil} onNavegar={handleNavegar} />
+                  : <Inicio onNavegar={handleNavegar} />)
+              : <SinAcceso motivo="No tienes acceso a Inicio. Pídele a Fernando que te habilite Visión General o Resumen de Clientes." />
+          )}
           {paginaActiva === "resumen" && (
             perfil?.es_super_admin
               ? <>
@@ -808,7 +798,49 @@ export default function App() {
           </PageTransition>
           <ToastHost />
         </div>
+  );
+
+
+  return (
+    <PerfilContext.Provider value={perfil}>
+    <ThemeProvider perfil={perfil}>
+    <div className="font-sans" style={{
+      background: 'var(--t-bg, #F5F5F7)',
+      display: 'block',
+      height: '100vh',
+    }}>
+
+      {/* MOBILE SHELL — Fitness style (iPhone/iPad H+V) */}
+      {mobile && (
+        <MobileShell
+          clienteActivo={clienteActivo}
+          paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
+          vistaActual={vistaActual}
+          onNavegar={handleNavegar}
+          onCerrarSesion={handleLogout}
+          perfilUsuario={perfil}
+        />
+      )}
+
+      {/* CONTENIDO · móvil: MobileShell + main · desktop: NavShell (barra · sidebar · iphone) */}
+      {mobile ? (
+        <main style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom))', minHeight: '100vh' }}>
+          {contenido}
         </main>
+      ) : (
+        <NavShell
+          clienteActivo={clienteActivo}
+          paginaActiva={paginaActiva}
+          vistaActual={vistaActual}
+          onNavegar={handleNavegar}
+          onCerrarSesion={handleLogout}
+          perfilUsuario={perfil}
+          modoPresent={modoPresent}
+          onToggleModoPresent={() => setModoPresent(v => !v)}
+        >
+          {contenido}
+        </NavShell>
+      )}
 
       {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
 

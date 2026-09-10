@@ -10,6 +10,7 @@ import {
 import { useTheme } from '../../lib/themeContext';
 import { THEMES } from '../../lib/themeTokens';
 import WizardNuevoUsuario from './WizardNuevoUsuario';
+import PreferenciasMenu from '../../components/nav/PreferenciasMenu';
 import { toast } from '../../lib/toast';
 import { versionLabel } from '../../lib/version';
 // GestionCuotasPanel: removido de Configuración. Las cuotas se gestionan
@@ -381,6 +382,9 @@ export default function Configuracion({ session }) {
 
       {/* ═══ APARIENCIA ═══ */}
       <SelectorApariencia perfil={session.perfil} />
+
+      {/* ═══ MENÚ (modo · densidad · abrir en) ═══ */}
+      <PreferenciasMenu />
 
       {/* ═══ FORMULARIO ═══ */}
       {showForm && (
