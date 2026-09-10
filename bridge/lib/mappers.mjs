@@ -29,7 +29,9 @@ export function erpVentas(row) {
     canal, subcanal: txt(g('Subcanal')), almacen: int(g('Almacen')), vendedor: txt(g('Vendedor')),
     folio: txt(g('Folio')), referencia: txt(g('Referencia')), lista_precios: txt(g('ListaPreciosEsp')),
     periodo: isoDate(g('periodo')), anio: int(g('anio')), mes: int(g('mes')), dia: int(g('dia')),
-    unidades: num(g('Unidades')), piezas: num(g('Piezas')),
+    // La vista del ERP devuelve Unidades en NULL (2026-09-09): Piezas es el respaldo.
+    // Las medidas en Postgres también hacen COALESCE(unidades, piezas, 0).
+    unidades: num(g('Unidades')) ?? num(g('Piezas')), piezas: num(g('Piezas')),
     monto_venta_pesos: num(g('MontoVentaPesos')), costo_venta_pesos: num(g('CostoVentaPesos')),
     precio_unidad_pesos: num(g('PrecioPorUnidadPesos')), costo_pieza_pesos: num(g('CostoPorPiezaPesos')),
     tipo_cambio: num(g('TipoCambio')), moneda: txt(g('Moneda')),
