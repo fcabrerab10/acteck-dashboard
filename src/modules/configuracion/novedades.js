@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.10.0', fecha: '2026-09-10', titulo: 'Estrategia de Precios',
+    items: [
+      'Kit V3, buscador por palabras y filtros con conteo; Mayoreo AAA primero y las demás listas a la derecha.',
+      'Histórico de precios que se llena solo con cada carga del puente (desde el 10 sep 2026): cambios del mes y evolución por lista en el drill.',
+      'Margen por lista sólo con permiso sensible; precio bajo accionable por cliente con lo dejado en la mesa, exportable.',
+      'Drill del SKU: precio real por cliente vs su lista, "Compartir precio", elasticidad por cambio de precio, simulador de precio con venta estimada, precio de la competencia y precio bajo por SKU.',
+    ],
+  },
+  {
     version: '3.9.0', fecha: '2026-09-10', titulo: 'Propuestas',
     items: [
       'Kit V3 en todo el flujo: tarjetas de cliente en la portada, entrada directa a armar, catálogo con buscador y filtros con conteo, revisar como hoja lateral.',

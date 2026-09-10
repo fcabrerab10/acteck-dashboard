@@ -1,1168 +1,132 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../../lib/supabase';
-import { useRoadmap } from '../../lib/queries';
+// Estrategia de Precios · V3 (kit): Hero narrativo → 4 KpiCard → buscador + filtros pills → tabla SKU × listas
+// (drill por SKU) → Panel plegable "Precio bajo accionable". Lógica en ./precios/ (datos.js, calculo.js, textos.js).
+// Datos: precios_sku la REEMPLAZA el puente cada hora (sólo el mes actual); el histórico vive en precios_historico
+// (trigger, acumula desde 2026-09-11) y v_precios_cambios_mes. Margen/costo sólo con puedeVerSensible(perfil)
+// (también fuera del Excel). Comparativo % entre listas e inconsistencias: NO aprobado, no está.
+import React, { useMemo, useRef, useState } from 'react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import {
-  Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download, ChevronDown, ChevronRight, Check,
-} from 'lucide-react';
 import SinAcceso from '../../components/SinAcceso';
-import { Cargando } from '../../components/kit';
+import ExportMenu from '../../components/ExportMenu';
+import { Hero, KpiCard, Panel, Cargando } from '../../components/kit';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaGlobal } from '../../lib/permisos';
-import {
-  BarChart, Bar, LineChart, Line, ComposedChart, Area, XAxis, YAxis, Tooltip,
-  CartesianGrid, ResponsiveContainer, Legend,
-} from 'recharts';
-import { fetchAll as fetchAllCentral } from '../../lib/queries';
-
-const MESES_LBL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const PRECIO_BAJO_KEY = 'Precio bajo facturado';
-const LISTAS_MOSTRAR = ['Mayoreo AAA', 'DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'];
-const OPCIONES_LISTAS = [PRECIO_BAJO_KEY, ...LISTAS_MOSTRAR];
-const LISTAS_LBL = {
-  'Mayoreo AAA':       'Mayoreo AAA',
-  'DICOTECH':          'DICOTECH',
-  'PCEL PROVISIONAL':  'PCEL',
-  'API PROVISIONAL':   'API',
-  'DECME PROVISIONAL': 'DECME',
-};
-
-const PALETTE = {
-  blue:   { bg: '#E6F1FB', text: '#042C53', mid: '#185FA5', soft: '#B5D4F4' },
-  amber:  { bg: '#FAEEDA', text: '#412402', mid: '#854F0B', soft: '#FAC775' },
-  teal:   { bg: '#E1F5EE', text: '#04342C', mid: '#0F6E56' },
-  red:    { bg: '#FCEBEB', text: '#501313', mid: '#A32D2D' },
-  emerald:{ bg: '#DCFCE7', text: '#14532D', mid: '#166534' },
-};
-
-const ROADMAP_COLOR = {
-  RMI:  { bg:'#E1F5EE', text:'#085041' },
-  RML:  { bg:'#EEEDFE', text:'#3C3489' },
-  2026: { bg:'#FAEEDA', text:'#854F0B' },
-  RMS:  { bg:'#FBEAF0', text:'#993556' },
-};
-
-const fmtMoney = (n) => {
-  if (n == null || isNaN(n)) return '—';
-  const a = Math.abs(Number(n));
-  return (Number(n) < 0 ? '-$' : '$') + a.toLocaleString('es-MX', { maximumFractionDigits: 0 });
-};
-const fmtCompact = (n) => {
-  if (n == null || isNaN(n)) return '—';
-  const a = Math.abs(Number(n));
-  const sign = Number(n) < 0 ? '-' : '';
-  if (a >= 1e6) return sign + '$' + (a / 1e6).toFixed(2) + 'M';
-  if (a >= 1e3) return sign + '$' + (a / 1e3).toFixed(0) + 'K';
-  return sign + '$' + Math.round(a);
-};
-const fmtInt = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('es-MX');
-const fmtPctDelta = (n) => n == null || isNaN(n) ? '—' : (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
-
-const PAGE = 1000;
-// Delegado al motor paginado PARALELO central (lib/queries.js).
-async function fetchAll(table, select, applyFilter = (q) => q) {
-  return fetchAllCentral(table, select, applyFilter);
-}
-
-function MultiSelect({ label, options, selected, onChange, width = 140 }) {
-  const { theme } = useTheme();
-  const P = paletteFromTheme(theme);
-  const isDark = theme.mode === 'dark';
-  const [open, setOpen] = useState(false);
-  const ref = React.useRef(null);
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-  const isAll = selected.size === 0;
-  const activo = !isAll;
-  const toggle = (v) => {
-    const next = new Set(selected);
-    if (next.has(v)) next.delete(v); else next.add(v);
-    onChange(next);
-  };
-  return (
-    <div style={{ position: 'relative', width, fontFamily: TYPO.fontText }} ref={ref}>
-      <button onClick={() => setOpen((o) => !o)}
-        style={{
-          width: '100%', height: 32, padding: '0 12px',
-          background: activo ? `${P.accent}1A` : theme.surface,
-          border: `1px solid ${activo ? P.accent : theme.border}`, borderRadius: 999,
-          fontSize: 11, color: activo ? P.accent : theme.text,
-          fontWeight: activo ? 600 : 500, fontFamily: 'inherit', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
-        }}
->
-{/* Sin cambio de border-color en hover — el scale global ya da el feedback */}
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {label}
-          {activo && <span style={{ marginLeft: 4, fontWeight: 700 }}>· {selected.size}</span>}
-        </span>
-        <ChevronDown style={{ width: 12, height: 12, opacity: 0.7, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 120ms' }} strokeWidth={2.2} />
-      </button>
-      {open && (
-        <div style={{
-          position: 'absolute', zIndex: 20, marginTop: 4, width: '100%',
-          background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
-          boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.4)' : '0 8px 24px rgba(0,0,0,0.08)',
-          maxHeight: 280, overflow: 'auto', fontFamily: TYPO.fontText,
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '6px 10px', fontSize: 10, borderBottom: `1px solid ${theme.border}`,
-            position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
-          }}>
-            <button style={{ background: 'transparent', border: 0, color: P.accent, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
-              onClick={() => onChange(new Set(options))}>Todas</button>
-            <button style={{ background: 'transparent', border: 0, color: theme.textMuted, fontSize: 10.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
-              onClick={() => onChange(new Set())}>Limpiar</button>
-          </div>
-          {options.map((o) => {
-            const sel = selected.has(o);
-            return (
-              <button key={o} onClick={() => toggle(o)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '6px 10px', fontSize: 11.5, background: 'transparent',
-                  border: 0, color: theme.text, cursor: 'pointer', fontFamily: 'inherit',
-                  textAlign: 'left',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                <span style={{
-                  width: 16, height: 16, borderRadius: 999,
-                  border: sel ? `1px solid ${P.accent}` : `1.5px solid ${isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.20)'}`,
-                  background: sel ? P.accent : 'transparent',
-                  color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0, transition: 'all 120ms',
-                }}>
-                  {sel && <Check style={{ width: 10, height: 10 }} strokeWidth={3} />}
-                </span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o}</span>
-              </button>
-            );
-          })}
-          {options.length === 0 && <div style={{ padding: '10px 12px', fontSize: 11, color: theme.textMuted }}>Sin opciones</div>}
-        </div>
-      )}
-    </div>
-  );
-}
+import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
+import { fecha as fmtFecha } from '../../lib/format';
+import Buscador from './sellin/Buscador';
+import Filtros from './sellin/Filtros';
+import TablaPrecios from './precios/TablaPrecios';
+import PanelPrecioBajo from './precios/PanelPrecioBajo';
+import { useDatosPrecios } from './precios/datos';
+import { FILTROS_VACIOS, conBusqueda, nActivos, listasVisibles, pasaTodos, facetas as calcFacetas, construirFilas, resumen, filasPrecioBajo, ordenar, precioEfectivo } from './precios/calculo';
+import { LISTAS, listaLbl, roadmapTone, fmtInt, fmtPct, fmtMoneyShort, MESES_LARGO } from './precios/textos';
 
 export default function EstrategiaPrecios() {
   const perfil = usePerfil();
-  if (!puedeVerPestanaGlobal(perfil, 'estrategia_precios')) {
-    return <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />;
-  }
+  if (!puedeVerPestanaGlobal(perfil, 'estrategia_precios')) return <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />;
+  return <Pantalla sensible={puedeVerSensible(perfil)} />;
+}
+
+function Pantalla({ sensible }) {
   const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const P = paletteFromTheme(theme);
-  const [loading, setLoading] = useState(true);
-  // roadmap ahora viene de useRoadmap() — cache compartido con otros modulos.
-  const { data: roadmapQ = [], isLoading: roadmapLoading } = useRoadmap();
-  const roadmap = roadmapQ;
-  const [precios, setPrecios] = useState([]);
-  const [preciosBajos, setPreciosBajos] = useState([]);
-  const [promos, setPromos] = useState([]);
-  const [busqueda, setBusqueda] = useState('');
-  const [marcaSel, setMarcaSel] = useState(new Set());
-  const [categoriaSel, setCategoriaSel] = useState(new Set());
-  const [roadmapSel, setRoadmapSel] = useState(new Set());
-  const [listasSel, setListasSel] = useState(new Set(OPCIONES_LISTAS));
+  const rootRef = useRef(null);
+  const { roadmap, datos, loading, error } = useDatosPrecios(sensible);
+  const [f, setF] = useState(FILTROS_VACIOS);
+  const [orden, setOrden] = useState(null);
   const [skuAbierto, setSkuAbierto] = useState(null);
+  const [bajoAbrir, setBajoAbrir] = useState(0); // contador: cada clic en el KPI vuelve a abrir el panel (aunque el usuario lo haya plegado)
+  const hoy = new Date();
+  const periodo = { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 };
 
-  useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const now = new Date();
-      const [pr, pb, pm] = await Promise.all([
-        fetchAll('v_estrategia_precios_lista', 'sku,lista,precio,anio,mes'),
-        fetchAll('v_estrategia_precios_bajo', 'sku,cliente_bajo,precio_bajo,piezas_bajo'),
-        fetchAll('promos_temporada', 'sku,campania,promo_pct,anio,mes,descripcion', (q) => q.eq('anio', now.getFullYear()).eq('mes', now.getMonth() + 1)),
-      ]);
-      setPrecios(pr);
-      setPreciosBajos(pb);
-      setPromos(pm);
-      setLoading(false);
-    })();
-  }, []);
+  const todas = useMemo(() => (datos ? construirFilas({ roadmap, ...datos }) : []), [roadmap, datos]);
+  const filas = useMemo(() => ordenar(todas.filter((r) => pasaTodos(r, f, null)), orden), [todas, f, orden]);
+  const facetas = useMemo(() => calcFacetas(todas, f), [todas, f]);
+  const kpi = useMemo(() => resumen(filas, periodo), [filas, periodo.anio, periodo.mes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bajas = useMemo(() => filasPrecioBajo(filas), [filas]);
+  const listas = listasVisibles(f);
+  const activos = nActivos(f);
 
-  const bajoMap = useMemo(() => new Map(preciosBajos.map((p) => [p.sku, p])), [preciosBajos]);
-  // Un SKU puede tener varias promos activas al mismo tiempo (Sell Out mensual
-  // + Back to School, etc.). Se combinan multiplicativamente: (1-p1)*(1-p2).
-  const promoMap = useMemo(() => {
-    const m = new Map();
-    for (const p of promos) {
-      if (!m.has(p.sku)) m.set(p.sku, { promos: [], factorNeto: 1 });
-      const it = m.get(p.sku);
-      it.promos.push(p);
-      it.factorNeto *= (1 - Number(p.promo_pct));
-    }
-    for (const [, it] of m) {
-      it.promo_pct_efectivo = 1 - it.factorNeto;
-      it.campania_principal = it.promos.map((p) => p.campania).join(' + ');
-      it.promo_pct = it.promo_pct_efectivo;
-      it.campania = it.promos.length === 1
-        ? it.promos[0].campania
-        : `${it.promos.length} promos activas`;
-    }
-    return m;
-  }, [promos]);
-  const preciosMap = useMemo(() => {
-    const m = new Map();
-    for (const p of precios) {
-      if (!m.has(p.sku)) m.set(p.sku, {});
-      m.get(p.sku)[p.lista] = Number(p.precio);
-    }
-    return m;
-  }, [precios]);
+  const toggleSet = (grupo, id) => setF((p) => { const s = new Set(p[grupo]); if (s.has(id)) s.delete(id); else s.add(id); return { ...p, [grupo]: s }; });
+  const toggleFlag = (id) => setF((p) => ({ ...p, [id]: !p[id] }));
+  const onSort = (col) => setOrden((o) => (o?.col === col ? (o.dir === 'desc' ? { col, dir: 'asc' } : null) : { col, dir: 'desc' }));
+  const abrirBajo = () => { setBajoAbrir((n) => n + 1); setTimeout(() => document.getElementById('precio-bajo')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); };
 
-  const marcasOpciones = useMemo(() => Array.from(new Set(roadmap.map((r) => r.marca).filter(Boolean))).sort(), [roadmap]);
-  const categoriasOpciones = useMemo(() => Array.from(new Set(roadmap.map((r) => r.categoria).filter(Boolean))).sort(), [roadmap]);
-  const roadmapOpciones = useMemo(() => Array.from(new Set(roadmap.map((r) => r.rdmp).filter(Boolean))).sort(), [roadmap]);
-
-  const filas = useMemo(() => {
-    const q = busqueda.trim().toUpperCase();
-    return roadmap
-      .filter((r) => {
-        if (marcaSel.size > 0 && !marcaSel.has(r.marca)) return false;
-        if (categoriaSel.size > 0 && !categoriaSel.has(r.categoria)) return false;
-        if (roadmapSel.size > 0 && !roadmapSel.has(r.rdmp)) return false;
-        if (q) {
-          const hay = (String(r.sku || '').toUpperCase().includes(q)
-                    || String(r.descripcion || '').toUpperCase().includes(q));
-          if (!hay) return false;
-        }
-        return true;
-      })
-      .map((r) => ({
-        ...r,
-        precios: preciosMap.get(r.sku) || {},
-        bajo: bajoMap.get(r.sku),
-        promo: promoMap.get(r.sku),
-      }));
-  }, [roadmap, preciosMap, bajoMap, promoMap, busqueda, marcaSel, categoriaSel, roadmapSel]);
-
-  const listasVisibles = useMemo(
-    () => LISTAS_MOSTRAR.filter((l) => listasSel.has(l)),
-    [listasSel]
-  );
-  const verPrecioBajo = listasSel.has(PRECIO_BAJO_KEY);
-
-  const exportarExcel = async () => {
-    // xlsx-js-style (~850 KB) sólo se descarga al exportar, no en el bundle inicial.
-    const xlsxMod = await import('xlsx-js-style');
-    const XLSX = xlsxMod.default || xlsxMod;
-    const incluyeAAA = listasVisibles.includes('Mayoreo AAA');
-    const incluyeDico = listasVisibles.includes('DICOTECH');
-
-    const cols = [];
-    cols.push({ header: 'Marca',       get: (r) => r.marca || '',       width: 12 });
-    cols.push({ header: 'SKU',         get: (r) => r.sku || '',         width: 14 });
-    cols.push({ header: 'Descripción', get: (r) => r.descripcion || '', width: 50 });
-    cols.push({ header: 'Roadmap',     get: (r) => r.rdmp || '',        width: 10 });
-    const bajoEsMenor = (r) => {
-      const bajo = r.bajo?.precio_bajo;
-      if (bajo == null) return false;
-      const p = r.precios || {};
-      const precioAAA = p['Mayoreo AAA'] ?? null;
-      const precioAAAefectivo = r.promo && precioAAA != null
-        ? precioAAA * (1 - Number(r.promo.promo_pct))
-        : precioAAA;
-      const lista = LISTAS_MOSTRAR
-        .map((l) => (l === 'Mayoreo AAA' ? precioAAAefectivo : p[l]))
-        .filter((v) => v != null && !isNaN(v));
-      if (!lista.length) return false;
-      return bajo < Math.min(...lista);
-    };
-    if (verPrecioBajo) {
-      cols.push({ header: 'Precio Bajo Facturado', get: (r) => (bajoEsMenor(r) ? r.bajo.precio_bajo : null), width: 16, money: true });
-      cols.push({ header: 'Piezas Precio Bajo',    get: (r) => (bajoEsMenor(r) ? r.bajo.piezas_bajo : null), width: 12, int: true });
-    }
-    if (incluyeAAA) {
-      cols.push({
-        header: 'Mayoreo AAA',
-        get: (r) => {
-          const precio = r.precios?.['Mayoreo AAA'] ?? null;
-          if (precio == null) return null;
-          return r.promo ? precio * (1 - Number(r.promo.promo_pct)) : precio;
-        },
-        width: 14, money: true, highlight: 'FEF3C7',
-      });
-    }
-    if (incluyeDico) {
-      cols.push({ header: 'DICOTECH', get: (r) => r.precios?.['DICOTECH'] ?? null, width: 12, money: true });
-    }
-
-    const HEADERS = cols.map((c) => c.header);
-    const nCols = HEADERS.length;
-    const rowsData = filas.map((r) => cols.map((c) => c.get(r)));
-
-    const hoy = new Date();
-    const tituloExcel = `Lista de Precios ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`;
-
-    const aoa = [
-      [tituloExcel, ...Array(nCols - 1).fill('')],
-      HEADERS,
-      ...rowsData,
+  const excel = () => {
+    const columnas = [
+      { label: 'Marca', key: 'marca', ancho: 12 }, { label: 'SKU', key: 'sku', ancho: 14 }, { label: 'Descripción', key: 'descripcion', ancho: 50 }, { label: 'Roadmap', key: 'rdmp', ancho: 10 },
+      { label: 'Precio bajo facturado', key: 'bajoReal', tipo: 'moneda', ancho: 16 }, { label: 'Cliente precio bajo', key: 'bajoCliente', ancho: 28 }, { label: 'Piezas precio bajo', key: 'bajoPiezas', tipo: 'numero', ancho: 12 },
+      ...listas.map((l) => ({ label: l, key: `p:${l}`, tipo: 'moneda', ancho: 14 })),
+      ...(sensible ? [{ label: 'Costo promedio', key: 'costo', tipo: 'moneda', ancho: 14 }, ...listas.map((l) => ({ label: `Margen ${listaLbl(l)}`, key: `m:${l}`, tipo: 'pct', ancho: 12 }))] : []),
     ];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-    const blackHeader = {
-      font: { bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { patternType: 'solid', fgColor: { rgb: '000000' } },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-    };
-    const titleStyle = { ...blackHeader, font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 14 } };
-
-    for (let c = 0; c < nCols; c++) {
-      const titleAddr = XLSX.utils.encode_cell({ r: 0, c });
-      if (!ws[titleAddr]) ws[titleAddr] = { v: '', t: 's' };
-      ws[titleAddr].s = titleStyle;
-      const headAddr = XLSX.utils.encode_cell({ r: 1, c });
-      if (ws[headAddr]) ws[headAddr].s = blackHeader;
-    }
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: nCols - 1 } }];
-    ws['!rows'] = [{ hpt: 26 }, { hpt: 32 }];
-
-    const moneyFmt = '"$"#,##0';
-
-    for (let i = 0; i < rowsData.length; i++) {
-      const rowIdx = i + 2;
-      for (let c = 0; c < nCols; c++) {
-        const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
-        const cell = ws[addr];
-        const col = cols[c];
-        if (!cell) {
-          if (col.highlight) {
-            ws[addr] = { t: 's', v: '', s: { fill: { patternType: 'solid', fgColor: { rgb: col.highlight } } } };
-          }
-          continue;
-        }
-        cell.s = cell.s || {};
-        if (col.money) cell.z = moneyFmt;
-        if (col.int && cell.v != null) cell.z = '#,##0';
-        if (col.highlight) {
-          cell.s.fill = { patternType: 'solid', fgColor: { rgb: col.highlight } };
-        }
-      }
-    }
-
-    ws['!cols'] = cols.map((c) => ({ wch: c.width }));
-    ws['!freeze'] = { xSplit: 0, ySplit: 2 };
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: rowsData.length + 1, c: nCols - 1 } }) };
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Lista de Precios');
-    XLSX.writeFile(wb, `${tituloExcel}.xlsx`);
+    const rows = filas.map((r) => {
+      const o = { marca: r.marca, sku: r.sku, descripcion: r.descripcion, rdmp: r.rdmp, bajoReal: r.bajo?.real ?? null, bajoCliente: r.bajo?.cliente ?? null, bajoPiezas: r.bajo?.piezas ?? null };
+      for (const l of listas) o[`p:${l}`] = precioEfectivo(r.precios, r.promo, l);
+      if (sensible) { o.costo = r.costo > 0 ? r.costo : null; for (const l of listas) o[`m:${l}`] = r.margen[l] != null ? r.margen[l] / 100 : null; }
+      return o;
+    });
+    const titulo = `Lista de Precios ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`;
+    return { titulo, hojas: [{ nombre: 'Lista de Precios', subtitulo: `${filas.length} SKUs · sin IVA`, columnas, filas: rows }] };
   };
 
-  if (loading) {
-    return <Cargando pantalla="estrategiaPrecios" label="Cargando estrategia de precios…" sub="Trayendo listas, roadmap y sell-in por SKU" minHeight={480} />;
-  }
+  if (loading) return <Cargando pantalla="estrategiaPrecios" minHeight={480} />;
+  if (error) return <div style={{ padding: 24, color: theme.red || '#FF3B30', fontFamily: TYPO.fontText, fontSize: 12 }}>No se pudieron cargar los precios: {String(error.message || error)}</div>;
 
-  // KPIs consolidados
-  const skusConPrecio = filas.filter((r) => Object.keys(r.precios).length > 0).length;
-  const skusPrecioBajo = filas.filter((r) => {
-    if (!r.bajo?.precio_bajo) return false;
-    const listasVals = Object.values(r.precios || {}).filter((v) => v != null);
-    if (!listasVals.length) return false;
-    return r.bajo.precio_bajo < Math.min(...listasVals);
-  }).length;
-  const promosPorCliente = new Map();
-  promos.forEach((p) => {
-    const c = p.campania || 'General';
-    promosPorCliente.set(c, (promosPorCliente.get(c) || 0) + 1);
-  });
-  const topPromo = [...promosPorCliente.entries()].sort((a, b) => b[1] - a[1])[0];
+  const historicoDesde = datos?.historicoDesde ? fmtFecha(datos.historicoDesde) : null;
+  const nCambios = kpi.subieron + kpi.bajaron;
+  const narrativa = `${fmtInt(kpi.conPrecio)} SKUs con precio de ${fmtInt(filas.length)}${activos || f.q ? ' filtrados' : ''}. `
+    + (nCambios ? `${fmtInt(nCambios)} cambios de precio este mes (${kpi.subieron} subieron, ${kpi.bajaron} bajaron). ` : 'Sin cambios de precio registrados este mes. ')
+    + (kpi.nBajo ? `${fmtInt(kpi.nBajo)} SKUs facturados debajo de su lista: ${fmtMoneyShort(kpi.dejado)} dejados en la mesa.` : 'Ningún cliente facturado debajo de su lista.');
 
-  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
-  const heroText = theme.heroCardText || '#F5F5F7';
-  const heroMuted = 'rgba(255,255,255,0.72)';
-  const heroSubtle = 'rgba(255,255,255,0.55)';
-  const nombreMes = MESES_LARGO[new Date().getMonth()];
-  const anioActual = new Date().getFullYear();
-  // Narrativa: cuántas familias con promo, cliente principal con promo, etc.
-  const familiasConPromo = new Set();
-  promos.forEach((p) => {
-    const sku = roadmap.find((r) => r.sku === p.sku);
-    if (sku?.familia) familiasConPromo.add(sku.familia);
-  });
+  const grupos = [
+    { id: 'marca', label: 'Marca', opciones: facetas.marca, sel: f.marca },
+    { id: 'categoria', label: 'Categoría', opciones: facetas.categoria, sel: f.categoria },
+    { id: 'roadmap', label: 'Roadmap', opciones: facetas.roadmap.map((o) => ({ ...o, tone: roadmapTone(o.id) })), sel: f.roadmap },
+    { id: 'listas', label: 'Listas', opciones: LISTAS.map((l) => ({ id: l, label: listaLbl(l), n: facetas.listas.get(l) || 0 })), sel: f.listas },
+  ];
+  const toggles = [
+    { id: 'conPromo', label: 'Con promo', on: f.conPromo, n: facetas.conPromo },
+    { id: 'precioBajo', label: 'Precio bajo', on: f.precioBajo, n: facetas.precioBajo },
+    { id: 'sinPrecio', label: 'Sin precio en alguna lista', on: f.sinPrecio, n: facetas.sinPrecio },
+  ];
 
   return (
-    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
-      {/* Hero editorial · narrativa del mes + 2×2 stats */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20,
-        background: heroBg, color: heroText, borderRadius: 14, padding: '14px 18px',
-        alignItems: 'center', position: 'relative', overflow: 'hidden',
-        border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
-      }}>
-        {isDark && (
-          <div style={{
-            position: 'absolute', top: '-30%', right: '-10%', width: '50%', height: '100%',
-            background: `radial-gradient(circle, ${P.accent}1F 0%, transparent 70%)`, pointerEvents: 'none',
-          }} />
+    <div ref={rootRef} data-stagger style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Hero eyebrow={`Dirección Comercial · ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} titulo="Estrategia de Precios." sub={narrativa}
+        stats={[
+          { k: 'SKUs con precio', v: fmtInt(kpi.conPrecio), sub: `de ${fmtInt(filas.length)}` },
+          { k: 'Listas', v: fmtInt(LISTAS.length), sub: 'Mayoreo AAA primero' },
+          { k: 'Promos vigentes', v: fmtInt(kpi.promos), sub: kpi.promos ? 'ya aplicadas en listas' : undefined },
+        ]} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+        <KpiCard eyebrow="Cambios de precio este mes" badge={historicoDesde ? { l: `desde ${historicoDesde}`, tone: 'gray' } : undefined}
+          big={fmtInt(nCambios)} bigSmall={nCambios ? `${kpi.subieron} subieron · ${kpi.bajaron} bajaron` : 'sin cambios'}
+          sub={`vs el mes anterior con dato · ${MESES_LARGO[periodo.mes - 1]} · el histórico acumula desde ${historicoDesde || 'hoy'}`} />
+        <KpiCard eyebrow="Precio bajo" badge={kpi.nBajo ? { l: 'ver detalle', tone: 'orange' } : undefined} onClick={abrirBajo}
+          big={fmtInt(kpi.nBajo)} bigSmall="SKUs" bigColor={kpi.nBajo ? (theme.orange || '#FF9500') : undefined}
+          sub={kpi.nBajo ? `${fmtMoneyShort(kpi.dejado)} dejados en la mesa · clientes debajo de su lista` : 'Nadie facturado debajo de su lista'} />
+        {sensible ? (
+          <KpiCard eyebrow="Margen promedio Mayoreo AAA" big={kpi.margenAAA != null ? fmtPct(kpi.margenAAA, 1) : '—'} bigSmall={kpi.margenN ? `${fmtInt(kpi.margenN)} SKUs` : undefined}
+            bigColor={kpi.margenAAA == null ? undefined : kpi.margenAAA < 10 ? (theme.red || '#FF3B30') : kpi.margenAAA < 20 ? (theme.orange || '#FF9500') : undefined}
+            sub="(precio AAA − costo promedio) / precio · promedio simple por SKU con costo" />
+        ) : (
+          <KpiCard eyebrow="Promos vigentes" big={fmtInt(kpi.promos)} bigSmall="SKUs" sub="ya aplicadas en las listas (promos_temporada)" />
         )}
-        <div style={{ position: 'relative' }}>
-          <p style={{
-            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
-            color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
-          }}>
-            Dirección Comercial · {nombreMes} {anioActual}
-          </p>
-          <h2 style={{
-            fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em',
-            color: heroText, margin: '4px 0 6px', lineHeight: 1.15,
-          }}>
-            Estrategia de Precios.
-          </h2>
-          <p style={{
-            color: heroMuted, fontSize: 11.5, lineHeight: 1.5, margin: 0, maxWidth: 460,
-            fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
-          }}>
-            <strong style={{ color: heroText, fontWeight: 500 }}>{fmtInt(skusConPrecio)} SKUs con precio</strong> de {fmtInt(roadmap.length)}.
-            {promos.length > 0 && (
-              <> <strong style={{ color: heroText, fontWeight: 500 }}>{promos.length} promo{promos.length !== 1 ? 's' : ''}</strong> vigentes{familiasConPromo.size > 0 && <> en <strong style={{ color: heroText, fontWeight: 500 }}>{familiasConPromo.size} familia{familiasConPromo.size !== 1 ? 's' : ''}</strong></>}.</>
-            )}
-            {skusPrecioBajo > 0 && (
-              <> <strong style={{ color: heroText, fontWeight: 500 }}>{skusPrecioBajo}</strong> facturados debajo de lista base — revisa los de mayor volumen.</>
-            )}
-          </p>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', position: 'relative' }}>
-          <HeroStatEP theme={theme} label="SKUs con precio" value={fmtInt(skusConPrecio)} sub={`de ${fmtInt(roadmap.length)}`} heroSubtle={heroSubtle} />
-          <HeroStatEP theme={theme} label="Promos vigentes" value={fmtInt(promos.length)} heroSubtle={heroSubtle} />
-          <HeroStatEP theme={theme} label="Listas activas" value={fmtInt(LISTAS_MOSTRAR.length)} heroSubtle={heroSubtle} />
-          <HeroStatEP theme={theme} label="Precio bajo" value={fmtInt(skusPrecioBajo)} valueColor={skusPrecioBajo > 0 ? P.orange : heroText} heroSubtle={heroSubtle} />
-        </div>
+        <KpiCard eyebrow="Sin precio en alguna lista" big={fmtInt(kpi.sinPrecio)} bigSmall="SKUs" bigColor={kpi.sinPrecio ? (theme.orange || '#FF9500') : undefined}
+          sub={`de ${fmtInt(filas.length)} · falta precio en al menos una de las ${LISTAS.length} listas`} />
       </div>
 
-      {/* Toolbar iOS pill */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{
-          flex: 1, minWidth: 240, maxWidth: 380, display: 'flex', alignItems: 'center', gap: 8,
-          padding: '0 12px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, height: 32,
-        }}>
-          <Search style={{ width: 12, height: 12, color: theme.textMuted }} strokeWidth={2.2} />
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar SKU o descripción (AC-943154, monitor SP270…)"
-            style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, color: theme.text, flex: 1 }} />
-          {busqueda && (
-            <button onClick={() => setBusqueda('')}
-              style={{ background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 2, display: 'flex' }}>
-              <X style={{ width: 12, height: 12 }} strokeWidth={2} />
-            </button>
-          )}
+      <Panel titulo="Buscar y filtrar" meta={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs · orden del roadmap${orden ? ' (ordenado por columna)' : ''}`}
+        acciones={<ExportMenu titulo="Lista de Precios" subtitulo={`${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} />}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Buscador value={f.q} onChange={(q) => setF((p) => conBusqueda(p, q))} resultados={f.q ? `${fmtInt(filas.length)} SKUs` : null} width={420}
+            placeholder="Buscar: mouse inalámbrico negro, AC-93, teclado balam, RMI…" />
+          <Filtros grupos={grupos} toggles={toggles} activos={activos} onToggle={toggleSet} onToggleFlag={toggleFlag} onLimpiar={() => setF((p) => ({ ...FILTROS_VACIOS(), q: p.q, tokens: p.tokens }))} />
         </div>
-        <MultiSelect label="Marcas" options={marcasOpciones} selected={marcaSel} onChange={setMarcaSel} width={140} />
-        <MultiSelect label="Categorías" options={categoriasOpciones} selected={categoriaSel} onChange={setCategoriaSel} width={150} />
-        <MultiSelect label="Roadmap" options={roadmapOpciones} selected={roadmapSel} onChange={setRoadmapSel} width={130} />
-        <MultiSelect label="Listas" options={OPCIONES_LISTAS} selected={listasSel} onChange={setListasSel} width={140} />
-        <button onClick={exportarExcel} disabled={filas.length === 0}
-          style={{
-            marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '6px 14px', height: 32, borderRadius: 999,
-            background: filas.length === 0 ? theme.bg : P.accent,
-            color: filas.length === 0 ? theme.textMuted : '#FFFFFF',
-            border: filas.length === 0 ? `1px solid ${theme.border}` : 0,
-            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-            cursor: filas.length === 0 ? 'not-allowed' : 'pointer', letterSpacing: '-0.01em',
-          }}>
-          <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
-          Exportar ({fmtInt(filas.length)})
-        </button>
-      </div>
+      </Panel>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px' }}>
-        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtInt(filas.length)}</strong> SKUs en orden del roadmap
-        </span>
-        <span style={{ fontSize: 10, color: theme.textMuted }}>Click en fila para drill-down</span>
-      </div>
+      <TablaPrecios filas={filas} listas={listas} sensible={sensible} orden={orden} onSort={onSort} skuAbierto={skuAbierto} onToggle={setSkuAbierto} periodo={periodo} />
 
-      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
-        <div style={{ overflow: 'auto', maxHeight: '70vh' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
-            <thead>
-              <tr>
-                {[
-                  { label: 'Marca',        align: 'left'   },
-                  { label: 'SKU',          align: 'left'   },
-                  { label: 'Descripción',  align: 'left'   },
-                  { label: 'Roadmap',      align: 'center' },
-                  ...(verPrecioBajo ? [{ label: 'Precio bajo', sub: 'facturado', align: 'right' }] : []),
-                  ...listasVisibles.map((l) => ({ label: LISTAS_LBL[l], align: 'right' })),
-                ].map((h, i) => (
-                  <th key={i}
-                    style={{
-                      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
-                      textAlign: h.align, padding: '9px 8px',
-                      fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9,
-                      textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
-                      borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
-                    }}>
-                    {h.label}
-                    {h.sub && (
-                      <span style={{ display: 'block', fontSize: 7.5, fontWeight: 500, letterSpacing: '0.04em', color: theme.textSubtle, textTransform: 'uppercase', marginTop: 1 }}>
-                        {h.sub}
-                      </span>
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((r) => {
-                const rmapChip = roadmapChip(theme, P, r.rdmp);
-                const promo = r.promo;
-                const precioAAA = r.precios['Mayoreo AAA'];
-                const precioAAAneto = promo && precioAAA != null
-                  ? precioAAA * (1 - Number(promo.promo_pct))
-                  : precioAAA;
-                const abierto = skuAbierto === r.sku;
-                const preciosLista = LISTAS_MOSTRAR
-                  .map((l) => (l === 'Mayoreo AAA' ? precioAAAneto : r.precios[l]))
-                  .filter((v) => v != null && !isNaN(v));
-                const minLista = preciosLista.length ? Math.min(...preciosLista) : null;
-                const mostrarBajo = r.bajo?.precio_bajo != null && minLista != null && r.bajo.precio_bajo < minLista;
-                return (
-                  <React.Fragment key={r.sku}>
-                    <tr onClick={() => setSkuAbierto(abierto ? null : r.sku)}
-                      style={{
-                        cursor: 'pointer',
-                        background: abierto ? `${P.accent}${isDark ? '1A' : '0D'}` : 'transparent',
-                        height: 36, transition: 'background 100ms',
-                      }}
-                      onMouseEnter={(e) => { if (!abierto) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
-                      onMouseLeave={(e) => { if (!abierto) e.currentTarget.style.background = 'transparent'; }}>
-                      <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, color: theme.textMuted, fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', width: 68 }}>{r.marca || '—'}</td>
-                      <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text, whiteSpace: 'nowrap', width: 100, paddingLeft: 14 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <ChevronRight
-                            style={{ width: 11, height: 11, color: P.accent, flexShrink: 0, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }}
-                            strokeWidth={2.4}
-                          />
-                          {r.sku}
-                        </span>
-                      </td>
-                      <td style={{
-                        padding: '7px 8px', borderTop: `1px solid ${theme.border}`,
-                        fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text,
-                        maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }} title={r.descripcion}>{r.descripcion || '—'}</td>
-                      <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'center', whiteSpace: 'nowrap', width: 70 }}>
-                        {r.rdmp && (
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 999,
-                            fontSize: 10, fontWeight: 600, letterSpacing: '-0.005em',
-                            fontFamily: TYPO.fontDisplay, background: rmapChip.bg, color: rmapChip.fg,
-                          }}>
-                            {r.rdmp}
-                          </span>
-                        )}
-                      </td>
-                      {verPrecioBajo && (
-                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'right', whiteSpace: 'nowrap', width: 96 }}>
-                          {mostrarBajo ? (
-                            <span
-                              title={`${r.bajo.cliente_bajo} · ${fmtInt(r.bajo.piezas_bajo)} pz`}
-                              style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 11.5, color: P.orange, letterSpacing: '-0.01em' }}>
-                              {fmtMoney(r.bajo.precio_bajo)}
-                            </span>
-                          ) : (
-                            <span style={{ color: theme.textSubtle }}>—</span>
-                          )}
-                        </td>
-                      )}
-                      {listasVisibles.map((l) => {
-                        if (l === 'Mayoreo AAA') {
-                          const promoTooltip = promo
-                            ? `Promo −${(Number(promo.promo_pct) * 100).toFixed(1)}% · lista ${fmtMoney(precioAAA)}\n`
-                              + (promo.promos || []).map((p) => `${p.campania}: ${Math.round(Number(p.promo_pct) * 100)}%`).join('\n')
-                            : undefined;
-                          return (
-                            <td key={l}
-                              style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'right', whiteSpace: 'nowrap' }}
-                              title={promoTooltip}>
-                              {precioAAA != null ? (
-                                <span style={{
-                                  fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em',
-                                  color: theme.text, fontVariantNumeric: 'tabular-nums',
-                                  display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end',
-                                }}>
-                                  {fmtMoney(precioAAAneto)}
-                                  {promo && (
-                                    <span style={{
-                                      display: 'inline-block', padding: '1px 6px', borderRadius: 999,
-                                      fontSize: 8.5, fontWeight: 700, background: `${P.purple}22`, color: P.purple,
-                                      letterSpacing: '0.02em',
-                                    }}>
-                                      −{(Number(promo.promo_pct) * 100).toFixed(0)}%
-                                    </span>
-                                  )}
-                                </span>
-                              ) : (
-                                <span style={{ color: theme.textSubtle }}>—</span>
-                              )}
-                            </td>
-                          );
-                        }
-                        return (
-                          <td key={l} style={{
-                            padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'right',
-                            fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.text,
-                            fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.005em', whiteSpace: 'nowrap',
-                          }}>
-                            {r.precios[l] != null ? fmtMoney(r.precios[l]) : <span style={{ color: theme.textSubtle, fontWeight: 400 }}>—</span>}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    {abierto && (
-                      <tr>
-                        <td colSpan={4 + (verPrecioBajo ? 1 : 0) + listasVisibles.length} style={{ padding: 0, background: theme.bg, borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}` }}>
-                          <DetalleSKU
-                            sku={r}
-                            promo={promo}
-                            bajo={r.bajo}
-                            precios={r.precios}
-                            onClose={() => setSkuAbierto(null)}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
-  const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const [datos, setDatos] = useState(null);
-  const [cargando, setCargando] = useState(true);
-  const anio = new Date().getFullYear();
-
-  useEffect(() => {
-    (async () => {
-      setCargando(true);
-      const [fact, preciosHist, promosHist] = await Promise.all([
-        fetchAll(
-          'facturacion_clientes',
-          'anio,mes,cliente_nombre,piezas,monto,canal',
-          (q) => q.eq('sku', sku.sku).in('anio', [anio, anio - 1])
-        ),
-        fetchAll(
-          'precios_sku',
-          'anio,mes,lista,precio',
-          (q) => q.eq('sku', sku.sku).gte('anio', anio - 1)
-        ),
-        fetchAll(
-          'promos_temporada',
-          'anio,mes,campania,promo_pct',
-          (q) => q.eq('sku', sku.sku).order('anio', { ascending: false }).order('mes', { ascending: false })
-        ),
-      ]);
-      setDatos({ fact, preciosHist, promosHist });
-      setCargando(false);
-    })();
-  }, [sku.sku, anio]);
-
-  const analisis = useMemo(() => {
-    if (!datos) return null;
-    const { fact, preciosHist, promosHist } = datos;
-
-    const serieMens = Array.from({ length: 12 }, (_, i) => ({ mes: MESES_LBL[i], piezas: 0, monto: 0, precio: null }));
-    fact.filter((f) => Number(f.anio) === anio).forEach((f) => {
-      const m = Number(f.mes) - 1;
-      if (m < 0 || m > 11) return;
-      serieMens[m].piezas += Number(f.piezas) || 0;
-      serieMens[m].monto  += Number(f.monto) || 0;
-    });
-    preciosHist.filter((p) => Number(p.anio) === anio && p.lista === 'Mayoreo AAA').forEach((p) => {
-      const m = Number(p.mes) - 1;
-      if (m >= 0 && m <= 11) serieMens[m].precio = Number(p.precio);
-    });
-    let ultimoPrecio = null;
-    for (let i = 0; i < 12; i++) {
-      if (serieMens[i].precio == null) serieMens[i].precio = ultimoPrecio;
-      else ultimoPrecio = serieMens[i].precio;
-    }
-
-    const clientesMap = new Map();
-    fact.filter((f) => Number(f.anio) === anio && f.cliente_nombre).forEach((f) => {
-      const k = f.cliente_nombre;
-      if (!clientesMap.has(k)) clientesMap.set(k, { cliente: k, piezas: 0, monto: 0, canal: f.canal });
-      const it = clientesMap.get(k);
-      it.piezas += Number(f.piezas) || 0;
-      it.monto  += Number(f.monto) || 0;
-    });
-    const precioLista = precios['Mayoreo AAA'];
-    const clientesAll = Array.from(clientesMap.values())
-      .filter((c) => c.piezas > 0)
-      .map((c) => {
-        const precioProm = c.piezas > 0 ? c.monto / c.piezas : 0;
-        return {
-          ...c,
-          precioProm,
-          deltaLista: precioLista > 0 ? ((precioProm - precioLista) / precioLista) * 100 : null,
-        };
-      })
-      .sort((a, b) => b.piezas - a.piezas);
-    // Compactación: 3 clientes por default (con "+ N más" al pie)
-    const clientes = clientesAll.slice(0, 3);
-    const clientesRestantes = clientesAll.slice(3);
-    const clienteVolumen = clientes[0];
-
-    const mesActual = new Date().getMonth() + 1;
-    const anioActual = new Date().getFullYear();
-    const mesMax = (anio === anioActual && mesActual > 1) ? mesActual - 1 : (anio === anioActual ? 1 : 12);
-    const piezasMesActual = serieMens[mesMax - 1]?.piezas || 0;
-    const piezasPrev3m = [mesMax - 2, mesMax - 3, mesMax - 4]
-      .filter((i) => i >= 0)
-      .reduce((s, i) => s + (serieMens[i]?.piezas || 0), 0);
-    const promPrev3m = piezasPrev3m > 0 ? piezasPrev3m / 3 : 0;
-    const piezasYTD = serieMens.reduce((s, r) => s + r.piezas, 0);
-    const montoYTD = serieMens.reduce((s, r) => s + r.monto, 0);
-
-    const promosLista = [];
-    const listasSet = new Set(preciosHist.map((p) => p.lista));
-    for (const listaNm of listasSet) {
-      const secuencia = preciosHist
-        .filter((p) => p.lista === listaNm)
-        .map((p) => ({ anio: Number(p.anio), mes: Number(p.mes), precio: Number(p.precio) }))
-        .sort((a, b) => a.anio - b.anio || a.mes - b.mes);
-      for (let i = 1; i < secuencia.length; i++) {
-        const prev = secuencia[i - 1];
-        const cur  = secuencia[i];
-        if (prev.precio > 0 && cur.precio < prev.precio) {
-          const dif = (prev.precio - cur.precio) / prev.precio;
-          if (dif >= 0.02) {
-            promosLista.push({
-              anio: cur.anio, mes: cur.mes,
-              campania: `Baja de lista · ${LISTAS_LBL[listaNm] || listaNm}`,
-              promo_pct: dif,
-              tipo: 'lista',
-            });
-          }
-        }
-      }
-    }
-
-    const promosUnificadas = [
-      ...promosHist.map((p) => ({ ...p, tipo: 'temporada' })),
-      ...promosLista,
-    ].sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
-
-    const anioActual2 = new Date().getFullYear();
-    const mesActual2  = new Date().getMonth() + 1;
-    const mesCorte = anio === anioActual2 ? mesActual2 : 12;
-    const primerMesConDato = serieMens.findIndex((r) => (r.piezas > 0) || r.precio != null);
-    let ultimoMesConDato = -1;
-    for (let i = mesCorte - 1; i >= 0; i--) {
-      if (serieMens[i].piezas > 0 || serieMens[i].precio != null) { ultimoMesConDato = i; break; }
-    }
-    const serieMensRecortada = primerMesConDato >= 0 && ultimoMesConDato >= 0
-      ? serieMens.slice(primerMesConDato, ultimoMesConDato + 1)
-      : [];
-
-    return {
-      serieMens: serieMensRecortada, clientes, clientesRestantes, clienteVolumen,
-      mesMax,
-      piezasMesActual, promPrev3m,
-      deltaVsPrev3m: promPrev3m > 0 ? ((piezasMesActual - promPrev3m) / promPrev3m) * 100 : null,
-      piezasYTD, montoYTD,
-      promosHist: promosUnificadas.slice(0, 3),
-      promosCount: promosUnificadas.length,
-    };
-  }, [datos, anio, precios]);
-
-  const precioAAA = precios['Mayoreo AAA'];
-  const precioAAAneto = promo && precioAAA != null
-    ? precioAAA * (1 - Number(promo.promo_pct))
-    : precioAAA;
-
-  // Delta precio Enero → mes actual
-  const deltaPrecioYTD = useMemo(() => {
-    if (!analisis?.serieMens?.length) return null;
-    const primero = analisis.serieMens.find((r) => r.precio != null);
-    const ultimo  = [...analisis.serieMens].reverse().find((r) => r.precio != null);
-    if (!primero || !ultimo || !primero.precio) return null;
-    return ((ultimo.precio - primero.precio) / primero.precio) * 100;
-  }, [analisis]);
-
-  // ═══ Estilo Apple para el drill-down ═══
-  const P = paletteFromTheme(theme);
-  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
-  const heroText = theme.heroCardText || '#F5F5F7';
-  const heroMuted = 'rgba(255,255,255,0.7)';
-  const heroSubtle = 'rgba(255,255,255,0.55)';
-
-  return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
-      overflow: 'hidden', fontFamily: TYPO.fontText, marginTop: 4,
-    }}>
-      {/* Hero negro con precio héroe */}
-      <div style={{ position: 'relative', background: heroBg, color: heroText }}>
-        <button onClick={onClose}
-          style={{ position: 'absolute', top: 12, right: 14, background: 'transparent', border: 0, color: heroMuted, fontSize: 14, cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
-          onMouseEnter={(e) => e.currentTarget.style.color = '#FFF'}
-          onMouseLeave={(e) => e.currentTarget.style.color = heroMuted}>
-          <X style={{ width: 14, height: 14 }} strokeWidth={2} />
-        </button>
-        <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, alignItems: 'center' }}>
-          <div>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px',
-              borderRadius: 999, background: 'rgba(255,255,255,0.10)',
-              fontSize: 9, fontWeight: 500, color: heroMuted,
-              textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: TYPO.fontText,
-            }}>
-              <span style={{ width: 5, height: 5, borderRadius: 999, background: P.teal }} />
-              {sku.categoria || 'Sin categoría'} · {sku.familia || '—'}
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: heroSubtle, marginLeft: 4 }}>{sku.sku}</span>
-            </div>
-            <h3 style={{
-              fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em',
-              color: '#FFF', margin: '3px 0 0', lineHeight: 1.2,
-            }}>
-              {sku.descripcion || sku.sku}
-            </h3>
-            <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, marginTop: 8, fontFamily: TYPO.fontText }}>
-              Precio Mayoreo AAA
-            </div>
-            <div style={{
-              fontFamily: TYPO.fontDisplay, fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em',
-              margin: '2px 0 4px', fontVariantNumeric: 'tabular-nums', color: '#FFF',
-            }}>
-              {precioAAAneto != null ? fmtMoney(precioAAAneto) : '—'}
-              {promo && precioAAA != null && (
-                <span style={{ color: heroSubtle, textDecoration: 'line-through', fontSize: 14, marginLeft: 6, fontWeight: 500 }}>
-                  {fmtMoney(precioAAA)}
-                </span>
-              )}
-            </div>
-            <p style={{ fontSize: 10.5, color: heroMuted, lineHeight: 1.45, maxWidth: 300, margin: 0, fontFamily: TYPO.fontText }}>
-              {promo && (
-                <><strong style={{ color: '#FFF', fontWeight: 500 }}>{Math.round(Number(promo.promo_pct) * 100)}% desc activo ({promo.campania}).</strong> </>
-              )}
-              {deltaPrecioYTD != null && (
-                <>Precio {deltaPrecioYTD >= 0 ? '+' : '−'}{Math.abs(deltaPrecioYTD).toFixed(1)}% en el año. </>
-              )}
-              {analisis?.clienteVolumen && analisis.clienteVolumen.deltaLista != null && (
-                <>{analisis.clienteVolumen.cliente} paga {fmtMoney(analisis.clienteVolumen.precioProm)} ({analisis.clienteVolumen.deltaLista >= 0 ? '+' : ''}{analisis.clienteVolumen.deltaLista.toFixed(1)}% vs lista).</>
-              )}
-            </p>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
-            <HeroStat label="Piezas YTD" value={analisis ? fmtInt(analisis.piezasYTD) : '—'} />
-            <HeroStat label="Facturado" value={analisis ? fmtCompact(analisis.montoYTD) : '—'} />
-            <HeroStat label={`Δ Precio ${anio}`} value={deltaPrecioYTD != null ? fmtPctDelta(deltaPrecioYTD) : '—'} valueColor={deltaPrecioYTD == null ? '#FFF' : deltaPrecioYTD >= 0 ? P.green : P.red} />
-            <HeroStat label={`Sellout ${analisis ? MESES_LBL[analisis.mesMax - 1] : ''}`} value={analisis ? `${fmtInt(analisis.piezasMesActual)} pz` : '—'} />
-          </div>
-        </div>
-      </div>
-
-      {cargando ? (
-        <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12 }}>
-          <Activity style={{ width: 20, height: 20, marginBottom: 6 }} /> Cargando…
-        </div>
-      ) : (
-        <>
-        {/* Body split · 2 paneles */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 0 }}>
-          {/* Panel izquierdo: precios + evolución */}
-          <div style={{ borderRight: `1px solid ${theme.border}`, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* Precios por lista */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Precios por lista</h4>
-                <span style={{ fontSize: 10, color: theme.textMuted }}>orden de mayor a menor</span>
-              </div>
-              {(() => {
-                const listasOrdenadas = ['Mayoreo AAA', 'DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL']
-                  .filter((l) => precios[l] != null)
-                  .map((l) => ({ lista: l, precio: precios[l] }))
-                  .sort((a, b) => b.precio - a.precio);
-                const maxPrecio = listasOrdenadas[0]?.precio || 1;
-                return (
-                  <>
-                    {bajo && (
-                      <ListaRow theme={theme} P={P} label="Precio bajo" precio={bajo.precio_bajo} maxPrecio={maxPrecio}
-                        subLabel={`${bajo.cliente_bajo} · ${fmtInt(bajo.piezas_bajo)}pz`} tone="orange" />
-                    )}
-                    {listasOrdenadas.map(({ lista, precio }) => (
-                      <ListaRow key={lista} theme={theme} P={P} label={LISTAS_LBL[lista] || lista}
-                        precio={precio} maxPrecio={maxPrecio}
-                        promoActiva={lista === 'Mayoreo AAA' && promo != null}
-                        tone={lista === 'Mayoreo AAA' ? 'accent' : null} />
-                    ))}
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* Evolución 12 meses */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Evolución {anio} · precio + piezas</h4>
-                <span style={{ fontSize: 9.5, color: theme.textMuted }}>
-                  <span style={{ display: 'inline-block', width: 10, height: 2, background: P.accent, verticalAlign: 'middle', marginRight: 4 }} />Precio
-                  <span style={{ display: 'inline-block', width: 10, height: 8, background: `${P.accent}33`, verticalAlign: 'middle', marginLeft: 10, marginRight: 4 }} />Piezas
-                </span>
-              </div>
-              {analisis && analisis.serieMens.length > 0 ? (
-                <ResponsiveContainer width="100%" height={120}>
-                  <ComposedChart data={analisis.serieMens} margin={{ top: 8, right: 6, left: -24, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id={`epFill-${sku.sku}`} x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor={P.accent} stopOpacity={isDark ? 0.32 : 0.20} />
-                        <stop offset="100%" stopColor={P.accent} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke={theme.border} strokeDasharray="2 4" vertical={false} />
-                    <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontText }} interval={0} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" hide domain={['auto', 'auto']} />
-                    <YAxis yAxisId="right" orientation="right" hide domain={[0, 'auto']} />
-                    <Tooltip
-                      formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
-                      labelStyle={{ fontSize: 10, color: theme.textMuted, fontFamily: TYPO.fontText, fontWeight: 500 }}
-                      contentStyle={{
-                        fontSize: 10, padding: '6px 10px',
-                        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
-                        fontFamily: TYPO.fontText, boxShadow: isDark ? 'none' : '0 4px 12px rgba(0,0,0,0.08)',
-                      }}
-                      cursor={{ stroke: theme.border, strokeDasharray: '3 3' }} />
-                    <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={`${P.accent}1F`} radius={[4, 4, 0, 0]} maxBarSize={26} />
-                    <Area yAxisId="left" type="monotone" dataKey="precio" name="Precio"
-                      stroke={P.accent} strokeWidth={2.5}
-                      fill={`url(#epFill-${sku.sku})`}
-                      dot={false}
-                      activeDot={{ r: 4, fill: theme.surface, stroke: P.accent, strokeWidth: 2.5 }}
-                      connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '24px 0', fontFamily: TYPO.fontText }}>Sin datos históricos</div>
-              )}
-            </div>
-          </div>
-
-          {/* Panel derecho: clientes + promos */}
-          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* Top clientes */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Top clientes YTD</h4>
-                <span style={{ fontSize: 10, color: theme.textMuted }}>precio · Δ vs AAA</span>
-              </div>
-              {!analisis || analisis.clientes.length === 0 ? (
-                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '12px 0' }}>Sin facturación este año.</div>
-              ) : (
-                <>
-                  {analisis.clientes.map((c, i) => {
-                    const critico = c.deltaLista != null && c.deltaLista < -8;
-                    const deltaColor = c.deltaLista == null || Math.abs(c.deltaLista) < 0.5 ? theme.textMuted
-                      : critico ? P.red
-                      : c.deltaLista < 0 ? P.orange : P.green;
-                    return (
-                      <div key={c.cliente} style={{
-                        display: 'grid', gridTemplateColumns: '20px 1fr auto 60px', gap: 8, alignItems: 'center',
-                        padding: '6px 4px', fontSize: 11,
-                      }}>
-                        <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 10, color: theme.textMuted, textAlign: 'center' }}>{i + 1}</span>
-                        <div>
-                          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.cliente}</div>
-                          <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtInt(c.piezas)} pz · {fmtCompact(c.monto)}</div>
-                        </div>
-                        <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 11.5, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
-                          {fmtMoney(c.precioProm)}
-                        </span>
-                        <span style={{ fontSize: 10, color: deltaColor, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {c.deltaLista == null ? '—' :
-                            Math.abs(c.deltaLista) < 0.5 ? '=' :
-                            (c.deltaLista < 0 ? `▼ ${Math.abs(c.deltaLista).toFixed(1)}%` : `▲ ${c.deltaLista.toFixed(1)}%`)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {analisis.clientesRestantes.length > 0 && (
-                    <div style={{ textAlign: 'center', fontSize: 10, color: theme.textMuted, padding: '6px 0 0', borderTop: `1px dashed ${theme.border}`, marginTop: 4 }}>
-                      + {analisis.clientesRestantes.length} más · {fmtInt(analisis.clientesRestantes.reduce((s, c) => s + c.piezas, 0))} pz
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Promos timeline */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Promos aplicadas</h4>
-                <span style={{ fontSize: 10, color: theme.textMuted }}>
-                  {analisis && analisis.promosCount > 0 ? `${analisis.promosHist.length} de ${analisis.promosCount}` : '—'}
-                </span>
-              </div>
-              {!analisis || analisis.promosHist.length === 0 ? (
-                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '12px 0' }}>Sin promociones registradas.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {analisis.promosHist.map((p, i) => (
-                    <div key={i} style={{
-                      display: 'grid', gridTemplateColumns: '58px 1fr auto', gap: 10, alignItems: 'center',
-                      padding: '6px 4px', fontSize: 11,
-                      borderBottom: i < analisis.promosHist.length - 1 ? `1px dashed ${theme.border}` : 'none',
-                    }}>
-                      <span style={{ fontSize: 9.5, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {MESES_LBL[Number(p.mes) - 1]} {String(p.anio).slice(-2)}
-                      </span>
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {p.campania}
-                      </span>
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: P.orange, textAlign: 'right', letterSpacing: '-0.01em' }}>
-                        {Math.round(Number(p.promo_pct) * 100)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ═══ Hero stat pill (drill-down) ═══
-function HeroStat({ label, value, valueColor }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.55)', fontWeight: 500, fontFamily: TYPO.fontText }}>{label}</span>
-      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, marginTop: 2, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF', letterSpacing: '-0.015em' }}>{value}</span>
-    </div>
-  );
-}
-
-// ═══ Fila de lista con barra ═══
-function ListaRow({ theme, P, label, precio, maxPrecio, subLabel, promoActiva, tone }) {
-  const width = maxPrecio > 0 ? Math.max(4, (precio / maxPrecio) * 100) : 0;
-  const barCol = tone === 'orange' ? P.orange : tone === 'accent' ? P.accent : P.accent;
-  const labelCol = tone === 'orange' ? P.orange : theme.text;
-  const priceCol = tone === 'orange' ? P.orange : theme.text;
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '100px 1fr auto 80px', gap: 8, alignItems: 'center',
-      padding: '6px 4px', fontSize: 11, borderBottom: `1px dashed ${theme.border}`,
-    }}>
-      <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 500, color: labelCol, letterSpacing: '-0.005em' }}>
-        {label}
-      </span>
-      <div style={{ height: 4, background: `${P.accent}1A`, borderRadius: 999, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${width}%`, background: barCol, borderRadius: 999 }} />
-      </div>
-      <span style={{
-        fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: priceCol,
-        letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', textAlign: 'right',
-      }}>
-        {fmtMoney(precio)}
-        {promoActiva && (
-          <span style={{
-            display: 'inline-block', padding: '1px 6px', borderRadius: 999,
-            fontSize: 8.5, fontWeight: 700, background: `${P.purple}22`, color: P.purple,
-            marginLeft: 6, letterSpacing: '0.02em',
-          }}>PROMO</span>
-        )}
-      </span>
-      <span style={{ fontSize: 10, color: theme.textMuted, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-        {subLabel || ''}
-      </span>
-    </div>
-  );
-}
-
-// ═══ Roadmap chip colors — iOS uniforme en 3 temas ═══
-function roadmapChip(theme, P, rdmp) {
-  const map = {
-    RMI:  { bg: `${P.teal}22`,   fg: theme.mode === 'dark' ? P.teal   : '#0F6E56' },
-    RML:  { bg: `${P.purple}22`, fg: theme.mode === 'dark' ? P.purple : '#6E44A6' },
-    RMS:  { bg: `${P.pink || P.red}22`, fg: theme.mode === 'dark' ? (P.pink || P.red) : '#B03050' },
-    2026: { bg: `${P.orange}22`, fg: theme.mode === 'dark' ? P.orange : '#8B4E00' },
-  };
-  return map[rdmp] || { bg: `${theme.textMuted}18`, fg: theme.textMuted };
-}
-
-// ═══ Palette helper (mismo criterio que otras pestañas) ═══
-function paletteFromTheme(theme) {
-  return {
-    accent: theme.accent || '#007AFF',
-    green:  theme.green  || '#34C759',
-    orange: theme.orange || '#FF9500',
-    red:    theme.red    || '#FF3B30',
-    purple: theme.purple || '#AF52DE',
-    teal:   theme.teal   || '#5AC8FA',
-    pink:   theme.pink   || '#FF2D55',
-  };
-}
-
-// ═══ Hero stat pill (para el hero editorial) ═══
-function HeroStatEP({ label, value, sub, valueColor, heroSubtle }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span style={{
-        fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em',
-        color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText,
-      }}>{label}</span>
-      <span style={{
-        fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em',
-        marginTop: 2, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF',
-      }}>
-        {value}
-        {sub && <span style={{ color: heroSubtle, fontSize: 10, marginLeft: 3, fontWeight: 500 }}>{sub}</span>}
-      </span>
-    </div>
-  );
-}
-
-// ═══ KPI card Apple Fitness para EstrategiaPrecios ═══
-function KpiCardEP({ theme, P, icon: Icon, iconColor, chip, value, valueColor, note }) {
-  const isDark = theme.mode === 'dark';
-  return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
-      padding: '12px 14px', minHeight: 108,
-      display: 'flex', flexDirection: 'column', gap: 4, fontFamily: TYPO.fontText,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 8, background: `${iconColor}22`, color: iconColor,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Icon style={{ width: 14, height: 14 }} strokeWidth={1.8} />
-        </div>
-        <span style={{
-          fontSize: 9, padding: '2px 7px', borderRadius: 999,
-          background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-          color: theme.textMuted, fontWeight: 500,
-        }}>{chip}</span>
-      </div>
-      <div style={{
-        fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em',
-        color: valueColor || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 6, lineHeight: 1,
-      }}>{value}</div>
-      <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.35, marginTop: 'auto' }}>{note}</div>
+      <PanelPrecioBajo filas={bajas} abrir={bajoAbrir} />
     </div>
   );
 }
