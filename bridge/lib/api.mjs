@@ -135,6 +135,32 @@ export async function logSyncEvent(table, ev, { dryRun = false } = {}) {
   } catch (e) { log(`  (no se pudo registrar sync_event: ${e.message})`); }
 }
 
+// ── Latido y solicitudes (Actualización de datos → "Pedir corrida") ────────
+// Latido: sync_status.fuente = 'puente' con ultima_actualizacion = ahora y meta
+// { version, node, agentes }. Lo lee /api/status?type=sync ("puente en línea hace N min").
+export async function latido(meta = {}) {
+  if (!DIRECTO) return; // vía Vercel no hay upsert arbitrario de sync_status
+  try {
+    await http(`${SB_URL}/rest/v1/sync_status?on_conflict=fuente`, {
+      method: 'POST', headers: sbHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({ fuente: 'puente', ultima_actualizacion: new Date().toISOString(), registros: null, meta: { origen: ORIGEN, node: process.version, ...meta } }),
+    }, { retries: 1 });
+  } catch (e) { log(`  (no se pudo escribir el latido: ${e.message})`); }
+}
+
+/** Solicitudes pendientes (tabla sync_solicitudes), más viejas primero. */
+export async function leerSolicitudes() {
+  if (!DIRECTO) throw new Error('solicitudes requiere SUPABASE_SERVICE_ROLE_KEY');
+  return (await sb.get('sync_solicitudes', 'select=id,fuente,solicitado_por,solicitado_at&estado=eq.pendiente&order=solicitado_at.asc', '0-49')) || [];
+}
+
+export async function actualizarSolicitud(id, patch) {
+  if (!DIRECTO) return;
+  await http(`${SB_URL}/rest/v1/sync_solicitudes?id=eq.${parseInt(id, 10)}`, {
+    method: 'PATCH', headers: sbHeaders({ Prefer: 'return=minimal' }), body: JSON.stringify(patch),
+  }, { retries: 1 });
+}
+
 /** Ping de credenciales. */
 export async function ping() {
   if (DIRECTO) return http(`${SB_URL}/rest/v1/sync_status?select=fuente&limit=1`, { headers: sbHeaders() }, { retries: 0 });

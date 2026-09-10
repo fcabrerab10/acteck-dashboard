@@ -89,7 +89,7 @@ const GRUPOS_BASE = [
     id: 'configuracion', label: 'Configuración', icon: Settings, color: '#8E8E93',
     nodos: [
       { pagina: 'configuracion', label: 'Configuración', icon: Settings },
-      { pagina: 'actualizarDatos', label: 'Actualizar datos', icon: RefreshCw, tipo: 'enlace', href: '/uploads.html' },
+      { pagina: 'actualizacion', label: 'Actualizar datos', icon: RefreshCw },
     ],
   },
 ];

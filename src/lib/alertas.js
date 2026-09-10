@@ -37,7 +37,7 @@ export function destinoAlerta(a) {
                                      ? { clienteKey: a.cliente_key, pagina: 'sellIn' }
                                      : { clienteKey: null, pagina: 'sellIn' };
     case 'rebate_por_generar':     return { clienteKey: a.cliente_key || 'dicotech', pagina: 'pagos' };
-    case 'datos_sin_actualizar':   return { clienteKey: null, pagina: null, url: '/uploads.html' };
+    case 'datos_sin_actualizar':   return { clienteKey: null, pagina: 'actualizacion' };
     default:                       return a?.cliente_key ? { clienteKey: a.cliente_key, pagina: 'home' } : null;
   }
 }

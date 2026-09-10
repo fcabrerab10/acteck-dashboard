@@ -525,7 +525,7 @@ export default function AnalisisClientesGlobal() {
       <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, background: theme.bg, minHeight: '100%', fontFamily: TYPO.fontText }}>
         <Users style={{ width: 48, height: 48, color: theme.textSubtle, margin: '0 auto 16px', strokeWidth: 1.5 }} />
         <h2 style={{ fontSize: 20, fontWeight: 600, color: theme.text, marginBottom: 8, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.02em' }}>Análisis por cliente</h2>
-        <p>No hay datos para {anio}. Sube el archivo ERP en /uploads.html.</p>
+        <p>No hay datos para {anio}. El puente SQL lo carga solo; revisa el Importador central.</p>
       </div>
     );
   }

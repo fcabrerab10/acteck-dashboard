@@ -447,7 +447,7 @@ export default function EstadoResultados() {
         Cifras en MXN. Fuente: <code style={{
           background: theme.surfaceHover, padding: '2px 6px', borderRadius: 4,
           fontSize: 11, fontFamily: 'ui-monospace, monospace',
-        }}>estados_resultados</code> · alimentada desde /uploads.html
+        }}>estados_resultados</code> · alimentada desde el Importador central
       </p>
 
       {/* Modal drill-down */}

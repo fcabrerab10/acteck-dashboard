@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.acteck.sync.solicitudes</string>
+  <!-- Cada 5 min: atiende la cola sync_solicitudes ("Pedir corrida" en Actualización de datos)
+       y deja el latido del puente en sync_status.puente aunque no haya nada pendiente. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>__BRIDGE_DIR__/run.sh</string>
+    <string>solicitudes</string>
+  </array>
+  <key>WorkingDirectory</key><string>__BRIDGE_DIR__</string>
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__BRIDGE_DIR__/logs/launchd-solicitudes.out.log</string>
+  <key>StandardErrorPath</key><string>__BRIDGE_DIR__/logs/launchd-solicitudes.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>Nice</key><integer>5</integer>
+</dict>
+</plist>

@@ -32,6 +32,7 @@ const UPLOAD_QUERIES = {
   sellout_digitalife: 'sellout_detalle?cliente=eq.digitalife&select=fecha,updated_at&order=fecha.desc&limit=1',
   sellout_dicotech:   'sellout_detalle?cliente=eq.dicotech&select=fecha,updated_at&order=fecha.desc&limit=1',
   sellout_pcel:       'sellout_pcel?select=anio,semana&order=anio.desc,semana.desc&limit=1',
+  revko_sellout:      'sellout_general?idcliente=eq.708&select=fecha,updated_at&order=fecha.desc&limit=1',
   inv_digitalife:     'inventario_cliente?cliente=eq.digitalife&select=anio,semana,updated_at&order=anio.desc,semana.desc&limit=1',
   inv_dicotech:       'inventario_cliente?cliente=eq.dicotech&select=anio,semana,updated_at&order=anio.desc,semana.desc&limit=1',
   ec_digitalife:      'estados_cuenta?cliente=eq.digitalife&select=anio,semana,fecha_corte,updated_at&order=anio.desc,semana.desc&limit=1',
@@ -74,17 +75,36 @@ async function handleSync(res) {
   if (error) return res.status(500).json({ error: error.message });
   // Último evento por status_key (éxito/error, filas, origen) para la sección
   // "Cargas automáticas" de Actualización de datos. Las cargas del puente y del
-  // uploader web escriben en sync_events con el mismo status_key.
-  const eventos = {};
+  // importador escriben en sync_events con el mismo status_key.
+  //   eventos[key]  = último evento (compatibilidad)
+  //   historial[key]= últimos 10 eventos (fila expandible de las cargas manuales)
+  //   puente        = últimos 30 eventos del puente (panel "Ver log")
+  //   solicitudes   = últimas 20 solicitudes de corrida (cola del puente)
+  const eventos = {}, historial = {};
   const { data: evs } = await supa
     .from('sync_events')
-    .select('status_key, src_id, status, filas, duracion_ms, user_nombre, detalles, created_at')
+    .select('id, status_key, src_id, status, filas, filename, duracion_ms, user_nombre, detalles, created_at')
     .not('status_key', 'is', null)
     .order('created_at', { ascending: false })
-    .limit(300);
-  for (const ev of evs || []) if (!eventos[ev.status_key]) eventos[ev.status_key] = ev;
+    .limit(600);
+  for (const ev of evs || []) {
+    if (!eventos[ev.status_key]) eventos[ev.status_key] = ev;
+    (historial[ev.status_key] ||= []);
+    if (historial[ev.status_key].length < 10) historial[ev.status_key].push(ev);
+  }
+  const { data: puente } = await supa
+    .from('sync_events')
+    .select('id, status_key, src_id, status, filas, duracion_ms, user_nombre, detalles, created_at')
+    .eq('user_nombre', 'Puente SQL (Mac mini)')
+    .order('created_at', { ascending: false })
+    .limit(30);
+  const { data: solicitudes } = await supa
+    .from('sync_solicitudes')
+    .select('id, fuente, solicitado_por, solicitado_at, estado, resultado, atendida_at')
+    .order('solicitado_at', { ascending: false })
+    .limit(20);
   res.setHeader('Cache-Control', 'no-store');
-  return res.status(200).json({ ok: true, items: data || [], eventos });
+  return res.status(200).json({ ok: true, items: data || [], eventos, historial, puente: puente || [], solicitudes: solicitudes || [] });
 }
 
 async function handleUpload(res) {

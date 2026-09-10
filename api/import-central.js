@@ -70,7 +70,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { table, rows, deleteAnios, deletePeriodos, deleteAll, finalize, anios, syncEvent } = req.body || {};
+    const { table, rows, deleteAnios, deletePeriodos, deleteAll, deleteCliente, finalize, anios, syncEvent } = req.body || {};
     if (!table || !ALLOWED[table]) return res.status(400).json({ error: 'invalid table. allowed: ' + Object.keys(ALLOWED).join(', ') });
 
     // syncEvent: bitácora de una corrida del puente (o de cualquier caller).
@@ -142,6 +142,23 @@ export default async function handler(req, res) {
       if (!dr.ok) {
         const txt = await dr.text();
         return res.status(dr.status).json({ error: 'deleteAll failed', detail: txt.slice(0, 500), table, pkCol });
+      }
+    }
+
+    // deleteCliente: borra todas las filas de un cliente antes del primer chunk.
+    // Lo usa el importador (Digitalife · "es el histórico completo") para
+    // reemplazar el sell out del cliente. Sólo tablas con columna cliente.
+    if (deleteCliente) {
+      const TABLAS_CLIENTE = new Set(['sellout_detalle', 'inventario_cliente', 'inventario_cliente_sucursal']);
+      const cli = String(deleteCliente);
+      if (!TABLAS_CLIENTE.has(table) || !/^[a-z_]{2,40}$/.test(cli)) return res.status(400).json({ error: 'deleteCliente no permitido', table, cliente: cli });
+      const dr = await fetch(`${SB_URL}/rest/v1/${table}?cliente=eq.${cli}`, {
+        method: 'DELETE',
+        headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'return=minimal' },
+      });
+      if (!dr.ok) {
+        const txt = await dr.text();
+        return res.status(dr.status).json({ error: 'deleteCliente failed', detail: txt.slice(0, 500), table, cliente: cli });
       }
     }
 

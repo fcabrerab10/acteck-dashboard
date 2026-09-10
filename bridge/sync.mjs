@@ -7,13 +7,19 @@
 //          erp  = ventas + inventario + precios (+ compras si está configurado)
 //          all  = todo lo configurado
 //          test = prueba de conexión a cada SQL Server, al Sheet y al dashboard
+//          solicitudes = atiende la cola sync_solicitudes ("Pedir corrida" en
+//                        Actualización de datos); launchd la corre cada 5 min.
+//
+// Cada invocación deja un latido en sync_status.fuente='puente' (meta: version,
+// node, agentes) con el que la página muestra "puente en línea hace N min".
 //
 // Cada fuente lee la vista/hoja, mapea con las MISMAS reglas que uploads.html
 // y sube por /api/import-central. Al terminar deja un sync_event (historial
 // del uploader) con filas, duración y errores.
 import * as M from './lib/mappers.mjs';
 import { readView, testServer, closeAll } from './lib/mssql.mjs';
-import { upsertRows, finalizeErpVentas, logSyncEvent, ping, describirTransporte, DIRECTO } from './lib/api.mjs';
+import { upsertRows, finalizeErpVentas, logSyncEvent, ping, describirTransporte, DIRECTO, latido, leerSolicitudes, actualizarSolicitud } from './lib/api.mjs';
+import { readFileSync } from 'node:fs';
 import { leerHoja, listarHojas, describirModo } from './lib/sheets.mjs';
 import { upsertEmbarquesCompras } from './lib/embarques.mjs';
 import { HOJAS_HISTORICAS, HOJAS_SECUNDARIAS, transformEmbarques, anioDeHoja } from '../api/_embarques.js';
@@ -25,6 +31,8 @@ const opt = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : nu
 const dryRun = flag('--dry-run');
 const top = parseInt(opt('--top') || '0', 10);
 const env = (k, d = '') => (process.env[k] ?? d).trim();
+const VERSION = (() => { try { return JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version; } catch { return '?'; } })();
+const AGENTES = ['com.acteck.sync.diario', 'com.acteck.sync.intradia', 'com.acteck.sync.solicitudes'];
 
 // Ventas: dos modos.
 //   · ventana (default): sólo los últimos ERP_VENTAS_DIAS días (o --dias N) por `periodo`;
@@ -212,12 +220,41 @@ async function test() {
   return fallas;
 }
 
+// Atiende la cola de "Pedir corrida": toma las pendientes (más viejas primero),
+// las marca en_proceso, corre la(s) fuente(s) y guarda el resultado. Si dos
+// solicitudes piden lo mismo se corre una sola vez y ambas quedan hechas.
+async function solicitudes() {
+  const pend = await leerSolicitudes();
+  if (!pend.length) { log('▸ solicitudes: ninguna pendiente'); return 0; }
+  log(`▸ solicitudes: ${pend.length} pendiente${pend.length > 1 ? 's' : ''} · ${pend.map((p) => `#${p.id} ${p.fuente} (${p.solicitado_por || '—'})`).join(' · ')}`);
+  for (const p of pend) await actualizarSolicitud(p.id, { estado: 'en_proceso' });
+  const lista = [...new Set(pend.flatMap((p) => GRUPOS[p.fuente] || [p.fuente]))].filter((n) => FUENTES[n]);
+  const res = {};
+  for (const n of lista) res[n] = await correr(n);
+  let fallas = 0;
+  for (const p of pend) {
+    const mias = (GRUPOS[p.fuente] || [p.fuente]).map((n) => res[n]).filter(Boolean);
+    const err = mias.filter((r) => r.ok === false);
+    const resultado = {
+      filas: mias.reduce((s, r) => s + (r.filas || 0), 0), duracion_ms: mias.reduce((s, r) => s + (r.duracion_ms || 0), 0),
+      fuentes: mias.map((r) => ({ nombre: r.nombre, ok: r.ok !== false, skipped: !!r.skipped, filas: r.filas ?? null, error: r.error || null })),
+      ...(err.length ? { mensaje: err.map((r) => `${r.nombre}: ${r.error}`).join(' · ').slice(0, 400) } : {}),
+    };
+    if (err.length) fallas++;
+    await actualizarSolicitud(p.id, { estado: err.length ? 'error' : 'hecha', resultado, atendida_at: new Date().toISOString() });
+  }
+  log(`resumen solicitudes: ${pend.length - fallas} hechas · ${fallas} con error`);
+  return fallas;
+}
+
 (async () => {
   const pedidas = args.filter((a) => !a.startsWith('--') && a !== opt('--top') && a !== opt('--anios') && a !== opt('--dias'));
-  if (!pedidas.length) { console.log('uso: sync.mjs <ventas|inventario|precios|compras|cuotas|sellout|embarques|erp|all|test> [--dry-run] [--top N] [--anios 2025,2026] [--dias 45]'); process.exit(2); }
+  if (!pedidas.length) { console.log('uso: sync.mjs <ventas|inventario|precios|compras|cuotas|sellout|embarques|erp|all|test|solicitudes> [--dry-run] [--top N] [--anios 2025,2026] [--dias 45]'); process.exit(2); }
   let exit = 0;
   try {
+    if (!dryRun && DIRECTO) await latido({ version: VERSION, agentes: AGENTES, comando: pedidas.join(' ') });
     if (pedidas.includes('test')) { exit = (await test()) ? 1 : 0; }
+    else if (pedidas.includes('solicitudes')) { exit = (await solicitudes()) ? 1 : 0; }
     else {
       const lista = [...new Set(pedidas.flatMap((p) => GRUPOS[p] || [p]))];
       const desconocidas = lista.filter((n) => !FUENTES[n]);

@@ -156,12 +156,23 @@ Nota sobre ventas: por default cada corrida es una **ventana de 45 días** (`ERP
 cd ~/acteck/acteck-dashboard/bridge
 ./launchd/install.sh
 ```
-Instala dos agentes para el usuario actual:
+Instala tres agentes para el usuario actual:
 
 | Agente | Horario | Corre |
 |---|---|---|
 | `com.acteck.sync.diario` | 06:30 todos los días | ventas + rebuild, inventario, precios, cuotas, sellout (embarques lo carga la tarea diaria de Claude, ver abajo) |
 | `com.acteck.sync.intradia` | cada hora 8:00–19:00, lunes a sábado | ventas + rebuild, inventario, precios |
+| `com.acteck.sync.solicitudes` | cada 5 minutos (desde 2026-09-11) | `sync.mjs solicitudes`: atiende la cola `sync_solicitudes` ("Pedir corrida ▾" en Configuración → Actualización de datos) y deja el **latido** del puente |
+
+**Latido y solicitudes (2026-09-11).** Cada invocación de `sync.mjs` (cualquier comando, salvo `--dry-run`) upserta `sync_status.fuente = 'puente'` con `ultima_actualizacion = now()` y `meta { version, node, agentes, comando }`. La página Actualización de datos lo lee por `/api/status?type=sync` y muestra "puente en línea · último latido hace N min"; sin latido en 20 min marca "Puente sin señal". La cola `sync_solicitudes` (migración `supabase/migrations/20260911_sync_solicitudes.sql`; RLS: sólo super admin inserta/lee, el puente escribe con service role) se atiende así: toma las `pendiente` más viejas primero → `en_proceso` → corre la fuente (`ventas | inventario | precios | cuotas | sellout | embarques | all`) → `hecha` o `error` con `resultado { filas, duracion_ms, fuentes[], mensaje? }` y `atendida_at`. Si dos solicitudes piden lo mismo, la fuente corre una sola vez.
+
+**Qué hacer en la Mac mini para activarlo** (una vez):
+```bash
+cd ~/acteck/acteck-dashboard && git pull --rebase && cd bridge && npm ci
+./launchd/install.sh          # reinstala diario + intradia e instala solicitudes
+launchctl list | grep com.acteck.sync   # deben aparecer los 3
+tail -f logs/sync-$(date +%Y-%m-%d).log # cada 5 min: "▸ solicitudes: ninguna pendiente"
+```
 
 Cambiar horarios: editar `bridge/launchd/*.plist` y volver a correr `install.sh`. Si la Mac mini estaba apagada a la hora programada, launchd corre la tarea al encender.
 
@@ -176,14 +187,14 @@ Los logs viven en `bridge/logs/` y se conservan 60 días.
 
 ## Paso 7 · Retirar las cargas manuales
 
-Cuando dos semanas de corridas cuadren, en `uploads.html` las tarjetas Ventas/Inventario/Precios, Cuotas, Sellout General y Master Embarques pasan a ser respaldo manual (siguen funcionando). Digitalife, PCEL, Dicotech, estados de cuenta y P&L siguen por archivo.
+Hecho el 2026-09-11: Configuración → Actualización de datos es el importador central (kit V3): cargas automáticas del puente arriba (con latido, "Pedir corrida ▾" y log) y cargas manuales por grupo abajo (Roadmap, P&L, Sellout Revko, Digitalife, PCEL, Dicotech, estados de cuenta) con anillo de frescura por cadencia. Parsers en `src/lib/parsers/`. En `uploads.html` se retiró la tarjeta "ERP Acteck" (streaming de Vw_TablaH_Ventas); Cuotas y Master Embarques sólo se ven con `?fuente=cuotas-anuales` / `?fuente=master-embarques` (enlace "Subir a mano" en la fila automática) o `?todas=1`. `uploads.html` sigue funcionando como respaldo técnico.
 
 ## Actualizar el puente
 
 ```bash
 cd ~/acteck/acteck-dashboard && git pull --rebase && cd bridge && npm ci
 ```
-No hay que reinstalar los agentes salvo que cambien los plists.
+No hay que reinstalar los agentes salvo que cambien los plists (`./launchd/install.sh`). **2026-09-11: sí hay que reinstalar** para que aparezca `com.acteck.sync.solicitudes` (latido + "Pedir corrida").
 
 ## Problemas comunes
 

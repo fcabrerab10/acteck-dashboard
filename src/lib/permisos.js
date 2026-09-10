@@ -116,6 +116,7 @@ export const PAGINA_A_PERMISO_GLOBAL = {
   propuestas:       "propuestas",
   axonMexico:       "axon_mexico",
   configuracion:    "__super_admin_only__",
+  actualizacion:    "__super_admin_only__", // Importador central (V3)
 };
 
 /** ¿Puede ver una página global del menú? Resuelve el mapa de arriba (+ Inicio). */

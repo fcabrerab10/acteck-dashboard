@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Wrapper para launchd: fija PATH (Homebrew) y corre el sync con credenciales.env.
-# Uso: ./run.sh all | erp | ventas | inventario | precios | compras | cuotas | sellout | embarques
+# Uso: ./run.sh all | erp | ventas | inventario | precios | compras | cuotas | sellout | embarques | solicitudes
 set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 cd "$(dirname "$0")"

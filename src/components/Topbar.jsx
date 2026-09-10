@@ -92,7 +92,7 @@ export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPr
       </span>
 
       {openMenuId === 'update' && (
-        <UpdatePanel theme={theme} isMidnight={isMidnight} onClose={closeMenu} onMouseEnter={cancelarCierre} onMouseLeave={() => scheduleClose('update')} />
+        <UpdatePanel theme={theme} isMidnight={isMidnight} onClose={closeMenu} onNavegar={onNavegar} onMouseEnter={cancelarCierre} onMouseLeave={() => scheduleClose('update')} />
       )}
     </div>
   );
@@ -130,7 +130,7 @@ export default function Topbar(props) {
 }
 
 // ═══════════════ Panel Actualizar datos ═══════════════
-function UpdatePanel({ theme, isMidnight, onMouseEnter, onMouseLeave }) {
+function UpdatePanel({ theme, isMidnight, onMouseEnter, onMouseLeave, onClose, onNavegar }) {
   const [fuentes, setFuentes] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(null);
 
@@ -189,10 +189,10 @@ function UpdatePanel({ theme, isMidnight, onMouseEnter, onMouseLeave }) {
         })}
       </div>
       <div style={{ height: 1, background: isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', margin: '4px 4px' }} />
-      <a href="/uploads.html" style={{
-        display: 'block', margin: '4px 4px 2px', padding: '9px 12px', borderRadius: 10, background: theme.accent, color: '#FFF',
-        fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, textAlign: 'center', textDecoration: 'none', letterSpacing: '-0.005em',
-      }}>Ir al importador central →</a>
+      <button type="button" onClick={() => { onClose?.(); onNavegar?.(null, 'actualizacion'); }} style={{
+        display: 'block', width: 'calc(100% - 8px)', margin: '4px 4px 2px', padding: '9px 12px', borderRadius: 10, background: theme.accent, color: '#FFF', border: 0, cursor: 'pointer',
+        fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, textAlign: 'center', letterSpacing: '-0.005em',
+      }}>Ir al importador central →</button>
     </div>
   );
 }

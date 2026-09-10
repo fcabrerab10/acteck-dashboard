@@ -268,9 +268,9 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<!-- Lector por streaming (fflate) para hojas que SheetJS no puede abrir: Vw_TablaH_Ventas → erp_ventas -->
-<script src="/fflate.min.js"></script>
-<script src="/xlsx-stream.js"></script>
+<!-- 2026-09-11: la tarjeta "ERP Acteck" (Vw_TablaH_Ventas por streaming con fflate/xlsx-stream.js)
+     se retiró: ventas, inventario y precios los carga el puente SQL de la Mac mini (bridge/).
+     public/xlsx-stream.js y fflate.min.js quedan en el repo sin usar. -->
 <script>
 // Grupos visuales para agrupar las tarjetas por cliente (con headers de color)
 const GRUPOS = [
@@ -283,26 +283,15 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Compras & Precios', desc:'Archivo único con las hojas relevantes: Vw_TablaH_Ventas (ventas renglón a renglón → erp_ventas; de ahí se reconstruye el sell-in canónico facturacion_clientes con la Fact Neta oficial y las medidas del director: Fact Bruta/Neta, Devoluciones, RMA, Bonificaciones, Contribución), Vw_TablaH_Inventario (stock), Vw_TablaH_Compras (POs) y Vw_TablaM_Precios (listas de precios por SKU). Vw_TablaH_Ventas se lee por streaming (no pasa por SheetJS) y se reemplaza por año.', file:'Actualizaciones ERP.xlsx',
-    // Hojas leídas por streaming (XlsxStream) ANTES de abrir el workbook con SheetJS.
-    streamed: [
-      { table:'erp_ventas', onConflict:'venta_id,venta_renglon', reader:'readErpVentas', finalize:'refresh_facturacion_clientes', label:'Ventas ERP renglón a renglón (Vw_TablaH_Ventas → erp_ventas · replace por año · reconstruye facturacion_clientes con Fact Neta oficial)' }
-    ],
-    combined: [
-      // facturacion_clientes ya NO se carga del pivot "Venta Facturación": se reconstruye
-      // desde erp_ventas (finalize) con la definición oficial del director (Fact Neta).
-      { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
-      { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true },
-      { table:'precios_sku', onConflict:'sku,lista,anio,mes', parser:'preciosERP', label:'Precios por lista (Vw_TablaM_Precios)', replace:true },
-      // Cuotas mensuales: ya NO se cargan desde el ERP. Se administran manualmente
-      // desde Configuración → "Cuotas mensuales por cliente" para que no se
-      // reescriban en cada actualización del ERP.
-      { table:'guias_erp', onConflict:'mov,movid', parser:'guiasErp', label:'Guías por factura (hoja Guias · alimenta Tracking Pedidos)', replace:true }
-    ]
-  },
-  { id:'cuotas-anuales', grupo:'globales', tipo:'updated', statusKey:'cuotas_mensuales', title:'Cuotas mensuales por cliente', desc:'Archivo anual con las cuotas mensuales por cliente (hoja "Cuotas"). Formato pivot: filas = clientes, columnas = 12 meses × año. Se detectan los años automáticamente en la fila 2. Sube 1 vez al año — reemplaza todas las cuotas de los años presentes en el archivo antes de insertar. Ya no se carga desde "Actualizaciones ERP" para evitar que se reescriba en cada upload.', file:'Cuotas <AÑO>.xlsx', table:'cuotas_mensuales', onConflict:'cliente,mes,anio', parser:'cuotasClientes', replaceAniosDinamico:true },
+  // 2026-09-11 · Los parsers de las fuentes MANUALES tienen su fuente de verdad en
+  // src/lib/parsers/ (los usa Configuración → Actualización de datos, que ahora es el
+  // importador). Aquí quedan copias como respaldo técnico. La tarjeta "ERP Acteck"
+  // (erp-acteck, hojas Vw_TablaH_*) se retiró: la carga el puente (bridge/sync.mjs).
+  // Cuotas y Master Embarques también van por el puente; sus tarjetas sólo se
+  // muestran como respaldo con ?fuente=<id> o ?todas=1 ("Subir a mano" en el importador).
+  { id:'cuotas-anuales', grupo:'globales', respaldo:true, tipo:'updated', statusKey:'cuotas_mensuales', title:'Cuotas mensuales por cliente', desc:'Archivo anual con las cuotas mensuales por cliente (hoja "Cuotas"). Formato pivot: filas = clientes, columnas = 12 meses × año. Se detectan los años automáticamente en la fila 2. Sube 1 vez al año — reemplaza todas las cuotas de los años presentes en el archivo antes de insertar. Ya no se carga desde "Actualizaciones ERP" para evitar que se reescriba en cada upload.', file:'Cuotas <AÑO>.xlsx', table:'cuotas_mensuales', onConflict:'cliente,mes,anio', parser:'cuotasClientes', replaceAniosDinamico:true },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
-  { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo único Master Embarques.xlsx con 7 hojas: histórico POs (2026, 2025, 2024, 2022-2023) → embarques_compras; Programación Arribos (logística por contenedor) → programacion_arribos; SN (series generadas por PO/SKU) → series_generadas; Proveedores (catálogo canónico) → proveedores_master. Upsert de embarques por (PO, CODIGO, CONTENEDOR) — soporta POs partidas en varios shipments. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx',
+  { id:'master-embarques', grupo:'globales', respaldo:true, tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo único Master Embarques.xlsx con 7 hojas: histórico POs (2026, 2025, 2024, 2022-2023) → embarques_compras; Programación Arribos (logística por contenedor) → programacion_arribos; SN (series generadas por PO/SKU) → series_generadas; Proveedores (catálogo canónico) → proveedores_master. Upsert de embarques por (PO, CODIGO, CONTENEDOR) — soporta POs partidas en varios shipments. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx',
     cronEndpoint:'/api/cron?task=sync-master-embarques',
     combined: [
       { table:'embarques_compras',    onConflict:'po,codigo,contenedor', parser:'masterEmbarques',        label:'Histórico embarques (4 hojas anuales)' },
@@ -3091,15 +3080,22 @@ function renderGrupoSection(grupo, fuentesG){
   return section;
 }
 
+function fuentesVisibles(){
+  const qs = new URLSearchParams(location.search);
+  const pedida = qs.get('fuente');
+  const todas = qs.get('todas') === '1';
+  return SOURCES.filter(s => !s.respaldo || todas || s.id === pedida);
+}
 function renderCards(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
+  const visibles = fuentesVisibles();
   for (const grupo of GRUPOS) {
-    const fuentesG = SOURCES.filter(s => s.grupo === grupo.id);
+    const fuentesG = visibles.filter(s => s.grupo === grupo.id);
     if (fuentesG.length === 0) continue;
     grid.appendChild(renderGrupoSection(grupo, fuentesG));
   }
-  const sinGrupo = SOURCES.filter(s => !s.grupo);
+  const sinGrupo = visibles.filter(s => !s.grupo);
   if (sinGrupo.length > 0) {
     grid.appendChild(renderGrupoSection({ id:'__otros__', label:'Otros', color:'#94A3B8', subtitle:'' }, sinGrupo));
   }
@@ -3190,29 +3186,6 @@ async function handleUpload(src){
     const buf = await f.arrayBuffer();
     appendLog(src, `Archivo: ${(f.size / (1024 * 1024)).toFixed(1)} MB`);
 
-    // Hojas por streaming (Vw_TablaH_Ventas → erp_ventas). Se procesan antes de
-    // SheetJS porque esa hoja no cabe en su parser; lee el zip fila por fila.
-    if (src.streamed) {
-      if (!window.XlsxStream) throw new Error('XlsxStream no cargó (fflate / xlsx-stream.js)');
-      for (const sub of src.streamed) {
-        appendLog(src, `--- ${sub.label} (${sub.table}) ---`);
-        const t0 = Date.now();
-        const { rows, anios } = await window.XlsxStream[sub.reader](new Uint8Array(buf), (n) => setStatus(src, 'b-warn', `Leyendo ${sub.table}… ${n.toLocaleString()} filas`));
-        appendLog(src, `Filas leídas: ${rows.length.toLocaleString()} · años ${anios.join(', ')} · ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-        if (!rows.length) throw new Error(`${sub.table}: la hoja no trajo filas`);
-        filasTotal += rows.length;
-        setStatus(src, 'b-warn', `Subiendo ${sub.table}…`);
-        await postChunksFast(src, sub.table, sub.onConflict, rows, anios);
-        if (sub.finalize) {
-          setStatus(src, 'b-warn', `Reconstruyendo facturacion_clientes…`);
-          const fr = await fetch('/api/import-central', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ table: sub.table, finalize: sub.finalize, anios }) });
-          const fj = await fr.json().catch(() => ({}));
-          if (!fr.ok) throw new Error(`finalize ${sub.finalize}: HTTP ${fr.status} ${JSON.stringify(fj).slice(0, 200)}`);
-          const res = Array.isArray(fj.resumen) ? fj.resumen.map(r => `${r.anio}: ${Number(r.filas).toLocaleString()} filas · $${Math.round(Number(r.monto)).toLocaleString()}`).join(' · ') : '';
-          appendLog(src, `  facturacion_clientes reconstruida desde erp_ventas (Fact Neta oficial) ${res}`);
-        }
-      }
-    }
     // Para archivos grandes, minimizar el uso de memoria del navegador.
     // No usar sheets:[] (rompe silenciosamente en XLSX 0.18.5 con algunos archivos).
     const readOpts = { type: 'array', cellDates: true, dense: true, cellStyles: false, cellHTML: false, cellFormula: false, bookVBA: false };

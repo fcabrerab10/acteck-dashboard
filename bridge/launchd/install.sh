@@ -18,4 +18,5 @@ echo "Agentes cargados:"
 launchctl list | grep com.acteck.sync || true
 echo
 echo "Probar ahora sin esperar al horario:  launchctl kickstart -k gui/$(id -u)/com.acteck.sync.intradia"
+echo "Cola de solicitudes (cada 5 min):     launchctl kickstart -k gui/$(id -u)/com.acteck.sync.solicitudes"
 echo "Ver log:                              tail -f $BRIDGE_DIR/logs/sync-$(date +%Y-%m-%d).log"

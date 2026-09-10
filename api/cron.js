@@ -772,7 +772,7 @@ async function reglaDatosSinActualizar() {
         + '. Sube el archivo en uploads.html.',
       cliente_key: null, sku: null,
       area: 'datos',
-      accion: { tipo: 'url', url: '/uploads.html', label: 'Subir' },
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'actualizacion', label: 'Abrir importador' },
       caduca_at: null,
       valor: dias,
       meta: { fuente: f.fuente, ultima_carga: ts, umbral_dias: f.umbral_dias, dias, periodo_max: f.periodo_max || null, filas: f.filas ?? null },

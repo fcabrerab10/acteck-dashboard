@@ -180,7 +180,7 @@ export default function MobileYo({ perfil, onCerrarSesion, onOpenConfig }) {
             iconBg={theme.accent} icon={<Upload size={16} />}
             label="Actualización de datos"
             sub="Uploads Excel · ERP · sellouts"
-            onClick={() => window.open('/uploads.html', '_blank')}
+            onClick={() => window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: { pagina: 'actualizacion' } }))}
             chev
           />
           <SettingRow theme={theme}

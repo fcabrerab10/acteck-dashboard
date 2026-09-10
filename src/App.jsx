@@ -349,14 +349,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'inicio'; } catch { return 'inicio'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'inicio';
-        const globals = new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']);
+        const globals = new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -528,6 +528,14 @@ export default function App() {
       setPaginaActiva(paginaId);
     }
   };
+
+  // Navegación desde componentes sin acceso a handleNavegar (FrescuraPill, móvil): evento global.
+  React.useEffect(() => {
+    const on = (e) => { const d = e.detail || {}; if (d.pagina) handleNavegar(d.clienteKey || null, d.pagina); };
+    window.addEventListener('acteck:navegar', on);
+    return () => window.removeEventListener('acteck:navegar', on);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const puedeActualizar = puedeActualizarDatos(perfil);
   const puedeVerConfig  = puedeConfigurar(perfil);

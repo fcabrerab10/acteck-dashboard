@@ -52,9 +52,9 @@ export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = 
     return partes.join(' · ');
   });
   const puedeSubir = puedeActualizarDatos(perfil);
-  const title = lineas.join('\n') + (puedeSubir && !onClick ? '\n\nClic para abrir uploads.html' : '');
+  const title = lineas.join('\n') + (puedeSubir && !onClick ? '\n\nClic para abrir el importador' : '');
 
-  const click = onClick || (puedeSubir ? () => window.open('/uploads.html', '_blank', 'noopener') : undefined);
+  const click = onClick || (puedeSubir ? () => window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: { pagina: 'actualizacion' } })) : undefined);
   let colores = null;
   if (inverso) {
     if (theme.mode === 'dark') {
