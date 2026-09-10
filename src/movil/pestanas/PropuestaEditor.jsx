@@ -1,21 +1,24 @@
 // Editor de propuesta (push desde Propuestas) · nueva o existente, mismo esquema que el armador de escritorio:
-//   propuestas_borradores { id 'prp_…', cliente_key, cliente_label, nombre, estado 'Borrador'|'Exportada'|'Enviada',
-//                           tstamp, propuesta: { sku → { piezas, precio, listaSel, descripcion, marca, familia } },
-//                           resumen: { skus, piezas, total, mes }, exported_filename }
+//   propuestas_borradores { id 'prp_…', cliente_key, cliente_label, nombre, estado 'borrador'|'enviada'|'cerrada',
+//                           tstamp, anio, mes, vigencia (date), lineas: [{ sku, piezas, precio, lista, custom, spiff, descripcion, marca, familia }],
+//                           resumen: { skus, piezas, total, mes }, exported_filename, enviada_at, folio }
+//   (modelo V3 · migraciones 20260911_propuestas_estado_lineas.sql y 20260911_propuestas_vigencia.sql; `propuesta` (mapa)
+//   lo mantiene un trigger para código viejo; vigencia por defecto = último día del mes objetivo, editable)
 // Cliente (Segmented) · mes · lista de precios (v_estrategia_precios_lista; por defecto la lista natural del cliente y,
 // como en escritorio, cada línea puede cambiar de lista o poner precio personalizado) · líneas con buscador de SKUs
 // (mismo catálogo que la Ficha de producto; piezas por defecto = promedio de sell-out de los 3 meses cerrados, como
 // escritorio) · total al pie · Guardar borrador · "Exportar y enviar": MISMO Excel que escritorio
-// (modules/comercial/propuestas/excelPropuesta.js) compartido con src/lib/compartirArchivo.js → estado Enviada.
-// Una propuesta ya exportada/enviada abre en modo detalle (resumen + líneas + compartir de nuevo) con "Editar".
+// (modules/comercial/propuestas/excelPropuesta.js) compartido con src/lib/compartirArchivo.js → estado enviada.
+// Una propuesta enviada/cerrada abre en modo detalle (resumen + líneas + compartir de nuevo) con "Editar".
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Share2, Save, Tag, Pencil, ClipboardList, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Share2, Save, Tag, Pencil, ClipboardList, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { supabase } from '../../lib/supabase';
 import { cachedQuery } from '../../lib/queries';
-import { CLIENTES, MES_LABEL, MES_FULL, mesesCerrados, nuevaPropuestaId, LISTA_POR_CLIENTE, listaShort, listaColor } from '../../modules/comercial/propuestas/constantes';
+import { CLIENTES, MES_LABEL, MES_FULL, mesesCerrados, nuevaPropuestaId, LISTA_POR_CLIENTE, listaShort, listaColor, normalizarEstado, estadoInfo, finDeMesISO } from '../../modules/comercial/propuestas/constantes';
+import { vigenciaTexto } from '../../modules/comercial/propuestas/textos';
 import { fetchSellout } from '../../modules/comercial/propuestas/datos';
 import { propuestaExcelBlob } from '../../modules/comercial/propuestas/excelPropuesta';
 import { compartirArchivo, puedeCompartirArchivos } from '../../lib/compartirArchivo';
@@ -26,10 +29,13 @@ import { money, int, MONO, N } from '../util';
 import { CampoCantidad } from './SOPExport';
 
 export const QK_PROPUESTAS = ['movil', 'propuestas'];
-export const TONO_ESTADO = { Borrador: 'gray', Exportada: 'green', Enviada: 'blue' };
+export const TONO_ESTADO = { borrador: 'gray', enviada: 'blue', cerrada: 'green' };
+export const ESTADO_LABEL = (e) => estadoInfo(e).label;
 const STALE = 5 * 60 * 1000;
 const mesKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 const labelMes = (k) => { const [a, m] = String(k || '').split('-').map(Number); return a && m ? `${MES_FULL[m - 1]} ${a}` : '—'; };
+/** 'YYYY-MM' → último día de ese mes ('YYYY-MM-DD'): vigencia por defecto de la propuesta. */
+const vigenciaDeMes = (k) => { const [a, m] = String(k || '').split('-').map(Number); const d = new Date(); return finDeMesISO(a || d.getFullYear(), m || d.getMonth() + 1); };
 const fmtPrecio = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ── Datos de los SKUs de la propuesta: descripción/marca/familia (roadmap) + precios por lista + inventario comercial ──
@@ -85,9 +91,11 @@ export default function PropuestaEditor({ id }) {
   const [clienteKey, setClienteKey] = useState('digitalife');
   const [nombre, setNombre] = useState('Cierre');
   const [mes, setMes] = useState(mesKey(hoy));
+  const [vigencia, setVigencia] = useState(() => vigenciaDeMes(mesKey(hoy)));
+  const [vigenciaManual, setVigenciaManual] = useState(false); // true cuando Fernando la cambió a mano: ya no sigue al mes
   const [lista, setLista] = useState(LISTA_POR_CLIENTE.digitalife);
   const [lineas, setLineas] = useState({});            // sku → { piezas, precio, listaSel, descripcion, marca, familia }
-  const [estado, setEstado] = useState('Borrador');
+  const [estado, setEstado] = useState('borrador');
   const [exportado, setExportado] = useState(null);    // exported_filename
   const [buscando, setBuscando] = useState(false);
   const [eligiendoLista, setEligiendoLista] = useState(null); // 'todas' | sku
@@ -100,16 +108,25 @@ export default function PropuestaEditor({ id }) {
     if (!row || cargado) return;
     setClienteKey(row.cliente_key || 'digitalife');
     setNombre(row.nombre || 'Cierre');
-    setMes(row.resumen?.mes && /^\d{4}-\d{2}$/.test(row.resumen.mes) ? row.resumen.mes : mesKey(new Date(N(row.tstamp) || Date.now())));
-    const ls = row.propuesta && typeof row.propuesta === 'object' ? row.propuesta : {};
+    const mesRow = row.resumen?.mes && /^\d{4}-\d{2}$/.test(row.resumen.mes) ? row.resumen.mes : mesKey(new Date(N(row.tstamp) || Date.now()));
+    setMes(mesRow);
+    if (row.vigencia) { setVigencia(String(row.vigencia).slice(0, 10)); setVigenciaManual(String(row.vigencia).slice(0, 10) !== vigenciaDeMes(mesRow)); }
+    else setVigencia(vigenciaDeMes(mesRow));
+    // Modelo V3: `lineas` (arreglo) es el canónico; `propuesta` (mapa) queda como respaldo de filas viejas.
     const limpias = {};
-    Object.entries(ls).forEach(([sku, v]) => { if (sku && v && typeof v === 'object') limpias[sku] = { ...v, sku, piezas: N(v.piezas), precio: N(v.precio), listaSel: v.listaSel || '' }; });
+    if (Array.isArray(row.lineas) && row.lineas.length) {
+      row.lineas.forEach((l) => { if (l?.sku) limpias[l.sku] = { ...l, sku: l.sku, piezas: N(l.piezas), precio: N(l.precio), listaSel: l.custom ? '__custom' : (l.lista || l.listaSel || '') }; });
+    } else {
+      const ls = row.propuesta && typeof row.propuesta === 'object' ? row.propuesta : {};
+      Object.entries(ls).forEach(([sku, v]) => { if (sku && v && typeof v === 'object') limpias[sku] = { ...v, sku, piezas: N(v.piezas), precio: N(v.precio), listaSel: v.listaSel || '' }; });
+    }
     setLineas(limpias);
     const primera = Object.values(limpias).map((v) => v.listaSel).find((l) => l && l !== '__custom');
     setLista(primera || LISTA_POR_CLIENTE[row.cliente_key] || LISTA_POR_CLIENTE.digitalife);
-    setEstado(row.estado || 'Borrador');
+    const est = normalizarEstado(row.estado);
+    setEstado(est);
     setExportado(row.exported_filename || null);
-    setModo(row.estado && row.estado !== 'Borrador' ? 'detalle' : 'editar');
+    setModo(est !== 'borrador' ? 'detalle' : 'editar');
     setCargado(true);
   }, [row, cargado]);
   useEffect(() => { if (cargado && modo === 'editar' && !xlsxListo.current) import('xlsx-js-style').then(() => { xlsxListo.current = true; }).catch(() => {}); }, [cargado, modo]);
@@ -169,7 +186,8 @@ export default function PropuestaEditor({ id }) {
   const guardar = async (estadoNuevo, extra = {}) => {
     const fila = {
       id: propId, cliente_key: clienteKey, cliente_label: cli.label, nombre: (nombre || 'Cierre').trim() || 'Cierre', estado: estadoNuevo, tstamp: Date.now(),
-      propuesta: Object.fromEntries(Object.entries(lineas).map(([k, v]) => [k, { piezas: N(v.piezas), precio: N(v.precio), listaSel: v.listaSel || '', descripcion: v.descripcion || '', marca: v.marca || '', familia: v.familia || '' }])),
+      anio: Number(mes.slice(0, 4)) || null, mes: Number(mes.slice(5, 7)) || null, vigencia: vigencia || vigenciaDeMes(mes),
+      lineas: Object.values(lineas).map((v) => ({ sku: v.sku, piezas: N(v.piezas), precio: N(v.precio), lista: v.listaSel === '__custom' ? null : (v.listaSel || null), custom: v.listaSel === '__custom' || undefined, descripcion: v.descripcion || '', marca: v.marca || '', familia: v.familia || '' })),
       resumen: { skus: propuestaLista.length, piezas, total, mes }, updated_at: new Date().toISOString(), ...extra,
     };
     const { error } = await supabase.from('propuestas_borradores').upsert(fila, { onConflict: 'id' });
@@ -181,7 +199,7 @@ export default function PropuestaEditor({ id }) {
   const onGuardar = async () => {
     if (!propuestaLista.length) { toast.error('Agrega al menos un SKU'); return; }
     setOcupado(true);
-    try { await guardar('Borrador'); toast.ok('Borrador guardado'); }
+    try { await guardar(estado === 'borrador' ? 'borrador' : estado); toast.ok(estado === 'borrador' ? 'Borrador guardado' : 'Propuesta guardada'); }
     catch (e) { toast.error(`No se pudo guardar: ${e?.message || e}`); }
     finally { setOcupado(false); }
   };
@@ -190,13 +208,14 @@ export default function PropuestaEditor({ id }) {
     if (propuestaLista.some((r) => !(r.precio > 0))) { toast.error('Hay líneas sin precio'); return; }
     setOcupado(true);
     try {
-      const { blob, filename } = await propuestaExcelBlob({ cliente: cli, propuestaLista, nombre });
+      const { blob, filename } = await propuestaExcelBlob({ cliente: cli, propuestaLista, nombre, vigencia: vigencia || vigenciaDeMes(mes) });
       const r = await compartirArchivo(blob, filename, { titulo: filename, texto: `Propuesta ${cli.label} · ${propuestaLista.length} SKUs · ${money(total)}` });
       if (!r) { toast.info('Se canceló el envío'); return; }
-      const nuevo = r === 'share' || estado === 'Enviada' ? 'Enviada' : 'Exportada';
+      // Generar el Excel final o compartirlo = enviada (una cerrada no regresa a enviada).
+      const nuevo = estado === 'cerrada' ? 'cerrada' : 'enviada';
       await guardar(nuevo, { exported_filename: filename });
       setExportado(filename); setModo('detalle');
-      toast.ok(r === 'share' ? 'Propuesta enviada' : 'Excel descargado · propuesta exportada');
+      toast.ok(r === 'share' ? 'Propuesta enviada' : 'Excel descargado · propuesta marcada como enviada');
     } catch (e) {
       toast.error(`No se pudo exportar: ${e?.message || e}`);
     } finally { setOcupado(false); }
@@ -208,7 +227,7 @@ export default function PropuestaEditor({ id }) {
   if (errorRow) return (<><Cabecera onVolver={nav.pop} etiqueta="Propuestas" /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se encontró la propuesta" sub={errorRow.message} /></>);
 
   const soporteShare = puedeCompartirArchivos(new Blob([''], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'x.xlsx');
-  const subTitulo = <><span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block' }} />{cli.label} · {labelMes(mes)} · <Pill tone={TONO_ESTADO[estado] || 'gray'} size="xs">{estado}</Pill></>;
+  const subTitulo = <><span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block' }} />{cli.label} · {labelMes(mes)} · <Pill tone={TONO_ESTADO[estado] || 'gray'} size="xs">{ESTADO_LABEL(estado)}</Pill></>;
 
   // ── Detalle (exportada / enviada) ──
   if (modo === 'detalle') {
@@ -216,7 +235,7 @@ export default function PropuestaEditor({ id }) {
       <>
         <Cabecera onVolver={nav.pop} etiqueta="Propuestas" derecha={<button type="button" onClick={() => setModo('editar')} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 44, padding: '0 10px', border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 15, cursor: 'pointer' }}><Pencil size={15} />Editar</button>} />
         <TituloGrande titulo={nombre || 'Cierre'} sub={subTitulo} />
-        <HeroM eyebrow={`Propuesta ${cli.label}`} frase={money(total)} sub={exportado ? `Excel: ${exportado}` : 'Todavía no se ha exportado el Excel'}
+        <HeroM eyebrow={`Propuesta ${cli.label} · vigencia al ${vigenciaTexto(vigencia)}`} frase={money(total)} sub={exportado ? `Excel: ${exportado}` : 'Todavía no se ha exportado el Excel'}
           stats={[{ k: 'SKUs', v: int(propuestaLista.length) }, { k: 'Piezas', v: int(piezas) }, { k: 'Precio prom.', v: piezas > 0 ? money(total / piezas) : '—', sub: 'por pieza' }]} />
         <ListaAgrupada titulo="Líneas" meta={propuestaLista.length} style={{ marginTop: 18 }}>
           {propuestaLista.length === 0 && <Vacio icon={null} titulo="Sin líneas" style={{ padding: '22px 16px' }} />}
@@ -244,7 +263,10 @@ export default function PropuestaEditor({ id }) {
             <span style={{ fontSize: 15, fontWeight: 500, letterSpacing: '-0.01em', flexShrink: 0 }}>Nombre</span>
             <input value={nombre} onChange={(e) => { setNombre(e.target.value); setSucio(true); }} placeholder="Cierre" autoCapitalize="sentences" style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', fontFamily: TYPO.fontText, fontSize: 16, color: theme.accent, textAlign: 'right' }} />
           </label>
-          <Fila titulo="Mes" chevron={false} trailing={<Segmented value={mes} onChange={(m) => { setMes(m); setSucio(true); }} options={mesesOpc} />} />
+          <Fila titulo="Mes" chevron={false} trailing={<Segmented value={mes} onChange={(m) => { setMes(m); if (!vigenciaManual) setVigencia(vigenciaDeMes(m)); setSucio(true); }} options={mesesOpc} />} />
+          <Fila icon={CalendarClock} color={theme.accent} titulo="Vigencia" sub={vigenciaManual ? 'Fecha fijada a mano' : 'Último día del mes elegido'} chevron={false}
+            trailing={<input type="date" value={vigencia} onChange={(e) => { const v = e.target.value; if (!v) return; setVigencia(v); setVigenciaManual(v !== vigenciaDeMes(mes)); setSucio(true); }} aria-label="Vigencia de la propuesta"
+              style={{ height: 34, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '0 10px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, fontSize: 15, outline: 'none' }} />} />
           <Fila icon={Tag} color={listaColor(lista)} titulo={lista} sub={`Lista de precios · ${listasDisponibles.length} disponible${listasDisponibles.length === 1 ? '' : 's'} para estos SKUs`} onClick={() => setEligiendoLista('todas')} />
         </ListaAgrupada>
         <BotonGrande icon={Plus} onClick={() => setBuscando(true)}>{propuestaLista.length ? 'Agregar otro SKU' : 'Agregar SKU'}</BotonGrande>
@@ -288,7 +310,7 @@ export default function PropuestaEditor({ id }) {
       <div style={{ padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <BotonGrande primario icon={Share2} disabled={ocupado || !propuestaLista.length} onClick={exportar}>{ocupado ? 'Generando…' : soporteShare ? 'Exportar y enviar' : 'Exportar Excel'}</BotonGrande>
         <BotonGrande icon={Save} disabled={ocupado || !propuestaLista.length} onClick={onGuardar}>Guardar borrador</BotonGrande>
-        <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, textAlign: 'center', lineHeight: 1.4 }}>Se exportará como <b>Propuesta {cli.label} {(nombre || 'Cierre').trim()} {MES_FULL[hoy.getMonth()]} {hoy.getFullYear()}.xlsx</b>, el mismo Excel que la computadora. Al compartirlo la propuesta queda como Enviada.</div>
+        <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, textAlign: 'center', lineHeight: 1.4 }}>Se exportará como <b>Propuesta {cli.label} {(nombre || 'Cierre').trim()} {MES_FULL[hoy.getMonth()]} {hoy.getFullYear()}.xlsx</b> con vigencia al {vigenciaTexto(vigencia)}, el mismo Excel que la computadora. Al compartirlo la propuesta queda como enviada; cuando el cliente facture se cierra sola.</div>
       </div>
 
       <HojaBuscarSkuProp abierto={buscando} onClose={() => setBuscando(false)} enLineas={skus} theme={theme} onElegir={(s) => { agregar(s); setBuscando(false); }} />

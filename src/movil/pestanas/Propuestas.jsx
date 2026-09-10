@@ -1,5 +1,5 @@
 // Propuestas móvil (push · nodo propuestas) · lista de propuestas_borradores por mes (cliente, estado
-// Borrador/Exportada/Enviada y total), buscador, filtro por cliente y "+ Nueva". Misma tabla y mismo esquema
+// borrador/enviada/cerrada y total), buscador, filtro por cliente y "+ Nueva". Misma tabla y mismo esquema
 // que el armador de escritorio (PropuestasTab.jsx): lo que se guarda aquí aparece allá y viceversa.
 // propuestas_borradores la escribe la app → se lee con supabase directo bajo useQuery (sin cachedQuery).
 import React, { useMemo, useState } from 'react';
@@ -14,14 +14,14 @@ import { useNav } from '../nav';
 import { TituloGrande, Cabecera, ListaAgrupada, Fila, CampoBusqueda, Segmented, Vacio, Skeleton, BotonGrande } from '../piezas';
 import { colorCliente } from '../datos';
 import { money, int, N } from '../util';
-import PropuestaEditor, { QK_PROPUESTAS, TONO_ESTADO } from './PropuestaEditor';
+import PropuestaEditor, { QK_PROPUESTAS, TONO_ESTADO, ESTADO_LABEL } from './PropuestaEditor';
 
 export function usePropuestas(enabled = true) {
   return useQuery({
     queryKey: QK_PROPUESTAS, staleTime: 60 * 1000, enabled,
     queryFn: async () => {
       const { data, error } = await supabase.from('propuestas_borradores')
-        .select('id,cliente_key,cliente_label,nombre,estado,tstamp,resumen,exported_filename,origen,updated_at')
+        .select('id,cliente_key,cliente_label,nombre,estado,tstamp,anio,mes,resumen,exported_filename,origen,folio,updated_at')
         .order('tstamp', { ascending: false }).limit(100);
       if (error) throw error;
       return data || [];
@@ -50,9 +50,11 @@ export default function Propuestas() {
     });
     const m = new Map();
     filas.forEach((r) => {
+      // Agrupado por mes objetivo (anio/mes), como en escritorio; filas viejas sin mes caen al mes de creación.
       const d = new Date(N(r.tstamp) || Date.now());
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (!m.has(key)) m.set(key, { key, label: `${MES_FULL[d.getMonth()]} ${d.getFullYear()}`, items: [] });
+      const anio = r.anio || d.getFullYear(), mes = r.mes || d.getMonth() + 1;
+      const key = `${anio}-${String(mes).padStart(2, '0')}`;
+      if (!m.has(key)) m.set(key, { key, label: `${MES_FULL[mes - 1]} ${anio}`, items: [] });
       m.get(key).items.push(r);
     });
     return [...m.values()].sort((a, b) => b.key.localeCompare(a.key));
@@ -70,7 +72,7 @@ export default function Propuestas() {
     return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Propuestas" /><Vacio icon={ClipboardList} color={theme.textMuted} titulo="Sin acceso" sub="Tu perfil no tiene la pestaña Propuestas." /></>);
   }
   const total = data?.length || 0;
-  const enviadas = (data || []).filter((r) => r.estado === 'Enviada').length;
+  const enviadas = (data || []).filter((r) => r.estado === 'enviada' || r.estado === 'cerrada').length;
   return (
     <>
       <Cabecera onVolver={nav.pop} derecha={botonNueva} />
@@ -94,7 +96,7 @@ export default function Propuestas() {
             const cli = CLIENTES.find((c) => c.key === r.cliente_key);
             return <Fila key={r.id} tono={colorCliente(r.cliente_key, theme)} titulo={r.nombre || 'Cierre'}
               sub={[cli?.label || r.cliente_label || r.cliente_key, res.skus != null ? `${int(res.skus)} SKUs` : null, res.piezas != null ? `${int(res.piezas)} pz` : null, r.origen].filter(Boolean).join(' · ')}
-              valor={res.total != null ? money(res.total) : '—'} pill={{ tone: TONO_ESTADO[r.estado] || 'gray', label: r.estado || 'Borrador' }} onClick={() => abrir(r)} />;
+              valor={res.total != null ? money(res.total) : '—'} pill={{ tone: TONO_ESTADO[r.estado] || 'gray', label: ESTADO_LABEL(r.estado) }} onClick={() => abrir(r)} />;
           })}
         </ListaAgrupada>
       ))}

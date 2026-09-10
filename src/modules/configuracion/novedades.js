@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.9.0', fecha: '2026-09-10', titulo: 'Propuestas',
+    items: [
+      'Kit V3 en todo el flujo: tarjetas de cliente en la portada, entrada directa a armar, catálogo con buscador y filtros con conteo, revisar como hoja lateral.',
+      'Propuestas guardadas en la base con estados Borrador · Enviada · Cerrada (cierre automático al facturar) y % de conversión contra la facturación.',
+      'Sugeridos al principio del catálogo (sombreados, se aceptan uno a uno o todos), autoguardado, memoria de precio por SKU, duplicar y compartir por WhatsApp.',
+      'Margen y costo sólo con permiso sensible; vigencia automática a fin de mes.',
+    ],
+  },
+  {
     version: '3.8.0', fecha: '2026-09-10', titulo: 'S&OP y Resumen de Clientes',
     items: [
       'S&OP en el kit V3: buscador por palabras, filtros con conteo, costos sólo con permiso sensible, drill con demanda 12 meses y cobertura proyectada, carrito de export como hoja lateral con "Compartir export".',

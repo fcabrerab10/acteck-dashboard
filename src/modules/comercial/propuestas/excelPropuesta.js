@@ -1,20 +1,22 @@
 // excelPropuesta.js — Excel de la propuesta de venta (hoja Resumen + hojas por familia para Digitalife).
 // Compartido por escritorio (PropuestasTab → VistaRevisar) y celular (PropuestaEditor):
 //
-//   exportarPropuestaExcel({ cliente, propuestaLista, nombre })  → descarga (escritorio) y devuelve el nombre
-//   propuestaExcelBlob({ cliente, propuestaLista, nombre })      → { blob, filename } para compartir en el celular
-//   construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nombre }) → { wb, filename }
+//   exportarPropuestaExcel({ cliente, propuestaLista, nombre, vigencia })  → descarga (escritorio) y devuelve el nombre
+//   propuestaExcelBlob({ cliente, propuestaLista, nombre, vigencia })      → { blob, filename } para compartir en el celular
+//   construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nombre, vigencia }) → { wb, filename }
 //
-// cliente = { key, label } · propuestaLista = [{ sku, descripcion, marca, familia, piezas, precio }]
+// cliente = { key, label } · propuestaLista = [{ sku, descripcion, marca, familia, piezas, precio }] · vigencia 'YYYY-MM-DD'
 // Nombre del archivo: "Propuesta <Cliente> <nombre> <Mes> <Año>.xlsx" (mes/año = momento del export).
+// La hoja Resumen abre con un bloque Propuesta · Cliente · Vigencia · Generada y luego la tabla por concepto.
 import { MES_FULL, familiaHoja } from './constantes';
+import { vigenciaTexto } from './textos';
 
 async function cargarXLSX() {
   const mod = await import('xlsx-js-style');
   return mod.default || mod;
 }
 
-export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nombre }) {
+export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nombre, vigencia }) {
   const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
   const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
   // ─── Estilos: header negro con letra blanca en negritas ───
@@ -170,19 +172,35 @@ export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nomb
     );
   }
 
+  // Bloque de cabecera (Propuesta · Cliente · Vigencia · Generada) + fila vacía + tabla por concepto
+  const cabecera = [
+    ['Propuesta', [cliente.label, nombreLimpio].filter(Boolean).join(' · ')],
+    ['Cliente', cliente.label],
+    ...(vigencia ? [['Vigencia', `al ${vigenciaTexto(vigencia)}`]] : []),
+    ['Generada', fechaLbl],
+    [],
+  ];
+  const off = cabecera.length; // fila del header de la tabla
   const resumenAoa = [
+    ...cabecera,
     ['Concepto', 'SKUs', 'Piezas', 'Total'],
     ...filasResumen,
   ];
   const wsResumen = XLSX.utils.aoa_to_sheet(resumenAoa);
   wsResumen['!cols'] = [{ wch: 34 }, { wch: 12 }, { wch: 14 }, { wch: 18 }];
-  wsResumen['!rows'] = [{ hpt: 24 }];
+  wsResumen['!rows'] = [...cabecera.map(() => ({ hpt: 18 })), { hpt: 24 }];
 
-  // Estilos: header negro + celdas
+  // Estilos: cabecera (etiqueta en negritas), header negro + celdas
+  const LABEL_STYLE = { font: { bold: true, sz: 10.5, name: 'Calibri' }, alignment: { vertical: 'center' } };
+  for (let r = 0; r < off - 1; r++) {
+    const a0 = XLSX.utils.encode_cell({ r, c: 0 }), a1 = XLSX.utils.encode_cell({ r, c: 1 });
+    if (wsResumen[a0]) wsResumen[a0].s = LABEL_STYLE;
+    if (wsResumen[a1]) wsResumen[a1].s = { font: { sz: 10.5, name: 'Calibri' }, alignment: { vertical: 'center', horizontal: 'left' } };
+  }
   for (let c = 0; c < 4; c++) {
-    const h = XLSX.utils.encode_cell({ r: 0, c });
+    const h = XLSX.utils.encode_cell({ r: off, c });
     if (wsResumen[h]) wsResumen[h].s = HEADER_STYLE;
-    for (let r = 1; r <= filasResumen.length; r++) {
+    for (let r = off + 1; r <= off + filasResumen.length; r++) {
       const a = XLSX.utils.encode_cell({ r, c });
       if (!wsResumen[a]) continue;
       if (c === 0) wsResumen[a].s = CELL_STYLE;

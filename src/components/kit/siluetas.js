@@ -37,8 +37,8 @@ export const SILUETAS = {
   home: [hero(3), kpis(4), chart(280), tabla(6, 5, { alto: 240 }), tabla(6, 5, { alto: 220 }), panel(4, { alto: 180 }), panel(5, { alto: 200 }), panel(4, { alto: 220 }), panel(4, { alto: 180 }), panel(1, { alto: 44 })],
   analisis: [fila(2, 40), panel(4, { alto: 120 }), panel(9, { alto: 500 }), panel(8, { alto: 450 }), panel(6, { alto: 400 }), panel(5, { alto: 250 })],
 
-  // Propuestas V3 (landing): hero 3 stats + fila de acciones · 4 KPIs · segmented + buscador · paneles por mes con tarjetas en 3 columnas
-  propuestas: [hero(3), kpis(4), fila(3, 30), grid('repeat(3, minmax(0,1fr))', [panel(4, { alto: 150 }), panel(4, { alto: 150 }), panel(4, { alto: 150 })]), grid('repeat(3, minmax(0,1fr))', [panel(4, { alto: 150 }), panel(4, { alto: 150 }), panel(4, { alto: 150 })])],
+  // Propuestas V3 (landing): hero 3 stats + fila de acciones · 3 tarjetas de cliente · 4 KPIs · segmented + buscador · paneles por mes con tarjetas en 3 columnas
+  propuestas: [hero(3), grid('repeat(3, minmax(0,1fr))', [panel(5, { alto: 210 }), panel(5, { alto: 210 }), panel(5, { alto: 210 })]), kpis(4), fila(3, 30), grid('repeat(3, minmax(0,1fr))', [panel(4, { alto: 150 }), panel(4, { alto: 150 }), panel(4, { alto: 150 })])],
   // S&OP V3: hero 4 stats · 4 KPIs · panel buscador+filtros (3 filas de pills) · tabla · 2 paneles plegables (Últimas compras, Calendario)
   forecastClientes: [hero(4), kpis(4), panel(3, { alto: 112 }), tabla(18, 9), panel(1, { alto: 44 }), panel(1, { alto: 44 })],
   // S&OP · Reuniones: segmented · hero (última reunión, 3 stats) · 4 KPIs · tarjetas por mes (3 por fila) · "Exports anteriores" plegable
@@ -46,7 +46,10 @@ export const SILUETAS = {
   // Drill del SKU en S&OP: cabecera de pills · KPI strip · simulador · gráfica 12 m + cobertura proyectada · tabla clientes
   sopDrill: [fila(6, 22), kpis(6), fila(1, 70), grid('minmax(0,1.4fr) minmax(0,1fr)', [chart(170), panel(6, { alto: 190 })]), tabla(6, 10)],
   forecastReservas: [hero(4), fila(2, 34), grid('minmax(0,1fr) 320px', [[fila(3, 80), tabla(16, 10)], panel(10, { alto: 480 })])],
-  estrategiaPrecios: [hero(4), fila(6, 32), fila(2, 20), tabla(18, 9)],
+  // Estrategia de Precios V3: hero 3 stats · 4 KPIs · panel buscador+filtros (3 filas de pills) · tabla SKU × listas · panel Precio bajo plegable
+  estrategiaPrecios: [hero(3), kpis(4), panel(3, { alto: 112 }), tabla(18, 9), panel(1, { alto: 44 })],
+  // Drill del SKU en Precios: cabecera de pills · 4 KPIs · izquierda (listas, evolución por lista, evolución año, elasticidad) · derecha (compartir, simulador, clientes, precio bajo, competencia, plegables)
+  preciosDrill: [fila(5, 22), kpis(4), grid('minmax(0,1.3fr) minmax(0,1fr)', [[panel(5, { alto: 150 }), chart(150), chart(130), tabla(3, 8, { alto: 120 })], [panel(2, { alto: 80 }), panel(3, { alto: 120 }), tabla(5, 6, { alto: 180 }), tabla(3, 7, { alto: 120 }), panel(1, { alto: 44 }), panel(1, { alto: 44 })]])],
   analisisClientes: [fila(3, 30), hero(3), kpis(4), fila(4, 30), tabla(16, 13), grid('minmax(0,1fr) minmax(0,1.1fr)', [chart(300), tabla(10, 6)]), panel(1, { alto: 44 })],
   analisisDrill: [kpis(3), grid('minmax(0,1.4fr) minmax(0,1fr)', [chart(190), panel(6)]), tabla(6, 10)],
   resumenClientes: [fila(2, 90), grid('minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)', [hero(3), [kpis(1, '1fr'), kpis(1, '1fr')], [kpis(1, '1fr'), kpis(1, '1fr')]]), fila(4, 28), chart(240), grid('repeat(3, minmax(0,1fr))', [panel(10, { alto: 430 }), panel(10, { alto: 430 }), panel(10, { alto: 430 })])],
