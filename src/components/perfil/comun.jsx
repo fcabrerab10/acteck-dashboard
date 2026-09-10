@@ -89,7 +89,8 @@ export function HojaLateral({ abierto, onClose, titulo, sub, ancho = 440, childr
   return (
     <Overlay abierto={abierto} onClose={onClose} zIndex={zIndex} alinear="stretch" justificar="flex-end">
       <div role="dialog" aria-modal="true" aria-label={titulo} style={{
-        ...vidrio(theme, 0), borderRadius: '16px 0 0 16px', borderRight: 0, width: `min(100vw, ${ancho}px)`, height: '100%', display: 'flex', flexDirection: 'column',
+        ...vidrio(theme, 0), background: esOscuro(theme) ? 'rgba(30,30,32,0.97)' : theme?.key === 'marfil' ? 'rgba(252,249,243,0.98)' : 'rgba(250,250,252,0.98)',
+        borderRadius: '16px 0 0 16px', borderRight: 0, width: `min(100vw, ${ancho}px)`, height: '100%', display: 'flex', flexDirection: 'column',
         transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: `transform ${DUR.page}ms ${EASE}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 10px' }}>

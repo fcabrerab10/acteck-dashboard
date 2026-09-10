@@ -1,6 +1,7 @@
 // Piezas compartidas por los tres modos de menú: superficies translúcidas, Kbd, estrella de favorito,
 // hoja inferior (iPhone), overlay y el icono de app (cuadrado de color) del modo iPhone.
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Star } from 'lucide-react';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
@@ -115,7 +116,7 @@ export function IconoApp({ icon: Icon, color, size = 44, radius = 11, style }) {
 }
 
 /** Overlay oscuro con fade; cierra al clic. */
-export function Overlay({ abierto, onClose, zIndex = 60, children, alinear = 'flex-end' }) {
+export function Overlay({ abierto, onClose, zIndex = 60, children, alinear = 'flex-end', justificar = 'center' }) {
   const [montado, setMontado] = useState(abierto);
   useEffect(() => {
     if (abierto) { setMontado(true); return; }
@@ -129,15 +130,19 @@ export function Overlay({ abierto, onClose, zIndex = 60, children, alinear = 'fl
     return () => window.removeEventListener('keydown', onKey, true);
   }, [abierto, onClose]);
   if (!montado) return null;
-  return (
+  // Portal a <body>: dentro del contenido hay ancestros con transform (PageTransition), y un
+  // `position: fixed` bajo un transform queda relativo a él (la hoja no cubría la ventana y el
+  // contenido se veía a través). En el portal el blur y la capa oscura funcionan siempre.
+  const capa = (
     <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
       style={{
-        position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: alinear, justifyContent: 'center',
+        position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: alinear, justifyContent: justificar,
         background: abierto ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0)', transition: `background ${DUR.page}ms ${EASE}`,
       }}>
       {children}
     </div>
   );
+  return typeof document !== 'undefined' ? createPortal(capa, document.body) : capa;
 }
 
 /** Hoja que sube desde abajo (340 ms) · modo iPhone. */
