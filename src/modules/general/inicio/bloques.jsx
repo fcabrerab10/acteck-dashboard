@@ -1,10 +1,9 @@
 // Bloques (Panel) de Inicio · presentación pura sobre el resultado de calc.js. Sólo kit + theme/TYPO.
 import React, { useMemo } from 'react';
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, pct, pp, fechaCorta, relativo } from '../../../lib/format';
-import { Panel, TablaCompacta, Pill, Boton, toast } from '../../../components/kit';
+import { Panel, TablaCompacta, Pill, Boton, toast, GraficaLineas } from '../../../components/kit';
 import { useBandejaHoy, completarItem } from '../../agenda/datos';
 import { FilaItem, FilaAviso } from '../../agenda/comun';
 import { isoDia as isoDiaAgenda } from '../../agenda/calculo';
@@ -33,29 +32,14 @@ const FilaStats = ({ children, style }) => <div style={{ display: 'flex', gap: 1
 // ── Ventas y margen · últimos 12 meses (Fact Neta + Contribución en barras, MC % en línea) + deducciones del periodo
 export function GraficaVentas({ r, onNavegar }) {
   const { theme } = useTheme();
-  const accent = theme.accent, orange = theme.orange;
-  const tip = { fontSize: 11.5, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText };
-  const ejeY = (v) => (v >= 1e6 ? `$${(v / 1e6).toFixed(0)}M` : `$${Math.round(v / 1e3)}K`);
+  const orange = theme.orange;
   const c = r.cur, p = r.prev;
   const periodo = r.modo === 'mes' ? `${r.mesL} ${r.anio}` : `YTD ${r.anio}`;
   return (
     <Panel titulo="Ventas y margen" meta="últimos 12 meses · Fact Neta, Contribución y MC %" acciones={onNavegar && <Boton onClick={onNavegar}>Ver Visión General</Boton>}>
-      <ResponsiveContainer width="100%" height={200}>
-        <ComposedChart data={r.serie} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barGap={2}>
-          <CartesianGrid vertical={false} stroke={theme.border} strokeDasharray="2 4" />
-          <XAxis dataKey="label" tick={{ fontSize: 10, fill: theme.textMuted, fontFamily: TYPO.fontDisplay }} axisLine={false} tickLine={false} />
-          <YAxis yAxisId="m" tickFormatter={ejeY} tick={{ fontSize: 9.5, fill: theme.textMuted }} axisLine={false} tickLine={false} width={40} />
-          <YAxis yAxisId="p" orientation="right" hide domain={[0, 60]} />
-          <Tooltip cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={tip} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} formatter={(v, n) => [n === 'MC %' ? pct(v) : $(v), n]} />
-          <Bar yAxisId="m" dataKey="fn" name="Fact Neta" fill={accent} fillOpacity={0.35} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false}>
-            {r.serie.map((s) => <Cell key={s.key} fillOpacity={s.actual ? 0.55 : 0.3} />)}
-          </Bar>
-          <Bar yAxisId="m" dataKey="c" name="Contribución" fill={accent} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false}>
-            {r.serie.map((s) => <Cell key={s.key} fillOpacity={s.actual ? 1 : 0.75} stroke={s.actual ? theme.text : 'none'} strokeWidth={s.actual ? 1 : 0} />)}
-          </Bar>
-          <Line yAxisId="p" type="monotone" dataKey="mc" name="MC %" stroke={orange} strokeWidth={1.8} dot={{ r: 2, strokeWidth: 0, fill: orange }} connectNulls isAnimationActive={false} />
-        </ComposedChart>
-      </ResponsiveContainer>
+      <GraficaLineas datos={r.serie.map((x) => ({ x: x.label, fn: x.fn, c: x.c, mc: x.mc }))}
+        series={[{ key: 'fn', label: 'Fact Neta', tipo: 'principal' }, { key: 'c', label: 'Contribución', tipo: 'linea', color: theme.green }, { key: 'mc', label: 'MC %', tipo: 'linea', color: orange, dash: '4 3', eje: 'der', formato: (v) => pct(v) }]}
+        formato={$c} alto={200} mesActivo={r.serie.findIndex((x) => x.actual)} />
       <FilaStats style={{ padding: '10px 2px 0', borderTop: `1px solid ${theme.border}`, marginTop: 6 }}>
         <Stat k={`Deducciones · ${periodo}`} v={$c(c.lost)} sub={c.lostPct != null ? `${pct(c.lostPct)} de la bruta${p.lostPct != null ? ` · ${pp(c.lostPct - p.lostPct)} vs ${r.anio - 1}` : ''}` : ''} color={theme.red} />
         <Stat k="Devoluciones" v={$c(c.devoluciones)} sub={p.devoluciones ? `${r.anio - 1}: ${$c(p.devoluciones)}` : null} />

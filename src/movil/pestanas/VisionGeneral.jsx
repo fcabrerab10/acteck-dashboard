@@ -24,7 +24,7 @@ import { textoCierre, compartir, copiar, mdp } from '../../lib/whatsapp';
 import { useNav } from '../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, Vacio, Segmented, HojaM, BotonGrande, TituloSeccionM, Pill, toast } from '../piezas';
 import { moneyCompact, pct, deltaPct, tonoCuota, tonoDelta, MESES, MESES_LARGO, MONO, N } from '../util';
-import { MiniBarras, nombreBonito } from './AnalisisFicha';
+import { MiniLineas, nombreBonito } from './AnalisisFicha';
 import { ultimosMeses } from './SellInCliente';
 import FichaProducto from '../FichaProducto';
 
@@ -154,7 +154,7 @@ export default function VisionGeneral() {
       </ListaAgrupada>
 
       <TituloSeccionM style={{ marginTop: 18, padding: '0 28px 6px' }}>Tendencia 12 meses · Fact Neta</TituloSeccionM>
-      <MiniBarras serie={r.serie.map((s) => ({ key: s.key, label: s.label, v: s.fn, actual: s.actual }))} nombre="Fact Neta" />
+      <MiniLineas serie={r.serie.map((s) => ({ key: s.key, label: s.label, v: s.fn, actual: s.actual }))} nombre="Fact Neta" />
       <div style={{ padding: '8px 28px 0', fontSize: 11.5, color: theme.textSubtle || theme.textMuted }}>{r.runRate > 0 ? `Run-rate de ${r.mesL.toLowerCase()}: ${moneyCompact(r.runRate)}${r.runRateYoy != null ? ` (${deltaPct(r.runRateYoy)} vs ${r.mesL.slice(0, 3).toLowerCase()} ${anio - 1})` : ''}.` : 'Mes actual resaltado.'}</div>
 
       <ListaAgrupada titulo={so?.cerrado ? `Sell-out · cierre ${MESES[so.cerrado.mes - 1]}` : 'Sell-out por mayorista'} meta={so?.cerrado ? moneyCompact(so.cerrado.importe) : undefined} style={{ marginTop: 18 }}

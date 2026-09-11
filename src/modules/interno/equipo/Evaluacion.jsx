@@ -2,12 +2,11 @@
 // Estado optimista: cada cambio actualiza la UI al instante y escribe evaluaciones_mensuales en segundo plano.
 // Bono = BONO_BASE + BONO_PCT × facturación (Digitalife + PCEL + Dicotech) + ajustes. "Cerrar y pagar" congela la fila.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { Copy, Check, Lock } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { money, moneyCompact } from '../../../lib/format';
-import { Panel, Pill, Boton, Segmented, toast } from '../../../components/kit';
+import { Panel, Pill, Boton, Segmented, toast, GraficaLineas } from '../../../components/kit';
 import { suaveBg, hairline } from '../../../components/perfil/comun';
 import { BONO_BASE, BONO_PCT, serieBonos } from './calculo.js';
 import { MESES, MESES_CORTO, nombreCorto } from './textos.js';
@@ -171,20 +170,10 @@ function HistorialBonos({ serie, anio, mes }) {
   const datos = serie.map((s) => ({ ...s, label: `${MESES_CORTO[s.mes - 1]}${s.mes === 1 ? ` ${String(s.anio).slice(2)}` : ''}` }));
   const conDatos = datos.filter((d) => d.bono != null);
   if (!conDatos.length) return <div style={{ fontSize: 12, color: theme.textMuted, padding: '6px 0' }}>Aún no hay evaluaciones cerradas.</div>;
-  const actual = datos.find((d) => d.anio === anio && d.mes === mes && d.bono != null);
+  const idxActual = datos.findIndex((d) => d.anio === anio && d.mes === mes && d.bono != null);
   return (
-    <div style={{ height: 150 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={datos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <XAxis dataKey="label" tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={{ stroke: theme.border }} tickLine={false} interval={0} />
-          <YAxis tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => moneyCompact(v)} />
-          <Tooltip contentStyle={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 11.5, color: theme.text }}
-            formatter={(v, _n, p) => [`${money(v)}${p?.payload?.cerrada ? '' : ' (abierta)'} · cuota ${(p?.payload?.cuotaPct ?? 0).toFixed(0)}%`, 'Bono']} labelStyle={{ color: theme.textMuted }} />
-          <Line type="monotone" dataKey="bono" stroke={theme.accent} strokeWidth={2} dot={{ r: 3, fill: theme.accent, strokeWidth: 0 }} connectNulls isAnimationActive={false} />
-          {actual && <ReferenceDot x={actual.label} y={actual.bono} r={5} fill={theme.surface} stroke={theme.accent} strokeWidth={2} />}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <GraficaLineas datos={datos.map((d) => ({ x: d.label, bono: d.bono }))} series={[{ key: 'bono', label: 'Bono', tipo: 'principal' }]}
+      formato={moneyCompact} alto={150} mesActivo={idxActual >= 0 ? idxActual : null} leyenda={false} />
   );
 }
 

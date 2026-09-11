@@ -3,6 +3,13 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.15.0', fecha: '2026-09-11', titulo: 'Gráficas lineales y trimestres combinables',
+    items: [
+      'Todas las gráficas de evolución mensual (antes barras) usan la misma gráfica de líneas: punto por mes, año anterior punteado, cuota, máximo y mínimo, y valores del mes en la cabecera al pasar el cursor.',
+      'Selector de trimestres combinable (Q1 a Q4 y Año) en Sell In, Sell Out y Home por cliente; KPIs y tablas suman los meses marcados y la gráfica atenúa los demás. La selección se recuerda por pantalla.',
+    ],
+  },
+  {
     version: '3.14.0', fecha: '2026-09-10', titulo: 'Agenda en el celular',
     items: [
       'Hoy en lista (deslizar a la derecha = hecho, a la izquierda = posponer) o Tablero deslizable por cliente, persona o categoría; elegible en Preferencias.',

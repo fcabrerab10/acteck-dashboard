@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { GraficaLineas } from '../../components/kit';
 import { TrendingUp, Star, Percent, AlertTriangle } from 'lucide-react';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -443,28 +443,9 @@ export default function SellInDrillDown(props) {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
             </div>
           </div>
-          <div style={{ width: '100%', height: 76 }}>
-            <ResponsiveContainer>
-              <AreaChart data={serieChart} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
-                <defs>
-                  <linearGradient id={`fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={blue} stopOpacity={0.20} />
-                    <stop offset="100%" stopColor={blue} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-                <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-                <YAxis tickFormatter={(v) => v == null ? '' : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={36} />
-                <Tooltip
-                  formatter={(v, name) => [fmtInt(v) + ' pz', name]}
-                  contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}
-                  labelStyle={{ color: theme.textMuted, fontWeight: 500 }}
-                />
-                <Area type="monotone" dataKey={`${anioPrev}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey={`${anioActual}`} stroke={blue} strokeWidth={2.4} fill={`url(#fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)})`} dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2.5 }} isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <GraficaLineas compacto datos={serieChart.map((d) => ({ x: d.mes, act: d[`${anioActual}`], prev: d[`${anioPrev}`] }))}
+            series={[{ key: 'act', label: String(anioActual), tipo: 'principal' }, { key: 'prev', label: String(anioPrev), tipo: 'anterior' }]}
+            formato={(v) => `${fmtInt(v)} pz`} alto={90} cabecera />
         </div>
 
         {/* Banda 3 · Heatmap Pareto cliente × mes */}

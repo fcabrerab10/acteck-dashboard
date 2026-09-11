@@ -2,10 +2,9 @@
 // valor a costo (sólo con permiso sensible) / piezas y días de inventario a la demanda actual.
 // LineChart de Recharts sin animación. Con 1 sola foto muestra "histórico desde hoy".
 import React, { useMemo } from 'react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { Panel, Pill } from '../../../components/kit';
+import { Panel, Pill, GraficaLineas } from '../../../components/kit';
 import { fmtCompact, fmtInt, fmtFechaCorta, N } from './constantes';
 
 /** Fila del histórico más cercana (hacia atrás) a `hoy - dias`. null si no hay. */
@@ -27,8 +26,6 @@ export default function HistoricoPanel({ historico, demandaDia, sensible }) {
   const ultimo = datos[n - 1], primero = datos[0];
   const hace30 = fotoHace(datos, 30);
 
-  const ejeY = { fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontDisplay };
-  const tooltipStyle = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, fontFamily: TYPO.fontText, fontSize: 11, color: theme.text, boxShadow: 'none' };
 
   const meta = n === 0 ? 'sin fotos todavía · la primera se guarda hoy con la carga del puente'
     : n === 1 ? `histórico desde ${fmtFechaCorta(primero.fecha)} · 1 foto`
@@ -41,17 +38,8 @@ export default function HistoricoPanel({ historico, demandaDia, sensible }) {
         <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text }}>{titulo}</span>
         {ultimo && <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{fmt(ultimo[dataKey])}</span>}
       </div>
-      <div style={{ height: 150 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={datos} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke={theme.divider || theme.border} vertical={false} />
-            <XAxis dataKey="label" tick={ejeY} axisLine={false} tickLine={false} minTickGap={24} />
-            <YAxis tick={ejeY} axisLine={false} tickLine={false} width={48} tickFormatter={(v) => fmt(v)} domain={['auto', 'auto']} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(v) => [fmt(v), titulo]} labelFormatter={(l) => l} cursor={{ stroke: theme.border }} />
-            <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={n <= 2} isAnimationActive={false} connectNulls />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      <GraficaLineas datos={datos.map((d) => ({ x: d.label, v: d[dataKey] }))} series={[{ key: 'v', label: titulo, tipo: 'principal', color }]}
+        formato={fmt} alto={150} desdeCero={false} cabecera={false} leyenda={false} puntos={n <= 2} />
     </div>
   );
 

@@ -1,13 +1,11 @@
 // Bloques (Panel) del Home V3 · presentación pura sobre el resultado de calc.js. Sólo kit + theme/TYPO.
 import React, { useState } from 'react';
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, fecha, fechaCorta } from '../../../lib/format';
-import { Panel, Segmented, TablaCompacta, HeatCell, Pill, Boton } from '../../../components/kit';
+import { Panel, TablaCompacta, HeatCell, Pill, Boton, GraficaLineas, SelectorTrimestres, etiquetaTrimestres } from '../../../components/kit';
 import { MESES, META_INV_DIAS } from './config';
 
-const RANGOS = [{ id: 'Q1', label: 'Q1' }, { id: 'Q2', label: 'Q2' }, { id: 'Q3', label: 'Q3' }, { id: 'Q4', label: 'Q4' }, { id: 'anio', label: 'Año' }];
 const signo = (v, d = 1) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneRatio = (v) => (v == null ? 'gray' : v >= 80 ? 'green' : v >= 60 ? 'orange' : 'red');
 const TONO_ESTADO = { pendiente: 'orange', en_curso: 'blue', esperando_info: 'purple', completado: 'green', activo: 'green', en_proceso: 'blue', pagado: 'green' };
@@ -25,14 +23,22 @@ export function Stat({ k, v, sub, color }) {
 }
 const FilaStats = ({ children }) => <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', padding: '2px 2px 10px' }}>{children}</div>;
 
-// ── Sell In vs Sell Out mensual · barras SI/SO + líneas año anterior y cuotas · filtro Q · sumas
+// ── Sell In vs Sell Out mensual · GraficaLineas del kit (SI principal, SO línea verde, SI año anterior, cuotas) · trimestres combinables · sumas
 export function GraficaSiSo({ serie, rango, setRango, anio }) {
   const { theme } = useTheme();
-  const { data, sums } = serie;
-  const tip = { fontSize: 11.5, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText };
-  const ejeY = (v) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`);
+  const { data, sums, meses = [] } = serie;
+  const sel = new Set(meses);
+  const atenuados = data.map((d, i) => (sel.has(d.m) ? null : i)).filter((i) => i != null);
+  const series = [
+    { key: 'si', label: `Sell In ${anio}`, tipo: 'principal' },
+    { key: 'so', label: 'Sell Out', tipo: 'linea', color: theme.green },
+    { key: 'siPrev', label: `Sell In ${anio - 1}`, tipo: 'anterior' },
+    { key: 'cuota', label: 'Cuota ideal', tipo: 'cuota' },
+    { key: 'cuotaMin', label: 'Cuota mín', tipo: 'cuota', dash: '1 3' },
+  ];
+  const resumen = `${etiquetaTrimestres(rango)} · ${$c(sums.si)} · ${meses.length} ${meses.length === 1 ? 'mes' : 'meses'}`;
   return (
-    <Panel titulo="Sell In vs Sell Out" meta={`${anio} · mensual vs cuota y ${anio - 1}`} acciones={<Segmented options={RANGOS} value={rango} onChange={setRango} />}>
+    <Panel titulo="Sell In vs Sell Out" meta={`${anio} · mensual vs cuota y ${anio - 1}`} acciones={<SelectorTrimestres value={rango} onChange={setRango} resumen={resumen} />}>
       <FilaStats>
         <Stat k={`Sell In ${anio}`} v={$c(sums.si)} sub={`${anio - 1}: ${$c(sums.siPrev)}`} />
         <Stat k="Δ YoY" v={signo(sums.yoy)} color={sums.yoy == null ? theme.textMuted : sums.yoy >= 0 ? theme.green : theme.red} />
@@ -40,19 +46,8 @@ export function GraficaSiSo({ serie, rango, setRango, anio }) {
         <Stat k="Cuota ideal" v={$c(sums.cuota)} sub={`Δ ${signo(sums.vsIdeal)}`} color={sums.vsIdeal == null ? undefined : sums.vsIdeal >= 0 ? theme.green : theme.orange} />
         <Stat k="Sell Out" v={$c(sums.so)} sub={sums.ratio != null ? `ratio SO/SI ${Math.round(sums.ratio)}%${sums.ratioPrev != null ? ` · ${signo(sums.ratio - sums.ratioPrev)} pp vs ${anio - 1}` : ''}` : 'sin ratio'} />
       </FilaStats>
-      <ResponsiveContainer width="100%" height={220}>
-        <ComposedChart data={data} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barGap={2}>
-          <CartesianGrid vertical={false} stroke={theme.border} strokeDasharray="2 4" />
-          <XAxis dataKey="mes" tick={{ fontSize: 10, fill: theme.textMuted, fontFamily: TYPO.fontDisplay }} axisLine={false} tickLine={false} />
-          <YAxis tickFormatter={ejeY} tick={{ fontSize: 9.5, fill: theme.textMuted }} axisLine={false} tickLine={false} width={44} />
-          <Tooltip cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={tip} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} formatter={(v, n) => [v == null ? '—' : $(v), n]} />
-          <Bar dataKey="si" name={`Sell In ${anio}`} fill={theme.accent} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false} />
-          <Bar dataKey="so" name="Sell Out" fill={theme.green} fillOpacity={0.8} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false} />
-          <Line type="monotone" dataKey="siPrev" name={`Sell In ${anio - 1}`} stroke={theme.textMuted} strokeWidth={1.6} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
-          <Line type="monotone" dataKey="cuota" name="Cuota ideal" stroke={theme.orange} strokeWidth={1.8} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />
-          <Line type="monotone" dataKey="cuotaMin" name="Cuota mín" stroke={theme.orange} strokeWidth={1.2} strokeDasharray="2 4" dot={false} isAnimationActive={false} connectNulls />
-        </ComposedChart>
-      </ResponsiveContainer>
+      <GraficaLineas datos={data.map((d) => ({ x: d.mes, m: d.m, si: d.si, so: d.so, siPrev: d.siPrev, cuota: d.cuota, cuotaMin: d.cuotaMin }))} series={series}
+        formato={$c} alto={220} mesesAtenuados={atenuados} mesActivo={data.reduce((acc, d, i) => (d.si != null ? i : acc), -1)} />
     </Panel>
   );
 }
@@ -68,7 +63,7 @@ export function SplitTabla({ filas, cfg, rango, setRango }) {
     { key: 'ratio', label: 'SO/SI', render: (f) => <Pill tone={toneRatio(f.ratio)}>{f.ratio == null ? '—' : `${Math.round(f.ratio)}%`}</Pill> },
   ];
   return (
-    <Panel titulo={`Sell In vs Sell Out por ${sucursal ? 'sucursal' : 'marca'}`} meta={sucursal ? 'SI repartido según el peso de cada sucursal en el SO' : 'ratio SO/SI'} acciones={<Segmented options={RANGOS.map((o) => (o.id === 'anio' ? { ...o, label: 'YTD' } : o))} value={rango} onChange={setRango} />}>
+    <Panel titulo={`Sell In vs Sell Out por ${sucursal ? 'sucursal' : 'marca'}`} meta={sucursal ? 'SI repartido según el peso de cada sucursal en el SO' : 'ratio SO/SI'} acciones={<SelectorTrimestres value={rango} onChange={setRango} />}>
       <TablaCompacta columnas={cols} filas={filas} rowKey={(f) => f.key} dense vacio="Sin datos de sell in/out para este rango." />
     </Panel>
   );

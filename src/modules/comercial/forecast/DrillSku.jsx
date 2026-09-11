@@ -3,11 +3,10 @@
 // proyectada mes a mes (6 m, stock + tránsito por ETA + compra simulada − demanda proyectada) y "Quién lo compra"
 // (useQuienLoCompra de inventario/compartir.js). Costos sólo con `sensible`. Sin Tailwind; sólo tokens de tema + kit.
 import React, { useEffect, useMemo, useState } from 'react';
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { EASE, DUR } from '../../../lib/motion';
-import { Pill, HeatCell, TablaCompacta, Cargando } from '../../../components/kit';
+import { Pill, HeatCell, TablaCompacta, Cargando, GraficaLineas } from '../../../components/kit';
 import { roadmapTone } from '../sellin/textos';
 import { fmtInt, fmtDias, fmtCompact, tonoCobertura, etiquetaCobertura, MONO } from '../inventario/constantes';
 import { useQuienLoCompra } from '../inventario/compartir';
@@ -278,19 +277,9 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 8 }}>
         <Tarjeta titulo="Demanda real 12 meses vs ritmo del motor" meta={`facturacion_clientes · ${fmtInt(total12m)} pz en 12 m · línea = ritmo 3 m${crec > 0 ? ` y proyección +${Math.round(crec * 100)}%` : ''}`}
           aside={<Pill tone="blue" size="xs">{fmtInt(demProy)} pz/m proyectado</Pill>}>
-          <div style={{ height: 170 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={serieDemanda} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke={theme.divider || theme.border} vertical={false} />
-                <XAxis dataKey="label" tick={ejeTick} axisLine={false} tickLine={false} minTickGap={12} />
-                <YAxis tick={ejeTick} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => fmtInt(v)} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}
-                  formatter={(v, name) => [v == null ? '—' : `${fmtInt(v)} pz`, name === 'real' ? 'Real ERP' : 'Motor S&OP']} />
-                <Bar dataKey="real" fill={theme.accent} radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={22} />
-                <Line type="monotone" dataKey="motor" stroke={theme.orange} strokeWidth={2} strokeDasharray="4 3" dot={false} isAnimationActive={false} connectNulls={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+          <GraficaLineas datos={serieDemanda.map((d) => ({ x: d.label, real: d.real, motor: d.motor }))}
+            series={[{ key: 'real', label: 'Real ERP', tipo: 'principal' }, { key: 'motor', label: 'Motor S&OP', tipo: 'linea', color: theme.orange, dash: '4 3' }]}
+            formato={(v) => `${fmtInt(v)} pz`} alto={170} />
         </Tarjeta>
         <Tarjeta titulo="Cobertura proyectada" meta={`stock + tránsito por ETA${qty > 0 && ltDias > 0 ? ` + ${fmtInt(qty)} pz simuladas (${Math.round(ltDias)} d)` : ''} − ${fmtInt(demProy)} pz/m`}>
           {demProy <= 0 ? (

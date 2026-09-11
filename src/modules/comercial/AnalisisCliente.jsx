@@ -7,6 +7,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import { fetchAllQ } from '../../lib/queries';
+import { GraficaLineas } from '../../components/kit';
 
 export default function AnalisisCliente({ cliente, clienteKey }) {
   var perfil = usePerfil();
@@ -874,35 +875,19 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
               totalCuotaMinA > 0 ? "vs Mín: " + fmtPct(ytd.projSO / totalCuotaMinA * 100) + (ytd.projSO >= totalCuotaMinA ? " ✓" : " ⚠") : "Estimado cierre " + anio,
               ytd.projSO >= totalCuotaMinA ? "#10b981" : "#ef4444")
           ),
-          // Monthly projection bars
+          // Proyección mensual · GraficaLineas del kit (real = línea principal · proyectado = promedio mensual punteado)
           el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:8, fontWeight:600 } }, "Sell In: Real vs Proyectado"),
-          el("div", { style: { display:"flex", gap:4, alignItems:"flex-end", height:120 } },
-            ventasPorMes.map(function(v) {
-              var isReal = v.sell_in > 0;
-              var val = isReal ? v.sell_in : ytd.avgSI;
-              var maxVal = Math.max(ytd.avgSI * 1.5, Math.max.apply(null, ventasPorMes.map(function(x){return x.sell_in;})));
-              var h = maxVal > 0 ? Math.max(val / maxVal * 100, 4) : 4;
-              return el("div", { key: v.mes, style: { flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 } },
-                el("div", { style: { fontSize:9, color:"#94a3b8" } }, fmtK(val)),
-                el("div", { style: { width:"100%", height: h + "px", background: isReal ? "#3b82f6" : "#dbeafe", borderRadius:3, border: isReal ? "none" : "1px dashed #93c5fd" } }),
-                el("div", { style: { fontSize:9, color:"#64748b" } }, v.label)
-              );
-            })
-          ),
+          el(GraficaLineas, {
+            datos: ventasPorMes.map(function(v) { return { x: v.label, real: v.sell_in > 0 ? v.sell_in : null, proy: ytd.avgSI }; }),
+            series: [{ key: 'real', label: 'Sell In real', tipo: 'principal' }, { key: 'proy', label: 'Promedio mensual (proyección)', tipo: 'linea', dash: '4 3' }],
+            formato: fmtM, alto: 170, mostrarMinMax: false,
+          }),
           el("div", { style: { fontSize:12, color:"#64748b", marginBottom:8, marginTop:16, fontWeight:600 } }, "Sell Out: Real vs Proyectado"),
-          el("div", { style: { display:"flex", gap:4, alignItems:"flex-end", height:120 } },
-            ventasPorMes.map(function(v) {
-              var isReal = v.sell_out > 0;
-              var val = isReal ? v.sell_out : ytd.avgSO;
-              var maxVal = Math.max(ytd.avgSO * 1.5, Math.max.apply(null, ventasPorMes.map(function(x){return x.sell_out;})));
-              var h = maxVal > 0 ? Math.max(val / maxVal * 100, 4) : 4;
-              return el("div", { key: "so"+v.mes, style: { flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 } },
-                el("div", { style: { fontSize:9, color:"#64748b" } }, fmtK(val)),
-                el("div", { style: { width:"100%", height: h + "px", background: isReal ? "#10b981" : "#d1fae5", borderRadius:3, border: isReal ? "none" : "1px dashed #6ee7b7" } }),
-                el("div", { style: { fontSize:9, color:"#94a3b8" } }, v.label)
-              );
-            })
-          ),
+          el(GraficaLineas, {
+            datos: ventasPorMes.map(function(v) { return { x: v.label, real: v.sell_out > 0 ? v.sell_out : null, proy: ytd.avgSO }; }),
+            series: [{ key: 'real', label: 'Sell Out real', tipo: 'principal', color: '#10b981' }, { key: 'proy', label: 'Promedio mensual (proyección)', tipo: 'linea', dash: '4 3' }],
+            formato: fmtM, alto: 170, mostrarMinMax: false,
+          }),
           ytd.st < 60 ? el("div", { style: { background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10, padding:"12px 16px", marginTop:12, display:"flex", alignItems:"center", gap:10 } },
             el("span", { style: { fontSize:20 } }, "⚠️"),
             el("div", null,

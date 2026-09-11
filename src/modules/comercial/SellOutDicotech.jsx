@@ -11,7 +11,7 @@ import { useRoadmap, useInventarioCliente } from '../../lib/queries';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { Cargando } from '../../components/kit';
+import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
@@ -129,7 +129,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   const [sucursalMes, setSucursalMes] = useState([]);
   const [inventarioSucursal, setInventarioSucursal] = useState([]);
   const [selloutGeneral, setSelloutGeneral] = useState([]); // detalle transaccional para vendedores/clientes/drill
-  const [rango, setRango] = useState(() => new Set(['Q3']));
+  const [rango, setRango, rangoPersistido] = usePersistTrimestres(`sellOut:${clienteKey}`, () => new Set(['Q3']));
   const [busqueda, setBusqueda] = useState('');
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
   const [familiaFilter, setFamiliaFilter] = useState(null);
@@ -192,9 +192,10 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   }, [mensual, anio]);
 
   useEffect(() => {
+    if (rangoPersistido) return; // la selección guardada por pantalla manda
     const q = mesActual <= 3 ? 'Q1' : mesActual <= 6 ? 'Q2' : mesActual <= 9 ? 'Q3' : 'Q4';
     setRango(new Set([q]));
-  }, [mesActual]);
+  }, [mesActual, rangoPersistido, setRango]);
 
   const mesesRango = useMemo(() => {
     if (!rango || typeof rango.has !== 'function' || rango.size === 0) return Q_MESES.anio;
@@ -573,7 +574,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
 
   // Timeline
   const timelineMeses = useMemo(() => {
-    return mesesRango.map((m) => {
+    return Q_MESES.anio.map((m) => {
       const i = m - 1;
       return {
         label: MESES[i], mes: m,
@@ -583,14 +584,14 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         futuro: m > mesActual,
       };
     });
-  }, [mesesRango, mensualPorAnio, anio, anioPrev, mesActual]);
+  }, [mensualPorAnio, anio, anioPrev, mesActual]);
 
   const timelineSums = useMemo(() => {
     let s2026 = 0, s2025 = 0;
-    for (const d of timelineMeses) { s2026 += d.sellIn; s2025 += d.sellInPrev; }
+    for (const d of timelineMeses) { if (!mesesRango.includes(d.mes)) continue; s2026 += d.sellIn; s2025 += d.sellInPrev; }
     const deltaYoY = s2025 > 0 ? ((s2026 - s2025) / s2025 * 100) : null;
     return { s2026, s2025, deltaYoY };
-  }, [timelineMeses]);
+  }, [timelineMeses, mesesRango]);
 
   const roadmapOrdenado = useMemo(() => {
     return [...roadmap].sort((a, b) => {
@@ -793,7 +794,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
 
       {/* Fila: Timeline + Composición por familia (donut) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
-        <TimelineLineal theme={theme} P={P} isDark={isDark}
+        <TimelineLineal mesesRango={mesesRango} theme={theme} P={P}
           data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango}
           anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
         <FamiliaSOCard theme={theme} P={P}
@@ -892,186 +893,36 @@ function KpiCard({ theme, P, eyebrow, badge, title, big, bigSmall, bigColor, sub
 }
 
 // ═══════════════ Timeline Lineal (color = P.teal para SO) ═══════════════
-function TimelineLineal({ theme, P, isDark, data, sums, rango, onChangeRango, anio, anioPrev, mesActual }) {
-  const [hoverIdx, setHoverIdx] = useState(null);
-  const W = 700, H = 260;
-  const padL = 46, padR = 20, padT = 32, padB = 28;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
-  const maxRaw = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev)));
-  const niceStep = (v) => {
-    const pow = Math.pow(10, Math.floor(Math.log10(v)));
-    const norm = v / pow;
-    const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
-    return nice * pow;
-  };
-  const maxV = niceStep(maxRaw * 1.15);
-  const xOf = (i) => padL + (i / Math.max(1, data.length - 1)) * chartW;
-  const yOf = (v) => padT + chartH - (v / maxV) * chartH;
-  const idxActual = data.findIndex(d => d.actual);
-  const cerrados = data.filter(d => !d.futuro);
-  const area2026 = cerrados.length > 0
-    ? `M ${xOf(0)},${yOf(cerrados[0].sellIn)} ${cerrados.map((d, i) => `L ${xOf(i)},${yOf(d.sellIn)}`).join(' ')} L ${xOf(cerrados.length - 1)},${padT + chartH} L ${xOf(0)},${padT + chartH} Z`
-    : '';
-  const line2026 = cerrados.map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
-  const line2025 = data.map((d, i) => `${xOf(i)},${yOf(d.sellInPrev)}`).join(' ');
-  const hovered = hoverIdx != null ? data[hoverIdx] : null;
-  const currentDatum = idxActual >= 0 ? data[idxActual] : null;
-  const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ f, v: maxV * f, y: padT + chartH * (1 - f) }));
-
-  const isSet = rango && typeof rango.has === 'function';
-  const isActiveQ = (q) => isSet ? rango.has(q) : rango === q;
-  const isActiveAnio = isSet ? rango.size === 4 || rango.size === 0 : rango === 'anio';
-  const toggleQ = (q) => {
-    if (!isSet) { onChangeRango(new Set([q])); return; }
-    const next = new Set(rango);
-    if (next.has(q)) next.delete(q); else next.add(q);
-    onChangeRango(next);
-  };
-  const setAnio = () => onChangeRango(new Set(['Q1', 'Q2', 'Q3', 'Q4']));
-  const filtros = [{ k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }];
-
-  const gradId = `soDicoArea-${anio}`;
-  const lineColor = P.teal; // sell out = teal
-
+function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anioPrev, mesActual, mesesRango = [] }) {
+  // Serie completa del año: los meses fuera de los trimestres marcados se atenúan (no desaparecen).
+  const datos = data.map((d) => ({ x: d.label, mes: d.mes, actual: d.futuro ? null : d.sellIn, anterior: d.sellInPrev }));
+  const series = [
+    { key: 'actual', label: `SO ${anio}`, tipo: 'principal' },
+    { key: 'anterior', label: `SO ${anioPrev}`, tipo: 'anterior' },
+  ];
+  const sel = new Set(mesesRango);
+  const atenuados = datos.map((d, i) => (sel.has(d.mes) ? null : i)).filter((i) => i != null);
+  const mesActivo = datos.findIndex((d) => d.mes === mesActual);
+  const resumen = `${etiquetaTrimestres(rango)} · ${fmt.money(sums.s2026)} · ${mesesRango.length} ${mesesRango.length === 1 ? 'mes' : 'meses'}`;
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
-          Evolución mensual · Sell Out
-          <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>
-            Combina trimestres para sumar
-          </span>
-        </h5>
-        <div style={{ display: 'inline-flex', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 8, padding: 2 }}>
-          {filtros.map(f => (
-            <button key={f.k} onClick={() => toggleQ(f.k)}
-              style={{
-                border: 0, background: isActiveQ(f.k) ? theme.surface : 'transparent',
-                padding: '4px 10px', borderRadius: 6,
-                fontFamily: isActiveQ(f.k) ? TYPO.fontDisplay : TYPO.fontText,
-                fontSize: 10.5, color: isActiveQ(f.k) ? theme.text : theme.textMuted,
-                fontWeight: isActiveQ(f.k) ? 600 : 500, cursor: 'pointer',
-                boxShadow: isActiveQ(f.k) ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                borderWidth: 1, borderStyle: 'solid', borderColor: isActiveQ(f.k) ? theme.border : 'transparent',
-              }}>{f.l}</button>
-          ))}
-          <button onClick={setAnio}
-            style={{
-              border: 0, background: isActiveAnio ? theme.surface : 'transparent',
-              padding: '4px 10px', borderRadius: 6,
-              fontFamily: isActiveAnio ? TYPO.fontDisplay : TYPO.fontText,
-              fontSize: 10.5, color: isActiveAnio ? theme.text : theme.textMuted,
-              fontWeight: isActiveAnio ? 600 : 500, cursor: 'pointer',
-              boxShadow: isActiveAnio ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-              borderWidth: 1, borderStyle: 'solid', borderColor: isActiveAnio ? theme.border : 'transparent',
-            }}>Año</button>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 14, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
-        <SumStat theme={theme} k={<><Dot color={theme.textMuted} />SO {anioPrev}</>} v={fmt.money(sums.s2025)} vColor={theme.textMuted} />
-        <SumStat theme={theme} k={<><Dot color={lineColor} />SO {anio}</>} v={fmt.money(sums.s2026)} vColor={theme.text} />
+    <Panel titulo="Evolución mensual · Sell Out" meta="combina trimestres para sumar"
+      acciones={<SelectorTrimestres value={rango} onChange={onChangeRango} resumen={resumen} />}>
+      <div style={{ display: 'flex', gap: 14, padding: '2px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
+        <SumStat theme={theme} k={<><Dot color={theme.textMuted} dashed />SO {anioPrev}</>} v={fmt.money(sums.s2025)} vColor={theme.textMuted} />
+        <SumStat theme={theme} k={<><Dot color={P.accent} />SO {anio}</>} v={fmt.money(sums.s2026)} vColor={theme.text} />
         {sums.deltaYoY != null && (
           <SumStat theme={theme} k="Δ YoY" v={`${sums.deltaYoY >= 0 ? '+' : ''}${sums.deltaYoY.toFixed(1)}%`} vColor={sums.deltaYoY >= 0 ? P.green : P.red} />
         )}
       </div>
-      <div style={{ position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 260, display: 'block' }}>
-          <defs>
-            <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={lineColor} stopOpacity="0.28" />
-              <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {yTicks.map((t, i) => (
-            <g key={i}>
-              <line x1={padL} y1={t.y} x2={W - padR} y2={t.y}
-                stroke={i === 0 ? (theme.divider || theme.border) : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')}
-                strokeDasharray={i === 0 ? undefined : '3 4'} />
-              <text x={padL - 8} y={t.y + 3} textAnchor="end"
-                fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill={theme.textMuted}>
-                {fmt.money(t.v)}
-              </text>
-            </g>
-          ))}
-          {area2026 && <path d={area2026} fill={`url(#${gradId})`} />}
-          <polyline points={line2025} fill="none" stroke={theme.textMuted} strokeWidth="2" opacity="0.55" />
-          <polyline points={line2026} fill="none" stroke={lineColor} strokeWidth="3" />
-          {cerrados.map((d, i) => {
-            const cx = xOf(i), cy = yOf(d.sellIn);
-            return (
-              <g key={`p-${i}`}>
-                <circle cx={cx} cy={cy} r={d.actual ? 6 : 4}
-                  fill={d.actual ? P.green : lineColor}
-                  stroke={theme.surface} strokeWidth={d.actual ? 2.5 : 2} />
-                {!d.actual && (
-                  <text x={cx} y={cy - 10} textAnchor="middle"
-                    fontFamily={TYPO.fontDisplay} fontSize="10" fontWeight="600" fill={theme.text}>
-                    {fmt.money(d.sellIn)}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-          {data.map((d, i) => (
-            <rect key={`h-${i}`}
-              x={xOf(i) - chartW / (data.length * 2)}
-              y={padT}
-              width={chartW / data.length}
-              height={chartH}
-              fill="transparent"
-              onMouseEnter={() => setHoverIdx(i)}
-              onMouseLeave={() => setHoverIdx(null)}
-              style={{ cursor: 'pointer' }}
-            />
-          ))}
-          {hoverIdx != null && (
-            <line x1={xOf(hoverIdx)} y1={padT} x2={xOf(hoverIdx)} y2={H - padB}
-              stroke={theme.textMuted} strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
-          )}
-          {data.map((d, i) => (
-            <text key={`x-${i}`} x={xOf(i)} y={H - 8} textAnchor="middle"
-              fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9"
-              fill={d.actual ? P.green : theme.textMuted}
-              fontWeight={d.actual ? 700 : 500}
-              opacity={d.futuro ? 0.4 : 1}>
-              {d.label}
-            </text>
-          ))}
-          {currentDatum && idxActual >= 0 && hoverIdx == null && (() => {
-            const cx = xOf(idxActual);
-            const cy = yOf(currentDatum.sellIn);
-            const yoyPct = currentDatum.sellInPrev > 0 ? ((currentDatum.sellIn - currentDatum.sellInPrev) / currentDatum.sellInPrev * 100) : null;
-            const boxW = 130;
-            const boxX = Math.max(padL, Math.min(W - padR - boxW, cx - boxW / 2));
-            const boxY = Math.max(4, cy - 44);
-            return (
-              <g pointerEvents="none">
-                <line x1={cx} y1={cy - 8} x2={cx} y2={boxY + 32} stroke={theme.text} strokeWidth="1" opacity="0.15" />
-                <rect x={boxX} y={boxY} width={boxW} height={32} rx="6" fill="#0A0A0C" />
-                <text x={boxX + boxW / 2} y={boxY + 13} textAnchor="middle"
-                  fontFamily={TYPO.fontDisplay} fontSize="10.5" fontWeight="600" fill="#FFF">
-                  {currentDatum.label} · {fmt.money(currentDatum.sellIn)}
-                </text>
-                <text x={boxX + boxW / 2} y={boxY + 25} textAnchor="middle"
-                  fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill="rgba(255,255,255,0.65)">
-                  {yoyPct != null ? `${yoyPct >= 0 ? '+' : ''}${yoyPct.toFixed(1)}% YoY` : 'sin comparativo'}
-                </text>
-              </g>
-            );
-          })()}
-        </svg>
-        {hovered && !hovered.futuro && (
-          <TimelineTooltip theme={theme} P={P} data={hovered} anio={anio} anioPrev={anioPrev}
-            xPct={((hoverIdx * chartW / Math.max(1, data.length - 1)) + padL) / W * 100} />
-        )}
-      </div>
-    </div>
+      <GraficaLineas datos={datos} series={series} formato={fmt.money} alto={240} mesActivo={mesActivo} mesesAtenuados={atenuados} />
+    </Panel>
   );
 }
 
-function Dot({ color }) {
-  return <span style={{ display: 'inline-block', width: 8, height: 2, borderRadius: 1, background: color, marginRight: 4 }} />;
+function Dot({ color, dashed }) {
+  return (
+    <span style={{ display: 'inline-block', width: 8, height: dashed ? 0 : 2, borderRadius: 1, background: dashed ? 'transparent' : color, borderTop: dashed ? `2px dashed ${color}` : 'none', marginRight: 4 }} />
+  );
 }
 function SumStat({ theme, k, v, vColor }) {
   return (
@@ -1081,37 +932,7 @@ function SumStat({ theme, k, v, vColor }) {
     </div>
   );
 }
-function TimelineTooltip({ theme, P, data, anio, anioPrev, xPct }) {
-  const delta = data.sellInPrev > 0 ? ((data.sellIn - data.sellInPrev) / data.sellInPrev * 100) : null;
-  return (
-    <div style={{
-      position: 'absolute', top: 8, left: `${xPct}%`, transform: 'translateX(-50%)',
-      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8,
-      padding: '8px 12px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', pointerEvents: 'none',
-      zIndex: 5, minWidth: 150, maxWidth: 220,
-    }}>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>{data.label} · {anio}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 3 }}>
-        <span style={{ color: theme.textMuted }}>SO {anio}</span>
-        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.sellIn)}</span>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
-        <span style={{ color: theme.textMuted }}>SO {anioPrev}</span>
-        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.sellInPrev)}</span>
-      </div>
-      {delta != null && (
-        <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px dashed ${theme.divider || theme.border}`, display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-          <span style={{ color: theme.textMuted }}>Δ YoY</span>
-          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: delta >= 0 ? P.green : P.red }}>
-            {delta >= 0 ? '+' : ''}{delta.toFixed(1)}%
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
 
-// ═══════════════ Composición por familia · SO YTD (donut stroke-dasharray) ═══════════════
 function FamiliaSOCard({ theme, P, familias, totalMonto, totalPiezas, selected, onSelect }) {
   const [expanded, setExpanded] = useState(false);
   const TOP_N = 7;
@@ -2540,19 +2361,12 @@ function DrillCol({ theme, P, title, count, items, color, sucursalTint }) {
 }
 
 function AnalisisMensualMini({ theme, P, isDark, mensuales, precioLista }) {
-  const W = 400, H = 90;
-  const padL = 18, padR = 8, padT = 14, padB = 22;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
-  const maxPz = Math.max(1, ...mensuales.map((m) => m.piezas));
-  const preciosVal = mensuales.filter((m) => m.precioReal != null).map((m) => m.precioReal);
-  const precioMin = Math.min(...preciosVal, precioLista || Infinity);
-  const precioMax = Math.max(...preciosVal, precioLista || 0);
-  const precioRange = precioMax - precioMin || 1;
-  const xOf = (i) => padL + (i / Math.max(1, mensuales.length - 1)) * chartW;
-  const yBar = (v) => padT + chartH * (1 - v / maxPz);
-  const yPr = (v) => padT + chartH * (1 - (v - precioMin) / precioRange);
-  const barW = Math.max(6, chartW / mensuales.length - 4);
+  const datos = mensuales.map((m) => ({ x: m.label, piezas: m.piezas > 0 ? m.piezas : null, precioReal: m.precioReal ?? null, precioLista: precioLista || null }));
+  const series = [
+    { key: 'precioReal', label: 'Precio real', tipo: 'principal', color: P.teal },
+    ...(precioLista ? [{ key: 'precioLista', label: 'Lista', tipo: 'anterior' }] : []),
+    { key: 'piezas', label: 'Piezas', tipo: 'linea', color: P.orange, eje: 'der', formato: (v) => `${fmt.int(v)} pz` },
+  ];
   return (
     <div style={{
       background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
@@ -2562,44 +2376,11 @@ function AnalisisMensualMini({ theme, P, isDark, mensuales, precioLista }) {
         <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>
           Análisis mensual · precio × piezas
         </span>
-        <div style={{ display: 'flex', gap: 8, fontSize: 9, color: theme.textMuted }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-            <span style={{ width: 7, height: 2, borderRadius: 1, background: P.teal }} />Real
-          </span>
-          {precioLista && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 7, height: 2, borderRadius: 1, background: theme.textMuted }} />Lista
-            </span>
-          )}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 1, background: P.orange, opacity: 0.7 }} />Piezas
-          </span>
-        </div>
       </div>
       {mensuales.length === 0 ? (
         <div style={{ padding: '18px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 10.5 }}>Sin transacciones aún</div>
       ) : (
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }}>
-          <line x1={padL} y1={padT} x2={W - padR} y2={padT} stroke={isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'} strokeDasharray="3 4" />
-          <line x1={padL} y1={padT + chartH / 2} x2={W - padR} y2={padT + chartH / 2} stroke={isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'} strokeDasharray="3 4" />
-          <line x1={padL} y1={padT + chartH} x2={W - padR} y2={padT + chartH} stroke={theme.divider || theme.border} />
-          {mensuales.map((m, i) => (
-            m.piezas > 0 ? <rect key={`b-${i}`} x={xOf(i) - barW / 2} y={yBar(m.piezas)} width={barW} height={padT + chartH - yBar(m.piezas)} fill={P.orange} opacity="0.55" rx="1" /> : null
-          ))}
-          {precioLista && (
-            <polyline points={mensuales.map((m, i) => `${xOf(i)},${yPr(precioLista)}`).join(' ')} fill="none" stroke={theme.textMuted} strokeWidth="1.2" strokeDasharray="4 3" opacity="0.55" />
-          )}
-          {(() => {
-            const puntos = mensuales.filter((m) => m.precioReal != null);
-            if (puntos.length === 0) return null;
-            const pts = mensuales.map((m, i) => m.precioReal != null ? `${xOf(i)},${yPr(m.precioReal)}` : null).filter(Boolean).join(' ');
-            return <polyline points={pts} fill="none" stroke={P.teal} strokeWidth="2" />;
-          })()}
-          {mensuales.map((m, i) => (
-            <text key={`x-${i}`} x={xOf(i)} y={H - 8} textAnchor="middle"
-              fontFamily='"SF Mono", ui-monospace, monospace' fontSize="8" fill={theme.textMuted}>{m.label}</text>
-          ))}
-        </svg>
+        <GraficaLineas datos={datos} series={series} formato={fmt.money} alto={120} compacto leyenda mostrarMinMax={false} desdeCero={false} />
       )}
     </div>
   );

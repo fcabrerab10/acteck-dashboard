@@ -10,11 +10,10 @@
 // Margen/costo sólo con `sensible`.
 import React, { useMemo, useState } from 'react';
 import { Share2, Copy, X } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, ComposedChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { fecha as fmtFecha } from '../../../lib/format';
-import { KpiCard, Pill, DeltaPill, Panel, Boton, Cargando, TablaCompacta, toast } from '../../../components/kit';
+import { KpiCard, Pill, DeltaPill, Panel, Boton, Cargando, TablaCompacta, toast, GraficaLineas } from '../../../components/kit';
 import { compartir, copiar, fechaCorta } from '../../../lib/whatsapp';
 import { usePerfil } from '../../../lib/perfilContext';
 import { useRoadmap } from '../../../lib/queries';
@@ -171,22 +170,14 @@ export default function DrillSku({ row, sensible = false, onClose }) {
               <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '18px 0' }}>Sin histórico de precios para este SKU.</div>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height={150}>
-                  <LineChart data={hist.serie.map((p) => ({ ...p, label: periodoLbl(p.anio, p.mes) }))} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                    <CartesianGrid stroke={theme.border} strokeDasharray="2 4" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontText }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontText }} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={(v) => fmtMoneyShort(v)} />
-                    <Tooltip formatter={(v, name) => [fmtMoney(v), listaLbl(name)]} contentStyle={tooltipStyle} labelStyle={{ fontSize: 10, color: theme.textMuted }} cursor={{ stroke: theme.border }} />
-                    {LISTAS.filter((l) => hist.serie.some((p) => p[l] != null)).map((l) => (
-                      <Line key={l} type="monotone" dataKey={l} name={l} stroke={listaColor(theme, l)} strokeWidth={l === 'Mayoreo AAA' ? 2.5 : 1.5} dot={{ r: 3, strokeWidth: 0, fill: listaColor(theme, l) }} isAnimationActive={false} connectNulls />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4, marginBottom: 8 }}>
-                  {LISTAS.filter((l) => hist.serie.some((p) => p[l] != null)).map((l) => (
-                    <span key={l} style={{ fontSize: 10, color: theme.textMuted, display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, background: listaColor(theme, l), display: 'inline-block' }} />{listaLbl(l)}</span>
-                  ))}
-                </div>
+                {(() => {
+                  const listas = LISTAS.filter((l) => hist.serie.some((p) => p[l] != null));
+                  const principal = listas.includes('Mayoreo AAA') ? 'Mayoreo AAA' : listas[0];
+                  const series = listas.map((l) => ({ key: l, label: listaLbl(l), tipo: l === principal ? 'principal' : 'linea', color: listaColor(theme, l) }));
+                  return (
+                    <GraficaLineas datos={hist.serie.map((p) => ({ ...p, x: periodoLbl(p.anio, p.mes) }))} series={series} formato={fmtMoneyShort} alto={170} desdeCero={false} style={{ marginBottom: 8 }} />
+                  );
+                })()}
                 {soloUnMes ? (
                   <div style={{ fontSize: 11, color: theme.textMuted }}>El histórico se acumula desde {hist.desde ? fmtFecha(hist.desde) : 'hoy'}: a partir del próximo mes se verán los cambios por lista aquí.</div>
                 ) : (
@@ -200,18 +191,9 @@ export default function DrillSku({ row, sensible = false, onClose }) {
             {calc.serieAnio.length === 0 ? (
               <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '18px 0' }}>Sin facturación este año.</div>
             ) : (
-              <ResponsiveContainer width="100%" height={130}>
-                <ComposedChart data={calc.serieAnio} margin={{ top: 8, right: 6, left: -24, bottom: 0 }}>
-                  <defs><linearGradient id={`epFill-${row.sku}`} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor={theme.accent || '#007AFF'} stopOpacity={tipo ? 0.32 : 0.2} /><stop offset="100%" stopColor={theme.accent || '#007AFF'} stopOpacity={0} /></linearGradient></defs>
-                  <CartesianGrid stroke={theme.border} strokeDasharray="2 4" vertical={false} />
-                  <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontText }} interval={0} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="left" hide domain={['auto', 'auto']} />
-                  <YAxis yAxisId="right" orientation="right" hide domain={[0, 'auto']} />
-                  <Tooltip formatter={(v, name) => (name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`)} contentStyle={tooltipStyle} labelStyle={{ fontSize: 10, color: theme.textMuted }} cursor={{ stroke: theme.border, strokeDasharray: '3 3' }} />
-                  <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={`${theme.accent || '#007AFF'}1F`} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false} />
-                  <Area yAxisId="left" type="monotone" dataKey="precio" name="Precio" stroke={theme.accent || '#007AFF'} strokeWidth={2.5} fill={`url(#epFill-${row.sku})`} dot={false} connectNulls isAnimationActive={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
+              <GraficaLineas datos={calc.serieAnio.map((d) => ({ x: d.mes, precio: d.precio, piezas: d.piezas }))}
+                series={[{ key: 'precio', label: 'Precio', tipo: 'principal' }, { key: 'piezas', label: 'Piezas', tipo: 'linea', color: theme.orange, eje: 'der', formato: (v) => `${fmtInt(v)} pz` }]}
+                formato={fmtMoneyShort} alto={150} desdeCero={false} />
             )}
           </Panel>
 

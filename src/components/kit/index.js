@@ -10,5 +10,7 @@ export { default as Boton } from './Boton';
 export { default as Skeleton, SkeletonPantalla } from './Skeleton';
 export { default as Cargando } from './Cargando';
 export { toast, ToastHost } from './Toast';
+export { default as GraficaLineas } from './GraficaLineas';
+export { default as SelectorTrimestres, TRIMESTRES, Q_MESES, qDe, mesesDeTrimestres, etiquetaTrimestres, usePersistTrimestres } from './SelectorTrimestres';
 export { EASE, DUR, STAGGER, t as transition } from '../../lib/motion';
 export { ELEV, elevation, bordeFlotante } from '../../lib/elevation';

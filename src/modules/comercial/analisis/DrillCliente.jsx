@@ -3,12 +3,11 @@
 // periodo con HeatCell SKU × últimos 6 meses · composición por categoría (roadmap_sku) ·
 // alertas activas si el cliente es propio. Detalle SKU: mv_analisis_cliente_sku_mes por código ERP.
 import React, { useMemo } from 'react';
-import { ComposedChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
 import { SEV_LABEL } from '../../../lib/alertas';
-import { Cargando, KpiCard, HeatCell, Pill, Panel } from '../../../components/kit';
+import { Cargando, KpiCard, HeatCell, Pill, Panel, GraficaLineas } from '../../../components/kit';
 import { useDetalleCliente } from './useAnalisisData';
 import { MESES, N, idxMes, enPeriodo, serie12, pctDe } from './calc';
 import { money, moneyFull, int, pct } from './formato';
@@ -76,22 +75,9 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: 10 }}>
         <Panel titulo="Tendencia · últimos 12 meses" meta={`fact. neta${verSensible ? ' y contribución' : ''} · línea gris = mismo mes del año anterior`} padding="6px 8px 4px">
-          <div style={{ width: '100%', height: 190 }}>
-            <ResponsiveContainer>
-              <ComposedChart data={serie} margin={{ top: 8, right: 6, left: -8, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="drillFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={accent} stopOpacity={0.18} /><stop offset="100%" stopColor={accent} stopOpacity={0} /></linearGradient>
-                </defs>
-                <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-                <XAxis dataKey="label" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-                <YAxis tickFormatter={money} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={46} />
-                <Tooltip formatter={(v, n) => [moneyFull(v), n]} contentStyle={tip} labelStyle={{ color: theme.textMuted }} />
-                <Area type="monotone" dataKey="fact_neta" name="Fact. neta" stroke={accent} strokeWidth={2.2} fill="url(#drillFill)" dot={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="anterior" name="Año anterior" stroke={theme.textMuted} strokeOpacity={0.6} strokeWidth={1.4} strokeDasharray="4 3" dot={false} isAnimationActive={false} connectNulls />
-                {verSensible && <Line type="monotone" dataKey="contribucion" name="Contribución" stroke={green} strokeWidth={1.8} dot={false} isAnimationActive={false} />}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+          <GraficaLineas datos={serie.map((d) => ({ x: d.label, fact_neta: d.fact_neta, anterior: d.anterior, contribucion: d.contribucion }))}
+            series={[{ key: 'fact_neta', label: 'Fact. neta', tipo: 'principal' }, { key: 'anterior', label: 'Año anterior', tipo: 'anterior' }, ...(verSensible ? [{ key: 'contribucion', label: 'Contribución', tipo: 'linea', color: green }] : [])]}
+            formato={money} alto={190} />
         </Panel>
         <div style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
           <Panel titulo="Composición por categoría" meta={`${periodoLbl} · roadmap_sku / ERP`}>

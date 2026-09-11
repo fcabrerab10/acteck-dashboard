@@ -5,13 +5,13 @@ import {
   ShoppingBag, Search, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
-  ComposedChart, Bar, PieChart, Pie, Cell,
+  Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
 } from 'recharts';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
-import { Cargando } from '../../components/kit';
+import { Cargando, GraficaLineas } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
@@ -707,27 +707,10 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex justify-between items-baseline mb-2">
             <h3 className="text-sm font-semibold text-gray-800">Evolución mensual · Sell-out en $</h3>
-            <div className="text-[11px] text-gray-500 flex gap-3">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: '#F59E0B' }} /> {anioPrev}</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: ACCENT }} /> {anioActual}</span>
-            </div>
           </div>
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer>
-              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="0" stroke="#F3F4F6" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 'auto']} tickFormatter={(v) => fmtMoneyShort(v)}
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
-                <Tooltip formatter={(v, name) => [formatMXN(v), name]}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
-                <Line dataKey="monto2025" name={String(anioPrev)} stroke="#F59E0B" strokeWidth={2}
-                  dot={{ r: 3, fill: '#F59E0B' }} activeDot={{ r: 5 }} connectNulls={false} />
-                <Line dataKey="monto2026" name={String(anioActual)} stroke={ACCENT} strokeWidth={2.5}
-                  dot={{ r: 3.5, fill: ACCENT }} activeDot={{ r: 5 }} connectNulls={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <GraficaLineas datos={chartData.map((d) => ({ x: d.mes, act: d.monto2026, prev: d.monto2025 }))}
+            series={[{ key: 'act', label: String(anioActual), tipo: 'principal', color: ACCENT }, { key: 'prev', label: String(anioPrev), tipo: 'anterior' }]}
+            formato={fmtMoneyShort} alto={260} mesActivo={mesActual - 1} />
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-4">

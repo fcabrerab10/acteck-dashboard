@@ -8,8 +8,8 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import { moneyCompact as $c, fecha } from '../../lib/format';
-import { Hero, KpiCard, Pill, Panel, SkeletonPantalla } from '../../components/kit';
-import { configDe, MESES, Q_MESES, qDe, META_INV_DIAS } from './home/config';
+import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, usePersistTrimestres, mesesDeTrimestres } from '../../components/kit';
+import { configDe, MESES, qDe, META_INV_DIAS } from './home/config';
 import { useHomeData } from './home/useHomeData';
 import { calcular, serieMensual, splitPor, topSkus } from './home/calc';
 import { GraficaSiSo, SplitTabla, TopSkusTabla, InventarioPanel, CobranzaPanel, PendientesMinutas, MarketingPanel, Secundario } from './home/bloques';
@@ -24,13 +24,13 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
   const { theme } = useTheme();
   const cfg = useMemo(() => configDe(clienteKey, cliente), [clienteKey, cliente]);
   const hoy = new Date(), anio = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
-  const [rango, setRango] = useState(qDe(mesActual));       // gráfica SI vs SO
-  const [rangoSplit, setRangoSplit] = useState(qDe(mesActual)); // split marca / sucursal
+  const [rango, setRango] = usePersistTrimestres(`home:${clienteKey}`, () => new Set([qDe(mesActual)]));           // gráfica SI vs SO
+  const [rangoSplit, setRangoSplit] = usePersistTrimestres(`homeSplit:${clienteKey}`, () => new Set([qDe(mesActual)])); // split marca / sucursal
   const { loading, error, data } = useHomeData(clienteKey, cfg, anio);
 
   const r = useMemo(() => (data ? calcular(data, cfg, anio, mesActual) : null), [data, cfg, anio, mesActual]);
-  const serie = useMemo(() => (r ? serieMensual(r, Q_MESES[rango], mesActual) : null), [r, rango, mesActual]);
-  const split = useMemo(() => (r ? splitPor(data, cfg, r, Q_MESES[rangoSplit], anio) : []), [data, cfg, r, rangoSplit, anio]);
+  const serie = useMemo(() => (r ? serieMensual(r, mesesDeTrimestres(rango), mesActual) : null), [r, rango, mesActual]);
+  const split = useMemo(() => (r ? splitPor(data, cfg, r, mesesDeTrimestres(rangoSplit), anio) : []), [data, cfg, r, rangoSplit, anio]);
   const top = useMemo(() => (r ? topSkus(data, r) : null), [data, r]);
 
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'home')) return <SinAcceso motivo={`No tienes acceso al Resumen de ${cfg.nombre}.`} />;

@@ -5,7 +5,6 @@
 // estados_cuenta (último corte del cliente propio).
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { Share2, Copy, Lock, CreditCard, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
@@ -15,6 +14,7 @@ import { useAlertas } from '../../lib/alertas';
 import { colorSev } from '../../components/notificaciones/Pila';
 import { canalLabel } from '../../modules/general/inicio/config';
 import { textoFichaCliente, compartir, copiar } from '../../lib/whatsapp';
+import { GraficaLineas } from '../../components/kit';
 import { useNav } from '../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, HeatCell, Vacio, HojaM, BotonGrande, TituloSeccionM, toast } from '../piezas';
 import { PROPIOS, nombreCliente, colorCliente } from '../datos';
@@ -34,23 +34,13 @@ export const nombreBonito = (s) => String(s || '').trim().toLowerCase().split(/\
   return w.replace(/^(\S)/, (c) => c.toUpperCase());
 }).join(' ');
 
-/** Gráfica mínima de 12 barras (Recharts, sin animación) con el mes actual resaltado. serie: [{ key, label, v, actual }]. */
-export function MiniBarras({ serie, fmt = moneyCompact, alto = 150, nombre = 'Monto' }) {
+/** Gráfica mínima de 12 meses (kit GraficaLineas compacto) con el mes actual resaltado. serie: [{ key, label, v, actual }]. */
+export function MiniLineas({ serie, fmt = moneyCompact, alto = 150, nombre = 'Monto' }) {
   const { theme } = useTheme();
-  const accent = theme.accent;
-  const tip = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 12, fontFamily: TYPO.fontText, color: theme.text, boxShadow: 'none' };
   return (
-    <div style={{ margin: '0 16px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 6px 4px 0' }}>
-      <ResponsiveContainer width="100%" height={alto}>
-        <BarChart data={serie} margin={{ top: 4, right: 6, left: 0, bottom: 0 }} barCategoryGap="28%">
-          <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontDisplay }} axisLine={false} tickLine={false} interval={0} />
-          <YAxis tickFormatter={(v) => moneyCompact(v).replace('$', '')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={34} />
-          <Tooltip cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={tip} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} formatter={(v) => [fmt(v), nombre]} />
-          <Bar dataKey="v" name={nombre} fill={accent} radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false}>
-            {serie.map((s) => <Cell key={s.key} fillOpacity={s.actual ? 1 : 0.42} stroke={s.actual ? theme.text : 'none'} strokeWidth={s.actual ? 1 : 0} />)}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div style={{ margin: '0 16px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 8px 4px' }}>
+      <GraficaLineas compacto datos={serie.map((s) => ({ x: s.label, v: s.v }))} series={[{ key: 'v', label: nombre, tipo: 'principal' }]}
+        formato={fmt} alto={alto} mesActivo={serie.findIndex((s) => s.actual)} cabecera />
     </div>
   );
 }
@@ -128,7 +118,7 @@ export default function AnalisisFicha({ clienteNombre, canal, label }) {
           </KpiGrid>
 
           <TituloSeccionM style={{ marginTop: 18, padding: '0 28px 6px' }}>Últimos 12 meses</TituloSeccionM>
-          <MiniBarras serie={r.serie} nombre="Facturación" />
+          <MiniLineas serie={r.serie} nombre="Facturación" />
 
           <ListaAgrupada titulo={`Top ${data.top.length} SKUs · ${anio}`} style={{ marginTop: 18 }} pie="Celda = piezas del año (intensidad relativa al SKU líder). Toca un SKU para ver disponibilidad y precio.">
             {data.top.length === 0 && <Vacio icon={null} titulo="Sin facturación este año" />}

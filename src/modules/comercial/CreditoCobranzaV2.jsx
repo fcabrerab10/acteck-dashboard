@@ -4,7 +4,7 @@
 // ─ 4 KpiCard con el aging (0-30 · 31-60 · 61-90 · +90) con barra proporcional y tono por tramo (click = filtra la tabla)
 // ─ Panel "Vencimientos próximos" (Recharts) + Panel "Línea de crédito y corte" (uso de línea, deltas vs corte anterior)
 // ─ Panel "Facturas con saldo" con TablaCompacta (búsqueda, filtro por tramo, orden, totales) + ExportMenu
-// ─ Panel plegable "Historial de cortes" (serie semanal Recharts + tabla; click en una semana = corte seleccionado)
+// ─ Panel plegable "Historial de cortes" (serie semanal con GraficaLineas del kit + tabla; click en una semana = corte seleccionado)
 // Preserva la data que ya cargaba (estados_cuenta + detalle + clientes_credito_config + v_fact_cliente_mes).
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -13,13 +13,13 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Search } from 'lucide-react';
 import {
-  ComposedChart, Bar, Line, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  ComposedChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, SkeletonPantalla, EASE, DUR } from '../../components/kit';
+import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, SkeletonPantalla, GraficaLineas, EASE, DUR } from '../../components/kit';
 
 const NOMBRES_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -524,24 +524,19 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
         acciones={!esUltimo && <Boton onClick={() => setCorteSel(cortes[0]?.id ?? null)}>Volver al último corte</Boton>}
       >
         {historial.length >= 2 ? (
-          <div style={{ height: 130, minWidth: 0, marginBottom: 8 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={historial} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barGap={1}>
-                <CartesianGrid vertical={false} stroke={theme.border} strokeDasharray="2 4" />
-                <XAxis dataKey="etiqueta" tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontDisplay }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="m" hide />
-                <YAxis yAxisId="d" orientation="right" hide />
-                <Tooltip cursor={cursorFill} contentStyle={tooltipStyle}
-                  labelFormatter={(l, p) => { const r = p?.[0]?.payload; return r ? `${l} · ${r.anio} · corte ${fmtFechaCorta(r.fecha)}` : l; }}
-                  formatter={(v, n) => (n === 'DSO' ? [v != null ? `${v}d` : '—', n] : [fmt$Full(v), n])} />
-                <Bar yAxisId="m" dataKey="saldo" name="Saldo" radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={28}
-                  onClick={(d) => d?.id && setCorteSel(d.id)} cursor="pointer">
-                  {historial.map((h) => <Cell key={h.id} fill={P.accent} fillOpacity={h.id === estado.id ? 1 : 0.35} />)}
-                </Bar>
-                <Bar yAxisId="m" dataKey="vencido" name="Vencido" fill={P.red} radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={28} />
-                <Line yAxisId="d" type="monotone" dataKey="dso" name="DSO" stroke={P.orange} strokeWidth={1.6} dot={{ r: 2, strokeWidth: 0, fill: P.orange }} connectNulls isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div style={{ marginBottom: 8 }}>
+            <GraficaLineas
+              datos={historial.map((h) => ({ x: h.etiqueta, saldo: h.saldo, vencido: h.vencido, dso: h.dso }))}
+              series={[
+                { key: 'saldo', label: 'Saldo', tipo: 'principal' },
+                { key: 'vencido', label: 'Vencido', tipo: 'linea', color: P.red },
+                { key: 'dso', label: 'DSO', tipo: 'linea', color: P.orange, eje: 'der', formato: (v) => `${Math.round(v)}d` },
+              ]}
+              formato={fmt$}
+              alto={150}
+              mesActivo={historial.findIndex((h) => h.id === estado.id)}
+              onClickMes={(i) => { const h = historial[i]; if (h?.id) setCorteSel(h.id); }}
+            />
           </div>
         ) : (
           <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 8 }}>La serie semanal aparece a partir del segundo corte cargado.</div>

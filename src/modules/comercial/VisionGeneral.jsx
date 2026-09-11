@@ -9,13 +9,8 @@ import {
   Activity, TrendingUp,
   Wallet, Package, Receipt, Target, ShoppingBag, X,
 } from 'lucide-react';
-import {
-  BarChart, Bar,
-  AreaChart, Area,
-  XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
-} from 'recharts';
 import { cachedQuery } from '../../lib/queries';
-import { Cargando, KpiCard } from '../../components/kit';
+import { Cargando, KpiCard, GraficaLineas } from '../../components/kit';
 import RentabilidadBloque from './RentabilidadBloque';
 import ExportMenu from '../../components/ExportMenu';
 import Pill, { toneColors } from '../../components/kit/Pill';
@@ -1015,25 +1010,12 @@ function ClientesPanel({ dimension, valor, color, clientes, mcPorCliente, mensua
         )}
       </div>
 
-      {/* Bar chart · año anterior vs año elegido */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '8px 0 6px' }}>
-        <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Facturación mensual · {anio - 1} vs {anio}</p>
-        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: canalCol }} />{anio}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anio - 1}</span>
-        </div>
-      </div>
-      <div style={{ width: '100%', height: 160, marginBottom: 14 }}>
-        <ResponsiveContainer>
-          <BarChart data={trendData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }} barCategoryGap="18%" barGap={2}>
-            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
-            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-            <Bar dataKey={`${anio - 1}`} fill={canalCol} fillOpacity={0.28} radius={[7, 7, 0, 0]} isAnimationActive={false} />
-            <Bar dataKey={`${anio}`}     fill={canalCol}                       radius={[7, 7, 0, 0]} isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Facturación mensual · año anterior vs año elegido (kit GraficaLineas) */}
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '8px 0 6px' }}>Facturación mensual · {anio - 1} vs {anio}</p>
+      <div style={{ marginBottom: 14 }}>
+        <GraficaLineas datos={trendData.map((d) => ({ x: d.mes, act: d[`${anio}`], prev: d[`${anio - 1}`] }))}
+          series={[{ key: 'act', label: String(anio), tipo: 'principal', color: canalCol }, { key: 'prev', label: String(anio - 1), tipo: 'anterior' }]}
+          formato={fmtCompact} alto={170} mesActivo={mesMax - 1} />
       </div>
 
       {clientes.length > 0 ? (
@@ -1093,30 +1075,11 @@ function TendenciaCard({ data, anio, mesMax }) {
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 18px', fontFamily: TYPO.fontText, display: 'flex', flexDirection: 'column' }}>
       <div className="flex items-baseline justify-between" style={{ marginBottom: 6 }}>
         <h4 style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Tendencia mensual · 3 años.</h4>
-        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.accent }} />{anio}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.6 }} />{anio - 1}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.3 }} />{anio - 2}</span>
-        </div>
       </div>
-      <div style={{ width: '100%', height: 158, flex: 1 }}>
-        <ResponsiveContainer>
-          <AreaChart data={data} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
-            <defs>
-              <linearGradient id="fillNow" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={theme.accent} stopOpacity={0.18} />
-                <stop offset="100%" stopColor={theme.accent} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
-            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-            <Area type="monotone" dataKey={`${anio - 2}`} stroke={theme.textMuted} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" fill="none" dot={false} isAnimationActive={false} />
-            <Area type="monotone" dataKey={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
-            <Area type="monotone" dataKey={`${anio}`}     stroke={theme.accent} strokeWidth={2.2} fill="url(#fillNow)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: theme.accent, strokeWidth: 2 }} isAnimationActive={false} />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <GraficaLineas datos={data.map((d) => ({ x: d.mes, act: d[`${anio}`], p1: d[`${anio - 1}`], p2: d[`${anio - 2}`] }))}
+          series={[{ key: 'act', label: String(anio), tipo: 'principal' }, { key: 'p1', label: String(anio - 1), tipo: 'anterior' }, { key: 'p2', label: String(anio - 2), tipo: 'linea', color: theme.textSubtle || theme.textMuted, dash: '2 3' }]}
+          formato={fmtCompact} alto={170} mesActivo={mesMax - 1} />
       </div>
     </div>
   );
@@ -1373,28 +1336,11 @@ function SellOutTendencia({ data, anio }) {
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 16px', fontFamily: TYPO.fontText, display: 'flex', flexDirection: 'column' }}>
       <div className="flex items-baseline justify-between" style={{ marginBottom: 4 }}>
         <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Tendencia sell-out mensual.</h4>
-        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: pink }} />{anio}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anio - 1}</span>
-        </div>
       </div>
-      <div style={{ width: '100%', height: 132, flex: 1 }}>
-        <ResponsiveContainer>
-          <AreaChart data={data} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
-            <defs>
-              <linearGradient id="fillSO" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={pink} stopOpacity={0.20} />
-                <stop offset="100%" stopColor={pink} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
-            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-            <Area type="monotone" dataKey={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
-            <Area type="monotone" dataKey={`${anio}`} stroke={pink} strokeWidth={2.2} fill="url(#fillSO)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: pink, strokeWidth: 2 }} isAnimationActive={false} />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <GraficaLineas datos={data.map((d) => ({ x: d.mes, act: d[`${anio}`], prev: d[`${anio - 1}`] }))}
+          series={[{ key: 'act', label: String(anio), tipo: 'principal', color: pink }, { key: 'prev', label: String(anio - 1), tipo: 'anterior' }]}
+          formato={fmtCompact} alto={150} />
       </div>
     </div>
   );
@@ -1528,24 +1474,11 @@ function SellOutCanalPanel({ canalKey, canalRow, serie12m, sellMayoristas, sellT
         <KBox lbl="Clientes finales" val={fmtInt(canalRow?.clientes || 0)} sub={`${fmtInt(canalRow?.skus || 0)} SKUs distintos`} last />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '6px 0 6px' }}>
-        <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Sell-out mensual · {anio - 1} vs {anio}</p>
-        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: canalCol }} />{anio}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: canalCol, opacity: 0.28 }} />{anio - 1}</span>
-        </div>
-      </div>
-      <div style={{ width: '100%', height: 130, marginBottom: 12 }}>
-        <ResponsiveContainer>
-          <BarChart data={serie12m} margin={{ top: 6, right: 4, left: -6, bottom: 0 }} barCategoryGap="18%" barGap={2}>
-            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
-            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-            <Bar dataKey={`${anio - 1}`} fill={canalCol} fillOpacity={0.28} radius={[7, 7, 0, 0]} isAnimationActive={false} />
-            <Bar dataKey={`${anio}`}     fill={canalCol}                    radius={[7, 7, 0, 0]} isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '6px 0 6px' }}>Sell-out mensual · {anio - 1} vs {anio}</p>
+      <div style={{ marginBottom: 12 }}>
+        <GraficaLineas datos={serie12m.map((d) => ({ x: d.mes, act: d[`${anio}`], prev: d[`${anio - 1}`] }))}
+          series={[{ key: 'act', label: String(anio), tipo: 'principal', color: canalCol }, { key: 'prev', label: String(anio - 1), tipo: 'anterior' }]}
+          formato={fmtCompact} alto={150} mesActivo={mesMax ? mesMax - 1 : null} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20 }}>

@@ -12,7 +12,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Share2, Copy, RotateCcw } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
@@ -20,7 +20,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { useRoadmap, fetchAll, fetchAllQ, cachedQuery } from '../../lib/queries';
-import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Cargando, toast } from '../../components/kit';
+import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Cargando, toast, GraficaLineas } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import SinAcceso from '../../components/SinAcceso';
 import ComparadorPeriodos from './ComparadorPeriodos';
@@ -389,28 +389,11 @@ function SellInGlobal({ sensible }) {
 
       {/* Evolución mensual + composición por familia */}
       <Panel titulo="Evolución mensual" meta={`${anio} vs ${anioPrev} · monto facturado${familiaSel ? ` · familia ${familiaSel}` : ''}`}
-        acciones={familiaSel ? <Boton size="sm" icon={RotateCcw} onClick={() => setFamiliaSel(null)}>Todas las familias</Boton> : (
-          <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: blue }} />{anio}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
-            {cuotas.anual > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, borderRadius: 1, background: orange }} />Cuota</span>}
-          </div>
-        )}>
+        acciones={familiaSel ? <Boton size="sm" icon={RotateCcw} onClick={() => setFamiliaSel(null)}>Todas las familias</Boton> : null}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 20 }}>
-          <div style={{ width: '100%', height: 210 }}>
-            <ResponsiveContainer>
-              <AreaChart data={chartData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
-                <defs><linearGradient id="fillSellInGlobal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={blue} stopOpacity={0.2} /><stop offset="100%" stopColor={blue} stopOpacity={0} /></linearGradient></defs>
-                <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-                <XAxis dataKey="mes" tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-                <YAxis tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} width={48} />
-                <Tooltip formatter={(v, n) => [formatMXN(v), n === 'act' ? anio : n === 'prev' ? anioPrev : 'Cuota']} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-                {cuotas.anual > 0 && !familiaSel && <Area type="monotone" dataKey="cuota" stroke={orange} strokeWidth={1.4} strokeDasharray="4 3" fill="none" dot={false} isAnimationActive={false} />}
-                <Area type="monotone" dataKey="prev" stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="act" stroke={blue} strokeWidth={2.2} fill="url(#fillSellInGlobal)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2 }} isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <GraficaLineas datos={chartData.map((d) => ({ x: d.mes, act: d.act, prev: d.prev, cuota: d.cuota }))}
+            series={[{ key: 'act', label: String(anio), tipo: 'principal' }, { key: 'prev', label: String(anioPrev), tipo: 'anterior' }, ...(cuotas.anual > 0 && !familiaSel ? [{ key: 'cuota', label: 'Cuota', tipo: 'cuota' }] : [])]}
+            formato={fmtMoneyShort} alto={210} mesActivo={mesActual - 1} />
           <div style={{ borderLeft: `1px solid ${theme.divider || theme.border}`, paddingLeft: 18, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text }}>Composición por familia · YTD</span>

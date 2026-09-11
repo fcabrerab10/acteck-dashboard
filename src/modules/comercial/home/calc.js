@@ -141,12 +141,13 @@ export function calcular(d, cfg, anio, mesActual) {
 }
 
 // ── Serie mensual para la gráfica + sumas del rango (Q1..Q4 / año)
+// `meses` = meses de los trimestres marcados (sumas y atenuado); la serie siempre trae los 12 meses del año.
 export function serieMensual(r, meses, mesActual) {
-  const data = meses.map((m) => { const c = r.cuotaDe(m); return { m, mes: MESES[m - 1], si: m > mesActual ? null : r.siCur.get(m) || 0, siPrev: r.siPrev.get(m) || 0, so: m > mesActual ? null : r.soCur.get(m) || 0, cuota: c.ideal || null, cuotaMin: c.min || null }; });
+  const data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => { const c = r.cuotaDe(m); return { m, mes: MESES[m - 1], si: m > mesActual ? null : r.siCur.get(m) || 0, siPrev: r.siPrev.get(m) || 0, so: m > mesActual ? null : r.soCur.get(m) || 0, cuota: c.ideal || null, cuotaMin: c.min || null }; });
   const cerr = meses.filter((m) => m <= mesActual);
   const si = sumMeses(r.siCur, cerr), siPrev = sumMeses(r.siPrev, cerr), so = sumMeses(r.soCur, cerr), soPrev = sumMeses(r.soPrev, cerr);
   const cuota = sum(meses, (m) => r.cuotaDe(m).ideal), cuotaMin = sum(meses, (m) => r.cuotaDe(m).min);
-  return { data, sums: { si, siPrev, so, cuota, cuotaMin, yoy: delta(si, siPrev), vsMin: delta(si, cuotaMin), vsIdeal: delta(si, cuota), ratio: pctDe(so, si), ratioPrev: pctDe(soPrev, siPrev) } };
+  return { data, meses, sums: { si, siPrev, so, cuota, cuotaMin, yoy: delta(si, siPrev), vsMin: delta(si, cuotaMin), vsIdeal: delta(si, cuota), ratio: pctDe(so, si), ratioPrev: pctDe(soPrev, siPrev) } };
 }
 
 // ── Split sell-in vs sell-out por marca (o por sucursal, con SI proporcional al peso de cada sucursal)

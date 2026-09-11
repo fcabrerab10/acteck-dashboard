@@ -3,10 +3,9 @@
 // evolución de 24 meses (Recharts). Toda cifra completa va en el title de la celda.
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { TablaCompacta, DeltaPill, Pill } from '../../../components/kit';
+import { TablaCompacta, DeltaPill, Pill, GraficaLineas } from '../../../components/kit';
 import { money, moneyCompact, pct, pp } from '../../../lib/format';
 import { MESES_LBL, GRUPOS_TABLA, evolucion24 } from './calculo';
 
@@ -98,8 +97,6 @@ export default function TablaFormal({ idx, idxPrev, filas, anio, mesSel, mesMax,
 
 function EvolucionCuenta({ idx, idxPrev, fila, anio, mesMax }) {
   const { theme } = useTheme();
-  const blue = theme.accent || '#007AFF';
-  const border = `1px solid ${theme.border}`;
   const esPct = fila.formato === 'pct';
   const data = useMemo(() => evolucion24(idx, idxPrev, fila.id, anio).map((d) => ({ ...d, valor: esPct && d.valor != null ? d.valor * 100 : d.valor })), [idx, idxPrev, fila.id, anio, esPct]);
   const fmt = (v) => (esPct ? pct(v) : moneyCompact(v));
@@ -113,18 +110,8 @@ function EvolucionCuenta({ idx, idxPrev, fila, anio, mesMax }) {
         <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 6 }}>
           {fila.label} · evolución 24 meses · {anio - 1}–{anio}
         </div>
-        <div style={{ height: 150 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke={theme.border} strokeDasharray="2 4" />
-              <XAxis dataKey="k" tick={{ fontSize: 9, fill: theme.textMuted, fontFamily: TYPO.fontDisplay }} axisLine={false} tickLine={false} interval={1} />
-              <YAxis tick={{ fontSize: 9, fill: theme.textMuted, fontFamily: TYPO.fontDisplay }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => fmt(v)} domain={['auto', 'auto']} />
-              <ReferenceLine y={0} stroke={theme.divider || theme.border} />
-              <Tooltip cursor={{ stroke: theme.border }} contentStyle={{ background: theme.surface, border, borderRadius: 10, fontSize: 11, fontFamily: TYPO.fontText, color: theme.text }} formatter={(v) => [fmt(v), fila.label]} />
-              <Line type="monotone" dataKey="valor" stroke={blue} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: blue }} activeDot={{ r: 4 }} connectNulls isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <GraficaLineas datos={data.map((d) => ({ x: d.k, valor: d.valor }))} series={[{ key: 'valor', label: fila.label, tipo: 'principal' }]}
+          formato={fmt} alto={150} desdeCero={esPct} leyenda={false} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: theme.textMuted, minWidth: 0 }}>
         <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: theme.textMuted }}>Resumen</div>
