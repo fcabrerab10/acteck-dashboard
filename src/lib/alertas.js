@@ -15,9 +15,9 @@ export const SEV_LABEL = { critica: 'Crítica', alta: 'Alta', media: 'Media', in
 const CLIENTES_CON_TAB = new Set(['digitalife', 'pcel', 'dicotech']);
 
 // ─── Centro de notificaciones (2026-09-11) ───
-export const AREAS = ['inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion', 'forecast'];
-export const AREA_LABEL = { inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación', forecast: 'Forecast' };
-const AREA_POR_TIPO = { stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', reserva_3dias: 'forecast', reserva_dia: 'forecast' };
+export const AREAS = ['inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion', 'forecast', 'tracking'];
+export const AREA_LABEL = { inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación', forecast: 'Forecast', tracking: 'Tracking' };
+const AREA_POR_TIPO = { stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', reserva_3dias: 'forecast', reserva_dia: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking' };
 export const MODOS_AREA = ['inmediato', 'resumen', 'silencio'];
 export const HORAS_RESUMEN = ['09:00', '13:00', '18:00'];  // horas con cron en vercel.json (15:00 / 19:00 / 00:00 UTC)
 export const NOMBRE_CLIENTE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech', mayoreo: 'Mayoreo', distribuidor: 'Distribuidor', e_commerce: 'E-commerce', mostrador: 'Mostrador', retail_propios: 'Retail propios', retail_representados: 'Retail rep.', otros: 'Otros' };
@@ -40,6 +40,9 @@ export function destinoAlerta(a) {
     case 'datos_sin_actualizar':   return { clienteKey: null, pagina: 'actualizacion' };
     case 'reserva_3dias':
     case 'reserva_dia':            return { clienteKey: null, pagina: 'forecastReservas', sku: a.sku };
+    case 'oc_detenida':
+    case 'oc_backorder_sin_po':
+    case 'factura_sin_oc':         return { clienteKey: null, pagina: 'ordenesCompra', sku: a.sku };
     default:                       return a?.cliente_key ? { clienteKey: a.cliente_key, pagina: 'home' } : null;
   }
 }

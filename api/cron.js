@@ -26,6 +26,9 @@ const SHEET_NAME = process.env.MASTER_EMBARQUES_SHEET_NAME || String(new Date().
 
 // Helpers de parseo/transformación compartidos con el puente (bridge/).
 import { parseCSV, transformEmbarques, HOJAS_HISTORICAS, anioDeHoja } from './_embarques.js';
+// Tracking Pedidos V3: la misma lógica pura que usa la pantalla (etapas derivadas, backorder, facturas sin OC).
+import { calcularTodo, backorderPorSku, facturasSinOC } from '../src/modules/comercial/tracking/calculo.js';
+import { ETAPA_LABEL as ETAPA_LABEL_TRACKING, DIAS_DETENIDA } from '../src/modules/comercial/tracking/textos.js';
 
 async function upsertChunks(rows) {
   const CHUNK = 200;
@@ -861,6 +864,91 @@ async function reglaReservasArribo(hoy, tipo) {
   return out;
 }
 
+// ─── h. Tracking Pedidos V3: oc_detenida · oc_backorder_sin_po · factura_sin_oc ───
+// Misma lógica que la pantalla (src/modules/comercial/tracking/calculo.js). Antes de evaluar se corre la RPC
+// oc_sincronizar_erp() (idempotente) para que facturas y guías del ERP estén ligadas. Área tracking → ordenesCompra.
+let _datosTracking = null;
+async function datosTracking() {
+  if (_datosTracking) return _datosTracking;
+  _datosTracking = (async () => {
+    try {
+      await fetch(`${SB_URL}/rest/v1/rpc/oc_sincronizar_erp`, { method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json' }, body: '{}' });
+    } catch (e) { console.warn('[tracking] oc_sincronizar_erp:', e?.message || e); }
+    const desde = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+    const [ocs, ocSkus, envios, envioSkus, cotizaciones, facturas, facturaSkus, transitoRows, stockRows, erpFacturas] = await Promise.all([
+      sbGetAll('oc_clientes?select=*'), sbGetAll('oc_clientes_skus?select=*'), sbGetAll('oc_envios?select=*'), sbGetAll('oc_envio_skus?select=*'),
+      sbGetAll('oc_cotizaciones?select=*'), sbGetAll('oc_facturas?select=*'), sbGetAll('oc_factura_skus?select=*'),
+      sbGetAll('v_transito_sku?select=sku,cantidad,eta_mas_cercana,embarques_detalle&cantidad=gt.0', 2000),
+      sbGetAll('v_inventario_comercial?select=sku,disponible', 5000),
+      sbGetAll(`v_erp_facturas_oc?select=cliente_key,folio,referencia,fecha,piezas,monto,n_partidas&fecha=gte.${desde}`, 2000),
+    ]);
+    const transito = new Map(transitoRows.map((t) => { const det = Array.isArray(t.embarques_detalle) ? [...t.embarques_detalle].sort((a, b) => String(a.eta || '').localeCompare(String(b.eta || ''))) : []; return [t.sku, { cantidad: Number(t.cantidad) || 0, eta: t.eta_mas_cercana || det[0]?.eta || null, po: det[0]?.po || null }]; }));
+    const stock = new Map(stockRows.map((r) => [r.sku, { disponible: Number(r.disponible) || 0 }]));
+    return { ocs, ocSkus, envios, envioSkus, cotizaciones, facturas, facturaSkus, erpFacturas, transito, stock, roadmap: new Map() };
+  })();
+  try { return await _datosTracking; } catch (e) { _datosTracking = null; throw e; }
+}
+const ACCION_TRACKING = { tipo: 'navegar', clienteKey: null, pagina: 'ordenesCompra', label: 'Ver tracking' };
+
+// Una alerta por OC detenida reciente (recibida en los últimos 30 días); las más viejas se agrupan en una por cliente
+// para no inundar la central con el histórico capturado sin envío.
+const DIAS_OC_RECIENTE = 30;
+async function reglaOcDetenida(hoy) {
+  const datos = await datosTracking();
+  const filas = calcularTodo(datos, hoy.d);
+  const detenidas = filas.filter((o) => o.detenida);
+  const esReciente = (o) => !o.fecha_recibida || (hoy.d - new Date(o.fecha_recibida)) / 86400000 <= DIAS_OC_RECIENTE;
+  const viejas = new Map();
+  for (const o of detenidas.filter((x) => !esReciente(x))) { if (!viejas.has(o.cliente_key)) viejas.set(o.cliente_key, []); viejas.get(o.cliente_key).push(o); }
+  const agrupadas = [...viejas].map(([ck, ocs]) => ({
+    tipo: 'oc_detenida', severidad: 'media',
+    clave: `oc_detenida|antiguas|${ck}`,
+    titulo: `${nombreCliente(ck)}: ${ocs.length} OC${ocs.length === 1 ? '' : 's'} antigua${ocs.length === 1 ? '' : 's'} sin envío ni entrega registrada`,
+    detalle: `Recibidas hace más de ${DIAS_OC_RECIENTE} días y detenidas en ${[...new Set(ocs.map((o) => (ETAPA_LABEL_TRACKING[o.etapa] || o.etapa).toLowerCase()))].join(' / ')}: ${ocs.slice(0, 6).map((o) => o.numero_oc_cliente).join(', ')}${ocs.length > 6 ? '…' : ''}. Registra el envío/entrega o ciérralas en Tracking.`,
+    cliente_key: ck, sku: null, area: 'tracking', accion: ACCION_TRACKING, caduca_at: null, valor: ocs.length,
+    meta: { total: ocs.length, ocs: ocs.slice(0, 50).map((o) => ({ id: o.id, oc: o.numero_oc_cliente, etapa: o.etapa, dias: Math.floor(o.diasEnEtapa) })) },
+  }));
+  return agrupadas.concat(detenidas.filter(esReciente).map((o) => {
+    const d = Math.floor(o.diasEnEtapa);
+    const etapa = (ETAPA_LABEL_TRACKING[o.etapa] || o.etapa).toLowerCase();
+    const bo = o.backorderSkus?.length ? ` · backorder ${fmtN(o.backorder)} pz` : '';
+    return {
+      tipo: 'oc_detenida', severidad: d > DIAS_DETENIDA * 2 ? 'alta' : 'media',
+      clave: `oc_detenida|${o.id}`,
+      titulo: `${nombreCliente(o.cliente_key)}: ${o.esCotizacion ? 'cotización' : 'OC'} ${o.numero_oc_cliente} lleva ${d} d en ${etapa}`,
+      detalle: `${fmtN(o.pedido)} pz pedidas · ${fmtN(o.facturado)} facturadas${bo}. ${o.etapa === 'recibida' ? 'Sin factura del ERP todavía.' : o.etapa === 'facturada' ? 'Facturada sin guía: registra el envío o espera la guía del ERP.' : 'Cotización sin respuesta del cliente.'}`,
+      cliente_key: o.cliente_key, sku: null, area: 'tracking', accion: ACCION_TRACKING, caduca_at: null, valor: d,
+      meta: { oc_id: o.esCotizacion ? null : o.id, oc: o.numero_oc_cliente, etapa: o.etapa, dias: d, pedido: o.pedido, facturado: o.facturado, backorder: o.backorder },
+    };
+  }));
+}
+async function reglaOcBackorderSinPo(hoy) {
+  const datos = await datosTracking();
+  const filas = calcularTodo(datos, hoy.d);
+  return backorderPorSku(filas).filter((b) => !b.cubre && b.stock < b.backorder).map((b) => ({
+    tipo: 'oc_backorder_sin_po', severidad: 'media',
+    clave: `oc_backorder_sin_po|${b.sku}`,
+    titulo: `${b.sku}: ${fmtN(b.backorder)} pz en backorder sin PO en tránsito`,
+    detalle: `${b.descripcion || b.sku} · ${b.clientes.map(nombreCliente).join(', ')} · OC ${b.ocs.slice(0, 3).join(', ')}${b.ocs.length > 3 ? '…' : ''} · stock hoy ${fmtN(b.stock)} · ${Math.round(b.dias)} d esperando. Revisa compras o avisa al cliente.`,
+    cliente_key: b.clientes.length === 1 ? b.clientes[0] : null, sku: b.sku, area: 'tracking', accion: ACCION_TRACKING, caduca_at: null, valor: b.backorder,
+    meta: { sku: b.sku, backorder: b.backorder, stock: b.stock, clientes: b.clientes, ocs: b.ocs.slice(0, 20), dias: Math.round(b.dias) },
+  }));
+}
+async function reglaFacturaSinOc(hoy) {
+  const datos = await datosTracking();
+  const sin = facturasSinOC(datos.erpFacturas, datos.facturas, hoy.d);
+  const porCliente = new Map();
+  for (const f of sin) { if (!porCliente.has(f.cliente_key)) porCliente.set(f.cliente_key, []); porCliente.get(f.cliente_key).push(f); }
+  return [...porCliente].map(([ck, fs]) => ({
+    tipo: 'factura_sin_oc', severidad: 'media',
+    clave: `factura_sin_oc|${ck}`,
+    titulo: `${nombreCliente(ck)}: ${fs.length} factura${fs.length === 1 ? '' : 's'} del ERP sin OC registrada`,
+    detalle: `${fs.slice(0, 5).map((f) => `${f.folio}${f.referencia ? ` (${f.referencia})` : ''} · ${fmtN(f.piezas)} pz`).join(' · ')}${fs.length > 5 ? ` · +${fs.length - 5}` : ''}. En Tracking: «Crear OC desde factura» o «Ligar a OC».`,
+    cliente_key: ck, sku: null, area: 'tracking', accion: ACCION_TRACKING, caduca_at: null, valor: fs.length,
+    meta: { total: fs.length, folios: fs.slice(0, 50).map((f) => ({ folio: f.folio, referencia: f.referencia, fecha: f.fecha, piezas: f.piezas })) },
+  }));
+}
+
 export { taskResumenProgramado, enviarCriticasNuevas };
 export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
@@ -873,7 +961,11 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['oc_sin_actualizar',      () => reglaOcSinActualizar()],
     ['reserva_3dias',          () => reglaReservasArribo(hoy, 'reserva_3dias')],
     ['reserva_dia',            () => reglaReservasArribo(hoy, 'reserva_dia')],
+    ['oc_detenida',            () => reglaOcDetenida(hoy)],
+    ['oc_backorder_sin_po',    () => reglaOcBackorderSinPo(hoy)],
+    ['factura_sin_oc',         () => reglaFacturaSinOc(hoy)],
   ];
+  _datosTracking = null;   // datos frescos por corrida (la instancia serverless puede reutilizarse)
   const errores = [];
   const tiposEvaluados = new Set();
   const candidatas = [];

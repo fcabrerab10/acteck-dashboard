@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.12.0', fecha: '2026-09-10', titulo: 'Tracking Pedidos',
+    items: [
+      'Pestaña rehecha desde cero conservando las 105 OCs capturadas: embudo cotización → OC → facturada → enviada → entregada, backorder por SKU, surtir hoy, tiempos por etapa.',
+      'Facturas del ERP ligadas solas por referencia o por folio, con sus partidas (SKU, piezas, precio y total): ya no se capturan producto por producto.',
+      'Guías del ERP con captura manual cuando no lleguen y aviso de desfase de fechas; "Pegar correo" para registrar una OC; alertas de OC detenida, backorder sin PO y factura sin OC.',
+    ],
+  },
+  {
     version: '3.11.0', fecha: '2026-09-10', titulo: 'Forecast',
     items: [
       'Reservas en kit V3: buscador y filtros con conteo, método 3 meses · 6 meses · ponderado, drill del SKU con arribos, stock del cliente y reservas anteriores, propuesta de reserva como hoja lateral con "Compartir".',
