@@ -84,6 +84,9 @@ export const MAPA_ACCIONES = {
   evaluaciones_kpis_template: { area: 'Equipo', INSERT: 'KPI de evaluación creado', UPDATE: 'KPI de evaluación editado', DELETE: 'KPI de evaluación eliminado' },
 };
 
+/** Módulo/pestaña de negocio al que pertenece una tabla auditada (fuente: MAPA_ACCIONES[tabla].area). */
+export const areaDeTabla = (tabla) => MAPA_ACCIONES[tabla]?.area || 'Otros';
+
 const OP_HUMANO = { INSERT: 'creado', UPDATE: 'editado', DELETE: 'eliminado' };
 export function humanizar(tabla, op) {
   const t = String(tabla || '').replace(/_/g, ' ');

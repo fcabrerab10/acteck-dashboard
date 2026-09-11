@@ -2,15 +2,24 @@
 // Lee `auditoria_cambios` (la llena el trigger fn_auditoria, migración
 // 20260910_auditoria_cambios.sql). Lectura directa con supabase.from —
 // sin cachedQuery: la tabla cambia a cada rato.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+//
+// El rango (Hoy · 7 días · 30 días · Todo) se aplica en el servidor y se traen
+// bloques de LOTE filas; el resto (persona, área, tipo, cliente, búsqueda sin
+// acentos, ruido de preferencias) se resuelve en el navegador para que los
+// conteos de cada pill se recalculen con los demás filtros aplicados.
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { Cargando } from '../../components/kit';
+import { Cargando, Segmented } from '../../components/kit';
+import ExportMenu from '../../components/ExportMenu';
+import Filtros from '../comercial/sellin/Filtros';
+import { traducirAccion, areaDeTabla } from './equipo/textos';
 import { ChevronDown, ChevronRight, History, Search, RefreshCw } from 'lucide-react';
 
 // ═══════════════════ Constantes ═══════════════════
-const PAGE = 50;
+const LOTE = 1000;      // filas por petición al servidor
+const VISIBLES = 150;   // filas pintadas antes de "Mostrar más"
 
 const TABLA_LABEL = {
   pagos: 'Pagos',
@@ -49,6 +58,9 @@ const TABLA_LABEL = {
   almacenes_config: 'Almacenes',
   roadmap_sku: 'Roadmap SKU',
   ventas_mensuales: 'Ventas mensuales',
+  sync_solicitudes: 'Corridas del puente',
+  agenda_items: 'Agenda · pendientes',
+  agenda_reuniones: 'Agenda · reuniones',
 };
 const tablaLabel = (t) => TABLA_LABEL[t] || (t || '').replace(/_/g, ' ');
 
@@ -56,6 +68,14 @@ const CLIENTE_LABEL = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicot
 const clienteLabel = (c) => CLIENTE_LABEL[c] || c;
 
 const OP_LABEL = { INSERT: 'Alta', UPDATE: 'Cambio', DELETE: 'Baja' };
+// Tipo de cambio en lenguaje de negocio (filtro + badge)
+const TIPO_DE_OP = { INSERT: 'creado', UPDATE: 'editado', DELETE: 'borrado' };
+const TIPOS = [
+  { id: 'creado', label: 'Creado', tone: 'green' },
+  { id: 'editado', label: 'Editado', tone: 'blue' },
+  { id: 'borrado', label: 'Borrado', tone: 'red' },
+];
+const LABEL_RUIDO = 'Preferencias de usuario';
 
 const RANGOS = [
   { id: 'hoy', label: 'Hoy' },
@@ -65,6 +85,9 @@ const RANGOS = [
 ];
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const GRUPOS = ['usuario', 'area', 'tipo', 'cliente'];
+const selVacia = () => ({ usuario: new Set(), area: new Set(), tipo: new Set(), cliente: new Set() });
 
 // ═══════════════════ Helpers ═══════════════════
 const inicioHoy = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -79,6 +102,7 @@ function desdeRango(rango) {
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const hhmm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const normalizar = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 function fmtRelativo(iso) {
   if (!iso) return '—';
@@ -97,6 +121,12 @@ function fmtAbsoluto(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()} · ${hhmm(d)}:${pad2(d.getSeconds())}`;
+}
+
+function fmtExcelFecha(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hhmm(d)}:${pad2(d.getSeconds())}`;
 }
 
 const isoFechaRe = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/;
@@ -149,6 +179,34 @@ function listaCambios(row) {
   return Object.entries(c).map(([campo, v]) => ({ campo, de: undefined, a: v }));
 }
 
+// Texto plano de los cambios (Excel y búsqueda)
+function cambiosTexto(row, cambios) {
+  if (!cambios.length) return '';
+  return cambios.map((c) => (row.operacion === 'UPDATE'
+    ? `${c.campo}: ${fmtValor(c.de, false)} → ${fmtValor(c.a, false)}`
+    : `${c.campo}: ${fmtValor(c.a, false)}`)).join(' · ');
+}
+
+// Fila enriquecida: traducción a negocio + claves de filtro + texto de búsqueda
+function enriquecer(r) {
+  const t = traducirAccion(r);
+  const ruido = t === null;
+  const label = ruido ? LABEL_RUIDO : t.label;
+  const area = ruido ? areaDeTabla(r.tabla) : t.area;
+  const cambios = listaCambios(r);
+  const texto = cambiosTexto(r, cambios);
+  const haystack = normalizar([
+    label, area, r.tabla, tablaLabel(r.tabla), r.operacion, OP_LABEL[r.operacion], TIPO_DE_OP[r.operacion],
+    r.usuario_email, nombreCorto(r.usuario_email), r.registro_id, r.cliente_key, clienteLabel(r.cliente_key), texto,
+  ].filter(Boolean).join(' '));
+  return {
+    ...r, label, area, ruido, cambios, texto, haystack,
+    tipo: TIPO_DE_OP[r.operacion] || 'editado',
+    kUsuario: r.usuario_email || '__sys__',
+    kCliente: r.cliente_key || '__none__',
+  };
+}
+
 // ═══════════════════ Componente ═══════════════════
 export default function HistorialCambios() {
   const { theme } = useTheme();
@@ -162,12 +220,12 @@ export default function HistorialCambios() {
   const border = `1px solid ${theme.border}`;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
   const heroBg = theme.heroCardBg || (isDark ? '#0A0A0C' : '#1C1C1E');
+  const rootRef = useRef(null);
 
   // Filtros
   const [rango, setRango] = useState('7d');
-  const [tabla, setTabla] = useState(null);
-  const [usuario, setUsuario] = useState(null);
-  const [cliente, setCliente] = useState(null);
+  const [sel, setSel] = useState(selVacia);
+  const [mostrarPrefs, setMostrarPrefs] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [q, setQ] = useState(''); // búsqueda con debounce
 
@@ -179,40 +237,33 @@ export default function HistorialCambios() {
   const [error, setError] = useState(null);
   const [expandidos, setExpandidos] = useState(() => new Set());
   const [refreshTick, setRefreshTick] = useState(0);
+  const [visibles, setVisibles] = useState(VISIBLES);
 
-  // KPIs + facetas (últimos 30 días)
+  // KPIs (hoy · semana · usuarios 30 días)
   const [kpi, setKpi] = useState({ hoy: null, semana: null, usuarios: null });
-  const [facetas, setFacetas] = useState({ tablas: [], usuarios: [], clientes: [] });
 
   useEffect(() => {
-    const t = setTimeout(() => setQ(busqueda.trim()), 300);
+    const t = setTimeout(() => setQ(normalizar(busqueda.trim())), 300);
     return () => clearTimeout(t);
   }, [busqueda]);
 
-  // Construye la query con filtros (sin cursor)
+  // Query base: sólo el rango se aplica en el servidor
   const buildQuery = useCallback(() => {
     let b = supabase.from('auditoria_cambios').select('*');
     const desde = desdeRango(rango);
     if (desde) b = b.gte('creado_at', desde);
-    if (tabla) b = b.eq('tabla', tabla);
-    if (usuario) b = usuario === '__sys__' ? b.is('usuario_email', null) : b.eq('usuario_email', usuario);
-    if (cliente) b = cliente === '__none__' ? b.is('cliente_key', null) : b.eq('cliente_key', cliente);
-    if (q) {
-      const s = q.replace(/[%,()]/g, ' ').trim();
-      if (s) b = b.or(`registro_id.ilike.%${s}%,usuario_email.ilike.%${s}%,tabla.ilike.%${s}%,cliente_key.ilike.%${s}%`);
-    }
     return b;
-  }, [rango, tabla, usuario, cliente, q]);
+  }, [rango]);
 
-  // Primera página (se reinicia al cambiar filtros)
+  // Primer lote (se reinicia al cambiar rango o al actualizar)
   useEffect(() => {
     let cancel = false;
-    setLoading(true); setError(null); setExpandidos(new Set());
-    buildQuery().order('id', { ascending: false }).limit(PAGE)
+    setLoading(true); setError(null); setExpandidos(new Set()); setVisibles(VISIBLES);
+    buildQuery().order('id', { ascending: false }).limit(LOTE)
       .then(({ data, error: err }) => {
         if (cancel) return;
         if (err) { setError(err.message); setRows([]); setHasMore(false); }
-        else { setRows(data || []); setHasMore((data || []).length === PAGE); }
+        else { setRows((data || []).map(enriquecer)); setHasMore((data || []).length === LOTE); }
         setLoading(false);
       });
     return () => { cancel = true; };
@@ -222,16 +273,16 @@ export default function HistorialCambios() {
     if (!rows.length || loadingMore) return;
     setLoadingMore(true);
     const cursor = rows[rows.length - 1].id;
-    const { data, error: err } = await buildQuery().lt('id', cursor).order('id', { ascending: false }).limit(PAGE);
+    const { data, error: err } = await buildQuery().lt('id', cursor).order('id', { ascending: false }).limit(LOTE);
     if (err) setError(err.message);
     else {
-      setRows((prev) => [...prev, ...(data || [])]);
-      setHasMore((data || []).length === PAGE);
+      setRows((prev) => [...prev, ...(data || []).map(enriquecer)]);
+      setHasMore((data || []).length === LOTE);
     }
     setLoadingMore(false);
   };
 
-  // KPIs + facetas
+  // KPIs
   useEffect(() => {
     let cancel = false;
     // Un builder por consulta: en supabase-js v2 comparten la URL si se reusa from().
@@ -239,25 +290,59 @@ export default function HistorialCambios() {
     Promise.all([
       t().select('id', { count: 'exact', head: true }).gte('creado_at', inicioHoy().toISOString()),
       t().select('id', { count: 'exact', head: true }).gte('creado_at', haceDias(7).toISOString()),
-      t().select('tabla,usuario_email,cliente_key').gte('creado_at', haceDias(30).toISOString()).order('id', { ascending: false }).limit(5000),
+      t().select('usuario_email').gte('creado_at', haceDias(30).toISOString()).not('usuario_email', 'is', null).order('id', { ascending: false }).limit(5000),
     ]).then(([h, s, f]) => {
       if (cancel) return;
-      const rowsF = f.data || [];
-      const cnt = (key) => {
-        const m = new Map();
-        rowsF.forEach((r) => { const k = r[key]; m.set(k, (m.get(k) || 0) + 1); });
-        return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ k, n }));
-      };
-      const us = cnt('usuario_email');
       setKpi({
         hoy: h.count ?? 0,
         semana: s.count ?? 0,
-        usuarios: us.filter((u) => u.k).length,
+        usuarios: new Set((f.data || []).map((r) => r.usuario_email)).size,
       });
-      setFacetas({ tablas: cnt('tabla'), usuarios: us, clientes: cnt('cliente_key') });
     }).catch(() => { /* KPIs son decorativos */ });
     return () => { cancel = true; };
   }, [refreshTick]);
+
+  // ─── Filtrado en el navegador ───
+  // `omitir` = grupo cuyo filtro NO se aplica (para calcular su conteo facetado)
+  const pasa = useCallback((r, omitir) => {
+    if (omitir !== 'prefs' && !mostrarPrefs && r.ruido) return false;
+    if (q && !r.haystack.includes(q)) return false;
+    if (omitir !== 'usuario' && sel.usuario.size && !sel.usuario.has(r.kUsuario)) return false;
+    if (omitir !== 'area' && sel.area.size && !sel.area.has(r.area)) return false;
+    if (omitir !== 'tipo' && sel.tipo.size && !sel.tipo.has(r.tipo)) return false;
+    if (omitir !== 'cliente' && sel.cliente.size && !sel.cliente.has(r.kCliente)) return false;
+    return true;
+  }, [sel, q, mostrarPrefs]);
+
+  const filtradas = useMemo(() => rows.filter((r) => pasa(r)), [rows, pasa]);
+
+  const facetas = useMemo(() => {
+    const conteo = (grupo, key) => {
+      const m = new Map();
+      rows.forEach((r) => { if (pasa(r, grupo)) m.set(r[key], (m.get(r[key]) || 0) + 1); });
+      sel[grupo].forEach((k) => { if (!m.has(k)) m.set(k, 0); });
+      return m;
+    };
+    const ordenado = (m, label) => [...m.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ id, label: label(id), n }));
+    const prefs = rows.reduce((n, r) => n + (r.ruido && pasa(r, 'prefs') ? 1 : 0), 0);
+    return {
+      usuario: ordenado(conteo('usuario', 'kUsuario'), (id) => (id === '__sys__' ? 'Sistema' : nombreCorto(id))),
+      area: ordenado(conteo('area', 'area'), (id) => id),
+      tipo: (() => { const m = conteo('tipo', 'tipo'); return TIPOS.map((t) => ({ ...t, n: m.get(t.id) || 0 })); })(),
+      cliente: ordenado(conteo('cliente', 'kCliente'), (id) => (id === '__none__' ? 'Sin cliente' : clienteLabel(id))),
+      prefs,
+    };
+  }, [rows, sel, pasa]);
+
+  const toggleSel = (grupo, id) => setSel((prev) => {
+    const n = new Set(prev[grupo]);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return { ...prev, [grupo]: n };
+  });
+
+  const nActivos = GRUPOS.reduce((n, g) => n + sel[g].size, 0) + (q ? 1 : 0) + (mostrarPrefs ? 1 : 0);
+  const hayFiltro = nActivos > 0;
+  const limpiar = () => { setSel(selVacia()); setBusqueda(''); setQ(''); setMostrarPrefs(false); };
 
   const toggle = (id) => setExpandidos((prev) => {
     const n = new Set(prev);
@@ -265,17 +350,51 @@ export default function HistorialCambios() {
     return n;
   });
 
-  const hayFiltro = !!(tabla || usuario || cliente || q);
-  const limpiar = () => { setTabla(null); setUsuario(null); setCliente(null); setBusqueda(''); setQ(''); };
+  const tipoColor = (tipo) => (tipo === 'creado' ? P.green : tipo === 'borrado' ? P.red : P.blue);
 
-  const opColor = (op) => (op === 'INSERT' ? P.green : op === 'DELETE' ? P.red : P.blue);
-
-  const ultimo = rows[0];
+  const ultimo = filtradas[0];
   const narrativa = useMemo(() => {
     if (kpi.hoy == null) return 'Quién cambió qué y cuándo.';
     if (kpi.hoy === 0) return 'Sin movimientos hoy.';
     return `${kpi.hoy} ${kpi.hoy === 1 ? 'cambio' : 'cambios'} hoy en lo que la app escribe.`;
   }, [kpi.hoy]);
+
+  const rangoLabel = RANGOS.find((r) => r.id === rango)?.label || '';
+
+  // ─── Exportar (columnas traducidas, sobre las filas filtradas) ───
+  const excel = () => ({
+    archivo: 'Historial de cambios',
+    hojas: [{
+      nombre: 'Historial',
+      subtitulo: `${rangoLabel}${hayFiltro ? ' · filtrado' : ''} · ${filtradas.length.toLocaleString('es-MX')} cambios`,
+      columnas: [
+        { label: 'Fecha', key: 'fecha', ancho: 18 },
+        { label: 'Persona', key: 'persona', ancho: 18 },
+        { label: 'Acción', key: 'accion', ancho: 32 },
+        { label: 'Área', key: 'area', ancho: 14 },
+        { label: 'Tipo', key: 'tipo', ancho: 10 },
+        { label: 'Cliente', key: 'cliente', ancho: 12 },
+        { label: 'Registro', key: 'registro', ancho: 16 },
+        { label: 'Cambios', key: 'cambios', ancho: 70 },
+        { label: 'Tabla (técnico)', key: 'tabla', ancho: 24 },
+        { label: 'Operación (técnico)', key: 'op', ancho: 12 },
+        { label: 'Correo', key: 'correo', ancho: 28 },
+      ],
+      filas: filtradas.map((r) => ({
+        fecha: fmtExcelFecha(r.creado_at),
+        persona: nombreCorto(r.usuario_email),
+        accion: r.label,
+        area: r.area,
+        tipo: TIPOS.find((t) => t.id === r.tipo)?.label || r.tipo,
+        cliente: r.cliente_key ? clienteLabel(r.cliente_key) : '',
+        registro: r.registro_id || '',
+        cambios: r.texto,
+        tabla: r.tabla,
+        op: r.operacion,
+        correo: r.usuario_email || '',
+      })),
+    }],
+  });
 
   // ─── Estilos reutilizables ───
   const pillStyle = (activo, color = P.blue) => ({
@@ -291,8 +410,10 @@ export default function HistorialCambios() {
   const th = { ...eyebrow, textAlign: 'left', padding: '6px 8px', borderBottom: border, whiteSpace: 'nowrap' };
   const td = { padding: '7px 8px', fontSize: 12, verticalAlign: 'top', borderBottom: `1px solid ${theme.border}` };
 
+  const pintadas = filtradas.slice(0, visibles);
+
   return (
-    <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div ref={rootRef} style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* ═══ Hero ═══ */}
       <div style={{
         background: heroBg, color: '#FFF', borderRadius: 12, padding: '14px 18px',
@@ -307,7 +428,7 @@ export default function HistorialCambios() {
             Historial de cambios
           </h2>
           <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11.5, maxWidth: 440, lineHeight: 1.4, margin: 0 }}>
-            {narrativa}{ultimo ? ` Último: ${nombreCorto(ultimo.usuario_email)} en ${tablaLabel(ultimo.tabla)}, ${fmtRelativo(ultimo.creado_at)}.` : ''}
+            {narrativa}{ultimo ? ` Último: ${nombreCorto(ultimo.usuario_email)} · ${ultimo.label}, ${fmtRelativo(ultimo.creado_at)}.` : ''}
           </p>
         </div>
         <HeroStat k="Hoy" v={kpi.hoy == null ? '—' : kpi.hoy.toLocaleString('es-MX')} sub="cambios" mono={mono} />
@@ -319,24 +440,15 @@ export default function HistorialCambios() {
       <div style={{ background: theme.surface, border, borderRadius: 12, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* Rango · segmented */}
-          <div style={{ display: 'inline-flex', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 9, padding: 2 }}>
-            {RANGOS.map((r) => (
-              <button key={r.id} type="button" onClick={() => setRango(r.id)} style={{
-                fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                background: rango === r.id ? theme.surface : 'transparent',
-                color: rango === r.id ? theme.text : theme.textMuted,
-                boxShadow: rango === r.id ? '0 1px 2px rgba(0,0,0,0.12)' : 'none',
-              }}>{r.label}</button>
-            ))}
-          </div>
+          <Segmented options={RANGOS} value={rango} onChange={setRango} />
 
-          {/* Búsqueda */}
+          {/* Búsqueda (sin acentos: acción, tabla, persona, contenido del cambio) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, border, borderRadius: 9, padding: '4px 9px', flex: '1 1 200px', minWidth: 160, background: theme.bg }}>
             <Search style={{ width: 12, height: 12, color: theme.textMuted, flexShrink: 0 }} />
             <input
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar registro, usuario, tabla…"
+              placeholder="Buscar acción, persona, registro o contenido del cambio…"
               style={{ border: 'none', outline: 'none', background: 'transparent', fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, width: '100%' }}
             />
           </div>
@@ -344,57 +456,28 @@ export default function HistorialCambios() {
           <button type="button" onClick={() => setRefreshTick((n) => n + 1)} title="Actualizar" style={{ ...pillStyle(false), padding: '4px 8px' }}>
             <RefreshCw style={{ width: 11, height: 11 }} /> Actualizar
           </button>
-          {hayFiltro && (
-            <button type="button" onClick={limpiar} style={pillStyle(false, P.red)}>Limpiar filtros</button>
-          )}
+          <ExportMenu
+            titulo="Historial de cambios"
+            subtitulo={rangoLabel}
+            excel={excel}
+            pdf={{ ref: rootRef }}
+            deshabilitado={loading || !filtradas.length}
+          />
         </div>
 
-        {/* Usuario · pills con avatar */}
-        {facetas.usuarios.length > 0 && (
-          <FilaPills label="Usuario">
-            <button type="button" onClick={() => setUsuario(null)} style={pillStyle(!usuario)}>Todos</button>
-            {facetas.usuarios.map((u) => {
-              const key = u.k || '__sys__';
-              const col = colorAvatar(u.k);
-              return (
-                <button key={key} type="button" onClick={() => setUsuario(usuario === key ? null : key)} style={pillStyle(usuario === key, col)} title={u.k || 'Sin usuario (service role / SQL)'}>
-                  <Avatar email={u.k} size={16} />
-                  {nombreCorto(u.k)}
-                  <span style={{ ...mono, fontSize: 9.5, opacity: 0.7 }}>{u.n}</span>
-                </button>
-              );
-            })}
-          </FilaPills>
-        )}
-
-        {/* Cliente */}
-        {facetas.clientes.length > 0 && (
-          <FilaPills label="Cliente">
-            <button type="button" onClick={() => setCliente(null)} style={pillStyle(!cliente)}>Todos</button>
-            {facetas.clientes.map((c) => {
-              const key = c.k || '__none__';
-              return (
-                <button key={key} type="button" onClick={() => setCliente(cliente === key ? null : key)} style={pillStyle(cliente === key)}>
-                  {c.k ? clienteLabel(c.k) : 'Sin cliente'}
-                  <span style={{ ...mono, fontSize: 9.5, opacity: 0.7 }}>{c.n}</span>
-                </button>
-              );
-            })}
-          </FilaPills>
-        )}
-
-        {/* Tabla */}
-        {facetas.tablas.length > 0 && (
-          <FilaPills label="Tabla">
-            <button type="button" onClick={() => setTabla(null)} style={pillStyle(!tabla)}>Todas</button>
-            {facetas.tablas.map((t) => (
-              <button key={t.k} type="button" onClick={() => setTabla(tabla === t.k ? null : t.k)} style={pillStyle(tabla === t.k)} title={t.k}>
-                {tablaLabel(t.k)}
-                <span style={{ ...mono, fontSize: 9.5, opacity: 0.7 }}>{t.n}</span>
-              </button>
-            ))}
-          </FilaPills>
-        )}
+        <Filtros
+          grupos={[
+            { id: 'usuario', label: 'Persona', opciones: facetas.usuario, sel: sel.usuario },
+            { id: 'area', label: 'Área', opciones: facetas.area, sel: sel.area },
+            { id: 'tipo', label: 'Tipo', opciones: facetas.tipo, sel: sel.tipo },
+            { id: 'cliente', label: 'Cliente', opciones: facetas.cliente, sel: sel.cliente },
+          ]}
+          toggles={[{ id: 'prefs', label: 'Mostrar cambios de preferencias', on: mostrarPrefs, n: facetas.prefs }]}
+          onToggle={toggleSel}
+          onToggleFlag={() => setMostrarPrefs((v) => !v)}
+          onLimpiar={limpiar}
+          activos={nActivos}
+        />
       </div>
 
       {/* ═══ Tabla ═══ */}
@@ -403,9 +486,12 @@ export default function HistorialCambios() {
           <Cargando pantalla="historialCambios" label="Cargando historial…" sub="Leyendo auditoría de cambios" minHeight={260} />
         ) : error ? (
           <div style={{ padding: 24, color: P.red, fontSize: 12 }}>No se pudo leer la auditoría: {error}</div>
-        ) : rows.length === 0 ? (
+        ) : filtradas.length === 0 ? (
           <div style={{ padding: '40px 24px', textAlign: 'center', color: theme.textMuted, fontSize: 12.5 }}>
-            Sin cambios registrados {hayFiltro ? 'con estos filtros' : `en ${RANGOS.find((r) => r.id === rango)?.label.toLowerCase()}`}.
+            Sin cambios registrados {hayFiltro ? 'con estos filtros' : `en ${rangoLabel.toLowerCase()}`}.
+            {!hayFiltro && rows.length > 0 && facetas.prefs > 0 && (
+              <div style={{ marginTop: 6, fontSize: 11.5 }}>Hay {facetas.prefs} {facetas.prefs === 1 ? 'cambio' : 'cambios'} de preferencias ocultos.</div>
+            )}
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -414,24 +500,25 @@ export default function HistorialCambios() {
                 <tr>
                   <th style={{ ...th, width: 22 }} />
                   <th style={{ ...th, width: 110 }}>Cuándo</th>
-                  <th style={{ ...th, width: 150 }}>Usuario</th>
-                  <th style={{ ...th, width: 150 }}>Tabla</th>
-                  <th style={{ ...th, width: 70 }}>Op.</th>
+                  <th style={{ ...th, width: 150 }}>Persona</th>
+                  <th style={{ ...th, width: 230 }}>Acción</th>
+                  <th style={{ ...th, width: 74 }}>Tipo</th>
                   <th style={{ ...th, width: 130 }}>Registro</th>
                   <th style={th}>Cambios</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {pintadas.map((r) => {
                   const abierto = expandidos.has(r.id);
-                  const cambios = listaCambios(r);
-                  const col = opColor(r.operacion);
+                  const cambios = r.cambios;
+                  const col = tipoColor(r.tipo);
                   const Chev = abierto ? ChevronDown : ChevronRight;
+                  const tecnico = `${r.tabla} · ${r.operacion}`;
                   return (
                     <React.Fragment key={r.id}>
                       <tr
                         onClick={() => toggle(r.id)}
-                        style={{ cursor: 'pointer', background: abierto ? (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)') : 'transparent' }}
+                        style={{ cursor: 'pointer', background: abierto ? (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)') : 'transparent', opacity: r.ruido ? 0.7 : 1 }}
                         onMouseEnter={(e) => { if (!abierto) e.currentTarget.style.background = theme.surfaceHover || 'rgba(0,0,0,0.02)'; }}
                         onMouseLeave={(e) => { if (!abierto) e.currentTarget.style.background = 'transparent'; }}
                       >
@@ -447,15 +534,15 @@ export default function HistorialCambios() {
                             <span style={{ fontSize: 12, fontWeight: 500, color: r.usuario_email ? theme.text : theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{nombreCorto(r.usuario_email)}</span>
                           </span>
                         </td>
-                        <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', color: theme.text }} title={r.tabla}>
-                            {tablaLabel(r.tabla)}
-                          </span>
-                          {r.cliente_key && <span style={{ marginLeft: 6, fontSize: 10.5, color: theme.textMuted }}>{clienteLabel(r.cliente_key)}</span>}
+                        <td style={{ ...td }} title={tecnico}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: theme.text, letterSpacing: '-0.01em', lineHeight: 1.25 }}>{r.label}</div>
+                          <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>
+                            {r.area} · {tablaLabel(r.tabla)}{r.cliente_key ? ` · ${clienteLabel(r.cliente_key)}` : ''}
+                          </div>
                         </td>
-                        <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                        <td style={{ ...td, whiteSpace: 'nowrap' }} title={OP_LABEL[r.operacion] || r.operacion}>
                           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 999, background: `${col}1A`, color: col }}>
-                            {OP_LABEL[r.operacion] || r.operacion}
+                            {r.tipo}
                           </span>
                         </td>
                         <td style={{ ...td }} title={r.registro_id || ''}>
@@ -483,13 +570,24 @@ export default function HistorialCambios() {
         )}
 
         {!loading && !error && rows.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderTop: border }}>
-            <span style={{ ...mono, fontSize: 11, color: theme.textMuted }}>{rows.length.toLocaleString('es-MX')} {rows.length === 1 ? 'registro' : 'registros'}{hasMore ? ' · hay más' : ''}</span>
-            {hasMore && (
-              <button type="button" onClick={cargarMas} disabled={loadingMore} style={{ ...pillStyle(true), opacity: loadingMore ? 0.6 : 1 }}>
-                {loadingMore ? 'Cargando…' : `Cargar ${PAGE} más`}
-              </button>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderTop: border, gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ ...mono, fontSize: 11, color: theme.textMuted }}>
+              {filtradas.length.toLocaleString('es-MX')} {filtradas.length === 1 ? 'cambio' : 'cambios'}
+              {hayFiltro ? ` de ${rows.length.toLocaleString('es-MX')} cargados` : ''}
+              {hasMore ? ' · hay más antiguos' : ''}
+            </span>
+            <span style={{ display: 'inline-flex', gap: 6 }}>
+              {filtradas.length > visibles && (
+                <button type="button" onClick={() => setVisibles((v) => v + VISIBLES)} style={pillStyle(false)}>
+                  Mostrar {Math.min(VISIBLES, filtradas.length - visibles)} más
+                </button>
+              )}
+              {hasMore && (
+                <button type="button" onClick={cargarMas} disabled={loadingMore} style={{ ...pillStyle(true), opacity: loadingMore ? 0.6 : 1 }}>
+                  {loadingMore ? 'Cargando…' : `Cargar ${LOTE.toLocaleString('es-MX')} más antiguos`}
+                </button>
+              )}
+            </span>
           </div>
         )}
       </div>
@@ -504,15 +602,6 @@ function HeroStat({ k, v, sub, mono }) {
       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{k}</div>
       <div style={{ ...mono, fontSize: 24, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1.05, color: '#FFF', marginTop: 2 }}>{v}</div>
       {sub && <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function FilaPills({ label, children }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600, opacity: 0.55, width: 52, flexShrink: 0 }}>{label}</span>
-      {children}
     </div>
   );
 }
@@ -561,8 +650,11 @@ function DetalleCambios({ row, cambios, theme, P, mono, border, eyebrow }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, color: theme.textMuted }}>
+        <span><span style={eyebrow}>Acción</span> <span style={{ color: theme.text, fontWeight: 600 }}>{row.label}</span></span>
+        <span><span style={eyebrow}>Área</span> <span>{row.area}</span></span>
         <span><span style={eyebrow}>Fecha</span> <span style={mono}>{fmtAbsoluto(row.creado_at)}</span></span>
         <span><span style={eyebrow}>Tabla</span> <span style={mono}>{row.tabla}</span></span>
+        <span><span style={eyebrow}>Operación</span> <span style={mono}>{row.operacion} · {OP_LABEL[row.operacion] || row.operacion}</span></span>
         <span><span style={eyebrow}>Registro</span> <span style={mono}>{row.registro_id || '—'}</span></span>
         {row.usuario_email && <span><span style={eyebrow}>Usuario</span> <span style={mono}>{row.usuario_email}</span></span>}
         {row.cliente_key && <span><span style={eyebrow}>Cliente</span> <span style={mono}>{clienteLabel(row.cliente_key)}</span></span>}
