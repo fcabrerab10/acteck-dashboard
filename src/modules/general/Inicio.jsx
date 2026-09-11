@@ -16,7 +16,7 @@ import { Hero, KpiCard, Pill, Panel, Segmented, SkeletonPantalla } from '../../c
 import { FUENTES_INICIO, MODOS, PAGINAS, MAX_ALERTAS, abrirNotificaciones } from './inicio/config';
 import { useInicioData } from './inicio/useInicioData';
 import { calcular } from './inicio/calc';
-import { GraficaVentas, DecisionPanel, ClientesGrid, CanalesPanel, AgendaPanel } from './inicio/bloques';
+import { GraficaVentas, DecisionPanel, ClientesGrid, CanalesPanel, AgendaPanel, HoyPanel } from './inicio/bloques';
 
 const signo = (v, d = 0) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneDe = (v) => (v == null ? 'gray' : v >= 0 ? 'green' : 'red');
@@ -69,6 +69,9 @@ export default function Inicio({ onNavegar }) {
           {r.cuota.fuente && <Pill tone="inverse" size="xs" title="Origen de la cuota total">cuota {r.cuota.fuente === 'cuotas_canales' ? 'anual (canales)' : 'Σ clientes'} {$c(r.cuota.anual)}</Pill>}
         </div>
       </Hero>
+
+      {/* Bloque "Hoy" (Agenda V3): bandeja compacta compartida con la pestaña Agenda */}
+      <HoyPanel onNavegar={onNavegar} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8 }}>
         <KpiCard eyebrow={`Fact Neta · ${labelOtro}`} badge={r.yoyOtro != null ? { l: `${signo(r.yoyOtro)} ${esMes ? 'YoY' : 'YoY a mismo día'}`, tone: toneDe(r.yoyOtro) } : undefined}

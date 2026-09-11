@@ -52,7 +52,7 @@ const HistorialCambios       = lazy(() => import('./modules/interno/HistorialCam
 const AxonMexico             = lazy(() => import('./modules/interno/AxonMexico'));
 const Configuracion          = lazy(() => import('./modules/configuracion/Configuracion'));
 const ActualizacionDatos     = lazy(() => import('./modules/settings/ActualizacionDatos'));
-const PendientesCalendarioV2 = lazy(() => import('./modules/interno/PendientesCalendarioV2'));
+const Agenda                 = lazy(() => import('./modules/agenda/Agenda')); // Agenda (V3 · 2026-09-11): sustituye a Pendientes & Calendario (adminInterna → agenda)
 // Auth y shell: estáticos (se necesitan antes de cualquier pantalla).
 import LoginPage from './modules/auth/LoginPage';
 import SetPasswordPage from './modules/auth/SetPasswordPage';
@@ -64,6 +64,7 @@ import {
   puedeVerPestana,
   puedeVerPestanaCliente,
   puedeVerPestanaGlobal,
+  puedeVerPaginaGlobal,
   puedeVerInicio,
 } from './lib/permisos';
 import { PerfilContext } from './lib/perfilContext';
@@ -78,7 +79,6 @@ import BandejaAlertas from './components/BandejaAlertas';
 import { ToastHost } from './components/kit';
 // Pantallas mobile: lazy (sólo se descargan en iPhone/iPad, y sólo la que se abre).
 const MobileHome              = lazy(() => import('./components/MobileHome'));
-const MobileHoy               = lazy(() => import('./components/MobileHoy'));
 const MobileEquipo            = lazy(() => import('./components/MobileEquipo'));
 const MobileYo                = lazy(() => import('./components/MobileYo'));
 const MobileSellIn            = lazy(() => import('./components/MobileSellIn'));
@@ -258,7 +258,7 @@ const GLOBAL_PAGES_INFO = {
   estrategiaPrecios:{ label: 'Estrategia de Precios',  icon: TrendingUp },
   forecastReservas: { label: 'Forecast',    icon: Target },
   ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
-  adminInterna:     { label: 'Administración Interna', icon: Building2 },
+  agenda:           { label: 'Agenda',                 icon: ClipboardList },
   axonMexico:       { label: 'Axon de México',          icon: Building2 },
 };
 function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
@@ -350,14 +350,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','agenda','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
-      try { return localStorage.getItem('nav_pagina') || 'inicio'; } catch { return 'inicio'; }
+      try { const p = localStorage.getItem('nav_pagina') || 'inicio'; return p === 'adminInterna' ? 'agenda' : p; } catch { return 'inicio'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'inicio';
-        const globals = new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']);
+        const globals = new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','agenda','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -439,10 +439,10 @@ export default function App() {
       () => import('./modules/comercial/ForecastClientesTab'), () => import('./modules/comercial/PropuestasTab'),
       () => import('./modules/comercial/EstrategiaPrecios'), () => import('./modules/comercial/InventarioGlobal'),
       () => import('./modules/comercial/TrackingPedidos'), () => import('./modules/comercial/ForecastReservas'),
-      () => import('./modules/interno/PendientesCalendarioV2'),
+      () => import('./modules/agenda/Agenda'),
     ];
     const moviles = [
-      () => import('./components/MobileHome'), () => import('./components/MobileHoy'),
+      () => import('./components/MobileHome'),
       () => import('./components/MobileHomeCliente'), () => import('./components/MobileSellIn'),
       () => import('./components/MobileSellOut'), () => import('./components/MobileCartera'),
     ];
@@ -519,6 +519,7 @@ export default function App() {
 
   // Sidebar navigation bridge
   const handleNavegar = (clienteId, paginaId) => {
+    if (paginaId === 'adminInterna') paginaId = 'agenda'; // página vieja "Pendientes & Calendario" → Agenda
     if (paginaId === 'configuracion') { setVistaActual('configuracion'); return; }
     setVistaActual(null);
     if (clienteId) {
@@ -708,13 +709,11 @@ export default function App() {
                   : <TrackingPedidos />)
               : <SinAcceso motivo="No tienes acceso a Tracking Pedidos." />
           )}
-          {paginaActiva === "adminInterna" && (
-            // Permiso granular: nivel 'ver' o 'edit' en permisos.globales.admin_interna
-            puedeVerPestanaGlobal(perfil, "admin_interna")
-              ? (mobile
-                  ? <MobileHoy perfil={perfil} onNavegar={handleNavegar} />
-                  : <PendientesCalendarioV2 />)
-              : <SinAcceso motivo="No tienes acceso a esta pestaña. Pídele a Fernando que te habilite 'Pendientes & Calendario' desde Administración." />
+          {paginaActiva === "agenda" && (
+            // Agenda (V3): permiso global `agenda` (migrado de admin_interna); internos y super admin siempre.
+            puedeVerPaginaGlobal(perfil, "agenda")
+              ? <Agenda onNavegar={handleNavegar} />
+              : <SinAcceso motivo="No tienes acceso a la Agenda. Pídele a Fernando que te la habilite desde Administración." />
           )}
           {paginaActiva === "telemetria" && (
             perfil?.es_super_admin

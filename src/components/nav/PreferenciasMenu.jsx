@@ -5,13 +5,14 @@ import { PanelTop, LayoutPanelLeft, Smartphone } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Panel, Segmented } from '../kit';
-import { usePreferencias, MODOS_MENU } from '../../lib/preferencias';
+import { usePreferencias, MODOS_MENU, MODOS_AGENDA } from '../../lib/preferencias';
 
 const ICONO = { barra: PanelTop, sidebar: LayoutPanelLeft, iphone: Smartphone };
 
 export default function PreferenciasMenu({ style }) {
   const { theme } = useTheme();
-  const { menu, setPreferencia, favoritos } = usePreferencias();
+  const { menu, prefs, setPreferencia, favoritos } = usePreferencias();
+  const agendaModo = prefs?.agenda?.modo === 'tablero' ? 'tablero' : 'bandeja';
   const dark = theme.mode === 'dark';
 
   const Fila = ({ titulo, desc, children }) => (
@@ -57,6 +58,10 @@ export default function PreferenciasMenu({ style }) {
       <Fila titulo="Abrir en" desc="Qué pestaña se abre al entrar al dashboard.">
         <Segmented value={menu.inicio} onChange={(v) => setPreferencia('menu.inicio', v)}
           options={[{ id: 'inicio', label: 'Inicio' }, { id: 'ultima', label: 'Última pestaña' }]} />
+      </Fila>
+      <Fila titulo="Agenda" desc={MODOS_AGENDA.find((m) => m.id === agendaModo)?.desc}>
+        <Segmented value={agendaModo} onChange={(v) => setPreferencia('agenda.modo', v)}
+          options={MODOS_AGENDA.map((m) => ({ id: m.id, label: m.label }))} />
       </Fila>
       <Fila titulo="Favoritos" desc={favoritos.length ? `${favoritos.length} pestaña${favoritos.length === 1 ? '' : 's'} · ⌘1-9 para saltar a ellas.` : 'Pulsa ☆ junto a cualquier pestaña del menú para añadirla.'}>
         {favoritos.length > 0 && (

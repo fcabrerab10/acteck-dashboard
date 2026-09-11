@@ -10,7 +10,7 @@
 import {
   Home, LayoutGrid, Calculator, Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Target,
   BarChart3, ClipboardList, TrendingUp, FileCheck, Megaphone, Wallet, CreditCard, History, Building2,
-  Shield, Users, Briefcase, Landmark, Store,
+  Shield, Users, Briefcase, Landmark, Store, CalendarCheck,
 } from 'lucide-react';
 import { puedeVerPaginaGlobal, puedeVerCliente, puedeVerPestanaCliente } from '../../lib/permisos';
 
@@ -40,6 +40,7 @@ const GRUPOS_BASE = [
     id: 'inicio', label: 'Inicio', icon: LayoutGrid, color: '#007AFF',
     nodos: [
       { pagina: 'inicio', label: 'Inicio', icon: LayoutGrid },
+      { pagina: 'agenda', label: 'Agenda', icon: CalendarCheck }, // V3 · tareas, reuniones con minuta y calendario (sustituye a Pendientes & Calendario)
     ],
   },
   {
@@ -74,7 +75,6 @@ const GRUPOS_BASE = [
   {
     id: 'interno', label: 'Interno', icon: Building2, color: '#AF52DE',
     nodos: [
-      { pagina: 'adminInterna',     label: 'Pendientes & Calendario', icon: ClipboardList },
       { pagina: 'telemetria',       label: 'Actividad del equipo',    icon: Activity },
       { pagina: 'historialCambios', label: 'Historial de cambios',    icon: History },
       // Administración (usuarios y permisos · datos · notificaciones del equipo · sistema). Sólo super admin;

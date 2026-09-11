@@ -118,6 +118,11 @@ function FichaUsuario({ u, usuarios, actualizar, refetch, soyYo, ts }) {
   };
   const setGlobal = (id, nivel) => guardar({ ...permisos, globales: { ...permisos.globales, [id]: nivel } });
   const setSensible = (on) => guardar({ ...permisos, sensible: !!on }, on ? 'Ya ve información sensible' : 'Información sensible oculta');
+  // perfiles.se_evalua (migración 20260911_equipo_se_evalua.sql): mismo patrón optimista + rollback de `actualizar`.
+  const setSeEvalua = async (on) => {
+    try { await actualizar(u.id, { se_evalua: !!on }); toast.ok(on ? 'Se evalúa mensualmente' : 'Ya no se evalúa mensualmente'); }
+    catch (e) { toast.error(`No se pudo guardar: ${e.message || e}`); }
+  };
   const setCliente = (ck, pestana, nivel) => {
     const clientes = { ...permisos.clientes, [ck]: { ...permisos.clientes[ck], [pestana]: nivel } };
     if (ck === 'digitalife' && espejo) for (const k of ESPEJO) clientes[k] = { ...clientes.digitalife };
@@ -224,6 +229,18 @@ function FichaUsuario({ u, usuarios, actualizar, refetch, soyYo, ts }) {
             </span>
           </span>
           <Interruptor theme={theme} on={esSuper || permisos.sensible === true} onChange={esSuper ? undefined : setSensible} title={esSuper ? 'Super admin: acceso total por código' : 'Mostrar u ocultar información sensible'} />
+        </div>
+      </Panel>
+
+      <Panel titulo="Evaluación mensual" meta="Actividad del equipo · bono y evaluación" padding="6px 12px">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.005em' }}>Se evalúa mensualmente</span>
+            <span style={{ display: 'block', fontSize: 10.5, color: theme.textSubtle || theme.textMuted }}>
+              {externo ? 'Los usuarios externos no se evalúan.' : 'Con esto su tarjeta y su hoja en Actividad del equipo muestran evaluación cualitativa, tareas, ajustes y bono (variable fija + comisión sobre facturación).'}
+            </span>
+          </span>
+          <Interruptor theme={theme} on={!!u.se_evalua} onChange={externo ? undefined : setSeEvalua} title={externo ? 'Sólo usuarios internos' : 'Activar o desactivar la evaluación mensual'} />
         </div>
       </Panel>
 

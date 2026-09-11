@@ -119,7 +119,8 @@ export const PAGINA_A_PERMISO_GLOBAL = {
   estrategiaPrecios:"estrategia_precios",
   forecastReservas: "forecast_reservas",
   ordenesCompra:    "ordenes_compra",
-  adminInterna:     "admin_interna",
+  agenda:           "agenda",         // Agenda (V3) · migrado de admin_interna
+  adminInterna:     "agenda",         // página vieja → mismo permiso
   telemetria:       "__super_admin_only__",
   propuestas:       "propuestas",
   axonMexico:       "axon_mexico",
@@ -132,6 +133,8 @@ export const puedeVerPaginaGlobal = (perfil, paginaId) => {
   if (!perfil) return false;
   if (perfil.es_super_admin) return true;
   if (paginaId === "inicio") return puedeVerInicio(perfil);
+  // Agenda: los internos la ven siempre (misma regla que RLS agenda_puede_ver); los demás con el permiso.
+  if ((paginaId === "agenda" || paginaId === "adminInterna") && perfil.tipo === "interno") return true;
   const permiso = PAGINA_A_PERMISO_GLOBAL[paginaId];
   if (permiso === "__super_admin_only__") return false;
   if (!permiso) return false;
@@ -229,7 +232,7 @@ export const PESTANAS_GLOBALES = [
   { id: "estrategia_precios", label: "Estrategia de Precios", desc: "Pricing por cliente y por SKU" },
   { id: "forecast_reservas",  label: "Forecast",   desc: "Reservas de arribos por cliente (preventa)" },
   { id: "ordenes_compra",     label: "Tracking Pedidos",      desc: "Gestión de OCs, fill rate y cruce con ERP" },
-  { id: "admin_interna",      label: "Administración Interna", desc: "Pendientes & Calendario del equipo" },
+  { id: "agenda",             label: "Agenda",                 desc: "Tareas, reuniones con minuta, calendario y avisos del dashboard (antes Pendientes & Calendario)" },
   { id: "historial_cambios",  label: "Historial de cambios",   desc: "Quién cambió qué y cuándo en lo que la app escribe" },
   { id: "axon_mexico",        label: "Axon de México",        desc: "Nueva empresa para gestión de e-commerce" },
   { id: "forecast_solicitudes", label: "Forecast — Solicitudes de Compra", desc: "Crear/editar solicitudes S&OP (⚠️ información delicada)" },

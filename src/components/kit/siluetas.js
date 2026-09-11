@@ -60,12 +60,19 @@ export const SILUETAS = {
   resumenClientes: [fila(2, 90), grid('minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)', [hero(3), [kpis(1, '1fr'), kpis(1, '1fr')], [kpis(1, '1fr'), kpis(1, '1fr')]]), fila(4, 28), chart(240), grid('repeat(3, minmax(0,1fr))', [panel(10, { alto: 430 }), panel(10, { alto: 430 }), panel(10, { alto: 430 })])],
   ordenesCompra: [hero(3), grid('repeat(5, minmax(0,1fr))', [panel(2, { alto: 96 }), panel(2, { alto: 96 }), panel(2, { alto: 96 }), panel(2, { alto: 96 }), panel(2, { alto: 96 })]), kpis(4), fila(3, 30), fila(6, 24), tabla(12, 10), grid('minmax(0,1.2fr) minmax(0,1fr)', [tabla(6, 7, { alto: 220 }), tabla(6, 6, { alto: 220 })]), grid('minmax(0,1fr) minmax(0,1.2fr)', [tabla(3, 6, { alto: 150 }), tabla(4, 6, { alto: 150 })])],
   trackingDrill: [fila(5, 44), fila(1, 34), fila(3, 28), tabla(4, 8, { alto: 150 }), tabla(2, 8, { alto: 90 })],
-  adminInterna: [hero(0), fila(4, 40), grid('1fr 380px', [panel(12, { alto: 460 }), [panel(6, { alto: 220 }), panel(6, { alto: 220 })]]), panel(8, { alto: 350 })],
+  // Agenda V3 · A Bandeja: segmented · hero 3 stats · 4 KPIs · lista Hoy + (Semana, Equipo) · Reuniones (línea del tiempo)
+  agenda: [fila(1, 30), hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(300px,1fr)', [panel(12, { alto: 460 }), [panel(6, { alto: 240 }), panel(3, { alto: 140 })]]), panel(8, { alto: 360 })],
+  // Agenda V3 · C Tablero: segmented · hero 2 stats · 4 KPIs · tablero 4 columnas · tira de reuniones · Semana + Equipo
+  agendaTablero: [fila(1, 30), hero(2), kpis(4), panel(2, { alto: 60 }), grid('repeat(4, minmax(0,1fr))', [panel(6, { alto: 300 }), panel(5, { alto: 260 }), panel(5, { alto: 260 }), panel(3, { alto: 180 })]), fila(6, 90), grid('1fr 1fr', [panel(6, { alto: 240 }), panel(3, { alto: 140 })])],
+  // Agenda V3 · Minuta (hoja lateral): pills · asistentes · editor de puntos · notas
+  agendaMinuta: [fila(4, 26), fila(4, 30), panel(8, { alto: 300 }), panel(4, { alto: 140 })],
+  adminInterna: [fila(1, 30), hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(300px,1fr)', [panel(12, { alto: 460 }), [panel(6, { alto: 240 }), panel(3, { alto: 140 })]]), panel(8, { alto: 360 })],
   historialCambios: [hero(3), panel(4, { alto: 120 }), tabla(14, 7)],
   actualizacion: [hero(4), tabla(6, 7, { alto: 300 }), tabla(9, 8, { alto: 400 }), fila(1, 28)],
-  estadoResultados: [fila(3, 36), fila(1, 80), grid('repeat(4, minmax(0,1fr))', [kpis(1, '1fr'), kpis(1, '1fr'), kpis(1, '1fr'), kpis(1, '1fr')]), chart(220), fila(1, 70), tabla(20, 14), panel(6, { alto: 250 })],
+  estadoResultados: [hero(3), fila(4, 30), kpis(4), chart(220), tabla(10, 11), tabla(22, 19), panel(3, { alto: 90 })],
   configuracion: [hero(3), fila(5, 34), grid('minmax(260px, 300px) 1fr', [[fila(1, 30), panel(3, { alto: 64 }), panel(3, { alto: 64 }), panel(3, { alto: 64 }), panel(3, { alto: 64 })], [panel(2, { alto: 64 }), panel(8, { alto: 280 }), panel(5, { alto: 200 })]])],
-  telemetria: [hero(3), kpis(4), tabla(12, 6)],
+  // Actividad del equipo V3: hero 4 stats · 4 KPIs · fila umbral · panel Internos con tarjetas de persona (3 por fila) · Externos plegable
+  telemetria: [hero(4), kpis(4), fila(3, 30), panel(1, { alto: 40 }), grid('repeat(3, minmax(0,1fr))', [panel(6, { alto: 236 }), panel(6, { alto: 236 }), panel(6, { alto: 236 })]), panel(1, { alto: 44 })],
   axonMexico: [hero(3), kpis(4), panel(6)],
   resumen: [panel(6, { alto: 200 }), kpis(4), tabla(10, 6)],
 };

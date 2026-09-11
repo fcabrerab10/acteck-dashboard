@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.13.0', fecha: '2026-09-10', titulo: 'Agenda, Estado de Resultados y Actividad del equipo',
+    items: [
+      'Agenda (debajo de Inicio) sustituye a Pendientes & Calendario: bandeja Hoy o tablero por etiqueta (elegible en Preferencias), #cliente y @persona, reuniones con línea del tiempo y puntos clasificados, minuta con guardado al momento, arrastre de lo abierto, avisos por responsable y conexión con Google Calendar.',
+      'Bloque "Hoy" en Inicio con la bandeja de la Agenda.',
+      'Estado de Resultados en kit V3: Mes y acumulado con comparativo, puente ventas del ERP vs P&L, ficha del mes como hoja lateral; toda la pestaña es información sensible.',
+      'Actividad del equipo: pulso del equipo, qué hizo cada quien (auditoría en lenguaje de negocio), cumplimiento de pendientes, inactividad con alerta y evaluación sólo para quien se marque "Se evalúa".',
+    ],
+  },
+  {
     version: '3.12.0', fecha: '2026-09-10', titulo: 'Tracking Pedidos',
     items: [
       'Pestaña rehecha desde cero conservando las 105 OCs capturadas: embudo cotización → OC → facturada → enviada → entregada, backorder por SKU, surtir hoy, tiempos por etapa.',

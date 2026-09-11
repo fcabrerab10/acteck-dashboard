@@ -1,10 +1,13 @@
 // Bloques (Panel) de Inicio · presentación pura sobre el resultado de calc.js. Sólo kit + theme/TYPO.
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, pct, pp, fechaCorta, relativo } from '../../../lib/format';
-import { Panel, TablaCompacta, Pill, Boton } from '../../../components/kit';
+import { Panel, TablaCompacta, Pill, Boton, toast } from '../../../components/kit';
+import { useBandejaHoy, completarItem } from '../../agenda/datos';
+import { FilaItem, FilaAviso } from '../../agenda/comun';
+import { isoDia as isoDiaAgenda } from '../../agenda/calculo';
 import { accionAlerta, ejecutarAccion, SEV_LABEL } from '../../../lib/alertas';
 import { formatFrescura } from '../../../lib/frescura';
 import { MESES, CLIENTE_NOMBRE, canalLabel, PAGINAS } from './config';
@@ -223,6 +226,33 @@ export function AgendaPanel({ r, frescuraErp, onNavegar }) {
           ))}
         </div>
       </div>
+    </Panel>
+  );
+}
+
+// ── "Hoy" (Agenda V3) · bandeja compacta arriba de las cifras: máx. MAX ítems (vencidas → hoy → avisos) + "Ver Agenda".
+// Comparte useBandejaHoy (modo ligero: sin tracking ni /api/status) con la pestaña Agenda. Se oculta si no hay nada.
+export function HoyPanel({ onNavegar, max = 6 }) {
+  const { theme } = useTheme();
+  const { bandeja: b, avisos, personasPorId, porId, hoy, cargando } = useBandejaHoy({ ligero: true });
+  const hoyIso = isoDiaAgenda(hoy);
+  const filas = useMemo(() => {
+    const out = [];
+    for (const it of b.vencidas) out.push({ k: `i:${it.id}`, item: it });
+    for (const it of b.hoy) out.push({ k: `i:${it.id}`, item: it });
+    for (const a of avisos.filter((x) => x.fecha === hoyIso || x.severidad === 'critica' || x.severidad === 'alta')) out.push({ k: a.id, aviso: a });
+    return out;
+  }, [b, avisos, hoyIso]);
+  if (cargando || !filas.length) return null;
+  const ir = () => onNavegar?.(null, 'agenda');
+  const toggle = async (item, hecha) => { try { await completarItem(item, hecha); } catch (e) { toast.error(e.message); } };
+  return (
+    <Panel titulo="Hoy" meta={`${b.vencidas.length ? `${b.vencidas.length} vencida${b.vencidas.length === 1 ? '' : 's'} · ` : ''}${b.hoy.length} para hoy · ${avisos.length} aviso${avisos.length === 1 ? '' : 's'} del sistema`} padding="0"
+      acciones={<Boton onClick={ir}>Ver Agenda</Boton>}>
+      {filas.slice(0, max).map((f) => f.item
+        ? <FilaItem key={f.k} item={f.item} personasPorId={personasPorId} porId={porId} hoy={hoy} onToggle={toggle} onAbrir={ir} compacta />
+        : <FilaAviso key={f.k} aviso={f.aviso} onNavegar={onNavegar} hoy={hoy} compacta />)}
+      {filas.length > max && <div onClick={ir} style={{ padding: '6px 12px', fontSize: 11, color: theme.accent, cursor: 'pointer' }}>+{filas.length - max} más en la Agenda</div>}
     </Panel>
   );
 }

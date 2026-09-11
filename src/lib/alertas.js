@@ -15,9 +15,10 @@ export const SEV_LABEL = { critica: 'Crítica', alta: 'Alta', media: 'Media', in
 const CLIENTES_CON_TAB = new Set(['digitalife', 'pcel', 'dicotech']);
 
 // ─── Centro de notificaciones (2026-09-11) ───
-export const AREAS = ['inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion', 'forecast', 'tracking'];
-export const AREA_LABEL = { inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación', forecast: 'Forecast', tracking: 'Tracking' };
-const AREA_POR_TIPO = { stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', reserva_3dias: 'forecast', reserva_dia: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking' };
+export const AREAS = ['agenda', 'inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion', 'forecast', 'tracking', 'equipo'];
+export const AREA_LABEL = { agenda: 'Agenda', inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación', forecast: 'Forecast', tracking: 'Tracking', equipo: 'Equipo' };
+// Agenda (V3): agenda_vencida · agenda_hoy · agenda_asignado van dirigidas a una persona (alertas.para_usuario).
+const AREA_POR_TIPO = { agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', reserva_3dias: 'forecast', reserva_dia: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking', equipo_inactivo: 'equipo' };
 export const MODOS_AREA = ['inmediato', 'resumen', 'silencio'];
 export const HORAS_RESUMEN = ['09:00', '13:00', '18:00'];  // horas con cron en vercel.json (15:00 / 19:00 / 00:00 UTC)
 export const NOMBRE_CLIENTE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech', mayoreo: 'Mayoreo', distribuidor: 'Distribuidor', e_commerce: 'E-commerce', mostrador: 'Mostrador', retail_propios: 'Retail propios', retail_representados: 'Retail rep.', otros: 'Otros' };
@@ -31,6 +32,9 @@ export function areaAlerta(a) {
 // el destino vive fuera de la SPA (uploads.html).
 export function destinoAlerta(a) {
   switch (a?.tipo) {
+    case 'agenda_vencida':
+    case 'agenda_hoy':
+    case 'agenda_asignado':       return { clienteKey: null, pagina: 'agenda' };
     case 'stock_vs_transito':      return { clienteKey: null, pagina: 'inventarioGlobal', sku: a.sku };
     case 'cuota_en_riesgo':        return { clienteKey: a.cliente_key, pagina: 'sellIn' };
     case 'devoluciones_anormales': return CLIENTES_CON_TAB.has(a.cliente_key)
@@ -43,6 +47,7 @@ export function destinoAlerta(a) {
     case 'oc_detenida':
     case 'oc_backorder_sin_po':
     case 'factura_sin_oc':         return { clienteKey: null, pagina: 'ordenesCompra', sku: a.sku };
+    case 'equipo_inactivo':        return { clienteKey: null, pagina: 'telemetria' };
     default:                       return a?.cliente_key ? { clienteKey: a.cliente_key, pagina: 'home' } : null;
   }
 }
@@ -79,11 +84,14 @@ export function ordenarAlertas(rows) {
 
 async function fetchAlertas(clienteKey) {
   const ahora = new Date().toISOString();
+  const uid = await uidActual();
   let q = supabase
     .from('alertas')
-    .select('id,tipo,severidad,titulo,detalle,cliente_key,sku,valor,meta,clave,area,accion,caduca_at,generada_at,actualizada_at,snooze_hasta')
+    .select('id,tipo,severidad,titulo,detalle,cliente_key,sku,valor,meta,clave,area,accion,caduca_at,generada_at,actualizada_at,snooze_hasta,para_usuario')
     .is('resuelta_at', null)
     .or(`snooze_hasta.is.null,snooze_hasta.lt.${ahora}`)
+    // dirigidas a una persona (Agenda) → sólo esa persona; sin destinatario → todos
+    .or(uid ? `para_usuario.is.null,para_usuario.eq.${uid}` : 'para_usuario.is.null')
     .order('actualizada_at', { ascending: false })
     .limit(500);
   if (clienteKey) q = q.eq('cliente_key', clienteKey);
@@ -141,8 +149,9 @@ export function useAlertasPospuestas({ enabled = true } = {}) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('alertas')
-        .select('id,tipo,severidad,titulo,detalle,cliente_key,sku,valor,meta,clave,area,accion,caduca_at,generada_at,actualizada_at,snooze_hasta')
+        .select('id,tipo,severidad,titulo,detalle,cliente_key,sku,valor,meta,clave,area,accion,caduca_at,generada_at,actualizada_at,snooze_hasta,para_usuario')
         .is('resuelta_at', null)
+        .or(await uidActual().then((u) => (u ? `para_usuario.is.null,para_usuario.eq.${u}` : 'para_usuario.is.null')))
         .gt('snooze_hasta', new Date().toISOString())
         .order('snooze_hasta', { ascending: true })
         .limit(200);

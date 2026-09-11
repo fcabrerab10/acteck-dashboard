@@ -53,10 +53,10 @@ const GLOBAL_SECCIONES = [
   },
   {
     id: 'internaGrupo',
-    label: 'Administración Interna',
-    emoji: '🏢',
+    label: 'Agenda',
+    emoji: '🗓️',
     color: '#B36600',
-    items: ['admin_interna'],
+    items: ['agenda'],
   },
   {
     id: 'axonGrupo',

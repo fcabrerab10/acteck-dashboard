@@ -1,1273 +1,310 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../../lib/supabase';
-import { Cargando } from '../../components/kit';
+// Estado de Resultados · V3 (2026-09-11). Kit: Hero · KpiCard · Segmented · Panel · TablaCompacta · Pill.
+// Datos: estados_resultados (P&L contable de REVKO, carga manual mensual desde el importador) por
+// resultados/datos.js; cálculo puro en resultados/calculo.js (pruebas: scripts/test-resultados-calculo.mjs).
+// Toda la pantalla es información sensible: sin `puedeVerSensible(perfil)` se muestra SinAcceso.
+// Estructura: Hero (frase del mes + frescura + alertas) → controles (año · mes · Mes/YTD · exportar)
+// → 4 KPIs → Tendencia (Recharts) → Puente ERP vs P&L → Tabla formal (TablaCompacta, grupos plegables,
+// fila expandible con 24 meses) → Información general → Ficha del mes (HojaLateral).
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { Calculator } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
-import { AppleH1, AppleEyebrow, AppleSegment } from '../../components/apple';
 import { TYPO } from '../../lib/themeTokens';
-import { Calculator, Printer, X, AlertTriangle, ChevronRight } from 'lucide-react';
-import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaGlobal } from '../../lib/permisos';
+import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
+import ExportMenu from '../../components/ExportMenu';
+import FrescuraPill from '../../components/FrescuraPill';
+import { Hero, KpiCard, Pill, Segmented, Panel, Cargando, toneColors } from '../../components/kit';
+import { money, moneyCompact, int, pct, pp } from '../../lib/format';
+import { cargarAnios, cargarEstado, cargarErp } from './resultados/datos';
+import {
+  MESES_LBL, MESES_FULL, GRUPOS_TABLA, indexar, mesMaxDe, medidas, serieMensual, alertasDe, fichaMes as calcFichaMes,
+  filasTabla, puente as calcPuente, infoGeneral,
+} from './resultados/calculo';
+import { fraseHero, subHero, mensajeAlerta } from './resultados/textos';
+import Tendencia from './resultados/Tendencia';
+import TablaFormal from './resultados/TablaFormal';
+import FichaMes from './resultados/FichaMes';
+import Puente from './resultados/Puente';
 
-// ────────── Constantes ──────────
-const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const MESES_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const LS_DESCARTADAS = 'edr_alertas_descartadas';
 
-// Grupos colapsables — cada uno con dot semantic color (leído del theme)
-const GRUPOS_TABLA = [
-  { id: 'ingresos', label: 'Ingresos', dotKey: 'green', defaultOpen: true,
-    cuentas: ['ventas_y_servicios_a_tasa_general','ventas_y_servicios_a_tasa_0','devol_desctos_o_bonif_sobre_ingresos'],
-    subtotal: 'venta_neta' },
-  { id: 'costos', label: 'Costo de ventas', dotKey: 'orange', defaultOpen: true,
-    cuentas: ['costo_de_ventas','costo_de_venta_empaque','costo_ecommerce','dev_desc_o_bonificacion_s_compra','destruccion_fiscal_2025','total_costo_de_venta'],
-    subtotal: 'utilidad_bruta' },
-  { id: 'gastos', label: 'Gastos operativos', dotKey: 'red', defaultOpen: true,
-    cuentas: ['gastos_generales','nomina','distribucion','arrendamiento','arrendamiento_estrategia','viaticos_com','otros_gastos','proyectos','total_gastos_proyectos','total_gastos'],
-    subtotal: 'uafir_sin_proyectos',
-    extra: 'uafir_con_proyectos' },
-  { id: 'indicadores_gasto', label: 'Indicadores de gasto', dotKey: 'purple', defaultOpen: false,
-    cuentas: ['alcance_gasto_vs_venta_n','alcance_gasto_vs_venta_n_presupuesto'],
-    formato: 'pct' },
-  { id: 'otros', label: 'Otros ingresos', dotKey: 'accent', defaultOpen: false,
-    cuentas: ['otros_ingresos','comision_proyectos'] },
-  { id: 'financieros', label: 'Gastos y productos financieros', dotKey: 'pink', defaultOpen: false,
-    cuentas: [
-      'gastos_financieros','comisiones_cartas_de_credito','comisiones_y_sit_bancarias',
-      'intereses_a_cargo_nacional','intereses_cartas_de_credito','intereses_prestamo_ing_jcr',
-      'perdida_cambiaria','perdida_revaluaciones','objetivo_anual_2',
-      'productos_financieros','intereses_a_favor_bancarios_nacional','utilidad_cambiaria','utilidad_revaluaciones',
-      'total_productos_financieros',
-    ] },
-  { id: 'utilidad', label: 'Utilidad final', dotKey: 'orange', defaultOpen: true,
-    cuentas: ['uaii_contable_con_proyecctos','uaii_contable_sin_proyectos'] },
-];
-
-const INFO_SLUGS = ['t_c_dof','colaboradores','vta_colaborador','uti_colaborador','interes_ing_jcr_mxn'];
-
-// ────────── Formateadores ──────────
-const fmtCompact = (n) => {
-  if (n == null || isNaN(n)) return '—';
-  const a = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (a >= 1e6) return sign + '$' + (a / 1e6).toFixed(2) + 'M';
-  if (a >= 1e3) return sign + '$' + (a / 1e3).toFixed(0) + 'K';
-  return sign + '$' + Math.round(a);
+// Pills sobre el Hero (fondo negro en Claro/Marfil). Misma paleta que FrescuraPill.INVERSO; en Midnight el
+// Hero es claro y se usan los tonos de modo claro del kit.
+const PILL_INVERSO = {
+  orange: { background: 'rgba(255,159,10,0.22)', color: '#FFC46B' },
+  purple: { background: 'rgba(191,90,242,0.22)', color: '#DDB4FF' },
+  gray:   { background: 'rgba(255,255,255,0.10)', color: 'rgba(245,245,247,0.78)' },
 };
-const fmtMoney = (n) => {
-  if (n == null || isNaN(n)) return '—';
-  const a = Math.abs(n);
-  return (n < 0 ? '-' : '') + '$' + a.toLocaleString('es-MX', { maximumFractionDigits: 0 });
+const pillInverso = (theme, tone) => {
+  if (theme.mode === 'dark') { const [background, color] = toneColors({ mode: 'light', textMuted: '#6E6E73' }, tone); return { background, color }; }
+  return PILL_INVERSO[tone] || PILL_INVERSO.gray;
 };
-const fmtPct = (n) => n == null || isNaN(n) ? '—' : n.toFixed(1) + '%';
-const fmtPctDelta = (n) => n == null || isNaN(n) ? '—' : (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
-const fmtNumber = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('es-MX');
-const esSubcuenta = (cuenta) => /^\s*\*/.test(cuenta || '');
 
-// ═══════════════════════════════════════════════════════════════════
-// COMPONENTE PRINCIPAL
-// ═══════════════════════════════════════════════════════════════════
 export default function EstadoResultados() {
   const perfil = usePerfil();
-  if (!puedeVerPestanaGlobal(perfil, 'estado_resultados')) {
-    return <SinAcceso motivo="No tienes acceso a Estado de Resultados." />;
-  }
   const { theme } = useTheme();
+  const rootRef = useRef(null);
+  const permitido = puedeVerPestanaGlobal(perfil, 'estado_resultados');
+  const sensible = puedeVerSensible(perfil);
+
   const [anio, setAnio] = useState(new Date().getFullYear());
-  const [aniosDisponibles, setAniosDisponibles] = useState([]);
+  const [anios, setAnios] = useState([]);
   const [rows, setRows] = useState([]);
   const [rowsPrev, setRowsPrev] = useState([]);
+  const [erpRows, setErpRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [mesDrillDown, setMesDrillDown] = useState(null);
-  const [modoTrend, setModoTrend] = useState('venta'); // venta | uafir | margen
-  const [alertasDescartadas, setAlertasDescartadas] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('edr_alertas_descartadas') || '[]')); }
-    catch { return new Set(); }
+  const [error, setError] = useState(null);
+  const [modo, setModo] = useState('mes'); // mes | ytd
+  const [mesSel, setMesSel] = useState(null); // null → último mes cargado
+  const [mesFicha, setMesFicha] = useState(null);
+  const [verTodasAlertas, setVerTodasAlertas] = useState(false);
+  const [descartadas, setDescartadas] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(LS_DESCARTADAS) || '[]')); } catch { return new Set(); }
   });
-  const persistirDescartadas = (next) => {
-    setAlertasDescartadas(next);
-    try { localStorage.setItem('edr_alertas_descartadas', JSON.stringify(Array.from(next))); } catch {}
-  };
+  const descartar = (id) => setDescartadas((s) => {
+    const n = new Set(s); n.add(id);
+    try { localStorage.setItem(LS_DESCARTADAS, JSON.stringify(Array.from(n))); } catch { /* noop */ }
+    return n;
+  });
 
+  // Años disponibles (una vez). Si el año actual no tiene P&L, cae al más reciente.
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from('estados_resultados').select('anio').order('anio', { ascending: false });
-      const unique = Array.from(new Set((data || []).map((r) => r.anio))).sort((a, b) => b - a);
-      setAniosDisponibles(unique);
-      if (unique.length > 0 && !unique.includes(anio)) setAnio(unique[0]);
-    })();
+    if (!permitido || !sensible) return;
+    let vivo = true;
+    cargarAnios().then((lista) => {
+      if (!vivo) return;
+      setAnios(lista);
+      if (lista.length && !lista.includes(anio)) setAnio(lista[0]);
+    }).catch((e) => vivo && setError(e?.message || String(e)));
+    return () => { vivo = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [permitido, sensible]);
 
+  // P&L del año y del anterior + medidas del ERP, en paralelo.
   useEffect(() => {
-    setLoading(true);
-    (async () => {
-      const [a, p] = await Promise.all([
-        supabase.from('estados_resultados').select('*').eq('anio', anio).order('orden'),
-        supabase.from('estados_resultados').select('cuenta_norm,mes,valor').eq('anio', anio - 1),
-      ]);
-      setRows(a.data || []);
-      setRowsPrev(p.data || []);
-      setLoading(false);
-    })();
-  }, [anio]);
+    if (!permitido || !sensible) return;
+    let vivo = true;
+    setLoading(true); setError(null);
+    Promise.all([cargarEstado(anio), cargarErp(anio)]).then(([{ rows: a, rowsPrev: p }, erp]) => {
+      if (!vivo) return;
+      setRows(a); setRowsPrev(p); setErpRows(erp); setMesSel(null); setLoading(false);
+    }).catch((e) => { if (!vivo) return; setError(e?.message || String(e)); setLoading(false); });
+    return () => { vivo = false; };
+  }, [anio, permitido, sensible]);
 
-  const byCuenta = useMemo(() => {
-    const m = new Map();
-    rows.forEach((r) => {
-      const k = r.cuenta_norm;
-      if (!m.has(k)) m.set(k, {
-        cuenta_norm: k, cuenta: r.cuenta,
-        orden: r.orden ?? 999, es_subtotal: !!r.es_subtotal,
-        valores: {}, notas: {},
-      });
-      const c = m.get(k);
-      c.valores[Number(r.mes)] = Number(r.valor);
-      if (r.nota) c.notas[Number(r.mes)] = r.nota;
-    });
-    for (const c of m.values()) {
-      const entries = Object.values(c.notas || {});
-      const uniq = Array.from(new Set(entries));
-      c.notaGeneral = (uniq.length === 1 && entries.length >= 3) ? uniq[0] : null;
-    }
-    return m;
-  }, [rows]);
+  const idx = useMemo(() => indexar(rows), [rows]);
+  const idxPrev = useMemo(() => indexar(rowsPrev), [rowsPrev]);
+  const mesMax = useMemo(() => mesMaxDe(rows), [rows]);
+  const mes = mesSel && mesSel <= mesMax ? mesSel : mesMax;
 
-  const byCuentaPrev = useMemo(() => {
-    const m = new Map();
-    rowsPrev.forEach((r) => {
-      const k = r.cuenta_norm;
-      if (!m.has(k)) m.set(k, { valores: {} });
-      m.get(k).valores[Number(r.mes)] = Number(r.valor);
-    });
-    return m;
-  }, [rowsPrev]);
+  const mMes = useMemo(() => medidas(idx, idxPrev, mes, 'mes'), [idx, idxPrev, mes]);
+  const mYtd = useMemo(() => medidas(idx, idxPrev, mes, 'ytd'), [idx, idxPrev, mes]);
+  const m = modo === 'ytd' ? mYtd : mMes;
+  const serie = useMemo(() => serieMensual(idx, idxPrev, mesMax), [idx, idxPrev, mesMax]);
+  const alertas = useMemo(() => alertasDe(idx, idxPrev, mesMax, anio).filter((a) => !descartadas.has(a.id)), [idx, idxPrev, mesMax, anio, descartadas]);
+  const filas = useMemo(() => filasTabla(GRUPOS_TABLA, idx, idxPrev, mes, mesMax), [idx, idxPrev, mes, mesMax]);
+  const puente = useMemo(() => calcPuente(idx, erpRows, mesMax), [idx, erpRows, mesMax]);
+  const info = useMemo(() => infoGeneral(idx, idxPrev, mes), [idx, idxPrev, mes]);
+  const ficha = useMemo(() => (mesFicha ? calcFichaMes(idx, idxPrev, mesFicha) : null), [idx, idxPrev, mesFicha]);
+  const abrirMes = useCallback((mm) => setMesFicha(mm), []);
 
-  const mesMax = useMemo(() => {
-    let m = 0;
-    rows.forEach((r) => { if (Number(r.mes) > m) m = Number(r.mes); });
-    return m || 12;
-  }, [rows]);
+  // Excel: tabla formal completa + puente. Los % van como fracción (exportar.js los formatea 0.0%).
+  const pctFrac = (f) => Object.fromEntries(['difVentaNetaPct', 'difFactNetaPct', 'difContribPct'].map((k) => [k, f[k] == null ? null : f[k] / 100]));
+  const excel = () => ({
+    titulo: `Estado de resultados ${anio}`,
+    archivo: `Estado de resultados ${anio}`,
+    hojas: [
+      {
+        nombre: `P&L ${anio}`,
+        subtitulo: `REVKO Technology · MXN · P&L hasta ${MESES_LBL[mesMax - 1]} ${anio}`,
+        columnas: [
+          { label: 'Grupo', key: 'grupo', tipo: 'texto', ancho: 24 },
+          { label: 'Cuenta', key: 'label', tipo: 'texto', ancho: 38 },
+          { label: 'Tipo', key: 'tipo', tipo: 'texto', ancho: 9 },
+          ...MESES_LBL.map((l, i) => ({ label: `${l} ${anio}`, key: `m${i + 1}`, tipo: 'moneda' })),
+          { label: `${MESES_LBL[mes - 1]} ${anio - 1}`, key: 'mesPrev', tipo: 'moneda' },
+          { label: 'Δ mes %', key: 'deltaMes', tipo: 'pct' },
+          { label: `YTD ${anio}`, key: 'ytd', tipo: 'moneda' },
+          { label: `YTD ${anio - 1}`, key: 'ytdPrev', tipo: 'moneda' },
+          { label: 'Δ YTD %', key: 'deltaYtd', tipo: 'pct' },
+          { label: 'Notas', key: 'notas', tipo: 'texto', ancho: 40 },
+        ],
+        filas: filas.filter((r) => r.tipo !== 'grupo').map((r) => {
+          const esPct = r.formato === 'pct';
+          const v = (x) => (x == null ? null : esPct ? x * 100 : x);
+          const frac = (x) => (x == null ? null : x / 100); // exportar.js: pct como fracción 0–1
+          // Las cuentas en % (Alcance % Gasto vs Venta N.) no caben en columnas de moneda: van como texto en Notas.
+          const notas = Object.entries(r.notas || {}).map(([mm, n]) => `${MESES_LBL[Number(mm) - 1]}: ${n}`);
+          if (esPct) notas.unshift(MESES_LBL.map((l, i) => (r.valores[i + 1] == null ? null : `${l} ${pct(r.valores[i + 1] * 100)}`)).filter(Boolean).join(' · '));
+          const o = { grupo: r.grupo, label: r.label.trim(), tipo: r.tipo === 'subtotal' ? 'Subtotal' : esPct ? '%' : 'Cuenta', mesPrev: esPct ? null : v(r.mesPrev), deltaMes: esPct ? r.deltaMes : frac(r.deltaMes), ytd: r.ytd, ytdPrev: r.ytdPrev, deltaYtd: frac(r.deltaYtd),
+            notas: notas.join(' · ') || null };
+          for (let i = 1; i <= 12; i++) o[`m${i}`] = esPct ? null : v(r.valores[i]);
+          return o;
+        }),
+      },
+      {
+        nombre: 'Puente ERP vs P&L',
+        subtitulo: `Venta neta del P&L vs Venta neta y Fact. neta del ERP · Utilidad bruta vs Contribución · ${anio}`,
+        columnas: [
+          { label: 'Mes', key: 'lbl', tipo: 'texto', ancho: 8 },
+          { label: 'Venta neta P&L', key: 'plVentaNeta', tipo: 'moneda' },
+          { label: 'Ventas brutas P&L', key: 'plVentasBrutas', tipo: 'moneda' },
+          { label: 'Fact. bruta ERP', key: 'erpFactBruta', tipo: 'moneda' },
+          { label: 'Fact. neta ERP', key: 'erpFactNeta', tipo: 'moneda' },
+          { label: 'Venta neta ERP', key: 'erpVentaNeta', tipo: 'moneda' },
+          { label: 'Δ Venta neta $', key: 'difVentaNeta', tipo: 'moneda' },
+          { label: 'Δ Venta neta %', key: 'difVentaNetaPct', tipo: 'pct' },
+          { label: 'Δ Fact. neta $', key: 'difFactNeta', tipo: 'moneda' },
+          { label: 'Δ Fact. neta %', key: 'difFactNetaPct', tipo: 'pct' },
+          { label: 'Utilidad bruta P&L', key: 'plUtilBruta', tipo: 'moneda' },
+          { label: 'Contribución ERP', key: 'erpContribucion', tipo: 'moneda' },
+          { label: 'Δ Utilidad $', key: 'difContrib', tipo: 'moneda' },
+          { label: 'Δ Utilidad %', key: 'difContribPct', tipo: 'pct' },
+          { label: 'Alerta', key: 'alerta', tipo: 'texto', ancho: 8 },
+        ],
+        filas: puente.filas.map((f) => ({ ...f, ...pctFrac(f), alerta: f.alerta ? 'Sí' : '' })),
+        totales: puente.totales ? { lbl: 'YTD', ...puente.totales, ...pctFrac(puente.totales) } : undefined,
+      },
+    ],
+  });
 
-  const totalCuenta = (m, slug, fromPrev = false) => {
-    const src = fromPrev ? byCuentaPrev : byCuenta;
-    const c = src.get(slug);
-    if (!c) return 0;
-    if (m === 0) {
-      let s = 0;
-      for (let i = 1; i <= mesMax; i++) s += Number(c.valores[i]) || 0;
-      return s;
-    }
-    return Number(c.valores[m]) || 0;
-  };
+  if (!permitido) return <SinAcceso motivo="No tienes acceso a Estado de Resultados." />;
+  if (!sensible) return <SinAcceso motivo="Esta pestaña contiene información sensible." />;
+  if (loading) return <Cargando pantalla="estadoResultados" label="Cargando estado de resultados…" minHeight={520} />;
 
-  const kpis = useMemo(() => {
-    const get = (slug, prev = false) => totalCuenta(0, slug, prev);
-    const ventaNeta = get('venta_neta');
-    const utilBruta = get('utilidad_bruta');
-    const uafir     = get('uafir_sin_proyectos');
-    const uaii      = get('uaii_contable_sin_proyectos');
-    const ventaPrev = get('venta_neta', true);
-    const utilPrev  = get('utilidad_bruta', true);
-    const uafirPrev = get('uafir_sin_proyectos', true);
-    const uaiiPrev  = get('uaii_contable_sin_proyectos', true);
-    return {
-      ventaNeta, utilBruta, uafir, uaii,
-      pctBruta: ventaNeta > 0 ? (utilBruta / ventaNeta) * 100 : null,
-      pctUafir: ventaNeta > 0 ? (uafir / ventaNeta) * 100 : null,
-      pctUaii:  ventaNeta > 0 ? (uaii / ventaNeta) * 100 : null,
-      deltaVenta: ventaPrev > 0 ? ((ventaNeta - ventaPrev) / ventaPrev) * 100 : null,
-      deltaUtil:  utilPrev  > 0 ? ((utilBruta - utilPrev) / utilPrev) * 100 : null,
-      deltaUafir: uafirPrev > 0 ? ((uafir - uafirPrev) / uafirPrev) * 100 : null,
-      deltaUaii:  uaiiPrev  > 0 ? ((uaii - uaiiPrev) / uaiiPrev) * 100 : null,
-      deltaMargen: (ventaPrev > 0 && utilPrev != null) ?
-        ((utilBruta / ventaNeta) - (utilPrev / ventaPrev)) * 100 : null,
-      ventaPrev, utilPrev, uafirPrev, uaiiPrev,
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byCuenta, byCuentaPrev, mesMax]);
-
-  // ── Serie mensual para sparklines y tendencia
-  const trendData = useMemo(() => {
-    const data = [];
-    for (let i = 1; i <= 12; i++) {
-      const vn   = totalCuenta(i, 'venta_neta');
-      const ub   = totalCuenta(i, 'utilidad_bruta');
-      const uf   = totalCuenta(i, 'uafir_sin_proyectos');
-      const vnP  = totalCuenta(i, 'venta_neta', true);
-      const ufP  = totalCuenta(i, 'uafir_sin_proyectos', true);
-      data.push({
-        mes: MESES_LBL[i - 1],
-        ventaNeta:     i <= mesMax ? (vn || null) : null,
-        utilBruta:     i <= mesMax ? (ub || null) : null,
-        uafir:         i <= mesMax ? (uf || null) : null,
-        ventaNetaPrev: vnP || null,
-        uafirPrev:     ufP || null,
-        margenBrutoPct: vn > 0 ? (ub / vn) * 100 : null,
-        uafirPct:       vn > 0 ? (uf / vn) * 100 : null,
-      });
-    }
-    return data;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byCuenta, byCuentaPrev, mesMax]);
-
-  // ── Alertas
-  const alertas = useMemo(() => {
-    const CUENTAS_CLAVE = ['venta_neta','utilidad_bruta','uafir_sin_proyectos','total_gastos','nomina','distribucion','arrendamiento','proyectos','gastos_generales','gastos_financieros'];
-    const items = [];
-    CUENTAS_CLAVE.forEach((slug) => {
-      const c = byCuenta.get(slug);
-      if (!c) return;
-      if (mesMax >= 2) {
-        const v = c.valores[mesMax];
-        const vPrev = c.valores[mesMax - 1];
-        if (v != null && vPrev != null && Math.abs(vPrev) > 1000) {
-          const delta = ((v - vPrev) / Math.abs(vPrev)) * 100;
-          if (Math.abs(delta) >= 25) {
-            items.push({
-              id: `${anio}-mom-${slug}-${mesMax}`, type: 'mom',
-              cuenta: c.cuenta, slug, mes: mesMax, delta,
-              mensaje: `${c.cuenta} ${delta > 0 ? 'subió' : 'bajó'} ${Math.abs(delta).toFixed(1)}% en ${MESES_FULL[mesMax-1]} vs ${MESES_FULL[mesMax-2]}`,
-            });
-          }
-        }
-      }
-      const v = c.valores[mesMax];
-      const cPrev = byCuentaPrev.get(slug);
-      const vPrevY = cPrev?.valores?.[mesMax];
-      if (v != null && vPrevY != null && Math.abs(vPrevY) > 1000) {
-        const delta = ((v - vPrevY) / Math.abs(vPrevY)) * 100;
-        if (Math.abs(delta) >= 40) {
-          items.push({
-            id: `${anio}-yoy-${slug}-${mesMax}`, type: 'yoy',
-            cuenta: c.cuenta, slug, mes: mesMax, delta,
-            mensaje: `${c.cuenta} ${MESES_FULL[mesMax-1]} ${anio}: ${delta > 0 ? '+' : ''}${delta.toFixed(1)}% vs ${anio - 1}`,
-          });
-        }
-      }
-    });
-    return items;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byCuenta, byCuentaPrev, mesMax, anio]);
-
-  const alertasActivas = alertas.filter((a) => !alertasDescartadas.has(a.id));
-
-  // ── Ficha del mes (para modal)
-  const fichaMes = useMemo(() => {
-    if (!mesDrillDown) return null;
-    const m = mesDrillDown;
-    const get = (slug) => byCuenta.get(slug);
-    const ventaNeta = get('venta_neta')?.valores?.[m] || 0;
-    const utilBruta = get('utilidad_bruta')?.valores?.[m] || 0;
-    const uafir     = get('uafir_sin_proyectos')?.valores?.[m] || 0;
-    const uaii      = get('uaii_contable_sin_proyectos')?.valores?.[m] || 0;
-    const ventaPrev = byCuentaPrev.get('venta_neta')?.valores?.[m] || 0;
-
-    const varsMoM = [];
-    byCuenta.forEach((c) => {
-      if (c.es_subtotal) return;
-      const v = c.valores[m]; const vPrev = c.valores[m - 1];
-      if (v != null && vPrev != null && Math.abs(vPrev) > 1000) {
-        const deltaAbs = v - vPrev;
-        const deltaPct = (deltaAbs / Math.abs(vPrev)) * 100;
-        if (Math.abs(deltaAbs) > 50000) varsMoM.push({ cuenta: c.cuenta, deltaAbs, deltaPct, valor: v, valorPrev: vPrev });
-      }
-    });
-    varsMoM.sort((a, b) => Math.abs(b.deltaAbs) - Math.abs(a.deltaAbs));
-
-    const varsYoY = [];
-    byCuenta.forEach((c) => {
-      if (c.es_subtotal) return;
-      const v = c.valores[m]; const vPrev = byCuentaPrev.get(c.cuenta_norm)?.valores?.[m];
-      if (v != null && vPrev != null && Math.abs(vPrev) > 1000) {
-        const deltaAbs = v - vPrev;
-        const deltaPct = (deltaAbs / Math.abs(vPrev)) * 100;
-        if (Math.abs(deltaAbs) > 50000) varsYoY.push({ cuenta: c.cuenta, deltaAbs, deltaPct, valor: v, valorPrev: vPrev });
-      }
-    });
-    varsYoY.sort((a, b) => Math.abs(b.deltaAbs) - Math.abs(a.deltaAbs));
-
-    return {
-      mes: m, ventaNeta, utilBruta, uafir, uaii, ventaPrev,
-      pctBruta: ventaNeta > 0 ? (utilBruta / ventaNeta) * 100 : null,
-      pctUafir: ventaNeta > 0 ? (uafir / ventaNeta) * 100 : null,
-      deltaVenta: ventaPrev > 0 ? ((ventaNeta - ventaPrev) / ventaPrev) * 100 : null,
-      varsMoM: varsMoM.slice(0, 5),
-      varsYoY: varsYoY.slice(0, 5),
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byCuenta, byCuentaPrev, mesDrillDown]);
-
-  if (loading) return <Cargando pantalla="estadoResultados" label="Cargando estado de resultados…" minHeight={480} />;
-  if (rows.length === 0) {
+  if (error) {
     return (
-      <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted }}>
-        <Calculator style={{ width: 48, height: 48, margin: '0 auto 16px', color: theme.textSubtle, strokeWidth: 1.2 }} />
-        <div style={{ ...typo(TYPO.h2), color: theme.text, marginBottom: 8 }}>Estado de resultados</div>
-        <div style={{ ...typo(TYPO.body), color: theme.textMuted }}>No hay datos para {anio}. Sube los cierres en /uploads.html.</div>
+      <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText }}>
+        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: theme.text, marginBottom: 6 }}>No se pudo cargar el estado de resultados</div>
+        <div style={{ fontSize: 12.5 }}>{error}</div>
+      </div>
+    );
+  }
+  if (!rows.length) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText }}>
+        <Calculator style={{ width: 44, height: 44, margin: '0 auto 14px', color: theme.textSubtle || theme.textMuted, strokeWidth: 1.2 }} />
+        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: theme.text, marginBottom: 6 }}>Estado de resultados</div>
+        <div style={{ fontSize: 12.5 }}>No hay P&L cargado para {anio}. Súbelo desde Administración → Datos (Estado de Resultados).</div>
+        {anios.length > 0 && <div style={{ marginTop: 14 }}><Segmented value={anio} onChange={setAnio} options={anios.map((y) => ({ id: y, label: String(y) }))} /></div>}
       </div>
     );
   }
 
-  // ═══ RENDER ═══
-  return (
-    <div style={{ maxWidth: 1240, margin: '0 auto', padding: '32px 24px 60px' }}>
-      {/* ─── Top bar: breadcrumb + segment año + PDF ─── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 24,
-      }} className="edr-no-print">
-        <div style={{ ...typo(TYPO.caption), color: theme.textMuted }}>
-          General · <span style={{ color: theme.text, fontWeight: 500 }}>Estado de resultados</span>
-        </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {aniosDisponibles.length > 1 && (
-            <AppleSegment
-              options={aniosDisponibles.map((y) => ({ value: y, label: String(y) }))}
-              value={anio} onChange={setAnio}
-            />
-          )}
-          <button onClick={() => window.print()}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '7px 14px', borderRadius: 999,
-              background: 'transparent', border: `1px solid ${theme.border}`,
-              color: theme.text, ...typo(TYPO.eyebrow), fontFamily: TYPO.fontText,
-              cursor: 'pointer', transition: 'background 200ms cubic-bezier(0.32, 0.72, 0, 1)',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = theme.surfaceHover}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-            <Printer style={{ width: 13, height: 13, strokeWidth: 2 }} /> Exportar PDF
-          </button>
-        </div>
-      </div>
+  const mesLbl = MESES_FULL[mes - 1];
+  const periodo = modo === 'ytd' ? `YTD ene–${MESES_LBL[mes - 1].toLowerCase()} ${anio}` : `${mesLbl} ${anio}`;
+  const vsTxt = modo === 'ytd' ? `vs YTD ${anio - 1}` : `vs ${MESES_LBL[mes - 1]} ${anio - 1}`;
+  const heroStat = (k, v, delta) => ({ k, v: moneyCompact(v), sub: delta == null ? `vs ${anio - 1}: —` : `${delta >= 0 ? '↑' : '↓'} ${Math.abs(delta).toFixed(1)} % vs ${anio - 1}` });
+  const alertasVisibles = verTodasAlertas ? alertas : alertas.slice(0, 3);
 
-      {/* ─── Header ─── */}
-      <div style={{ marginBottom: 20 }}>
-        <AppleH1>Estado de resultados.</AppleH1>
-        <p style={{
-          ...typo(TYPO.body), color: theme.textMuted,
-          margin: '8px 0 0', fontFamily: TYPO.fontText,
-        }}>
-          REVKO Technology · {anio === new Date().getFullYear() ? 'YTD' : `Enero – ${MESES_LBL[mesMax - 1]}`} {anio} · MXN
+  const kpiDelta = (delta, ppVal, invert = false) => ({
+    badge: delta == null ? undefined : { tone: (invert ? delta <= 0 : delta >= 0) ? 'green' : 'red', l: `${delta >= 0 ? '↑' : '↓'} ${Math.abs(delta).toFixed(1)}%` },
+    ppTxt: ppVal == null ? null : pp(ppVal),
+  });
+  const kVenta = kpiDelta(m.delta.ventaNeta);
+  const kBruta = kpiDelta(m.delta.utilBruta, m.delta.brutaPp);
+  const kUafir = kpiDelta(m.delta.uafir, m.delta.uafirPp);
+  const kUaii = kpiDelta(m.delta.uaii, m.delta.uaiiPp);
+
+  return (
+    <div ref={rootRef} style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
+      <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+        {/* 1 · Hero narrativo */}
+        <Hero
+          eyebrow={`Estado de resultados · REVKO Technology · ${mesLbl} ${anio}`}
+          titulo={fraseHero(mMes, anio)}
+          sub={subHero(medidas(idx, idxPrev, mesMax, 'ytd'), anio, mesMax)}
+          stats={[
+            heroStat('Venta neta', mMes.ventaNeta, mMes.delta.ventaNeta),
+            heroStat('UAII · UAFIR', mMes.uafir, mMes.delta.uafir),
+            heroStat('UAI · UAII contable', mMes.uaii, mMes.delta.uaii),
+          ]}
+        >
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <FrescuraPill pantalla="estadoResultados" inverso />
+            <Pill tone="gray" size="xs" style={pillInverso(theme, 'gray')} title="Cadencia de carga manual del P&L: día 10 de cada mes, tolerancia 10 días">
+              Carga mensual · día 10 · P&L hasta {MESES_LBL[mesMax - 1]} {anio}
+            </Pill>
+            {alertasVisibles.map((a) => (
+              <Pill key={a.id} tone={a.type === 'yoy' ? 'purple' : 'orange'} size="xs" dot onClick={() => abrirMes(a.mes)}
+                title={`${a.type === 'yoy' ? 'Vs año anterior' : 'Vs mes anterior'} · antes ${money(a.valorPrev)} · ahora ${money(a.valor)} · clic abre la ficha del mes`}
+                style={pillInverso(theme, a.type === 'yoy' ? 'purple' : 'orange')}>
+                {mensajeAlerta(a, anio)}
+                <span role="button" aria-label="Descartar alerta" title="Descartar" onClick={(e) => { e.stopPropagation(); descartar(a.id); }}
+                  style={{ marginLeft: 2, opacity: 0.7, fontWeight: 700, lineHeight: 1 }}>×</span>
+              </Pill>
+            ))}
+            {alertas.length > 3 && (
+              <Pill tone="gray" size="xs" onClick={() => setVerTodasAlertas((v) => !v)} style={pillInverso(theme, 'gray')}>
+                {verTodasAlertas ? 'ver menos' : `+${alertas.length - 3} más`}
+              </Pill>
+            )}
+          </div>
+        </Hero>
+
+        {/* 2 · Controles */}
+        <div data-no-print style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {anios.length > 1 && <Segmented value={anio} onChange={setAnio} options={anios.map((y) => ({ id: y, label: String(y) }))} />}
+          <Segmented value={mes} onChange={(v) => setMesSel(v)} options={Array.from({ length: mesMax }, (_, i) => ({ id: i + 1, label: MESES_LBL[i] }))} />
+          <Segmented value={modo} onChange={setModo} options={[{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD' }]} />
+          <span style={{ fontSize: 11, color: theme.textMuted }}>{periodo} · {vsTxt}</span>
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <ExportMenu titulo="Estado de resultados" subtitulo={`REVKO Technology · ${periodo}`} excel={excel} pdf={{ ref: rootRef }} />
+          </span>
+        </div>
+
+        {/* 3 · KPIs del periodo (Mes o YTD) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8 }}>
+          <KpiCard eyebrow={`Venta neta · ${modo === 'ytd' ? 'YTD' : mesLbl}`} badge={kVenta.badge} big={moneyCompact(m.ventaNeta)}
+            sub={`${vsTxt}: ${moneyCompact(m.prev.ventaNeta)}`} onClick={() => abrirMes(mes)} />
+          <KpiCard eyebrow={`Utilidad bruta · ${modo === 'ytd' ? 'YTD' : mesLbl}`} badge={kBruta.badge} big={moneyCompact(m.utilBruta)} bigSmall={m.pct.bruta != null ? `margen ${pct(m.pct.bruta)}` : undefined}
+            sub={`${vsTxt}: ${moneyCompact(m.prev.utilBruta)}${m.prev.pct.bruta != null ? ` · ${pct(m.prev.pct.bruta)}` : ''}${kBruta.ppTxt ? ` (${kBruta.ppTxt})` : ''}`} onClick={() => abrirMes(mes)} />
+          <KpiCard eyebrow={`UAII · UAFIR s/ proyectos · ${modo === 'ytd' ? 'YTD' : mesLbl}`} badge={kUafir.badge} big={moneyCompact(m.uafir)} bigSmall={m.pct.uafir != null ? `${pct(m.pct.uafir)} s/ venta` : undefined}
+            sub={`${vsTxt}: ${moneyCompact(m.prev.uafir)}${kUafir.ppTxt ? ` (${kUafir.ppTxt})` : ''}`} onClick={() => abrirMes(mes)} />
+          <KpiCard eyebrow={`UAI · UAII contable s/ proyectos · ${modo === 'ytd' ? 'YTD' : mesLbl}`} badge={kUaii.badge} big={moneyCompact(m.uaii)} bigSmall={m.pct.uaii != null ? `${pct(m.pct.uaii)} s/ venta` : undefined}
+            sub={`${vsTxt}: ${moneyCompact(m.prev.uaii)}${kUaii.ppTxt ? ` (${kUaii.ppTxt})` : ''}`} onClick={() => abrirMes(mes)} />
+        </div>
+
+        {/* 4 · Tendencia mensual */}
+        <Tendencia serie={serie} anio={anio} mesMax={mesMax} onMesClick={abrirMes} />
+
+        {/* 5 · Puente ventas ERP vs P&L */}
+        <Puente puente={puente} anio={anio} mesMax={mesMax} onMesClick={abrirMes} />
+
+        {/* 6 · Tabla formal */}
+        <Panel
+          titulo="Detalle por cuenta"
+          meta={`cada cuenta con sus 12 meses, ${MESES_LBL[mes - 1]} vs ${MESES_LBL[mes - 1]} ${anio - 1}, YTD vs YTD ${anio - 1} · clic en un grupo lo pliega · clic en una cuenta muestra sus 24 meses · clic en un mes abre su ficha`}
+          padding="0"
+          acciones={<span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <Pill tone="gray" size="xs">Última actualización · {MESES_LBL[mesMax - 1]} {anio}</Pill>
+            <Pill tone="gray" size="xs">MXN</Pill>
+          </span>}
+        >
+          <TablaFormal idx={idx} idxPrev={idxPrev} filas={filas} anio={anio} mesSel={mes} mesMax={mesMax} onMesClick={abrirMes} />
+        </Panel>
+
+        {/* 7 · Información general */}
+        {info.length > 0 && (
+          <Panel titulo="Información general" meta={`${mesLbl} ${anio} · T.C. DOF, colaboradores y productividad`} plegable abiertoInicial={false}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
+              {info.map((it) => (
+                <KpiCard key={it.slug} eyebrow={it.label} big={it.valor == null ? '—' : it.entero ? int(it.valor) : moneyCompact(it.valor)}
+                  badge={it.delta == null ? undefined : { tone: it.delta >= 0 ? 'green' : 'red', l: `${it.delta >= 0 ? '↑' : '↓'} ${Math.abs(it.delta).toFixed(1)}%` }}
+                  sub={`${anio - 1}: ${it.valorPrev == null ? '—' : it.entero ? int(it.valorPrev) : moneyCompact(it.valorPrev)}`} />
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        <p style={{ fontSize: 10.5, color: theme.textSubtle || theme.textMuted, textAlign: 'center', margin: '8px 0 0', fontFamily: TYPO.fontText }}>
+          Cifras en MXN · fuente <code style={{ background: theme.surfaceHover, padding: '1px 5px', borderRadius: 4, fontSize: 10, fontFamily: 'ui-monospace, monospace' }}>estados_resultados</code> (P&L contable, importador central) y <code style={{ background: theme.surfaceHover, padding: '1px 5px', borderRadius: 4, fontSize: 10, fontFamily: 'ui-monospace, monospace' }}>v_erp_medidas_mes</code> (ventas del ERP)
         </p>
       </div>
 
-      {/* ─── Notice pill (alertas) ─── */}
-      {alertasActivas.length > 0 && (
-        <NoticePill theme={theme} alertas={alertasActivas}
-          onDismiss={(id) => persistirDescartadas(new Set([...alertasDescartadas, id]))}
-          onMesClick={(m) => setMesDrillDown(m)} />
-      )}
-
-      {/* ═══════════ BENTO — visual summary ═══════════ */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 12, marginBottom: 32,
-      }}>
-        {/* Hero ring UAII (2x2) */}
-        <HeroRing theme={theme} kpis={kpis} anio={anio} mesMax={mesMax} />
-
-        <KpiMini theme={theme} label="Venta neta"
-          value={fmtCompact(kpis.ventaNeta)}
-          delta={kpis.deltaVenta} deltaLabel={`vs ${anio - 1}`}
-          series={trendData.map((d) => d.ventaNeta)} mesMax={mesMax} />
-
-        <KpiMini theme={theme} label="Utilidad bruta"
-          value={fmtCompact(kpis.utilBruta)}
-          delta={kpis.deltaUtil} deltaLabel={`vs ${anio - 1}`}
-          series={trendData.map((d) => d.utilBruta)} mesMax={mesMax} />
-
-        <KpiMini theme={theme} label="Margen bruto"
-          value={kpis.pctBruta != null ? kpis.pctBruta.toFixed(1) + '%' : '—'}
-          delta={kpis.deltaMargen} deltaLabel="pts vs 25" isPts
-          series={trendData.map((d) => d.margenBrutoPct)} mesMax={mesMax} />
-
-        <KpiMini theme={theme} label="UAFIR s/ proy."
-          value={fmtCompact(kpis.uafir)}
-          delta={kpis.deltaUafir} deltaLabel={`vs ${anio - 1}`}
-          series={trendData.map((d) => d.uafir)} mesMax={mesMax} />
-
-        {/* Tendencia wide (span 4) */}
-        <TrendCard theme={theme} data={trendData} anio={anio} mesMax={mesMax}
-          modo={modoTrend} setModo={setModoTrend}
-          onMesClick={(m) => setMesDrillDown(m)} />
-      </div>
-
-      {/* ═══════════ REPORT — detalle formal ═══════════ */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-        padding: '12px 0 12px', borderBottom: `2px solid ${theme.text}`,
-        marginBottom: 20,
-      }}>
-        <div>
-          <h2 style={{ ...typo(TYPO.h2), color: theme.text, margin: 0 }}>Detalle por cuenta.</h2>
-          <div style={{ ...typo(TYPO.body), color: theme.textMuted, fontFamily: TYPO.fontText, marginTop: 4 }}>
-            Cada cuenta con desglose mensual, YTD, comparativo {anio - 1} y variación
-          </div>
-        </div>
-        <div style={{
-          textAlign: 'right', ...typo(TYPO.caption),
-          color: theme.textMuted, fontFamily: TYPO.fontText,
-          fontVariantNumeric: 'tabular-nums',
-        }}>
-          <div>Última actualización · <span style={{ color: theme.text, fontWeight: 500 }}>{MESES_LBL[mesMax - 1]} {anio}</span></div>
-          <div>Preparado por Dashboard Acteck</div>
-        </div>
-      </div>
-
-      <div style={{
-        background: theme.surface, borderRadius: 20,
-        boxShadow: theme.shadow, padding: '8px 24px 24px',
-        overflowX: 'auto',
-        backdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-        WebkitBackdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-        border: theme.mode === 'dark' || theme.mode === 'vibrant' ? `1px solid ${theme.border}` : 'none',
-      }}>
-        <ReportTable theme={theme} grupos={GRUPOS_TABLA}
-          byCuenta={byCuenta} byCuentaPrev={byCuentaPrev}
-          trendData={trendData} mesMax={mesMax} anio={anio}
-          onMesClick={(m) => setMesDrillDown(m)} />
-      </div>
-
-      {/* ─── Info general ─── */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-        padding: '40px 0 12px', borderBottom: `1px solid ${theme.border}`,
-        marginBottom: 16,
-      }}>
-        <h2 style={{ ...typo(TYPO.h2), color: theme.text, margin: 0, fontSize: 22 }}>Información general.</h2>
-      </div>
-      <InfoGeneral theme={theme} byCuenta={byCuenta} byCuentaPrev={byCuentaPrev} mesMax={mesMax} anio={anio} />
-
-      <p style={{
-        ...typo(TYPO.caption), color: theme.textSubtle,
-        textAlign: 'center', marginTop: 32, fontFamily: TYPO.fontText,
-      }}>
-        Cifras en MXN. Fuente: <code style={{
-          background: theme.surfaceHover, padding: '2px 6px', borderRadius: 4,
-          fontSize: 11, fontFamily: 'ui-monospace, monospace',
-        }}>estados_resultados</code> · alimentada desde el Importador central
-      </p>
-
-      {/* Modal drill-down */}
-      {fichaMes && (
-        <FichaMesModal theme={theme} ficha={fichaMes} anio={anio} anioPrev={anio - 1}
-          onClose={() => setMesDrillDown(null)} />
-      )}
-
-      <style>{`
-        @media print {
-          .edr-no-print { display: none !important; }
-          @page { size: A3 landscape; margin: 12mm; }
-          body { background: #fff !important; }
-        }
-      `}</style>
+      <FichaMes ficha={ficha} anio={anio} abierto={!!mesFicha} onClose={() => setMesFicha(null)} />
     </div>
   );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// Helpers de estilo
-// ═══════════════════════════════════════════════════════════════════
-function typo(t) {
-  return {
-    fontFamily: t === TYPO.body || t === TYPO.sub || t === TYPO.eyebrow || t === TYPO.label || t === TYPO.caption
-      ? TYPO.fontText : TYPO.fontDisplay,
-    fontSize: t.fs, fontWeight: t.w, letterSpacing: t.ls, lineHeight: t.lh || 1.4,
-  };
-}
-
-const dotColorFrom = (theme, key) => {
-  const map = {
-    green: theme.green, red: theme.red, orange: theme.orange,
-    pink: theme.pink, purple: theme.purple, accent: theme.accent,
-  };
-  return map[key] || theme.textMuted;
-};
-
-// ═══════════════════════════════════════════════════════════════════
-// HERO RING — card 2x2 con ring gradient tipo Fitness
-// ═══════════════════════════════════════════════════════════════════
-function HeroRing({ theme, kpis, anio, mesMax }) {
-  // Ring % = margen UAII s/ venta (cap 30% para visualizar)
-  const marginUaii = kpis.pctUaii;
-  const ringPct = marginUaii != null ? Math.min(Math.max(marginUaii / 30, 0), 1) : 0;
-  const dashArray = ringPct * 264; // circunferencia r=42 → 2πr ≈ 264
-
-  return (
-    <div style={{
-      gridColumn: 'span 2', gridRow: 'span 2',
-      background: theme.surface,
-      backdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-      WebkitBackdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-      border: theme.mode === 'dark' || theme.mode === 'vibrant' ? `1px solid ${theme.border}` : 'none',
-      borderRadius: 22, boxShadow: theme.shadow, padding: 32,
-      display: 'flex', alignItems: 'center', gap: 28,
-    }}>
-      <svg viewBox="0 0 100 100" style={{ width: 200, height: 200, flexShrink: 0 }}>
-        <circle cx="50" cy="50" r="42" fill="none" stroke={theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} strokeWidth="10" />
-        <circle cx="50" cy="50" r="42" fill="none" stroke={theme.text} strokeWidth="10" strokeLinecap="round"
-          strokeDasharray={`${dashArray} 264`} transform="rotate(-90 50 50)" />
-        <text x="50" y="46" textAnchor="middle" fontSize="9" fill={theme.textMuted}
-          fontWeight="500" fontFamily={TYPO.fontText}>margen UAII</text>
-        <text x="50" y="60" textAnchor="middle" fontSize="16" fontWeight="700" fill={theme.text}
-          fontFamily={TYPO.fontDisplay} style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {marginUaii != null ? marginUaii.toFixed(1) + '%' : '—'}
-        </text>
-        <text x="50" y="72" textAnchor="middle" fontSize="7" fill={theme.textSubtle}
-          fontFamily={TYPO.fontText}>s/ venta neta</text>
-      </svg>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ ...typo(TYPO.eyebrow), color: theme.textMuted, marginBottom: 10 }}>
-          UAII acumulada · {anio}
-        </div>
-        <div style={{
-          ...typo({ fs: 64, w: 600, ls: '-0.045em', lh: 1 }),
-          fontFamily: TYPO.fontDisplay,
-          color: theme.text,
-          fontVariantNumeric: 'tabular-nums',
-          marginBottom: 12,
-        }}>{fmtCompact(kpis.uaii)}</div>
-        <DeltaLine theme={theme} pct={kpis.deltaUaii} label={`vs ${anio - 1}`} big />
-        <div style={{
-          ...typo(TYPO.caption), color: theme.textMuted, fontFamily: TYPO.fontText,
-          marginTop: 16, paddingTop: 16, borderTop: `1px solid ${theme.divider}`,
-        }}>
-          Promedio mensual · <span style={{ color: theme.text, fontWeight: 500 }}>
-            {fmtCompact(mesMax > 0 ? kpis.uaii / mesMax : 0)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// KPI MINI — card chica con sparkline
-// ═══════════════════════════════════════════════════════════════════
-function KpiMini({ theme, label, value, delta, deltaLabel, series, mesMax, isPts }) {
-  return (
-    <div style={{
-      background: theme.surface,
-      backdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-      WebkitBackdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-      border: theme.mode === 'dark' || theme.mode === 'vibrant' ? `1px solid ${theme.border}` : 'none',
-      borderRadius: 20, boxShadow: theme.shadow, padding: 20,
-    }}>
-      <div style={{
-        ...typo({ fs: 11, w: 600, ls: '0.06em' }),
-        fontFamily: TYPO.fontText,
-        color: theme.textMuted, textTransform: 'uppercase',
-        marginBottom: 10,
-      }}>{label}</div>
-      <div style={{
-        ...typo({ fs: 26, w: 600, ls: '-0.02em', lh: 1 }),
-        fontFamily: TYPO.fontDisplay,
-        color: theme.text,
-        fontVariantNumeric: 'tabular-nums',
-        marginBottom: 6,
-      }}>{value}</div>
-      <DeltaLine theme={theme} pct={delta} label={deltaLabel} isPts={isPts} />
-      <div style={{ marginTop: 10 }}>
-        <Sparkline theme={theme} series={series} mesMax={mesMax}
-          color={delta != null && delta < 0 ? theme.red : theme.text}
-          interactive fmt={(v) => value.includes('%') ? (v?.toFixed(1) || '—') + '%' : fmtCompact(v)} />
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// SPARKLINE
-// ═══════════════════════════════════════════════════════════════════
-function Sparkline({ theme, series, mesMax, color, height = 24, width = 100, interactive = false, fmt = fmtCompact }) {
-  const [hoverI, setHoverI] = useState(null);
-  const points = (series || []).slice(0, mesMax).filter((v) => v != null && !isNaN(v));
-  if (points.length < 2) return <div style={{ height }} />;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const step = width / (points.length - 1);
-  const coords = points.map((v, i) => ({
-    x: i * step,
-    y: height - ((v - min) / range) * (height - 4) - 2,
-    v,
-  }));
-  const poly = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
-
-  const handleMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * width;
-    const i = Math.round(x / step);
-    setHoverI(i >= 0 && i < coords.length ? i : null);
-  };
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
-      style={{ display: 'block', width: '100%', height, cursor: interactive ? 'crosshair' : 'default' }}
-      onMouseMove={interactive ? handleMove : undefined}
-      onMouseLeave={interactive ? () => setHoverI(null) : undefined}>
-      <polyline points={poly} fill="none" stroke={color || theme.text}
-        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      {interactive && hoverI != null && coords[hoverI] && (
-        <>
-          <circle cx={coords[hoverI].x} cy={coords[hoverI].y} r="2.5" fill={color || theme.text} />
-          <title>{`${MESES_LBL[hoverI]}: ${fmt(coords[hoverI].v)}`}</title>
-        </>
-      )}
-    </svg>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// DELTA LINE — "↑ 21.8% vs 2025"
-// ═══════════════════════════════════════════════════════════════════
-function DeltaLine({ theme, pct, label, big, isPts }) {
-  if (pct == null || !isFinite(pct)) return <div style={{ ...typo(TYPO.caption), color: theme.textMuted }}>—</div>;
-  const isPos = pct >= 0;
-  const col = isPos ? theme.green : theme.red;
-  return (
-    <div style={{
-      ...typo(big ? { fs: 15, w: 500, ls: 0 } : { fs: 11.5, w: 500, ls: 0 }),
-      fontFamily: TYPO.fontText,
-      color: col,
-      fontVariantNumeric: 'tabular-nums',
-    }}>
-      {isPos ? '↑' : '↓'} {Math.abs(pct).toFixed(1)}{isPts ? ' pts' : '%'}
-      {label && <span style={{ color: theme.textMuted, fontWeight: 400, marginLeft: 6 }}>{label}</span>}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// NOTICE PILL — alertas discretas estilo Apple
-// ═══════════════════════════════════════════════════════════════════
-function NoticePill({ theme, alertas, onDismiss, onMesClick }) {
-  const [open, setOpen] = useState(false);
-  const primaria = alertas[0];
-  const rest = alertas.length - 1;
-  return (
-    <div className="edr-no-print" style={{ marginBottom: 24 }}>
-      <div style={{
-        display: 'inline-flex', alignItems: 'center', gap: 10,
-        background: theme.eyebrowSoft || (theme.mode === 'dark' ? 'rgba(255,149,0,0.14)' : 'rgba(196,82,13,0.08)'),
-        color: theme.eyebrowColor || theme.orange,
-        padding: '9px 16px', borderRadius: 999,
-        ...typo(TYPO.eyebrow), fontFamily: TYPO.fontText,
-        cursor: 'pointer',
-      }} onClick={() => setOpen(!open)}>
-        <span style={{
-          width: 6, height: 6, borderRadius: 999,
-          background: theme.orange, flexShrink: 0,
-        }} />
-        <span>
-          {primaria.mensaje}
-          {rest > 0 && <span style={{ opacity: 0.65, marginLeft: 8 }}>· {rest} más</span>}
-        </span>
-        <ChevronRight style={{
-          width: 12, height: 12,
-          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-          transition: 'transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-        }} />
-      </div>
-      {open && (
-        <div style={{
-          background: theme.surface, borderRadius: 14,
-          border: `1px solid ${theme.border}`,
-          marginTop: 8, padding: 12,
-          boxShadow: theme.shadow,
-          backdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-        }}>
-          {alertas.map((a) => (
-            <div key={a.id} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '8px 10px', borderRadius: 8,
-              ...typo(TYPO.caption), fontFamily: TYPO.fontText, color: theme.text,
-            }}>
-              <span style={{
-                ...typo({ fs: 10, w: 700, ls: '0.06em' }),
-                background: a.type === 'yoy' ? theme.purple + '20' : theme.orange + '20',
-                color: a.type === 'yoy' ? theme.purple : theme.orange,
-                padding: '2px 7px', borderRadius: 999,
-                textTransform: 'uppercase',
-              }}>{a.type}</span>
-              <span style={{ flex: 1 }}>{a.mensaje}</span>
-              <button onClick={() => onMesClick(a.mes)}
-                style={{
-                  background: 'transparent', border: 'none', ...typo(TYPO.caption),
-                  color: theme.accent, cursor: 'pointer', fontFamily: TYPO.fontText, padding: 4,
-                }}>Ver mes</button>
-              <button onClick={() => onDismiss(a.id)}
-                style={{
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  color: theme.textMuted, padding: 2, lineHeight: 0,
-                }}><X style={{ width: 12, height: 12 }} /></button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// TREND CARD — gráfica wide con área gradient + comparativo dashed
-// ═══════════════════════════════════════════════════════════════════
-function TrendCard({ theme, data, anio, mesMax, modo, setModo, onMesClick }) {
-  const [hoverIdx, setHoverIdx] = useState(null);
-  const config = {
-    venta:  { key: 'ventaNeta',  keyPrev: 'ventaNetaPrev', label: 'Venta neta', fmt: fmtCompact },
-    uafir:  { key: 'uafir',      keyPrev: 'uafirPrev',     label: 'UAFIR',      fmt: fmtCompact },
-    margen: { key: 'margenBrutoPct', keyPrev: null,        label: 'Margen bruto', fmt: (v) => v != null ? v.toFixed(1) + '%' : '—' },
-  }[modo];
-
-  const seriesA = data.map((d) => d[config.key]);
-  const seriesB = config.keyPrev ? data.map((d) => d[config.keyPrev]) : null;
-  const allVals = [...seriesA, ...(seriesB || [])].filter((v) => v != null && !isNaN(v));
-  if (allVals.length === 0) return null;
-
-  const min = Math.min(...allVals, 0);
-  const max = Math.max(...allVals);
-  const range = (max - min) || 1;
-
-  const W = 900, H = 220;
-  const padL = 40, padR = 40, padT = 30, padB = 46;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
-  const stepX = chartW / 11;
-
-  const scaleY = (v) => padT + chartH - ((v - min) / range) * chartH;
-  const scaleX = (i) => padL + i * stepX;
-
-  const pointsA = seriesA.map((v, i) => v != null ? { x: scaleX(i), y: scaleY(v), i, v } : null).filter(Boolean);
-  const pointsB = seriesB ? seriesB.map((v, i) => v != null ? { x: scaleX(i), y: scaleY(v), i, v } : null).filter(Boolean) : [];
-
-  const linePathA = pointsA.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  const areaPathA = pointsA.length ?
-    `${linePathA} L ${pointsA[pointsA.length - 1].x} ${padT + chartH} L ${pointsA[0].x} ${padT + chartH} Z` : '';
-  const linePathB = pointsB.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-
-  const promedio = allVals.reduce((a, b) => a + b, 0) / allVals.length;
-
-  const handleMouseMove = (e) => {
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * W;
-    if (x < padL || x > W - padR) { setHoverIdx(null); return; }
-    const i = Math.round((x - padL) / stepX);
-    if (i < 0 || i > 11) { setHoverIdx(null); return; }
-    setHoverIdx(i);
-  };
-
-  const hovered = hoverIdx != null ? {
-    i: hoverIdx,
-    x: scaleX(hoverIdx),
-    vA: seriesA[hoverIdx],
-    vB: seriesB ? seriesB[hoverIdx] : null,
-    mes: MESES_FULL[hoverIdx],
-  } : null;
-
-  return (
-    <div style={{
-      gridColumn: 'span 4',
-      background: theme.surface,
-      backdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-      WebkitBackdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-      border: theme.mode === 'dark' || theme.mode === 'vibrant' ? `1px solid ${theme.border}` : 'none',
-      borderRadius: 20, boxShadow: theme.shadow, padding: '24px 28px',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
-        <div>
-          <div style={{
-            ...typo({ fs: 11, w: 600, ls: '0.06em' }),
-            fontFamily: TYPO.fontText,
-            color: theme.textMuted, textTransform: 'uppercase',
-          }}>Tendencia mensual · {config.label}</div>
-          <div style={{
-            ...typo({ fs: 22, w: 600, ls: '-0.02em' }),
-            fontFamily: TYPO.fontDisplay,
-            color: theme.text, marginTop: 4, fontVariantNumeric: 'tabular-nums',
-          }}>Promedio {config.fmt(promedio)}/mes</div>
-          <div style={{ ...typo(TYPO.caption), color: theme.textMuted, marginTop: 2, fontFamily: TYPO.fontText }}>
-            Comparativo con {anio - 1} (línea punteada)
-          </div>
-        </div>
-        <AppleSegment
-          options={[
-            { value: 'venta', label: 'Venta' },
-            { value: 'uafir', label: 'UAFIR' },
-            { value: 'margen', label: 'Margen' },
-          ]}
-          value={modo} onChange={setModo}
-        />
-      </div>
-
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoverIdx(null)}>
-        {/* baseline */}
-        <line x1={padL} y1={scaleY(0)} x2={W - padR} y2={scaleY(0)} stroke={theme.divider} strokeWidth="1" />
-
-        {/* Serie prev (dashed) */}
-        {pointsB.length > 1 && (
-          <>
-            <path d={linePathB} fill="none" stroke={theme.textSubtle} strokeWidth="1.5" strokeDasharray="4 3" />
-            {pointsB.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="3" fill={theme.textSubtle} />
-            ))}
-          </>
-        )}
-
-        {/* Serie actual (solid, sin gradiente de área) */}
-        {areaPathA && <path d={areaPathA} fill={theme.text} fillOpacity="0.05" />}
-        {linePathA && <path d={linePathA} fill="none" stroke={theme.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-
-        {/* Guide vertical al hover */}
-        {hovered && hovered.vA != null && (
-          <line x1={hovered.x} x2={hovered.x} y1={padT} y2={padT + chartH}
-            stroke={theme.text} strokeOpacity="0.25" strokeWidth="1" strokeDasharray="2 3" />
-        )}
-
-        {/* Puntos actuales */}
-        {pointsA.map((p) => {
-          const isHovered = hovered && hovered.i === p.i;
-          return (
-            <circle key={p.i} cx={p.x} cy={p.y} r={isHovered ? 6.5 : 4.5}
-              fill={theme.text}
-              stroke={theme.surface} strokeWidth={isHovered ? 3 : 2}
-              style={{ cursor: 'pointer', transition: 'r 180ms cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-              onClick={() => onMesClick && onMesClick(p.i + 1)} />
-          );
-        })}
-
-        {/* Labels del hover */}
-        {hovered && hovered.vA != null && (
-          <g>
-            <text x={hovered.x} y={scaleY(hovered.vA) - 14} textAnchor="middle"
-              fontSize="12" fontWeight="700" fill={theme.text}
-              fontFamily={TYPO.fontDisplay}
-              style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {config.fmt(hovered.vA)}
-            </text>
-            {hovered.vB != null && (
-              <text x={hovered.x} y={scaleY(hovered.vB) + 14} textAnchor="middle"
-                fontSize="10.5" fill={theme.textSubtle}
-                fontFamily={TYPO.fontText}
-                style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {anio - 1} · {config.fmt(hovered.vB)}
-              </text>
-            )}
-          </g>
-        )}
-
-        {/* X labels (mes hovered destacado) */}
-        {MESES_LBL.map((m, i) => (
-          <text key={m} x={scaleX(i)} y={H - 14} textAnchor="middle"
-            fontSize="11"
-            fontWeight={hovered && hovered.i === i ? 600 : 400}
-            fill={hovered && hovered.i === i ? theme.text : (i < mesMax ? theme.textMuted : theme.textSubtle)}
-            fontFamily={TYPO.fontText}>{m}</text>
-        ))}
-      </svg>
-
-      {/* Tooltip resumen abajo (cuando hover) */}
-      <div style={{
-        minHeight: 22, marginTop: 8,
-        ...typo(TYPO.caption), fontFamily: TYPO.fontText, color: theme.textMuted,
-        display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'center',
-        opacity: hovered ? 1 : 0, transition: 'opacity 180ms',
-      }}>
-        {hovered && (
-          <>
-            <span><span style={{ color: theme.text, fontWeight: 500 }}>{hovered.mes} {anio}</span></span>
-            {hovered.vA != null && hovered.vB != null && (() => {
-              const delta = ((hovered.vA - hovered.vB) / Math.abs(hovered.vB)) * 100;
-              return (
-                <span style={{ color: delta >= 0 ? theme.green : theme.red, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
-                  {delta >= 0 ? '↑' : '↓'} {Math.abs(delta).toFixed(1)}% vs {anio - 1}
-                </span>
-              );
-            })()}
-            <span style={{ ...typo(TYPO.caption), color: theme.textSubtle }}>Click para ver detalle del mes</span>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// REPORT TABLE — tabla formal con grupos, subtotales, sparklines
-// ═══════════════════════════════════════════════════════════════════
-function ReportTable({ theme, grupos, byCuenta, byCuentaPrev, trendData, mesMax, anio, onMesClick }) {
-  const cellR = {
-    padding: '10px 10px', textAlign: 'right',
-    fontVariantNumeric: 'tabular-nums', ...typo({ fs: 13, w: 400, ls: 0 }),
-    fontFamily: TYPO.fontText, color: theme.text,
-    borderBottom: `1px solid ${theme.divider}`,
-  };
-  const cellL = { ...cellR, textAlign: 'left', fontVariantNumeric: 'normal' };
-  const headR = {
-    padding: '14px 10px 10px', textAlign: 'right',
-    ...typo({ fs: 10.5, w: 700, ls: '0.08em' }),
-    fontFamily: TYPO.fontText,
-    color: theme.textMuted, textTransform: 'uppercase',
-    borderBottom: `1.5px solid ${theme.text}`,
-    background: theme.surface,
-    position: 'sticky', top: 0, zIndex: 2,
-  };
-  const headL = { ...headR, textAlign: 'left' };
-
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}>
-      <thead>
-        <tr>
-          <th style={headL}>Cuenta</th>
-          <th style={headR}>Ene</th>
-          <th style={headR}>Feb</th>
-          <th style={headR}>Mar</th>
-          <th style={headR}>Abr</th>
-          <th style={headR}>May</th>
-          <th style={headR}>Jun</th>
-          <th style={headR}>Jul</th>
-          <th style={headR}>Ago</th>
-          <th style={headR}>Sep</th>
-          <th style={headR}>Oct</th>
-          <th style={headR}>Nov</th>
-          <th style={headR}>Dic</th>
-          <th style={headR}>YTD {anio}</th>
-          <th style={headR}>YTD {anio - 1}</th>
-          <th style={headR}>Δ %</th>
-          <th style={headR}>Tend.</th>
-        </tr>
-      </thead>
-      <tbody>
-        {grupos.map((g) => {
-          const cuentas = g.cuentas
-            .map((slug) => byCuenta.get(slug))
-            .filter(Boolean)
-            .sort((a, b) => a.orden - b.orden);
-          if (g.extra) {
-            const e = byCuenta.get(g.extra);
-            if (e) cuentas.push(e);
-          }
-          const sub = g.subtotal ? byCuenta.get(g.subtotal) : null;
-          const subTotal = sub ? sumYTD(sub, mesMax) : null;
-          const subTotalPrev = sub ? sumYTD(byCuentaPrev.get(g.subtotal), mesMax) : null;
-          const deltaSub = subTotal != null && subTotalPrev > 0 ? ((subTotal - subTotalPrev) / subTotalPrev) * 100 : null;
-
-          return (
-            <React.Fragment key={g.id}>
-              <tr>
-                <td colSpan={17} style={{
-                  background: theme.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  padding: '14px 10px',
-                  ...typo({ fs: 10.5, w: 700, ls: '0.09em' }),
-                  fontFamily: TYPO.fontText, color: theme.textMuted, textTransform: 'uppercase',
-                }}>
-                  <span style={{
-                    display: 'inline-block', width: 6, height: 6,
-                    borderRadius: 999, background: dotColorFrom(theme, g.dotKey),
-                    marginRight: 10, verticalAlign: 'middle',
-                  }} />
-                  {g.label}
-                </td>
-              </tr>
-              {cuentas.map((c) => (
-                <ReportRow key={c.cuenta_norm} theme={theme}
-                  cuenta={c} prev={byCuentaPrev.get(c.cuenta_norm)}
-                  mesMax={mesMax} formato={g.formato}
-                  onMesClick={onMesClick} />
-              ))}
-              {sub && (
-                <tr>
-                  <td style={{
-                    ...cellL, ...typo({ fs: 14, w: 600, ls: '-0.01em' }),
-                    fontFamily: TYPO.fontDisplay,
-                    padding: '14px 10px',
-                    borderTop: `1.5px solid ${theme.text}`,
-                    borderBottom: `2px solid ${theme.text}`,
-                  }}>{sub.cuenta}</td>
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
-                    <td key={m} style={{
-                      ...cellR, ...typo({ fs: 13, w: 600, ls: 0 }),
-                      fontFamily: TYPO.fontDisplay,
-                      padding: '14px 10px',
-                      borderTop: `1.5px solid ${theme.text}`, borderBottom: `2px solid ${theme.text}`,
-                    }}>{sub.valores[m] != null ? fmtCompact(sub.valores[m]) : '—'}</td>
-                  ))}
-                  <td style={{
-                    ...cellR, ...typo({ fs: 14, w: 600, ls: '-0.01em' }),
-                    fontFamily: TYPO.fontDisplay,
-                    padding: '14px 10px',
-                    borderTop: `1.5px solid ${theme.text}`, borderBottom: `2px solid ${theme.text}`,
-                  }}>{fmtCompact(subTotal)}</td>
-                  <td style={{
-                    ...cellR, color: theme.textMuted,
-                    padding: '14px 10px',
-                    borderTop: `1.5px solid ${theme.text}`, borderBottom: `2px solid ${theme.text}`,
-                  }}>{fmtCompact(subTotalPrev)}</td>
-                  <td style={{
-                    ...cellR, color: deltaSub == null ? theme.textMuted : deltaSub >= 0 ? theme.green : theme.red,
-                    fontWeight: 500,
-                    padding: '14px 10px',
-                    borderTop: `1.5px solid ${theme.text}`, borderBottom: `2px solid ${theme.text}`,
-                  }}>{deltaSub == null ? '—' : fmtPctDelta(deltaSub)}</td>
-                  <td style={{
-                    ...cellR, padding: '10px 10px',
-                    borderTop: `1.5px solid ${theme.text}`, borderBottom: `2px solid ${theme.text}`,
-                  }}>
-                    <div style={{ width: 56 }}>
-                      <Sparkline theme={theme} series={trendData.map((d) => d[g.subtotal === 'venta_neta' ? 'ventaNeta' : g.subtotal === 'utilidad_bruta' ? 'utilBruta' : 'uafir'])}
-                        mesMax={mesMax} color={theme.text} height={18} width={56} />
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function ReportRow({ theme, cuenta, prev, mesMax, formato, onMesClick }) {
-  const isSubcuenta = esSubcuenta(cuenta.cuenta);
-  const ytd = sumYTD(cuenta, mesMax);
-  const ytdPrev = sumYTD(prev, mesMax);
-  const delta = ytdPrev > 0 ? ((ytd - ytdPrev) / ytdPrev) * 100 : null;
-
-  const fmtCell = (v) => {
-    if (v == null) return '—';
-    if (formato === 'pct') return fmtPct(v * 100);
-    return fmtCompact(v);
-  };
-
-  // Sparkline por fila
-  const series = [1,2,3,4,5,6,7,8,9,10,11,12].map((m) => cuenta.valores?.[m] ?? null);
-
-  const cellR = {
-    padding: '9px 10px', textAlign: 'right',
-    fontVariantNumeric: 'tabular-nums', ...typo({ fs: 13, w: 400 }),
-    fontFamily: TYPO.fontText, color: theme.text,
-    borderBottom: `1px solid ${theme.divider}`,
-    whiteSpace: 'nowrap',
-  };
-  const cellL = { ...cellR, textAlign: 'left', fontVariantNumeric: 'normal', paddingLeft: isSubcuenta ? 26 : 10 };
-
-  const [hover, setHover] = useState(false);
-  return (
-    <tr
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ background: hover ? (theme.mode === 'dark' ? 'rgba(10,132,255,0.06)' : 'rgba(0,113,227,0.03)') : 'transparent' }}
-    >
-      <td style={{ ...cellL, color: isSubcuenta ? theme.textSubtle : theme.text,
-        fontStyle: isSubcuenta ? 'italic' : 'normal' }}
-        title={cuenta.notaGeneral || cuenta.cuenta}>
-        {cuenta.cuenta}
-      </td>
-      {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => {
-        const v = cuenta.valores?.[m];
-        const isEmpty = v == null;
-        return (
-          <td key={m}
-            onClick={() => v != null && onMesClick && onMesClick(m)}
-            style={{
-              ...cellR,
-              color: isEmpty ? theme.textSubtle : v < 0 ? theme.red : theme.text,
-              cursor: v != null ? 'pointer' : 'default',
-            }}
-            title={cuenta.notas?.[m] || ''}>
-            {fmtCell(v)}
-          </td>
-        );
-      })}
-      <td style={{ ...cellR, fontWeight: 500 }}>{formato === 'pct' ? '—' : fmtCompact(ytd)}</td>
-      <td style={{ ...cellR, color: theme.textMuted }}>{fmtCompact(ytdPrev)}</td>
-      <td style={{ ...cellR, color: delta == null ? theme.textMuted : delta >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
-        {delta == null ? '—' : fmtPctDelta(delta)}
-      </td>
-      <td style={{ ...cellR, padding: '6px 10px' }}>
-        <div style={{ width: 56 }}>
-          <Sparkline theme={theme} series={series} mesMax={mesMax}
-            color={delta == null ? theme.textMuted : delta >= 0 ? theme.green : theme.red}
-            height={18} width={56} />
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// INFO GENERAL — mini cards al pie
-// ═══════════════════════════════════════════════════════════════════
-function InfoGeneral({ theme, byCuenta, byCuentaPrev, mesMax, anio }) {
-  const items = INFO_SLUGS.map((slug) => {
-    const c = byCuenta.get(slug);
-    if (!c) return null;
-    const val = c.valores?.[mesMax] ?? null;
-    const valPrev = byCuentaPrev.get(slug)?.valores?.[mesMax] ?? null;
-    const delta = valPrev > 0 && val != null ? ((val - valPrev) / valPrev) * 100 : null;
-    let formatted = '—';
-    if (val != null) {
-      if (slug === 't_c_dof' || slug === 'colaboradores') formatted = fmtNumber(val);
-      else formatted = fmtCompact(val);
-    }
-    return {
-      slug, label: c.cuenta, valor: formatted, valPrev, delta,
-    };
-  }).filter(Boolean);
-
-  if (items.length === 0) return null;
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-      {items.map((it) => (
-        <div key={it.slug} style={{
-          background: theme.surface,
-          backdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-          WebkitBackdropFilter: theme.mode === 'vibrant' ? 'blur(20px) saturate(180%)' : undefined,
-          border: theme.mode === 'dark' || theme.mode === 'vibrant' ? `1px solid ${theme.border}` : 'none',
-          borderRadius: 16, boxShadow: theme.shadow, padding: 18,
-        }}>
-          <div style={{
-            ...typo({ fs: 11, w: 600, ls: '0.06em' }),
-            fontFamily: TYPO.fontText, color: theme.textMuted,
-            textTransform: 'uppercase', marginBottom: 8,
-          }}>{it.label}</div>
-          <div style={{
-            ...typo({ fs: 22, w: 600, ls: '-0.02em' }),
-            fontFamily: TYPO.fontDisplay,
-            color: theme.text, marginBottom: 4,
-            fontVariantNumeric: 'tabular-nums',
-          }}>{it.valor}</div>
-          <div style={{ ...typo(TYPO.caption), color: theme.textMuted, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
-            {anio - 1}: {it.valPrev != null ? (it.slug === 't_c_dof' || it.slug === 'colaboradores' ? fmtNumber(it.valPrev) : fmtCompact(it.valPrev)) : '—'}
-            {it.delta != null && (
-              <span style={{ color: it.delta >= 0 ? theme.green : theme.red, fontWeight: 500, marginLeft: 6 }}>
-                {it.delta >= 0 ? '+' : ''}{it.delta.toFixed(1)}%
-              </span>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// FICHA MES MODAL — drill-down side panel
-// ═══════════════════════════════════════════════════════════════════
-function FichaMesModal({ theme, ficha, anio, anioPrev, onClose }) {
-  const { mes, ventaNeta, utilBruta, uafir, uaii, ventaPrev, pctBruta, pctUafir, deltaVenta, varsMoM, varsYoY } = ficha;
-  return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-      display: 'flex', justifyContent: 'flex-end', zIndex: 100,
-      backdropFilter: 'blur(6px)',
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: theme.surfaceElevated || theme.surface,
-        width: 500, maxWidth: '95vw', height: '100vh',
-        overflowY: 'auto', padding: 32,
-        boxShadow: theme.mode === 'dark'
-          ? '-12px 0 40px rgba(0,0,0,0.6)'
-          : '-12px 0 40px rgba(0,0,0,0.2)',
-        color: theme.text,
-        borderLeft: theme.mode === 'dark' ? `1px solid ${theme.border}` : 'none',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-          <div>
-            <div style={{ ...typo(TYPO.eyebrow), color: theme.textMuted, fontFamily: TYPO.fontText }}>Ficha del mes</div>
-            <div style={{ ...typo({ fs: 28, w: 600, ls: '-0.025em' }), fontFamily: TYPO.fontDisplay, color: theme.text, marginTop: 6 }}>
-              {MESES_FULL[mes - 1]} {anio}
-            </div>
-          </div>
-          <button onClick={onClose} style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: theme.textMuted, padding: 6,
-          }}><X style={{ width: 20, height: 20 }} /></button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 28 }}>
-          <MiniStat theme={theme} label="Venta neta" value={fmtCompact(ventaNeta)}
-            sub={ventaPrev > 0 ? `${anioPrev}: ${fmtCompact(ventaPrev)}` : ''} delta={deltaVenta} />
-          <MiniStat theme={theme} label="Utilidad bruta" value={fmtCompact(utilBruta)}
-            sub={pctBruta != null ? `Margen ${pctBruta.toFixed(1)}%` : ''} />
-          <MiniStat theme={theme} label="UAFIR s/ proy" value={fmtCompact(uafir)}
-            sub={pctUafir != null ? `${pctUafir.toFixed(1)}% s/ venta` : ''} />
-          <MiniStat theme={theme} label="UAII" value={fmtCompact(uaii)} />
-        </div>
-
-        {varsMoM.length > 0 && (
-          <FichaSection theme={theme} title={`Top variaciones vs ${MESES_FULL[mes - 2] || 'mes anterior'}`}>
-            {varsMoM.map((v, i) => <VarRow key={i} theme={theme} v={v} />)}
-          </FichaSection>
-        )}
-        {varsYoY.length > 0 && (
-          <FichaSection theme={theme} title={`Top variaciones vs ${MESES_FULL[mes - 1]} ${anioPrev}`}>
-            {varsYoY.map((v, i) => <VarRow key={i} theme={theme} v={v} />)}
-          </FichaSection>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MiniStat({ theme, label, value, sub, delta }) {
-  return (
-    <div style={{
-      background: theme.surface, borderRadius: 14, padding: 14,
-      border: theme.mode === 'dark' ? `1px solid ${theme.border}` : 'none',
-    }}>
-      <div style={{ ...typo(TYPO.label), color: theme.textMuted, fontFamily: TYPO.fontText }}>{label}</div>
-      <div style={{
-        ...typo({ fs: 22, w: 600, ls: '-0.02em' }), fontFamily: TYPO.fontDisplay,
-        color: theme.text, margin: '6px 0 4px', fontVariantNumeric: 'tabular-nums',
-      }}>{value}</div>
-      {delta != null && <DeltaLine theme={theme} pct={delta} label="YoY" />}
-      {sub && <div style={{ ...typo(TYPO.caption), color: theme.textMuted, fontFamily: TYPO.fontText, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function FichaSection({ theme, title, children }) {
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <div style={{
-        ...typo({ fs: 11, w: 700, ls: '0.06em' }), fontFamily: TYPO.fontText,
-        color: theme.textMuted, textTransform: 'uppercase', marginBottom: 10,
-      }}>{title}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</div>
-    </div>
-  );
-}
-
-function VarRow({ theme, v }) {
-  const subio = v.deltaAbs > 0;
-  const col = subio ? theme.red : theme.green;
-  return (
-    <div style={{ padding: '10px 12px', background: theme.surface, borderRadius: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <span style={{ ...typo(TYPO.body), color: theme.text, fontFamily: TYPO.fontText, flex: 1 }}>{v.cuenta}</span>
-        <span style={{ ...typo(TYPO.caption), color: col, fontFamily: TYPO.fontText, fontWeight: 500, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-          {subio ? '↑' : '↓'} {fmtCompact(Math.abs(v.deltaAbs))} ({fmtPctDelta(v.deltaPct)})
-        </span>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', ...typo(TYPO.caption), color: theme.textSubtle, fontFamily: TYPO.fontText, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-        <span>antes: {fmtCompact(v.valorPrev)}</span>
-        <span>ahora: {fmtCompact(v.valor)}</span>
-      </div>
-    </div>
-  );
-}
-
-function sumYTD(cuenta, mesMax) {
-  if (!cuenta || !cuenta.valores) return 0;
-  let s = 0;
-  for (let i = 1; i <= mesMax; i++) s += Number(cuenta.valores[i]) || 0;
-  return s;
 }

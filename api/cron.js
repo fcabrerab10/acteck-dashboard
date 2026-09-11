@@ -949,7 +949,199 @@ async function reglaFacturaSinOc(hoy) {
   }));
 }
 
-export { taskResumenProgramado, enviarCriticasNuevas };
+
+// ═════════════════════ Agenda (V3 · 2026-09-11) ═══════════════════════════════
+// Tres reglas sobre agenda_items (tareas y puntos de reunión). Las alertas van DIRIGIDAS a una
+// persona (alertas.para_usuario): la central sólo se las muestra a ella y el resumen por correo
+// también. La app nunca inserta en `alertas`: deja `notificar_a` en el ítem y aquí se convierte.
+//   · agenda_vencida   una alerta por (ítem vencido, responsable); severidad alta si > 7 días.
+//   · agenda_asignado  cuando alguien asigna un punto/tarea a otro (notificar_motivo 'asignado') o
+//                      al cerrar una reunión con puntos abiertos ('cierre'); se limpia notificar_a.
+//   · agenda_hoy       (task agenda-hoy, 08:30 CDMX) resumen del día por persona: vencidas + hoy +
+//                      reuniones; caduca al final del día; correo si prefs.notif.areas.agenda ≠ silencio.
+const ACCION_AGENDA = { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Abrir Agenda' };
+const finDelDiaCDMX = (hoy) => new Date(Date.UTC(hoy.anio, hoy.mes - 1, hoy.dia, 6 + 24)).toISOString(); // 00:00 del día siguiente CDMX
+let _agenda = null;
+async function datosAgenda() {
+  if (_agenda) return _agenda;
+  _agenda = (async () => {
+    const [items, reuniones, perfiles] = await Promise.all([
+      sbGetAll('agenda_items?select=id,tipo,titulo,estado,categoria,prioridad,fecha_limite,cliente_key,responsables,reunion_id,notificar_a,notificar_motivo,creado_por,updated_at&estado=in.(abierta,arrastrada)', 2000),
+      sbGetAll('agenda_reuniones?select=id,titulo,cliente_key,fecha,tipo,estado&estado=neq.cerrada', 500),
+      sbGetAll('perfiles?select=user_id,nombre,email,tipo,activo,estado,preferencias&activo=eq.true'),
+    ]);
+    return { items, reuniones, perfiles, porUsuario: new Map(perfiles.map((p) => [p.user_id, p])) };
+  })();
+  try { return await _agenda; } catch (e) { _agenda = null; throw e; }
+}
+const primerNombre = (p) => String(p?.nombre || p?.email || '').split(' ')[0];
+async function reglaAgendaVencida(hoy) {
+  const { items, reuniones, porUsuario } = await datosAgenda();
+  const reu = new Map(reuniones.map((r) => [r.id, r]));
+  const out = [];
+  for (const it of items) {
+    if (it.estado !== 'abierta' || !it.fecha_limite || it.fecha_limite >= hoy.iso) continue;
+    const dias = Math.round((new Date(hoy.iso) - new Date(it.fecha_limite)) / 86400000);
+    for (const u of it.responsables || []) {
+      if (!porUsuario.has(u)) continue;
+      out.push({
+        tipo: 'agenda_vencida', severidad: dias > 7 ? 'alta' : 'media', clave: `agenda_vencida|${it.id}|${u}`, para_usuario: u,
+        titulo: `${it.tipo === 'punto' ? 'Punto' : 'Tarea'} vencid${it.tipo === 'punto' ? 'o' : 'a'} hace ${dias} d: ${it.titulo.slice(0, 80)}`,
+        detalle: `${it.cliente_key ? `${nombreCliente(it.cliente_key)} · ` : ''}límite ${it.fecha_limite}${it.reunion_id && reu.get(it.reunion_id) ? ` · de la reunión «${reu.get(it.reunion_id).titulo}»` : ''}. Márcala como hecha o muévela de fecha en la Agenda.`,
+        cliente_key: ['digitalife', 'pcel', 'dicotech'].includes(it.cliente_key) ? it.cliente_key : null, sku: null, area: 'agenda', accion: ACCION_AGENDA, caduca_at: null, valor: dias,
+        meta: { item_id: it.id, tipo_item: it.tipo, fecha_limite: it.fecha_limite, dias },
+      });
+    }
+  }
+  return out;
+}
+async function reglaAgendaAsignado(hoy) {
+  const { items, reuniones, porUsuario } = await datosAgenda();
+  const reu = new Map(reuniones.map((r) => [r.id, r]));
+  const pendientes = items.filter((it) => Array.isArray(it.notificar_a) && it.notificar_a.length);
+  const out = [];
+  const ahora = new Date().toISOString();
+  for (const it of pendientes) {
+    const quien = porUsuario.get(it.creado_por);
+    for (const u of it.notificar_a) {
+      if (!porUsuario.has(u)) continue;
+      const cierre = it.notificar_motivo === 'cierre';
+      out.push({
+        tipo: 'agenda_asignado', severidad: 'media', clave: `agenda_asignado|${it.id}|${u}|${it.updated_at?.slice(0, 16) || ahora.slice(0, 16)}`, para_usuario: u,
+        titulo: cierre ? `Quedó a tu cargo al cerrar la reunión: ${it.titulo.slice(0, 80)}` : `${quien ? primerNombre(quien) : 'Alguien'} te asignó: ${it.titulo.slice(0, 80)}`,
+        detalle: `${it.cliente_key ? `${nombreCliente(it.cliente_key)} · ` : ''}${it.fecha_limite ? `límite ${it.fecha_limite}` : 'sin fecha'}${it.reunion_id && reu.get(it.reunion_id) ? ` · reunión «${reu.get(it.reunion_id).titulo}»` : ''}.`,
+        cliente_key: ['digitalife', 'pcel', 'dicotech'].includes(it.cliente_key) ? it.cliente_key : null, sku: null, area: 'agenda', accion: ACCION_AGENDA,
+        caduca_at: new Date(Date.now() + 7 * 86400000).toISOString(), valor: null, meta: { item_id: it.id, motivo: it.notificar_motivo || 'asignado', por: it.creado_por || null },
+      });
+    }
+  }
+  // Se limpia notificar_a en cuanto se generó la alerta (idempotente: si el upsert falla, la próxima corrida lo reintenta).
+  if (pendientes.length) {
+    const r = await fetch(`${SB_URL}/rest/v1/agenda_items?id=in.(${pendientes.map((i) => i.id).join(',')})`, {
+      method: 'PATCH', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ notificar_a: [], notificar_motivo: null }),
+    });
+    if (!r.ok) console.warn('[agenda_asignado] no se limpió notificar_a:', r.status);
+  }
+  return out;
+}
+// Resumen del día por persona (task agenda-hoy). Devuelve las alertas agenda_hoy y manda correo.
+async function taskAgendaHoy({ dryRun = esDryRun() } = {}) {
+  const hoy = hoyCDMX();
+  _agenda = null;
+  const { items, reuniones, perfiles } = await datosAgenda();
+  const ahora = new Date().toISOString();
+  const caduca = finDelDiaCDMX(hoy);
+  const alertas = [], correos = [], omitidos = [];
+  const transporte = dryRun ? null : await crearTransporte().catch(() => null);
+  for (const p of perfiles.filter((x) => x.tipo === 'interno' && (x.estado == null || x.estado === 'activo'))) {
+    const mios = items.filter((it) => it.estado === 'abierta' && (it.responsables || []).includes(p.user_id));
+    const venc = mios.filter((it) => it.fecha_limite && it.fecha_limite < hoy.iso).sort((a, b) => a.fecha_limite.localeCompare(b.fecha_limite));
+    const deHoy = mios.filter((it) => it.fecha_limite === hoy.iso);
+    const reus = reuniones.filter((r) => r.tipo === 'reunion' && new Date(r.fecha).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }) === hoy.iso).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    if (!venc.length && !deHoy.length && !reus.length) { omitidos.push({ to: p.email, motivo: 'nada para hoy' }); continue; }
+    const linea = (it) => `• ${it.titulo}${it.cliente_key ? ` (#${it.cliente_key})` : ''}${it.fecha_limite && it.fecha_limite < hoy.iso ? ` · vencida ${it.fecha_limite}` : ''}`;
+    const horaDe = (r) => new Date(r.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' });
+    const titulo = `Tu agenda de hoy: ${deHoy.length} para hoy${venc.length ? ` · ${venc.length} vencida${venc.length === 1 ? '' : 's'}` : ''}${reus.length ? ` · ${reus.length} reunión${reus.length === 1 ? '' : 'es'}` : ''}`;
+    const detalle = [venc.length ? `Vencidas: ${venc.slice(0, 4).map((i) => i.titulo.slice(0, 40)).join(' · ')}${venc.length > 4 ? ` · +${venc.length - 4}` : ''}` : null, deHoy.length ? `Hoy: ${deHoy.slice(0, 4).map((i) => i.titulo.slice(0, 40)).join(' · ')}` : null, reus.length ? `Reuniones: ${reus.map((r) => `${horaDe(r)} ${nombreCliente(r.cliente_key || 'interno')}`).join(' · ')}` : null].filter(Boolean).join('. ');
+    alertas.push({ tipo: 'agenda_hoy', severidad: venc.length ? 'media' : 'info', clave: `agenda_hoy|${p.user_id}|${hoy.iso}`, para_usuario: p.user_id, titulo, detalle, cliente_key: null, sku: null, area: 'agenda', accion: ACCION_AGENDA, caduca_at: caduca, valor: deHoy.length + venc.length, meta: { vencidas: venc.length, hoy: deHoy.length, reuniones: reus.length }, generada_at: ahora, actualizada_at: ahora });
+    // Correo (preferencias.notif.areas.agenda ≠ 'silencio' y resumen.correo)
+    const prefs = prefsNotif(p);
+    if (!p.email || prefs.areas.agenda === 'silencio' || !prefs.resumen.correo) { omitidos.push({ to: p.email, motivo: 'agenda en silencio o sin correo' }); continue; }
+    const text = `${titulo}\n\n${venc.length ? `VENCIDAS (${venc.length})\n${venc.map(linea).join('\n')}\n\n` : ''}${deHoy.length ? `HOY (${deHoy.length})\n${deHoy.map(linea).join('\n')}\n\n` : ''}${reus.length ? `REUNIONES\n${reus.map((r) => `• ${horaDe(r)} · ${r.titulo} (${nombreCliente(r.cliente_key || 'interno')})`).join('\n')}\n\n` : ''}${APP_URL}`;
+    const cuerpo = [venc.length ? htmlSeccion('Vencidas', `${venc.length}`, venc.map((i) => ({ severidad: 'alta', titulo: i.titulo, detalle: `límite ${i.fecha_limite}`, accion: ACCION_AGENDA }))) : '', deHoy.length ? htmlSeccion('Hoy', `${deHoy.length}`, deHoy.map((i) => ({ severidad: 'info', titulo: i.titulo, detalle: i.cliente_key ? nombreCliente(i.cliente_key) : null, accion: ACCION_AGENDA }))) : '', reus.length ? htmlSeccion('Reuniones', `${reus.length}`, reus.map((r) => ({ severidad: 'info', titulo: `${horaDe(r)} · ${r.titulo}`, detalle: nombreCliente(r.cliente_key || 'interno'), accion: ACCION_AGENDA }))) : ''].join('');
+    const html = htmlCorreo({ titulo: `Agenda del ${hoy.dia} de ${MESES_LARGO[hoy.mes - 1].toLowerCase()}`, intro: titulo, cuerpo });
+    const subject = `${titulo} · Dashboard Acteck`;
+    if (dryRun || !transporte) { correos.push({ to: p.email, subject, dryRun: true }); continue; }
+    try { const info = await transporte.transporter.sendMail({ from: transporte.from, to: p.email, subject, text, html }); correos.push({ to: p.email, subject, msg_id: info.messageId }); }
+    catch (e) { correos.push({ to: p.email, subject, error: e.message }); }
+  }
+  let upsert = null;
+  if (alertas.length && !dryRun) {
+    const r = await fetch(`${SB_URL}/rest/v1/alertas?on_conflict=clave`, { method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(alertas) });
+    upsert = r.ok ? 'ok' : `HTTP ${r.status} ${(await r.text()).slice(0, 200)}`;
+  }
+  return { ok: !upsert || upsert === 'ok', dryRun, hoy: hoy.iso, alertas: alertas.length, upsert, correos, omitidos };
+}
+
+// ═══ Actividad del equipo · equipo_inactivo (2026-09-11) ═══════════════════════
+// Una alerta por usuario INTERNO y ACTIVO que lleve ≥ umbral días hábiles (L-V)
+// sin entrar al dashboard (último evento de eventos_usuario) o, teniendo pendientes
+// abiertos en agenda_items, sin cerrar ninguno. El umbral es el mismo que se elige
+// en la pantalla: perfiles.preferencias.equipo.umbralInactividad del super admin
+// (default 3; ver src/modules/interno/equipo/datos.js). Área 'equipo', severidad
+// media (alta si duplica el umbral), acción → pantalla telemetria. Sin agenda_items
+// (tabla ausente / error) sólo evalúa "sin entrar". Sólo el cron escribe alertas.
+const UMBRAL_INACTIVIDAD_DEFAULT = 3;
+function diasHabilesDesde(iso, hoy) {
+  if (!iso) return null;
+  const desde = new Date(new Date(iso).toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+  desde.setHours(12, 0, 0, 0);
+  const fin = new Date(hoy.anio, hoy.mes - 1, hoy.dia, 12);
+  let n = 0;
+  for (let d = new Date(desde); d < fin;) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) n += 1; }
+  return n;
+}
+async function reglaEquipoInactivo(hoy) {
+  const [perfiles, admins] = await Promise.all([
+    sbGetAll('perfiles?select=user_id,nombre,email,tipo,activo,estado&activo=eq.true&tipo=eq.interno&user_id=not.is.null'),
+    sbGetAll('perfiles?select=preferencias&es_super_admin=eq.true&limit=1'),
+  ]);
+  const raw = Number(admins?.[0]?.preferencias?.equipo?.umbralInactividad);
+  const umbral = [2, 3, 5].includes(raw) ? raw : UMBRAL_INACTIVIDAD_DEFAULT;
+  const internos = perfiles.filter((p) => p.estado == null || p.estado === 'activo');
+  if (!internos.length) return [];
+  // Último evento por usuario (una consulta limit 1 por persona: el equipo interno es pequeño).
+  const ultimos = await Promise.all(internos.map(async (p) => {
+    const rows = await sbGetAll(`eventos_usuario?select=ts&user_id=eq.${p.user_id}&order=ts.desc&limit=1`, 1).catch(() => []);
+    return [p.user_id, rows?.[0]?.ts || null];
+  }));
+  const ultimoPor = new Map(ultimos);
+  // Agenda (tolerante): abiertos y último cierre por responsable.
+  let agendaPor = null;
+  try {
+    const items = await sbGetAll('agenda_items?select=estado,responsables,completado_en&or=(estado.in.(abierta,arrastrada),completado_en.not.is.null)', 5000);
+    agendaPor = new Map();
+    for (const it of items) {
+      for (const uid of it.responsables || []) {
+        if (!agendaPor.has(uid)) agendaPor.set(uid, { abiertos: 0, ultimoCierre: null });
+        const a = agendaPor.get(uid);
+        if (it.estado === 'abierta' || it.estado === 'arrastrada') a.abiertos += 1;
+        if (it.completado_en && (!a.ultimoCierre || it.completado_en > a.ultimoCierre)) a.ultimoCierre = it.completado_en;
+      }
+    }
+  } catch { agendaPor = null; }
+  const out = [];
+  for (const p of internos) {
+    const dSin = diasHabilesDesde(ultimoPor.get(p.user_id), hoy);
+    const sinEntrar = dSin == null || dSin >= umbral;
+    const ag = agendaPor?.get(p.user_id) || null;
+    const dCierre = ag && ag.abiertos > 0 ? diasHabilesDesde(ag.ultimoCierre, hoy) : null;
+    const sinCerrar = !!ag && ag.abiertos > 0 && (dCierre == null || dCierre >= umbral);
+    if (!sinEntrar && !sinCerrar) continue;
+    const nombre = p.nombre || p.email;
+    const dias = sinEntrar ? (dSin ?? umbral) : dCierre ?? umbral;
+    const titulo = sinEntrar
+      ? `${nombre} lleva ${dSin == null ? 'más de 28' : dSin} día${dSin === 1 ? '' : 's'} hábil${dSin === 1 ? '' : 'es'} sin entrar al dashboard`
+      : `${nombre} lleva ${dCierre == null ? 'más de 28' : dCierre} día${dCierre === 1 ? '' : 's'} hábil${dCierre === 1 ? '' : 'es'} sin cerrar pendientes (${ag.abiertos} abierto${ag.abiertos === 1 ? '' : 's'})`;
+    out.push({
+      tipo: 'equipo_inactivo', severidad: dias >= umbral * 2 ? 'alta' : 'media',
+      clave: `equipo_inactivo|${p.user_id}`,
+      titulo,
+      detalle: `${sinEntrar ? `Última sesión ${ultimoPor.get(p.user_id) ? String(ultimoPor.get(p.user_id)).slice(0, 10) : 'sin registro en 28 días'}` : `Último cierre ${ag.ultimoCierre ? String(ag.ultimoCierre).slice(0, 10) : 'sin registro'}`} · umbral ${umbral} días hábiles. Revisa su tarjeta en Actividad del equipo.`,
+      cliente_key: null, sku: null,
+      area: 'equipo',
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'telemetria', label: 'Ver actividad' },
+      caduca_at: null,
+      valor: dias,
+      meta: { user_id: p.user_id, sin_entrar: sinEntrar, dias_sin_entrar: dSin, sin_cerrar: sinCerrar, dias_sin_cerrar: dCierre, abiertos: ag?.abiertos ?? null, umbral },
+    });
+  }
+  return out;
+}
+// ═══ /equipo_inactivo ═══════════════════════════════════════════════════════════
+
+export { taskResumenProgramado, enviarCriticasNuevas, taskAgendaHoy };
 export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
   const REGLAS = [
@@ -964,8 +1156,12 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['oc_detenida',            () => reglaOcDetenida(hoy)],
     ['oc_backorder_sin_po',    () => reglaOcBackorderSinPo(hoy)],
     ['factura_sin_oc',         () => reglaFacturaSinOc(hoy)],
+    ['agenda_vencida',         () => reglaAgendaVencida(hoy)],
+    ['agenda_asignado',        () => reglaAgendaAsignado(hoy)],
+    ['equipo_inactivo',        () => reglaEquipoInactivo(hoy)],   // Actividad del equipo (bloque al final de las reglas)
   ];
-  _datosTracking = null;   // datos frescos por corrida (la instancia serverless puede reutilizarse)
+  _datosTracking = null;
+  _agenda = null;   // datos frescos por corrida (la instancia serverless puede reutilizarse)
   const errores = [];
   const tiposEvaluados = new Set();
   const candidatas = [];
@@ -977,7 +1173,7 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   });
 
   // Estado actual de la tabla
-  const existentes = await sbGetAll('alertas?select=id,clave,tipo,resuelta_at,resuelta_por,actualizada_at,caduca_at,meta', 5000);
+  const existentes = await sbGetAll('alertas?select=id,clave,tipo,resuelta_at,resuelta_por,actualizada_at,caduca_at,meta,para_usuario', 5000);
   const porClave = new Map(existentes.map((a) => [a.clave, a]));
   const ahora = new Date().toISOString();
   const REABRIR_MS = 36 * 3600 * 1000;
@@ -1024,8 +1220,10 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
 
   // Auto-resolver: activas de tipos evaluados cuya condición ya no se cumple,
   // más las que ya caducaron (caduca_at < ahora) aunque su regla haya fallado.
+  // agenda_asignado es un aviso puntual (sólo es candidata en la corrida que la genera): vive hasta caduca_at o hasta que
+  // la persona la resuelva, no se auto-resuelve por "ya no está en la lista".
   const aResolver = existentes.filter((a) => !a.resuelta_at && (
-    (tiposEvaluados.has(a.tipo) && !clavesVigentes.has(a.clave))
+    (tiposEvaluados.has(a.tipo) && a.tipo !== 'agenda_asignado' && !clavesVigentes.has(a.clave))
     || (a.caduca_at && a.caduca_at < ahora && !clavesVigentes.has(a.clave))
   ));
   if (aResolver.length) {
@@ -1064,8 +1262,8 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
 // dryRun (RESUMEN_DRY_RUN=1 o ?dryRun=1): arma todo y lo devuelve sin enviar
 // ni marcar notificada_at.
 // ══════════════════════════════════════════════════════════════════════════════
-const AREAS_NOTIF = ['inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion'];
-const AREA_LABEL = { inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación' };
+const AREAS_NOTIF = ['agenda', 'inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion', 'forecast', 'tracking'];
+const AREA_LABEL = { agenda: 'Agenda', inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación', forecast: 'Forecast', tracking: 'Tracking' };
 const SEV_ORDEN_N = { critica: 0, alta: 1, media: 2, info: 3 };
 const SEV_COLOR = { critica: '#FF3B30', alta: '#FF9500', media: '#FFCC00', info: '#007AFF' };
 const APP_URL = process.env.APP_URL || 'https://acteck-dashboard.vercel.app';
@@ -1082,8 +1280,10 @@ function prefsNotif(perfil) {
     criticas_correo: n.criticas_correo !== false,
   };
 }
-const areaDe = (a) => a.area || ({ stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion' })[a.tipo] || 'operacion';
+const areaDe = (a) => a.area || ({ agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion' })[a.tipo] || 'operacion';
 const aplicaCliente = (a, prefs) => !prefs.clientes || !a.cliente_key || prefs.clientes.includes(a.cliente_key);
+// Alertas dirigidas (Agenda): sólo a su destinatario.
+const aplicaPersona = (a, p) => !a.para_usuario || a.para_usuario === p.user_id;
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ordenSev = (a, b) => (SEV_ORDEN_N[a.severidad] ?? 9) - (SEV_ORDEN_N[b.severidad] ?? 9) || String(b.actualizada_at || '').localeCompare(String(a.actualizada_at || ''));
 
@@ -1093,7 +1293,7 @@ async function perfilesNotificables() {
 }
 async function alertasActivas() {
   const ahora = new Date().toISOString();
-  return sbGetAll(`alertas?select=id,tipo,severidad,titulo,detalle,cliente_key,sku,valor,meta,area,accion,generada_at,actualizada_at,snooze_hasta&resuelta_at=is.null&or=(snooze_hasta.is.null,snooze_hasta.lt.${ahora})`, 2000);
+  return sbGetAll(`alertas?select=id,tipo,severidad,titulo,detalle,cliente_key,sku,valor,meta,area,accion,generada_at,actualizada_at,snooze_hasta,para_usuario&resuelta_at=is.null&or=(snooze_hasta.is.null,snooze_hasta.lt.${ahora})`, 2000);
 }
 async function marcarNotificadas(alertas, ahora) {
   const ids = alertas.map((a) => a.id);
@@ -1167,7 +1367,7 @@ async function enviarCriticasNuevas({ dryRun = esDryRun() } = {}) {
   for (const p of perfiles) {
     const prefs = prefsNotif(p);
     if (!prefs.criticas_correo) continue;
-    const mias = nuevas.filter((a) => prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs));
+    const mias = nuevas.filter((a) => prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
     if (!mias.length) continue;
     mias.forEach((a) => alcanzadas.add(a.id));
     const porArea = new Map();
@@ -1210,8 +1410,8 @@ async function taskResumenProgramado({ dryRun = esDryRun(), hora = null } = {}) 
     if (!prefs.resumen.correo) { omitidos.push({ to: p.email, motivo: 'resumen.correo = false' }); continue; }
     const horaPref = Number(String(prefs.resumen.hora).split(':')[0]);
     if (Number.isFinite(horaPref) && horaPref !== horaCDMX) { omitidos.push({ to: p.email, motivo: `hora ${prefs.resumen.hora} ≠ ${horaCDMX}:00` }); continue; }
-    const mias = activas.filter((a) => a.severidad !== 'critica' && prefs.areas[areaDe(a)] === 'resumen' && aplicaCliente(a, prefs));
-    const criticasPend = activas.filter((a) => a.severidad === 'critica' && prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs));
+    const mias = activas.filter((a) => a.severidad !== 'critica' && prefs.areas[areaDe(a)] === 'resumen' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
+    const criticasPend = activas.filter((a) => a.severidad === 'critica' && prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
     const resueltas = resueltasSolas.filter((a) => prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs));
     if (!mias.length && !resueltas.length && !criticasPend.length) { omitidos.push({ to: p.email, motivo: 'sin alertas para su configuración' }); continue; }
 
@@ -1277,10 +1477,13 @@ export default async function handler(req, res) {
       const dryRun = esDryRun() || q.dryRun === '1';
       const hora = q.hora != null && q.hora !== '' ? Number(q.hora) : null;
       result = await taskResumenProgramado({ dryRun, hora: Number.isFinite(hora) ? hora : null });
+    } else if (task === 'agenda-hoy') {
+      // Agenda (V3): resumen diario por persona a las 08:30 CDMX (vercel.json: 30 14 * * 1-6 UTC)
+      result = await taskAgendaHoy({ dryRun: esDryRun() || req.query?.dryRun === '1' });
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | resumen-programado[&dryRun=1&hora=13]',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1]',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

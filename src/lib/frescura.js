@@ -34,6 +34,7 @@ export const FUENTES_POR_PANTALLA = {
   cobranza:          ['estados_cuenta'],
   estrategiaPrecios: ['precios_sku', 'roadmap_sku'],
   ventasErp:         ['erp_ventas'],
+  estadoResultados:  ['estados_resultados'],
   home:              ['facturacion_clientes', 'sellout_*'],
   marketing:         [],
 };

@@ -51,8 +51,8 @@ export async function cargarTodo() {
   return { sync, ocs, ocSkus, envios, envioSkus, cotizaciones, facturas, facturaSkus, erpFacturas: erpFacturas || [], transito, stock, roadmap, roadmapRows: roadmapRows || [], cargadoAt: new Date().toISOString() };
 }
 
-export function useTrackingDatos() {
-  return useQuery({ queryKey: KEY, queryFn: cargarTodo, staleTime: 60 * 1000, refetchOnWindowFocus: false });
+export function useTrackingDatos({ enabled = true } = {}) {
+  return useQuery({ queryKey: KEY, queryFn: cargarTodo, staleTime: 60 * 1000, refetchOnWindowFocus: false, enabled });
 }
 
 /** Tras escribir: invalida la cache central y recarga esta pantalla (vuelve a correr la RPC). */

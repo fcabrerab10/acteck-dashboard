@@ -17,7 +17,7 @@ const GRUPOS_MENU = [
   { id: 'direccionGeneral',  label: 'Dirección General',  ids: ['estado_resultados'] },
   { id: 'direccionComercial', label: 'Dirección Comercial', ids: ['vision_general', 'analisis_clientes', 'sell_in', 'sell_out', 'inventario_global', 'cobranza_global', 'forecast_clientes', 'forecast_solicitudes'] },
   { id: 'clientesPropios',   label: 'Clientes propios',   ids: ['resumen_clientes', 'propuestas', 'estrategia_precios', 'forecast_reservas', 'ordenes_compra'] },
-  { id: 'interno',           label: 'Interno',            ids: ['admin_interna', 'historial_cambios', 'configuracion'] },
+  { id: 'interno',           label: 'Interno',            ids: ['agenda', 'historial_cambios', 'configuracion'] },
   { id: 'axon',              label: 'Axon',               ids: ['axon_mexico'] },
 ];
 export function gruposGlobales() {
