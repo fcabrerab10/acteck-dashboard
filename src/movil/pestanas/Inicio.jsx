@@ -13,6 +13,7 @@ import { colorSev } from '../../components/notificaciones/Pila';
 import { useNav } from '../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Skeleton, Vacio } from '../piezas';
 import { useHoyExtra, nombreCliente, colorCliente } from '../datos';
+import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente } from '../../lib/permisos';
 import { saludo, diaLargo, nombreCorto, hoyISO, moneyCompact, money, pct, deltaPct, tonoCuota, MESES, N } from '../util';
 import FichaCliente from './FichaCliente';
 import FichaProducto from '../FichaProducto';
@@ -27,7 +28,11 @@ export default function Inicio() {
   const { loading, error, data } = useInicioData(anio);
   const { data: alertas = [] } = useAlertas();
   const { data: extra } = useHoyExtra();
-  const r = useMemo(() => (data ? calcular(data, alertas, { anio, mesActual, hoy, modo: 'mes' }) : null), [data, alertas, anio, mesActual, hoy]);
+  const perfil = nav.perfil;
+  const sensible = puedeVerSensible(perfil);
+  const veCobranza = puedeVerPestanaGlobal(perfil, 'cobranza_global'), veInventario = puedeVerPestanaGlobal(perfil, 'inventario_global');
+  const clientesVisibles = useMemo(() => ['digitalife', 'pcel', 'dicotech'].filter((k) => puedeVerCliente(perfil, k)), [perfil]);
+  const r = useMemo(() => (data ? calcular(data, alertas, { anio, mesActual, hoy, modo: 'mes', sensible, clientesVisibles }) : null), [data, alertas, anio, mesActual, hoy, sensible, clientesVisibles]);
 
   const abrirCliente = (ck) => nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`);
   const navegarAlerta = (a) => ejecutarAccion(a, (ck, pagina, ex) => {
@@ -82,14 +87,19 @@ export default function Inicio() {
       <HeroM eyebrow={`Dirección general · ${r.mesL} ${anio}`} frase={r.titulo} sub={r.sub}
         stats={[
           { k: 'Fact Neta MTD', v: fmtM(r.cur.fact_neta), sub: r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota` : 'sin cuota' },
-          { k: 'Margen MC', v: r.cur.mc != null ? pct(r.cur.mc) : '—', sub: r.dMc != null ? `${r.dMc >= 0 ? '+' : ''}${r.dMc.toFixed(1)} pp` : undefined },
-          { k: 'Utilidad', v: fmtM(r.cur.utilidad_comercial), sub: r.yoyUtilidad != null ? `${deltaPct(r.yoyUtilidad)} YoY` : undefined },
+          ...(sensible ? [
+            { k: 'Margen MC', v: r.cur.mc != null ? pct(r.cur.mc) : '—', sub: r.dMc != null ? `${r.dMc >= 0 ? '+' : ''}${r.dMc.toFixed(1)} pp` : undefined },
+            { k: 'Utilidad', v: fmtM(r.cur.utilidad_comercial), sub: r.yoyUtilidad != null ? `${deltaPct(r.yoyUtilidad)} YoY` : undefined },
+          ] : [
+            { k: 'YoY', v: r.yoy != null ? deltaPct(r.yoy) : '—', sub: r.yoyLabel },
+            { k: 'Piezas netas', v: Math.round(r.cur.piezas).toLocaleString('es-MX'), sub: 'del mes' },
+          ]),
         ]} />
 
       <KpiGrid style={{ marginTop: 12 }}>
         <KpiM eyebrow={`Fact Neta YTD ${anio}`} big={fmtM(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1}` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />
-        <KpiM eyebrow="Cartera vencida" big={fmtM(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${fmtM(r.cartera.saldo)}` : 'sin saldo'} onClick={() => nav.navegar({ pagina: 'cobranzaGlobal' })} />
-        <KpiM eyebrow="Inventario comercial" big={fmtM(r.inv.valor)} sub={r.inv.cobertura != null ? `${r.inv.cobertura} d de cobertura` : `${r.inv.skus} SKUs con stock`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={() => nav.push(<FichaProducto />, 'ficha')} />
+        {veCobranza && <KpiM eyebrow="Cartera vencida" big={fmtM(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${fmtM(r.cartera.saldo)}` : 'sin saldo'} onClick={() => nav.navegar({ pagina: 'cobranzaGlobal' })} />}
+        {veInventario && <KpiM eyebrow="Inventario comercial" big={sensible ? fmtM(r.inv.valor) : `${Math.round(r.inv.piezas).toLocaleString('es-MX')} pz`} sub={r.inv.cobertura != null ? `${r.inv.cobertura} d de cobertura` : `${r.inv.skus} SKUs con stock`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={() => nav.push(<FichaProducto />, 'ficha')} />}
         <KpiM eyebrow={`Sell-out ${soMes ? MESES[soMes - 1] : 'últ. mes'}`} big={soTotal > 0 ? fmtM(soTotal) : '—'} sub={soUltimo.length ? `${soUltimo.length} clientes · último mes cerrado` : 'sin sell-out cargado'} />
       </KpiGrid>
 

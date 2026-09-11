@@ -102,7 +102,7 @@ function agenda(d, inv) {
 const fmtM = (n) => `$${(Math.abs(n) / 1e6).toFixed(Math.abs(n) >= 1e7 ? 1 : 2)}M`;
 
 // ── Resumen principal
-export function calcular(d, alertas, { anio, mesActual, hoy, modo }) {
+export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = true, clientesVisibles = null }) {
   const hoyISO = iso(hoy), limiteISO = iso(new Date(hoy.getTime() + DIAS_AGENDA * 86400000));
   const filtro = enPeriodo(modo, mesActual), otroModo = modo === 'mes' ? 'anio' : 'mes', filtroOtro = enPeriodo(otroModo, mesActual);
   const cur = agg(d.medidas.filter((r) => N(r.anio) === anio && filtro(r)));
@@ -140,7 +140,7 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo }) {
 
   // Clientes con pestaña
   const meses = mesesDe(modo, mesActual);
-  const clientes = CLIENTES.map((c) => {
+  const clientes = CLIENTES.filter((c) => !clientesVisibles || clientesVisibles.includes(c.key)).map((c) => {
     const fact = sum(d.factCli.filter((r) => r.cliente_key === c.key && N(r.anio) === anio && meses.includes(N(r.mes))), (r) => r.monto);
     const factPrev = sum(d.factCli.filter((r) => r.cliente_key === c.key && N(r.anio) === anio - 1 && meses.includes(N(r.mes))), (r) => r.monto);
     const cuota = sum(d.cuotasMensuales.filter((x) => x.cliente === c.key && meses.includes(N(x.mes))), (x) => x.cuota_ideal);
@@ -175,9 +175,10 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo }) {
   const fraseDec = nDec === 0 ? 'Sin asuntos críticos pendientes.' : nDec === 1 ? 'Un asunto requiere decisión hoy.' : `${['Dos', 'Tres', 'Cuatro', 'Cinco'][nDec - 2] || nDec} asuntos requieren decisión hoy.`;
   let titulo;
   if (modo === 'mes') {
+    const margenTxt = sensible ? ` con margen del ${cur.mc != null ? cur.mc.toFixed(1) : '—'} %` : '';
     titulo = !cur.fact_neta ? `${mesL} aún sin ventas registradas en el ERP. ${fraseDec}`
-      : pctCuota == null ? `${mesL} lleva ${fmtM(cur.fact_neta)} con margen del ${cur.mc?.toFixed(1)} %. ${fraseDec}`
-      : `${mesL} va al ${Math.round(pctCuota)} % de cuota con margen del ${cur.mc != null ? cur.mc.toFixed(1) : '—'} %. ${fraseDec}`;
+      : pctCuota == null ? `${mesL} lleva ${fmtM(cur.fact_neta)}${margenTxt}. ${fraseDec}`
+      : `${mesL} va al ${Math.round(pctCuota)} % de cuota${margenTxt}. ${fraseDec}`;
   } else {
     const yoyTxt = yoy == null ? '' : `, ${Math.abs(yoy).toFixed(0)} % ${yoy >= 0 ? 'arriba' : 'abajo'} de ${anio - 1}`;
     titulo = pctCuota == null ? `${anio} lleva ${fmtM(cur.fact_neta)}${yoyTxt}.` : `${anio} va al ${Math.round(pctCuota)} % de la cuota anual${yoyTxt}.`;
@@ -185,13 +186,13 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo }) {
   const sub = [
     cuotaPeriodo > 0 ? `Fact Neta ${fmtM(cur.fact_neta)} de ${fmtM(cuotaPeriodo)} de cuota` : `Fact Neta ${fmtM(cur.fact_neta)} · sin cuota cargada`,
     runRate > 0 ? `run-rate ${mesL.slice(0, 3)} ${fmtM(runRate)}${runRateYoy != null ? ` (${runRateYoy >= 0 ? '+' : ''}${runRateYoy.toFixed(0)} % vs ${mesL.slice(0, 3)} ${anio - 1})` : ''}` : null,
-    `utilidad comercial ${fmtM(cur.utilidad_comercial)}`,
+    sensible ? `utilidad comercial ${fmtM(cur.utilidad_comercial)}` : `${Math.round(cur.piezas).toLocaleString("es-MX")} pzs netas`,
     cart.vencido > 0 ? `cartera vencida ${fmtM(cart.vencido)}` : 'cartera sin vencidos',
   ].filter(Boolean).join(' · ');
 
   return {
     modo, otroModo, anio, mesActual, mesL, cur, prev, otro, otroPrev, cuota: q, cuotaPeriodo, cuotaOtro, pctCuota, pctOtro, pctAnual, yoy, yoyOtro, yoyUtilidad, yoyLabel, dMc,
     runRate, runRateYoy, mesRow, mesPrev, cartera: cart, inv, alertas: activas, decision, clientes, canales, totalCanales, serie, titulo, sub,
-    agenda: agenda(d, inv), auditoria: d.auditoria, hayDatos: d.medidas.length > 0,
+    agenda: agenda(d, inv), auditoria: d.auditoria, hayDatos: d.medidas.length > 0, sensible,
   };
 }

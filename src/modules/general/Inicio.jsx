@@ -6,7 +6,7 @@ import React, { useMemo, useState } from 'react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerInicio } from '../../lib/permisos';
+import { puedeVerInicio, puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente } from '../../lib/permisos';
 import { useAlertas } from '../../lib/alertas';
 import { useFrescura } from '../../lib/frescura';
 import { moneyCompact as $c, int, pct, pp, fecha } from '../../lib/format';
@@ -32,7 +32,17 @@ export default function Inicio({ onNavegar }) {
   const alertasQ = useAlertas({ clienteKey: null });
   const { porFuente } = useFrescura(true);
 
-  const r = useMemo(() => (data ? calcular(data, alertasQ.data || [], { anio, mesActual, hoy, modo }) : null), [data, alertasQ.data, anio, mesActual, hoy, modo]);
+  // Permisos: lo sensible (márgenes, contribución, utilidad, costos) sólo con el permiso; los bloques
+  // globales sólo si el usuario ve esa pestaña; las tarjetas de cliente sólo de los clientes que ve.
+  const sensible = puedeVerSensible(perfil);
+  const ve = useMemo(() => ({
+    visionGeneral: puedeVerPestanaGlobal(perfil, 'vision_general'),
+    cobranza: puedeVerPestanaGlobal(perfil, 'cobranza_global'),
+    inventario: puedeVerPestanaGlobal(perfil, 'inventario_global'),
+    sellIn: puedeVerPestanaGlobal(perfil, 'sell_in'),
+  }), [perfil]);
+  const clientesVisibles = useMemo(() => ['digitalife', 'pcel', 'dicotech'].filter((k) => puedeVerCliente(perfil, k)), [perfil]);
+  const r = useMemo(() => (data ? calcular(data, alertasQ.data || [], { anio, mesActual, hoy, modo, sensible, clientesVisibles }) : null), [data, alertasQ.data, anio, mesActual, hoy, modo, sensible, clientesVisibles]);
 
   if (!puedeVerInicio(perfil)) return <SinAcceso motivo="No tienes acceso a Inicio." />;
   if (loading || (!r && !error)) return <SkeletonPantalla pantalla="inicio" />;
@@ -47,8 +57,13 @@ export default function Inicio({ onNavegar }) {
 
   const stats = [
     { k: `Fact Neta · ${labelPeriodo}`, v: $c(c.fact_neta), sub: r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota${r.yoy != null ? ` · ${signo(r.yoy)} ${r.yoyLabel}` : ''}` : r.yoy != null ? `${signo(r.yoy)} ${r.yoyLabel}` : 'sin cuota' },
-    { k: 'Margen al momento', v: c.mc != null ? pct(c.mc) : '—', sub: c.muc != null ? `MUC ${pct(c.muc)}${r.dMc != null ? ` · ${pp(r.dMc)} YoY` : ''}` : 'MC sobre Fact Neta' },
-    { k: 'Utilidad comercial', v: $c(c.utilidad_comercial), sub: r.yoyUtilidad != null ? `${signo(r.yoyUtilidad, 1)} vs ${anio - 1}${esMes ? ' a mismo día' : ''}` : 'sin comparativo', color: r.yoyUtilidad == null ? undefined : r.yoyUtilidad >= 0 ? theme.green : theme.red },
+    ...(sensible ? [
+      { k: 'Margen al momento', v: c.mc != null ? pct(c.mc) : '—', sub: c.muc != null ? `MUC ${pct(c.muc)}${r.dMc != null ? ` · ${pp(r.dMc)} YoY` : ''}` : 'MC sobre Fact Neta' },
+      { k: 'Utilidad comercial', v: $c(c.utilidad_comercial), sub: r.yoyUtilidad != null ? `${signo(r.yoyUtilidad, 1)} vs ${anio - 1}${esMes ? ' a mismo día' : ''}` : 'sin comparativo', color: r.yoyUtilidad == null ? undefined : r.yoyUtilidad >= 0 ? theme.green : theme.red },
+    ] : [
+      { k: `Fact Neta · ${labelOtro}`, v: $c(r.otro.fact_neta), sub: r.pctOtro != null ? `${Math.round(r.pctOtro)}% de cuota` : r.yoyOtro != null ? `${signo(r.yoyOtro)} YoY` : 'sin cuota' },
+      { k: 'Piezas netas', v: int(c.piezas), sub: c.ticket != null ? `ticket promedio ${$c(c.ticket)}` : labelPeriodo },
+    ]),
   ];
 
   const lostTxt = `lost profit ${$c(c.lost)}${c.lostPct != null ? ` (${pct(c.lostPct)} de la bruta)` : ''}`;
@@ -74,28 +89,33 @@ export default function Inicio({ onNavegar }) {
       <HoyPanel onNavegar={onNavegar} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8 }}>
-        <KpiCard eyebrow={`Fact Neta · ${labelOtro}`} badge={r.yoyOtro != null ? { l: `${signo(r.yoyOtro)} ${esMes ? 'YoY' : 'YoY a mismo día'}`, tone: toneDe(r.yoyOtro) } : undefined}
+        {(sensible || ve.visionGeneral) && <KpiCard eyebrow={`Fact Neta · ${labelOtro}`} badge={r.yoyOtro != null ? { l: `${signo(r.yoyOtro)} ${esMes ? 'YoY' : 'YoY a mismo día'}`, tone: toneDe(r.yoyOtro) } : undefined}
           big={$c(r.otro.fact_neta)} bigSmall={r.cuotaOtro ? `de ${$c(r.cuotaOtro)}` : ''}
           sub={[r.pctOtro != null ? `${Math.round(r.pctOtro)}% de cuota ${esMes ? 'YTD' : 'del mes'}` : 'sin cuota', r.pctAnual != null ? `${Math.round(r.pctAnual)}% de la anual ${$c(r.cuota.anual)}` : null].filter(Boolean).join(' · ')}
-          progress={r.pctOtro ?? undefined} onClick={ir(null, PAGINAS.visionGeneral)} />
-        <KpiCard eyebrow={`Contribución · ${labelPeriodo}`} badge={r.dMc != null ? { l: `${pp(r.dMc)} MC`, tone: r.dMc >= 0 ? 'green' : 'red' } : undefined}
-          big={$c(c.contribucion)} bigSmall={c.mc != null ? `MC ${pct(c.mc)}` : ''}
-          sub={`${lostTxt} · dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
-          onClick={ir(null, PAGINAS.visionGeneral)} />
-        <KpiCard eyebrow={cart.corte ? `Cartera · corte ${fecha(cart.corte)}` : 'Cartera'} badge={cart.vencido > 0 ? { l: `${$c(cart.vencido)} vencido`, tone: cart.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al corriente', tone: 'green' }}
+          progress={r.pctOtro ?? undefined} onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
+        {sensible
+          ? <KpiCard eyebrow={`Contribución · ${labelPeriodo}`} badge={r.dMc != null ? { l: `${pp(r.dMc)} MC`, tone: r.dMc >= 0 ? 'green' : 'red' } : undefined}
+              big={$c(c.contribucion)} bigSmall={c.mc != null ? `MC ${pct(c.mc)}` : ''}
+              sub={`${lostTxt} · dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
+              onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />
+          : <KpiCard eyebrow={`Deducciones · ${labelPeriodo}`} badge={c.lostPct != null ? { l: `${pct(c.lostPct)} de la bruta`, tone: c.lostPct > 8 ? 'orange' : 'gray' } : undefined}
+              big={$c(c.lost)} bigSmall="lost profit"
+              sub={`dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
+              onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
+        {ve.cobranza && <KpiCard eyebrow={cart.corte ? `Cartera · corte ${fecha(cart.corte)}` : 'Cartera'} badge={cart.vencido > 0 ? { l: `${$c(cart.vencido)} vencido`, tone: cart.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al corriente', tone: 'green' }}
           big={$c(cart.saldo)} bigSmall={`${cart.filas.length} cliente${cart.filas.length === 1 ? '' : 's'}`} bigColor={cart.vencido > 0 && cart.pctVencido > 25 ? theme.red : undefined}
           sub={[cart.dso != null ? `DSO ${cart.dso} d` : null, cart.mas90 > 0 ? `${$c(cart.mas90)} > 90 d` : null, cart.filas[0]?.vencido > 0 ? `${cart.filas[0].cliente}: ${$c(cart.filas[0].vencido)} vencido` : null].filter(Boolean).join(' · ') || 'sin estados de cuenta'}
-          onClick={ir(null, PAGINAS.cobranza)} />
-        <KpiCard eyebrow="Inventario comercial + tránsito" badge={{ l: inv.cobertura != null ? `${inv.cobertura} d cobertura` : 'sin cobertura', tone: coberturaTone }}
-          big={$c(inv.valor)} bigSmall={`+ ${$c(inv.transitoValor)} en tránsito`}
+          onClick={ir(null, PAGINAS.cobranza)} />}
+        {ve.inventario && <KpiCard eyebrow="Inventario comercial + tránsito" badge={{ l: inv.cobertura != null ? `${inv.cobertura} d cobertura` : 'sin cobertura', tone: coberturaTone }}
+          big={sensible ? $c(inv.valor) : int(inv.piezas)} bigSmall={sensible ? `+ ${$c(inv.transitoValor)} en tránsito` : `pzs · + ${int(inv.transitoPzs)} en tránsito`}
           sub={`${int(inv.transitoPzs)} pzs en ${inv.pos} PO · ${inv.skus} SKUs con stock${inv.skusRiesgo ? ` · ${inv.skusRiesgo} SKUs en riesgo` : ''}`}
-          onClick={ir(null, PAGINAS.inventario)} />
+          onClick={ir(null, PAGINAS.inventario)} />}
       </div>
 
-      <GraficaVentas r={r} onNavegar={ir(null, PAGINAS.visionGeneral)} />
+      <GraficaVentas r={r} onNavegar={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />
       <DecisionPanel r={r} onNavegar={onNavegar} onNotificaciones={() => abrirNotificaciones(onNavegar, perfil)} max={MAX_ALERTAS} />
-      <ClientesGrid r={r} onNavegar={onNavegar} />
-      <CanalesPanel r={r} onNavegar={ir(null, PAGINAS.sellIn)} />
+      {r.clientes.length > 0 && <ClientesGrid r={r} onNavegar={onNavegar} />}
+      {ve.sellIn && <CanalesPanel r={r} onNavegar={ir(null, PAGINAS.sellIn)} />}
       <AgendaPanel r={r} frescuraErp={porFuente.erp_ventas} onNavegar={onNavegar} />
     </div>
   );

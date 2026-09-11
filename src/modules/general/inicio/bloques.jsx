@@ -36,9 +36,11 @@ export function GraficaVentas({ r, onNavegar }) {
   const c = r.cur, p = r.prev;
   const periodo = r.modo === 'mes' ? `${r.mesL} ${r.anio}` : `YTD ${r.anio}`;
   return (
-    <Panel titulo="Ventas y margen" meta="últimos 12 meses · Fact Neta, Contribución y MC %" acciones={onNavegar && <Boton onClick={onNavegar}>Ver Visión General</Boton>}>
-      <GraficaLineas datos={r.serie.map((x) => ({ x: x.label, fn: x.fn, c: x.c, mc: x.mc }))}
-        series={[{ key: 'fn', label: 'Fact Neta', tipo: 'principal' }, { key: 'c', label: 'Contribución', tipo: 'linea', color: theme.green }, { key: 'mc', label: 'MC %', tipo: 'linea', color: orange, dash: '4 3', eje: 'der', formato: (v) => pct(v) }]}
+    <Panel titulo={r.sensible ? "Ventas y margen" : "Ventas"} meta={r.sensible ? "últimos 12 meses · Fact Neta, Contribución y MC %" : "últimos 12 meses · Fact Neta"} acciones={onNavegar && <Boton onClick={onNavegar}>Ver Visión General</Boton>}>
+      <GraficaLineas datos={r.serie.map((x) => (r.sensible ? { x: x.label, fn: x.fn, c: x.c, mc: x.mc } : { x: x.label, fn: x.fn }))}
+        series={r.sensible
+          ? [{ key: 'fn', label: 'Fact Neta', tipo: 'principal' }, { key: 'c', label: 'Contribución', tipo: 'linea', color: theme.green }, { key: 'mc', label: 'MC %', tipo: 'linea', color: orange, dash: '4 3', eje: 'der', formato: (v) => pct(v) }]
+          : [{ key: 'fn', label: 'Fact Neta', tipo: 'principal' }]}
         formato={$c} alto={200} mesActivo={r.serie.findIndex((x) => x.actual)} />
       <FilaStats style={{ padding: '10px 2px 0', borderTop: `1px solid ${theme.border}`, marginTop: 6 }}>
         <Stat k={`Deducciones · ${periodo}`} v={$c(c.lost)} sub={c.lostPct != null ? `${pct(c.lostPct)} de la bruta${p.lostPct != null ? ` · ${pp(c.lostPct - p.lostPct)} vs ${r.anio - 1}` : ''}` : ''} color={theme.red} />
@@ -132,7 +134,9 @@ export function ClientesGrid({ r, onNavegar }) {
               <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, c.pct ?? 0))}%`, background: col, borderRadius: 999 }} />
             </div>
             <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-              <Stat k="MC" v={c.mc != null ? pct(c.mc) : '—'} sub={c.dMc != null ? `${pp(c.dMc)} YoY` : null} color={c.mc == null ? theme.textMuted : c.dMc == null || c.dMc >= 0 ? theme.text : theme.orange} />
+              {r.sensible
+                ? <Stat k="MC" v={c.mc != null ? pct(c.mc) : '—'} sub={c.dMc != null ? `${pp(c.dMc)} YoY` : null} color={c.mc == null ? theme.textMuted : c.dMc == null || c.dMc >= 0 ? theme.text : theme.orange} />
+                : <Stat k={`${r.anio - 1}`} v={$c(c.factPrev)} sub={c.yoy != null ? `${signo(c.yoy, 0)} ${r.yoyLabel}` : null} />}
               <Stat k={c.sellout ? `Sell Out · ${MESES[c.sellout.mes - 1]}` : 'Sell Out'} v={c.sellout ? $c(c.sellout.monto) : '—'} sub={c.sellout?.yoy != null ? `${signo(c.sellout.yoy, 0)} YoY` : 'sin mes cerrado'} color={c.sellout?.yoy == null ? undefined : c.sellout.yoy >= 0 ? theme.green : theme.red} />
             </div>
           </div>
@@ -156,8 +160,10 @@ export function CanalesPanel({ r, onNavegar }) {
       ? <Pill tone={toneCuota(c.pct)}>{c.pct != null ? `${Math.round(c.pct)}%` : '—'}</Pill>
       : <Pill tone={toneDe(c.yoy)}>{signo(c.yoy, 0)}</Pill>) },
     ...(hayCuota ? [{ key: 'yoy', label: r.yoyLabel, render: (c) => <span style={{ color: c.yoy == null ? theme.textMuted : c.yoy >= 0 ? theme.green : theme.red }}>{signo(c.yoy, 0)}</span> }] : []),
-    { key: 'mc', label: 'MC', render: (c) => <Pill tone={c.mc == null ? 'gray' : c.margenObjetivo != null ? (c.mc >= c.margenObjetivo ? 'green' : 'orange') : c.mc >= 30 ? 'green' : c.mc >= 20 ? 'blue' : 'orange'}>{c.mc != null ? pct(c.mc) : '—'}</Pill> },
-    { key: 'dMc', label: 'Δ MC', render: (c) => <span style={{ color: c.dMc == null ? theme.textMuted : c.dMc >= 0 ? theme.green : theme.red }}>{c.dMc != null ? pp(c.dMc) : '—'}</span> },
+    ...(r.sensible ? [
+      { key: 'mc', label: 'MC', render: (c) => <Pill tone={c.mc == null ? 'gray' : c.margenObjetivo != null ? (c.mc >= c.margenObjetivo ? 'green' : 'orange') : c.mc >= 30 ? 'green' : c.mc >= 20 ? 'blue' : 'orange'}>{c.mc != null ? pct(c.mc) : '—'}</Pill> },
+      { key: 'dMc', label: 'Δ MC', render: (c) => <span style={{ color: c.dMc == null ? theme.textMuted : c.dMc >= 0 ? theme.green : theme.red }}>{c.dMc != null ? pp(c.dMc) : '—'}</span> },
+    ] : []),
   ];
   return (
     <Panel titulo={`Canales · ${periodo} vs cuota`} meta={hayCuota ? (r.modo === 'mes' ? 'cuota anual ÷ 12' : `cuota anual × ${r.mesActual}/12`) : 'sin cuotas por canal cargadas · se muestra YoY'} acciones={onNavegar && <Boton onClick={onNavegar}>Ver Sell In</Boton>}>
