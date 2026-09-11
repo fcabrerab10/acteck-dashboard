@@ -3,6 +3,7 @@
 //   { tipo: 'tab',  tab }             → pestaña raíz con su propia pila (inicio · clientes · alertas · buscar)
 //   { tipo: 'push', key, el }         → pantalla empujada sobre la pila de la pestaña activa
 //   { tipo: 'proximamente', label }   → hoja "Próximamente · edita desde la computadora"
+// `extra` (opcional) llega desde nav.navegar({ pagina, extra }) y lo reciben las páginas globales (p. ej. Agenda).
 // Las pantallas empujadas son React.lazy: sólo se descarga la que se abre. (Archivo .js: sin JSX, createElement.)
 import { createElement as h, lazy } from 'react';
 import { CLIENTES_NAV } from '../components/nav/arbol';
@@ -20,6 +21,7 @@ const CobranzaCliente  = lazy(() => import('./pestanas/CobranzaCliente'));
 const ForecastCliente  = lazy(() => import('./pestanas/ForecastCliente'));
 const SOP              = lazy(() => import('./pestanas/SOP'));
 const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
+const Agenda           = lazy(() => import('./pestanas/agenda/Agenda'));
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Ninguna aparece como nodo salvo `inicio`. */
 export const TABS_RAIZ = ['inicio', 'clientes', 'alertas', 'buscar'];
@@ -42,6 +44,10 @@ const GLOBALES = {
   forecastClientes:  () => ({ tipo: 'push', key: 'sop', el: h(SOP) }),
   propuestas:        () => ({ tipo: 'push', key: 'propuestas', el: h(Propuestas) }),
   forecastReservas:  () => ({ tipo: 'push', key: 'forecast', el: h(ForecastCliente) }),
+  // Agenda V3 (tareas, reuniones con minuta, semana, clientes). `extra` viene de una notificación: { itemId } abre el ítem
+  // o su minuta; { vista } elige la pestaña inicial. adminInterna (página vieja) cae aquí también.
+  agenda:            (extra) => ({ tipo: 'push', key: 'agenda', el: h(Agenda, { inicial: extra || null }) }),
+  adminInterna:      (extra) => ({ tipo: 'push', key: 'agenda', el: h(Agenda, { inicial: extra || null }) }),
 };
 
 // Pestañas de cliente propio (nodo.clienteKey = digitalife | pcel | dicotech).
@@ -54,14 +60,14 @@ const CLIENTE = {
   cartera:    (ck) => ({ tipo: 'push', key: `cartera-${ck}`, el: h(CobranzaCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
 };
 
-export function destino({ pagina, clienteKey, label } = {}) {
+export function destino({ pagina, clienteKey, label, extra } = {}) {
   if (clienteKey) {
     const f = CLIENTE[pagina];
     if (f) return f(clienteKey);
     return { tipo: 'proximamente', label: `${CLIENTES_NAV[clienteKey]?.label || clienteKey} · ${label || pagina}` };
   }
   const f = GLOBALES[pagina];
-  if (f) return f();
+  if (f) return f(extra);
   return { tipo: 'proximamente', label: label || pagina };
 }
 

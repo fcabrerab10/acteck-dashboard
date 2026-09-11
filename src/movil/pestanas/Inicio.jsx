@@ -93,7 +93,8 @@ export default function Inicio() {
         <KpiM eyebrow={`Sell-out ${soMes ? MESES[soMes - 1] : 'últ. mes'}`} big={soTotal > 0 ? fmtM(soTotal) : '—'} sub={soUltimo.length ? `${soUltimo.length} clientes · último mes cerrado` : 'sin sell-out cargado'} />
       </KpiGrid>
 
-      <ListaAgrupada titulo="Hoy" meta={hoyItems.length || undefined} style={{ marginTop: 18 }}>
+      <ListaAgrupada titulo="Hoy" meta={hoyItems.length || undefined} style={{ marginTop: 18 }}
+        accion={<button type="button" onClick={() => nav.navegar({ pagina: 'agenda' })} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 500, padding: 0, cursor: 'pointer' }}>Agenda ›</button>}>
         {hoyItems.length === 0 && <Vacio titulo="Nada pendiente para hoy" sub="Sin pagos, arribos, actividades ni tareas con fecha de hoy." style={{ padding: '22px 16px' }} />}
         {hoyItems.map((it) => <Fila key={it.key} icon={it.icon} color={it.color} titulo={it.titulo} sub={it.sub} valor={it.valor} onClick={it.onClick} />)}
       </ListaAgrupada>

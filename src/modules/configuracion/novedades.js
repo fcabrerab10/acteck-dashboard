@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.14.0', fecha: '2026-09-10', titulo: 'Agenda en el celular',
+    items: [
+      'Hoy en lista (deslizar a la derecha = hecho, a la izquierda = posponer) o Tablero deslizable por cliente, persona o categoría; elegible en Preferencias.',
+      'Captura rápida con texto o voz entendiendo #cliente, @persona y fechas en lenguaje natural ("el viernes", "en 3 días", "15 sep").',
+      'Minuta en vivo con guardado al momento, Cerrar reunión, Clientes con lo abierto de cada uno y Semana de sólo lectura.',
+      'Historial de cambios con acciones en lenguaje de negocio y filtros con conteo.',
+    ],
+  },
+  {
     version: '3.13.0', fecha: '2026-09-10', titulo: 'Agenda, Estado de Resultados y Actividad del equipo',
     items: [
       'Agenda (debajo de Inicio) sustituye a Pendientes & Calendario: bandeja Hoy o tablero por etiqueta (elegible en Preferencias), #cliente y @persona, reuniones con línea del tiempo y puntos clasificados, minuta con guardado al momento, arrastre de lo abierto, avisos por responsable y conexión con Google Calendar.',

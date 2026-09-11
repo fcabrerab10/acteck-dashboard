@@ -127,9 +127,9 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     if (!nodo || nodo.disabled) return;
     const id = nodo.id || idNodo(nodo.clienteKey || null, nodo.pagina);
     const label = nodo.label || buscarNodo(arbol, id)?.label;
-    const d = destino({ pagina: nodo.pagina, clienteKey: nodo.clienteKey || null, label });
+    const d = destino({ pagina: nodo.pagina, clienteKey: nodo.clienteKey || null, label, extra: nodo.extra });
     if (d.tipo === 'tab') { irATab(d.tab); return; }
-    if (d.tipo === 'push') { setActivoId(id); push(d.el, d.key); return; }
+    if (d.tipo === 'push') { setActivoId(id); push(d.el, nodo.extra ? `${d.key}-${Date.now()}` : d.key); return; }
     abrirProximamente(d.label);
   }, [arbol, irATab, push, abrirProximamente]);
 

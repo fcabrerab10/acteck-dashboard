@@ -66,6 +66,10 @@ export const SILUETAS = {
   agendaTablero: [fila(1, 30), hero(2), kpis(4), panel(2, { alto: 60 }), grid('repeat(4, minmax(0,1fr))', [panel(6, { alto: 300 }), panel(5, { alto: 260 }), panel(5, { alto: 260 }), panel(3, { alto: 180 })]), fila(6, 90), grid('1fr 1fr', [panel(6, { alto: 240 }), panel(3, { alto: 140 })])],
   // Agenda V3 · Minuta (hoja lateral): pills · asistentes · editor de puntos · notas
   agendaMinuta: [fila(4, 26), fila(4, 30), panel(8, { alto: 300 }), panel(4, { alto: 140 })],
+  // Móvil · Agenda A (hero 3 stats · segmented · lista), C tablero (segmented · una columna) y Minuta (título · hero · puntos · pie)
+  movilAgenda: [hero(3), fila(1, 34), panel(6, { alto: 250 }), panel(4, { alto: 170 })],
+  movilAgendaTablero: [fila(1, 34), panel(8, { alto: 420 }), fila(1, 16)],
+  movilMinuta: [fila(1, 44), hero(3), panel(3, { alto: 110 }), panel(6, { alto: 240 }), fila(1, 48)],
   adminInterna: [fila(1, 30), hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(300px,1fr)', [panel(12, { alto: 460 }), [panel(6, { alto: 240 }), panel(3, { alto: 140 })]]), panel(8, { alto: 360 })],
   historialCambios: [hero(3), panel(4, { alto: 120 }), tabla(14, 7)],
   actualizacion: [hero(4), tabla(6, 7, { alto: 300 }), tabla(9, 8, { alto: 400 }), fila(1, 28)],

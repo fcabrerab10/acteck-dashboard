@@ -1,5 +1,7 @@
 // Pestaña Alertas · mismo modelo del Centro iOS: pilas por área (agruparPorArea), Segmented Hoy / Semana /
 // Silenciadas, sección "Resumen programado {hora}" y filas que se deslizan a la izquierda para Posponer 3 d / Resolver.
+// Alertas de Agenda (agenda_vencida · agenda_asignado, meta.item_id): la acción abre el ítem o su minuta en la Agenda
+// móvil (rutas.js → extra { itemId }) y al deslizar aparece "Hecho" (marca la tarea hecha y resuelve la alerta).
 import React, { useMemo, useState } from 'react';
 import { Clock, Check, ChevronDown, ChevronRight, BellOff } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -11,6 +13,7 @@ import {
   ejecutarAccion, accionAlerta, agruparPorArea, areaAlerta, aplicaCliente, esNueva, SEV_LABEL,
 } from '../../lib/alertas';
 import { colorSev, horaRelativa } from '../../components/notificaciones/Pila';
+import { completarItem } from '../../modules/agenda/datos';
 import { useNav } from '../nav';
 import { TituloGrande, Segmented, FilaDeslizable, Fila, Vacio, Skeleton, Pill, TituloSeccionM, toast } from '../piezas';
 import { nombreCliente } from '../datos';
@@ -68,14 +71,17 @@ export default function Alertas() {
     marcarLeidas([a.id]).catch(() => {});
     ejecutarAccion(a, (ck, pagina, ex) => {
       if (ex?.sku || pagina === 'inventarioGlobal') { if (ex?.sku) nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha'); return; }
+      if (pagina === 'agenda' || pagina === 'adminInterna') { nav.navegar({ pagina: 'agenda', extra: a.meta?.item_id ? { itemId: a.meta.item_id } : null }); return; }
       if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`); return; }
       nav.navegar({ pagina }); // rutas.js: Fuentes, Historial o "Próximamente"
     });
   };
+  // Agenda: "Hecho" directo desde la notificación (marca el ítem y resuelve la alerta).
+  const hecho = (a) => salir(a.id, async () => { await completarItem({ id: a.meta.item_id }, true); const { data } = await supabase.auth.getUser(); return resolverAlerta(a.id, data?.user?.email || nav.perfil?.email); }, 'Hecho');
   const leerPila = (p) => { const ids = p.alertas.filter((a) => esNueva(a, lecturas)).map((a) => a.id); if (ids.length) marcarLeidas(ids).catch(() => {}); };
   const hora = prefs?.resumen?.hora || '13:00';
   const nNuevas = [...inmediatas, ...resumen].filter((a) => esNueva(a, lecturas)).length;
-  const props = { lecturas, saliendo, onVer: ver, onPosponer: posponer, onResolver: resolver, onAbrir: leerPila, theme };
+  const props = { lecturas, saliendo, onVer: ver, onPosponer: posponer, onResolver: resolver, onHecho: hecho, onAbrir: leerPila, theme };
 
   let cuerpo;
   if (isLoading) cuerpo = <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={76} r={12} /><Skeleton h={76} r={12} /><Skeleton h={76} r={12} /></div>;
@@ -105,7 +111,7 @@ export default function Alertas() {
   );
 }
 
-function PilaM({ pila, lecturas, saliendo, onVer, onPosponer, onResolver, onAbrir, abiertaInicial = false, quieta = false, theme }) {
+function PilaM({ pila, lecturas, saliendo, onVer, onPosponer, onResolver, onHecho, onAbrir, abiertaInicial = false, quieta = false, theme }) {
   const [abierta, setAbierta] = useState(abiertaInicial);
   const top = pila.alertas[0];
   const toggle = () => { const n = !abierta; setAbierta(n); if (n) onAbrir?.(pila); };
@@ -132,7 +138,9 @@ function PilaM({ pila, lecturas, saliendo, onVer, onPosponer, onResolver, onAbri
             return (
               <FilaDeslizable key={a.id} saliendo={saliendo.has(a.id)} acciones={[
                 { label: 'Posponer', icon: Clock, color: theme.orange, onClick: () => onPosponer(a) },
-                { label: 'Resolver', icon: Check, color: theme.green, onClick: () => onResolver(a) },
+                a.meta?.item_id && String(a.tipo || '').startsWith('agenda_')
+                  ? { label: 'Hecho', icon: Check, color: theme.green, onClick: () => onHecho(a) }
+                  : { label: 'Resolver', icon: Check, color: theme.green, onClick: () => onResolver(a) },
               ]}>
                 <div style={{ borderTop: `1px solid ${theme.border}` }}>
                   <Fila tono={colorSev(theme, a.severidad)} alto={56} chevron={false}
