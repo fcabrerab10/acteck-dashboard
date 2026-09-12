@@ -43,6 +43,7 @@ export default function Cuenta({ fila, anio, mes, corteDia }) {
   const [tab, setTab] = useState('resumen');
   const [q, setQ] = useState('');
   const [compartiendo, setCompartiendo] = useState(false);
+  const [skuAbierto, setSkuAbierto] = useState(null);   // ficha del SKU como hoja desde abajo (igual que Sell Out de cliente propio)
 
   const skuQ = useDrillSkus(cuenta, anio, tab === 'resumen' || tab === 'skus');
   const invQ = useDrillInventario(cuenta, tab === 'resumen' || tab === 'skus' || tab === 'inventario');
@@ -93,13 +94,13 @@ export default function Cuenta({ fila, anio, mes, corteDia }) {
       {activa === 'resumen' && (
         <Resumen fila={fila} anio={anio} mes={mes} corteDia={corteDia} skus={skus} alertas={alertas}
           campos={campos} hayInv={hayInv} cargando={skuQ.isLoading || invQ.isLoading}
-          onSku={(s) => nav.push(<FichaSku sku={s.sku} fila={fila} skus={skus} meses12={meses12} anio={anio} hayInv={hayInv} />, `so-sku-${cuenta}-${s.sku}`)} />
+          onSku={(s) => setSkuAbierto(s.sku)} />
       )}
 
       {activa === 'skus' && (
         skuQ.isLoading ? <Cargando pantalla="sellInDrill" minHeight={220} /> : (
           <TabSkus skus={skus} meses12={meses12} anio={anio} hayInv={hayInv} q={q} setQ={setQ}
-            onSku={(s) => nav.push(<FichaSku sku={s.sku} fila={fila} skus={skus} meses12={meses12} anio={anio} hayInv={hayInv} />, `so-sku-${cuenta}-${s.sku}`)} />
+            onSku={(s) => setSkuAbierto(s.sku)} />
         )
       )}
 
@@ -138,6 +139,11 @@ export default function Cuenta({ fila, anio, mes, corteDia }) {
         <span style={{ fontFamily: MONO }}>v_sellout_inventario_cuenta_sku</span>. Sólo aparecen las pestañas
         cuyo dato manda la fuente de esta cuenta.
       </Fuente>
+
+      {/* Ficha del SKU en hoja desde abajo: no se sale de la cuenta */}
+      <HojaM abierto={!!skuAbierto} onClose={() => setSkuAbierto(null)} titulo={skuAbierto || ''} sub={fila.nombre} alto="82vh">
+        {skuAbierto && <FichaSku sku={skuAbierto} fila={fila} skus={skus} meses12={meses12} anio={anio} hayInv={hayInv} onCerrar={() => setSkuAbierto(null)} />}
+      </HojaM>
 
       <HojaM abierto={compartiendo} onClose={() => setCompartiendo(false)} titulo="Estatus de la cuenta" sub={`${fila.nombre} · ${MESES_LARGO[mes - 1]} ${anio}`} alto="78vh">
         <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -265,17 +271,16 @@ function TabSkus({ skus, meses12, anio, hayInv, q, setQ, onSku }) {
   );
 }
 
-/** Ficha de un SKU dentro de UNA cuenta (usa lo que ya cargó la pantalla: nada extra que pedir). */
-function FichaSku({ sku, fila, skus, meses12, anio, hayInv }) {
+/** Ficha de un SKU dentro de UNA cuenta, en hoja desde abajo (usa lo que ya cargó la pantalla: nada extra que pedir). */
+function FichaSku({ sku, fila, skus, meses12, anio, hayInv, onCerrar }) {
   const { theme } = useTheme();
   const nav = useNav();
   const s = skus.find((x) => x.sku === sku);
-  if (!s) return (<><Cabecera onVolver={nav.pop} etiqueta={fila.nombre} /><Vacio icon={null} titulo="SKU sin datos" /></>);
+  if (!s) return <Vacio icon={null} titulo="SKU sin datos" />;
   const columnas = meses12.map((m) => `${MESES[m.mes - 1]}${m.anio !== anio ? ` ${String(m.anio).slice(2)}` : ''}`);
   return (
-    <>
-      <Cabecera onVolver={nav.pop} etiqueta={fila.nombre.split(' ')[0]} />
-      <TituloGrande titulo={sku} sub={[s.marca, s.categoria].filter(Boolean).join(' · ') || 'Sin marca ni categoría'} />
+    <div style={{ padding: '4px 0 16px' }}>
+      <div style={{ padding: '0 16px 10px', fontSize: 12.5, color: theme.textMuted }}>{[s.marca, s.categoria].filter(Boolean).join(' · ') || 'Sin marca ni categoría'}</div>
       <CajaDatos cols={hayInv ? 3 : 2}>
         <Dato k="Piezas 12 m" v={fmtInt(s.total)} sub={`prom ${fmtInt(s.prom)} / mes`} />
         <Dato k="Piezas del mes" v={fmtInt(s.mesActual)} sub={s.mesActual ? 'con venta' : 'sin venta este mes'} />
@@ -294,9 +299,9 @@ function FichaSku({ sku, fila, skus, meses12, anio, hayInv }) {
         </div>
       </div>
       <div style={{ padding: '18px 16px 0' }}>
-        <BotonGrande icon={PackageSearch} onClick={() => { nav.agregarSku(sku); nav.navegar({ pagina: 'inventarioGlobal' }); }}>Ver disponibilidad</BotonGrande>
+        <BotonGrande icon={PackageSearch} onClick={() => { onCerrar?.(); nav.agregarSku(sku); nav.navegar({ pagina: 'inventarioGlobal' }); }}>Ver disponibilidad</BotonGrande>
       </div>
-    </>
+    </div>
   );
 }
 
