@@ -120,7 +120,7 @@ export default function GraficaLineas({
     const vp = num(fila[principal.key]), va = anterior ? num(fila[anterior.key]) : null;
     const delta = vp != null && va != null && va !== 0 ? ((vp - va) / Math.abs(va)) * 100 : null;
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: titulo ? 'flex-start' : 'flex-end', minWidth: 0 }}>
         <Pill tone="blue" size="xs">{fila.x} · {vp == null ? '—' : fmtDe(principal)(vp)}</Pill>
         {anterior && <Pill tone="gray" size="xs">{anterior.label} · {va == null ? '—' : fmtDe(anterior)(va)}</Pill>}
         {cuotas.map((c) => { const v = num(fila[c.key]); return v == null ? null : <Pill key={c.key} tone="green" size="xs">{c.label} · {fmtDe(c)(v)}</Pill>; })}
@@ -168,8 +168,11 @@ export default function GraficaLineas({
     if (!esMax && !esMin) return null;
     if (esMax && esMin) return null; // un solo punto: la cabecera ya lo dice
     const anchor = index === 0 ? 'start' : index === datos.length - 1 ? 'end' : 'middle';
+    // El mín se anota debajo del punto, salvo que ya esté pegado al eje X: entonces arriba, para no pisar el eje ni otras líneas.
+    const pegadoAbajo = y + 16 > alto - 26;
+    const ty = esMax || pegadoAbajo ? y - 11 : y + 16;
     return (
-      <text x={x} y={esMax ? y - 11 : y + 16} textAnchor={anchor} fontSize={9.5} fontFamily={TYPO.fontDisplay} fill={theme.textMuted} fontWeight={500}>
+      <text x={x} y={ty} textAnchor={anchor} fontSize={9.5} fontFamily={TYPO.fontDisplay} fill={theme.textMuted} fontWeight={500}>
         {esMax ? 'máx' : 'mín'} {formato(value)}
       </text>
     );
@@ -249,20 +252,16 @@ export default function GraficaLineas({
     </div>
   ) : null;
 
+  // Las pastillas de lectura van en su propia fila, encima del trazo: nunca en la cabecera del Panel
+  // (ahí competían con el título y se encimaban cuando había varias series).
   const cuerpo = (
     <div style={style}>
-      {!titulo && pastillas && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{pastillas}</div>}
+      {pastillas && <div style={{ display: 'flex', justifyContent: titulo ? 'flex-start' : 'flex-end', marginBottom: 6, minWidth: 0 }}>{pastillas}</div>}
       {grafica}
       {leyendaEl}
     </div>
   );
 
   if (!titulo) return cuerpo;
-  const accionesPanel = (pastillas || acciones) ? (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-      {pastillas}
-      {acciones}
-    </div>
-  ) : null;
-  return <Panel titulo={titulo} meta={meta} acciones={accionesPanel}>{cuerpo}</Panel>;
+  return <Panel titulo={titulo} meta={meta} acciones={acciones}>{cuerpo}</Panel>;
 }
