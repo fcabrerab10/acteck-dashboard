@@ -3,6 +3,22 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.24.0', fecha: '2026-09-12', titulo: 'Tracking Pedidos en el celular',
+    items: [
+      'OCs por etapa (Abiertas · Detenidas · Surtir hoy · Backorder · Entregadas) con deslizar para registrar envío o compartir estatus.',
+      'Ficha de la OC con timeline, facturas del ERP con sus partidas, envíos con desfase, folios y "Ir al cliente"; registrar OC, pegar correo y cotización desde el "+".',
+      'Las alertas de Tracking abren la OC directamente. Cuotas de piezas y costo listas en el puente; margen por canal y fill rates sobre las ventas nuevas.',
+    ],
+  },
+  {
+    version: '3.24.0', fecha: '2026-09-12', titulo: 'Sell Out consolidado en el celular · Ingram separado',
+    items: [
+      'Sell Out consolidado ya está en el celular: mes con su comparativo al mismo día, inventario en clientes, evolución de 12 meses, composición por canal / marca / categoría y las cuentas agrupadas por canal. Al tocar una cuenta se abre su ficha con Resumen, SKUs, Inventario, Sucursales, Clientes finales y Estados (el mapa sigue sólo en la computadora).',
+      'Ingram son dos clientes distintos: 00226 (mayoreo) con su sell out del puente y 04126 (retail representados), que factura pero no reporta sell out; sale como fila aparte con "—" en las columnas de sell out. Su sell in ya no se contaba como mayoreo.',
+      'La frescura de Digitalife y Dicotech se ve por separado: cada uno sube su archivo por su lado y antes la pastilla mostraba sólo la carga más reciente de los dos.',
+    ],
+  },
+  {
     version: '3.23.0', fecha: '2026-09-12', titulo: 'Sell Out consolidado · la empresa como equipo',
     items: [
       'Pestaña Sell Out nueva: todo lo que desplazan las 16 cuentas (12 mayoristas del puente + Digitalife, PCEL, Dicotech + mostrador y e-commerce) en una sola tabla, con sell in del ERP al lado y el mes comparado contra el año pasado al mismo día.',

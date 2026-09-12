@@ -75,9 +75,16 @@ export const SILUETAS = {
   movilAgendaTablero: [fila(1, 34), panel(8, { alto: 420 }), fila(1, 16)],
   // Móvil · Sell In consolidado: hero (3 stats + barra + pills) · 4 KPIs en 2×2 · lista de canales · buscador · composición · Top 10
   movilSellInGlobal: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), panel(7, { alto: 320 }), fila(1, 38), panel(6, { alto: 240 }), panel(10, { alto: 420 })],
+  // Móvil · Sell Out consolidado: hero (3 stats + pills de canal) · 4 KPIs en 2×2 · gráfica 12 m ·
+  // segmented de composición + su lista · listas de cuentas por canal (mayoreo, distribuidores, directo)
+  movilSellOutGlobal: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), chart(170), fila(1, 34), panel(6, { alto: 260 }), panel(10, { alto: 420 }), panel(4, { alto: 200 })],
   movilMinuta: [fila(1, 44), hero(3), panel(3, { alto: 110 }), panel(6, { alto: 240 }), fila(1, 48)],
   // Móvil · Actividad del equipo: hero (pulso, 3 stats) · 4 KPIs en 2×2 · fila del umbral · lista de internos · lista de externos
   movilEquipo: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), fila(1, 30), panel(6, { alto: 300 }), panel(3, { alto: 150 })],
+  // Móvil · Tracking de pedidos: hero (3 stats) · 4 KPIs en 2×2 · segmented + chips + buscador · listas de OCs por etapa
+  movilTracking: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), fila(1, 34), fila(1, 30), fila(1, 38), panel(6, { alto: 260 }), panel(4, { alto: 190 })],
+  // Móvil · Ficha de la OC: título · hero (3 stats) · botones · recorrido · SKUs · envíos
+  movilTrackingOC: [hero(3), fila(1, 50), fila(1, 50), panel(5, { alto: 220 }), panel(5, { alto: 240 }), panel(3, { alto: 150 })],
   // Móvil · Administración: hero (3 stats) · segmented de 4 secciones · buscador · lista de internos · lista de externos · botón
   movilAdmin: [hero(3), fila(1, 34), fila(1, 38), panel(6, { alto: 300 }), panel(3, { alto: 150 }), panel(1, { alto: 50 })],
   adminInterna: [fila(1, 30), hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(300px,1fr)', [panel(12, { alto: 460 }), [panel(6, { alto: 240 }), panel(3, { alto: 140 })]]), panel(8, { alto: 360 })],

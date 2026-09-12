@@ -72,6 +72,9 @@ export default function Alertas() {
     marcarLeidas([a.id]).catch(() => {});
     ejecutarAccion(a, (ck, pagina, ex) => {
       // 3er argumento de push = nodo del árbol que queda resaltado en el menú.
+      // Tracking (oc_detenida · oc_backorder_sin_po · factura_sin_oc): con meta.oc_id se abre la ficha de la OC;
+      // si no, la pantalla de Tracking. Va antes que el SKU porque estas alertas también traen `sku`.
+      if (pagina === 'ordenesCompra') { nav.navegar({ pagina: 'ordenesCompra', extra: a.meta?.oc_id ? { ocId: a.meta.oc_id } : null }); return; }
       if (ex?.sku || pagina === 'inventarioGlobal') { if (ex?.sku) nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); return; }
       if (pagina === 'agenda' || pagina === 'adminInterna') { nav.navegar({ pagina: 'agenda', extra: a.meta?.item_id ? { itemId: a.meta.item_id } : null }); return; }
       if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`, ['digitalife', 'pcel', 'dicotech'].includes(ck) ? idNodo(ck, 'home') : null); return; }

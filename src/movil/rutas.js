@@ -23,8 +23,11 @@ const SOP              = lazy(() => import('./pestanas/SOP'));
 const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
 const Agenda           = lazy(() => import('./pestanas/agenda/Agenda'));
 const SellInGlobal     = lazy(() => import('./pestanas/sellin/SellInGlobal'));
+const SellOutGlobal    = lazy(() => import('./pestanas/selloutGlobal/SellOutGlobal'));
 const Equipo           = lazy(() => import('./pestanas/equipo/Equipo'));
 const Admin            = lazy(() => import('./pestanas/admin/Admin'));
+const Tracking         = lazy(() => import('./pestanas/tracking/Tracking'));
+const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Ninguna aparece como nodo salvo `inicio`. */
 export const TABS_RAIZ = ['inicio', 'clientes', 'alertas', 'buscar'];
@@ -46,9 +49,14 @@ const GLOBALES = {
   configuracion:     () => ({ tipo: 'push', key: 'admin', el: h(Admin) }),     // Administración (sólo super admin)
   visionGeneral:     () => ({ tipo: 'push', key: 'vision', el: h(VisionGeneral) }),
   sellIn:            () => ({ tipo: 'push', key: 'sellin-global', el: h(SellInGlobal) }), // Sell In consolidado (sin clienteKey)
+  sellOut:           () => ({ tipo: 'push', key: 'sellout-global', el: h(SellOutGlobal) }), // Sell Out consolidado (sin clienteKey)
   analisisClientes:  () => ({ tipo: 'push', key: 'analisis', el: h(AnalisisClientes) }),
   forecastClientes:  () => ({ tipo: 'push', key: 'sop', el: h(SOP) }),
   propuestas:        () => ({ tipo: 'push', key: 'propuestas', el: h(Propuestas) }),
+  // Tracking de pedidos (OCs de clientes). `extra.ocId` (alerta de tracking) abre la ficha de la OC.
+  ordenesCompra:     (extra) => (extra?.ocId
+    ? { tipo: 'push', key: `oc-${extra.ocId}`, el: h(FichaOC, { ocId: extra.ocId }) }
+    : { tipo: 'push', key: 'tracking', el: h(Tracking) }),
   forecastReservas:  () => ({ tipo: 'push', key: 'forecast', el: h(ForecastCliente) }),
   // Agenda V3 (tareas, reuniones con minuta, semana, clientes). `extra` viene de una notificación: { itemId } abre el ítem
   // o su minuta; { vista } elige la pestaña inicial. adminInterna (página vieja) cae aquí también.

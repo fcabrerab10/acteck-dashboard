@@ -1,5 +1,6 @@
 // Agenda móvil · piezas compartidas por Hoy (A), Tablero (C), Reuniones, Minuta, Clientes y Semana.
 //   · FilaGesto: deslizar a la derecha = hecho · a la izquierda = posponer (touch-action: pan-y, umbral, salida animada)
+//     (props `mantener` + `colorDerecha`/`colorIzquierda`: la fila NO se va y el fondo cambia de color — lo usa el Tracking móvil)
 //   · useLongPress: mantener presionada una tarjeta (450 ms, se cancela al mover > 10 px)
 //   · TarjetaItem / TarjetaAviso / TarjetaReunion: tarjetas de tarea-punto, aviso del sistema y reunión
 //   · FAB, PalomitaM, ChipM, Tag* (pills de #cliente @persona /categoría reutilizadas de la web)
@@ -95,7 +96,7 @@ export function useLongPress(onLong, { ms = 450, onTap } = {}) {
 
 // ─── Deslizar: derecha = hecho · izquierda = posponer ───
 const UMBRAL_MIN = 76;
-export function FilaGesto({ children, onDerecha, onIzquierda, labelDerecha = 'Hecho', labelIzquierda = 'Mañana', iconoDerecha: IconD = Check, iconoIzquierda: IconI = Clock, disabled = false, style }) {
+export function FilaGesto({ children, onDerecha, onIzquierda, labelDerecha = 'Hecho', labelIzquierda = 'Mañana', iconoDerecha: IconD = Check, iconoIzquierda: IconI = Clock, disabled = false, mantener = false, colorDerecha, colorIzquierda, style }) {
   const { theme } = useTheme();
   const ref = useRef(null);
   const [dx, setDx] = useState(0);
@@ -124,13 +125,14 @@ export function FilaGesto({ children, onDerecha, onIzquierda, labelDerecha = 'He
     const umbral = Math.max(UMBRAL_MIN, w * 0.32);
     const rapido = Date.now() - s.t0 < 260 && Math.abs(dxRef.current) > 48;
     const v = dxRef.current;
-    if (v > 0 && onDerecha && (v > umbral || rapido)) { setSalida('der'); ponDx(w); setTimeout(() => onDerecha(), sinAnim ? 0 : DUR.exit); return; }
-    if (v < 0 && onIzquierda && (-v > umbral || rapido)) { setSalida('izq'); ponDx(-w); setTimeout(() => onIzquierda(), sinAnim ? 0 : DUR.exit); return; }
+    // `mantener`: la fila no se va (acciones que no cambian la lista, p. ej. abrir una hoja o compartir).
+    if (v > 0 && onDerecha && (v > umbral || rapido)) { if (mantener) { ponDx(0); onDerecha(); return; } setSalida('der'); ponDx(w); setTimeout(() => onDerecha(), sinAnim ? 0 : DUR.exit); return; }
+    if (v < 0 && onIzquierda && (-v > umbral || rapido)) { if (mantener) { ponDx(0); onIzquierda(); return; } setSalida('izq'); ponDx(-w); setTimeout(() => onIzquierda(), sinAnim ? 0 : DUR.exit); return; }
     ponDx(0);
   };
   const pct = Math.min(1, Math.abs(dx) / UMBRAL_MIN);
   const der = dx > 0;
-  const fondo = der ? theme.green : theme.orange;
+  const fondo = der ? (colorDerecha || theme.green) : (colorIzquierda || theme.orange);
   return (
     <div ref={ref} style={{ position: 'relative', overflow: 'hidden', borderRadius: 12, maxHeight: salida ? 0 : 400, marginBottom: salida ? 0 : 8, opacity: salida ? 0 : 1, transition: salida ? `max-height ${DUR.content}ms ${EASE} ${DUR.exit}ms, margin ${DUR.content}ms ${EASE} ${DUR.exit}ms, opacity ${DUR.exit}ms ${EASE}` : 'none', ...style }}>
       {dx !== 0 && (
