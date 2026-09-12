@@ -38,8 +38,9 @@ const ficha = () => ({ tipo: 'push', key: 'ficha', el: h(FichaProducto) });
 
 // Páginas globales (nodo.clienteKey == null) → pantalla móvil.
 const GLOBALES = {
-  // Pagos V3 · Hoy (por solicitar · autorizar · sin folio · vence), calendario y fondos.
-  pagos:             () => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil) }),
+  // Pagos V3 · bandeja por acción (por solicitar · autorizar · sin folio · por registrar · vence · rechazados),
+  // calendario, fondos e historial. `extra` viene de una alerta: { pagoId } abre ese pago · { fondoId } abre Fondos.
+  pagos:             (extra) => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil, { inicial: extra || null }) }),
   inicio:            () => tab('inicio'),
   resumenClientes:   () => tab('clientes'),           // "Resumen de Clientes" = pestaña Clientes (propios · canales ERP)
   alertas:           () => tab('alertas'),            // no son nodos del árbol: los usan la barra superior y Buscar
@@ -70,7 +71,7 @@ const GLOBALES = {
 // Pestañas de cliente propio (nodo.clienteKey = digitalife | pcel | dicotech).
 const CLIENTE = {
   home:   (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(FichaCliente, { clienteKey: ck }) }),
-  pagos:  (ck) => ({ tipo: 'push', key: `pagos-${ck}`, el: h(PagosMovil, { clienteKey: ck }) }),
+  pagos:  (ck, extra) => ({ tipo: 'push', key: `pagos-${ck}`, el: h(PagosMovil, { clienteKey: ck, inicial: extra || null }) }),
   sellIn: (ck) => ({ tipo: 'push', key: `sellin-${ck}`, el: h(SellInCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
   estrategia: (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
   sellOut:    (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
@@ -81,7 +82,7 @@ const CLIENTE = {
 export function destino({ pagina, clienteKey, label, extra } = {}) {
   if (clienteKey) {
     const f = CLIENTE[pagina];
-    if (f) return f(clienteKey);
+    if (f) return f(clienteKey, extra);
     return { tipo: 'proximamente', label: `${CLIENTES_NAV[clienteKey]?.label || clienteKey} · ${label || pagina}` };
   }
   const f = GLOBALES[pagina];

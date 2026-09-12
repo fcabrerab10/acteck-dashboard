@@ -75,6 +75,13 @@ export default function Alertas() {
       // Tracking (oc_detenida · oc_backorder_sin_po · factura_sin_oc): con meta.oc_id se abre la ficha de la OC;
       // si no, la pantalla de Tracking. Va antes que el SKU porque estas alertas también traen `sku`.
       if (pagina === 'ordenesCompra') { nav.navegar({ pagina: 'ordenesCompra', extra: a.meta?.oc_id ? { ocId: a.meta.oc_id } : null }); return; }
+      // Pagos (pago_por_solicitar · pago_sin_autorizar_5d · pago_sin_folio · pago_vence_7d · fondo_negativo):
+      // meta.pago_id abre ese pago en la bandeja; meta.fondo_id abre la pestaña Fondos con ese fondo arriba.
+      if (pagina === 'pagos') {
+        const ex = a.meta?.pago_id ? { pagoId: a.meta.pago_id } : a.meta?.fondo_id ? { fondoId: a.meta.fondo_id } : null;
+        nav.navegar({ clienteKey: ck || null, pagina: 'pagos', extra: ex });
+        return;
+      }
       if (ex?.sku || pagina === 'inventarioGlobal') { if (ex?.sku) nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); return; }
       if (pagina === 'agenda' || pagina === 'adminInterna') { nav.navegar({ pagina: 'agenda', extra: a.meta?.item_id ? { itemId: a.meta.item_id } : null }); return; }
       if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`, ['digitalife', 'pcel', 'dicotech'].includes(ck) ? idNodo(ck, 'home') : null); return; }

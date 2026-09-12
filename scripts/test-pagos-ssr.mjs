@@ -19,6 +19,10 @@ try {
   const { default: PanelReglas } = await vite.ssrLoadModule('/src/modules/comercial/pagosv3/PanelReglas.jsx');
   const { default: DrillPago } = await vite.ssrLoadModule('/src/modules/comercial/pagosv3/DrillPago.jsx');
   const { default: PagosUnificados } = await vite.ssrLoadModule('/src/modules/comercial/PagosUnificados.jsx');
+  const { default: PagosMovil } = await vite.ssrLoadModule('/src/movil/pestanas/pagos/Pagos.jsx');
+  const { default: CalendarioM } = await vite.ssrLoadModule('/src/movil/pestanas/pagos/CalendarioM.jsx');
+  const { HojaCorreo } = await vite.ssrLoadModule('/src/movil/pestanas/pagos/hojas.jsx');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 
   const theme = getTheme('claro');
   const perfil = { es_super_admin: true, nombre: 'Fernando Cabrera' };
@@ -89,6 +93,53 @@ try {
   ok(/aria-busy="true"|Cargando/.test(pant), 'primer render muestra el loader con la silueta de Pagos');
   const sinAcceso = h(PagosUnificados, {}, { es_super_admin: false, permisos: {} });
   ok(/Sin acceso|No tienes acceso/.test(sinAcceso), 'sin permisos → Sin acceso');
+
+  console.log('\nMóvil · bandeja por acción (mockup A)');
+  const hMovil = (el, p = perfil, qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })) =>
+    renderToString(React.createElement(QueryClientProvider, { client: qc }, wrap(el, p)));
+  ok(/aria-busy="true"/.test(hMovil(React.createElement(PagosMovil, {}))), 'primer render = silueta móvil de Pagos');
+  const sinAccesoM = hMovil(React.createElement(PagosMovil, {}), { es_super_admin: false, permisos: {} });
+  ok(/Sin acceso/.test(sinAccesoM), 'sin permisos → Sin acceso');
+
+  // Con la consulta ya en cache se pinta la bandeja completa (grupos, chips y hero).
+  // Fechas lejanas para que no caigan en "Vence en 7 días" y se vea cada grupo por etapa.
+  const lejos = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+  const pagosMovil = [
+    ...pagos,
+    { id: 'm1', cliente: 'pcel', concepto: 'Rebate Q3 lejano', tipo: 'rebate', origen: 'auto', estado: 'calculado', monto: 410000, fecha_programada: lejos, detalle: {} },
+    { id: 'm2', cliente: 'digitalife', concepto: 'SPIFF sell in lejano', tipo: 'spiff', origen: 'auto', estado: 'solicitado', monto: 42000, fecha_programada: lejos, solicitado_at: '2026-09-03T10:00:00Z', detalle: {} },
+    { id: 'm3', cliente: 'dicotech', concepto: 'Apoyo sin folio', tipo: 'marketing', origen: 'manual', estado: 'autorizado', monto: 84300, folio: '', fecha_programada: lejos, detalle: {} },
+    { id: 'm4', cliente: 'pcel', concepto: 'Campaña con folio', tipo: 'marketing', origen: 'manual', estado: 'folio', monto: 6960, folio: 'F-4462', fecha_programada: lejos, detalle: {} },
+  ];
+  const qcCargado = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qcCargado.setQueryData(['movil', 'pagos', 'digitalife,pcel,dicotech'], { pagos: pagosMovil, fondos, reglas: [] });
+  const mov = hMovil(React.createElement(PagosMovil, {}), perfil, qcCargado);
+  ok(mov.includes('Pagos'), 'título de la pantalla');
+  ok(['Hoy', 'Calendario', 'Fondos', 'Historial'].every((t) => mov.includes(t)), 'Segmented Hoy · Calendario · Fondos · Historial');
+  ok(/comprometid/i.test(mov), 'hero con el comprometido del mes');
+  ok(['Por solicitar', 'Por autorizar', 'Sin folio', 'Por registrar (folio sin pago)', 'Vence en 7 días'].every((g) => mov.includes(g)),
+    'los grupos por acción de la bandeja');
+  ok(mov.includes('Digitalife') && mov.includes('PCEL') && mov.includes('Dicotech'), 'chips de cliente');
+  ok(mov.includes('Rebate agosto') && mov.includes('Protección de precio'), 'las filas de la bandeja');
+
+  console.log('\nMóvil · calendario');
+  const calM = renderToString(wrap(React.createElement(CalendarioM, {
+    pagos, anio: 2026, mes: 9, hoy: '2026-09-12', dia: '2026-09-15', onDia() {}, onMes() {}, onPago() {},
+  })));
+  ok(/septiembre/i.test(calM) && calM.includes('2026'), 'encabezado del mes');
+  ok(calM.includes('Rebate agosto'), 'lista los pagos del día elegido');
+  ok((calM.match(/aria-pressed/g) || []).length >= 28, 'una celda por día del mes', (calM.match(/aria-pressed/g) || []).length);
+
+  console.log('\nMóvil · hoja de Copiar correo');
+  const corr = renderToString(wrap(React.createElement(HojaCorreo, {
+    pago: pagos[1], abierto: true, onCerrar() {}, perfil, reglas: [], puedeEditar: true, onSolicitado() {},
+  })));
+  ok(corr.includes('Copiar correo'), 'título de la hoja');
+  ok(/Copiar y marcar solicitado/.test(corr), 'el calculado copia Y marca solicitado');
+  const corrReenvio = renderToString(wrap(React.createElement(HojaCorreo, {
+    pago: pagos[0], abierto: true, onCerrar() {}, perfil, reglas: [], puedeEditar: true, onSolicitado() {},
+  })));
+  ok(!/Copiar y marcar solicitado/.test(corrReenvio) && corrReenvio.includes('Copiar correo'), 'el ya solicitado sólo copia (reenvío)');
 } finally {
   await vite.close();
 }

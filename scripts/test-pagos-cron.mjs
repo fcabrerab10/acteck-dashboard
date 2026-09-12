@@ -25,6 +25,11 @@ const TABLAS = {
   pagos_dinamica_mes: [{ cliente: 'dicotech', anio: 2026, mes: 8, meta: 110000, premios: [{ pos: 1, premio: 'Amazon $2,500', monto: 2500 }] }],
   marketing_actividades: [{ id: 'a1', cliente: 'dicotech', nombre: 'ADS', anio: 2026, mes: 8, inversion: 6000, cobro: 'empresa' }],
   pagos: [{ id: 'x', clave_calculo: 'rebate:dicotech:2026-08' }],   // ya existe → no se duplica
+  perfiles: [
+    { user_id: 'u-fer', email: 'Fernando.Cabrera@acteck.com', activo: true },
+    { user_id: 'u-karo', email: 'karolina.veliz@acteck.com', activo: true },
+    { user_id: 'u-otro', email: 'david.millan@acteck.com', activo: true },
+  ],
   v_pagos_fondos_saldo: [
     { fondo_id: 1, cliente: 'pcel', fondo_key: 'mkt', nombre: 'Marketing', saldo: -15000, activo: true },
     { fondo_id: 2, cliente: 'dicotech', fondo_key: 'mkt', nombre: 'Marketing', saldo: 37600, activo: true },
@@ -74,6 +79,23 @@ ok(tipos.includes('fondo_negativo'), 'fondo_negativo (PCEL −15,000)', tipos);
 ok(al.find((a) => a.tipo === 'pago_vence_7d' && a.meta.pago_id === 'p5')?.severidad === 'critica', 'el vencido es crítico');
 ok(al.every((a) => a.area === 'pagos' && a.clave && a.accion?.pagina === 'pagos'), 'todas llevan área, clave y acción de navegación');
 ok(new Set(al.map((a) => a.clave)).size === al.length, 'claves únicas (el cron las usa para no duplicar)');
+
+console.log('\nreglasAlertasPagos · destinatarios (para_usuario)');
+const para = (tipo) => al.filter((a) => a.tipo === tipo).map((a) => a.para_usuario);
+ok(al.every((a) => a.para_usuario), 'todas van dirigidas a una persona', al.filter((a) => !a.para_usuario).map((a) => a.tipo));
+ok(al.every((a) => a.clave.endsWith(`|${a.para_usuario}`)), 'la clave lleva el user_id (una alerta por persona)');
+const solicitarP1 = al.filter((a) => a.tipo === 'pago_por_solicitar' && a.meta.pago_id === 'p1').map((a) => a.para_usuario).sort();
+ok(JSON.stringify(solicitarP1) === '["u-fer","u-karo"]', 'pago_por_solicitar → Fernando y Karolina (dos alertas)', solicitarP1);
+ok(para('pago_sin_autorizar_5d').every((u) => u === 'u-fer'), 'pago_sin_autorizar_5d → Fernando', para('pago_sin_autorizar_5d'));
+ok(para('pago_sin_folio').every((u) => u === 'u-karo'), 'pago_sin_folio → Karolina', para('pago_sin_folio'));
+ok(para('pago_vence_7d').every((u) => u === 'u-karo'), 'pago_vence_7d → Karolina', para('pago_vence_7d'));
+ok(para('fondo_negativo').every((u) => u === 'u-fer'), 'fondo_negativo → Fernando', para('fondo_negativo'));
+
+console.log('\nreglasAlertasPagos · sin perfiles resueltos (respaldo)');
+const sbSinPerfiles = async (path) => (path.split('?')[0] === 'perfiles' ? [] : sbGetAll(path));
+const alSin = await P.reglasAlertasPagos({ sbGetAll: sbSinPerfiles, hoy: { anio: 2026, mes: 9, dia: 12, iso: '2026-09-12' } });
+ok(alSin.every((a) => !a.para_usuario), 'sin perfiles caen a aviso general (sin para_usuario)');
+ok(new Set(alSin.map((a) => a.clave)).size === alSin.length, 'y las claves siguen siendo únicas');
 
 console.log(fallos === 0 ? '\nOK · helper del cron' : `\n${fallos} fallo(s)`);
 process.exit(fallos ? 1 : 0);

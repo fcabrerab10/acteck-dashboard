@@ -38,8 +38,11 @@ con los bloques comunes (cálculo, fondos, reglas).
 | `src/modules/comercial/pagosv3/FormPagoManual.jsx` | Pago manual + apoyo de cálculo de protección de precio (inventario × diferencia de lista). |
 | `src/modules/comercial/pagosv3/HojaRegistrarPago.jsx` | "Registrar pago": adjunta el PDF de la NC, lo lee y propone los campos; Fernando confirma. |
 | `src/modules/comercial/pagosv3/siluetas.js` | Presets de silueta locales (`SIL_PAGOS`, `SIL_PAGOS_DRILL`, `SIL_MOVIL_PAGOS`). |
-| `src/movil/pestanas/pagos/Pagos.jsx` · `DetallePago.jsx` | App móvil: "Hoy" (por solicitar / autorizar / sin folio / vence), calendario en lista, fondos, detalle con Copiar correo, Autorizar, folio y Registrar pago con PDF. Sin edición de reglas. |
-| `api/_pagos.js` | Helper del cron: `taskPagosCalcular`, `calcularPagosDelPeriodo`, `aplicarPagosCalculados`, `reglasAlertasPagos`. Reutiliza el motor de la pantalla. |
+| `src/movil/pestanas/pagos/Pagos.jsx` | App móvil (mockup A): **bandeja por acción**. Segmented Hoy · Calendario · Fondos · Historial; grupos Por solicitar · Por autorizar · Sin folio · Por registrar (folio sin pago) · Vence en 7 días · Rechazados; chips de cliente; hero con comprometido / pagado / vence 7 d. Gestos por fila (`FilaGesto` con `mantener`): derecha = acción de la etapa, izquierda = Copiar correo. Toast con Deshacer al solicitar y al autorizar. Sin edición de reglas. |
+| `src/movil/pestanas/pagos/hojas.jsx` | Hojas que abren los gestos: `HojaCorreo` (Copiar correo; al copiar marca Solicitado, o copia para reenviar si ya lo está), `HojaFolio`, `HojaRegistrar` (PDF de la NC) y `HojaConfirmar` (autorizar / reabrir). |
+| `src/movil/pestanas/pagos/CalendarioM.jsx` | Calendario del mes en cuadrícula (lunes→domingo) con puntos por tipo, "hoy" resaltado, mes anterior/siguiente y la lista del día tocado. |
+| `src/movil/pestanas/pagos/DetallePago.jsx` | Detalle del pago: cálculo, evidencia, bitácora y las mismas acciones desde adentro. |
+| `api/_pagos.js` | Helper del cron: `taskPagosCalcular`, `calcularPagosDelPeriodo`, `aplicarPagosCalculados`, `reglasAlertasPagos` (alertas **dirigidas por persona** con `para_usuario`, como `agenda_asignado`). Reutiliza el motor de la pantalla. |
 | `scripts/test-pagos-motor.mjs` · `-nc` · `-correo` · `-cron` · `-ssr` | Tests (56 comprobaciones, todas en verde). |
 
 ### Migraciones aplicadas
@@ -130,14 +133,15 @@ Dos entradas: la global y la de cliente (misma pantalla, con o sin `clienteKey`)
 ```diff
  const GLOBALES = {
    inicio:            () => tab('inicio'),
-+  // Pagos V3 · "Hoy" (por solicitar · autorizar · sin folio · vence), calendario y fondos.
-+  pagos:             () => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil) }),
++  // Pagos V3 · bandeja por acción, calendario, fondos e historial.
++  // `extra` viene de una alerta: { pagoId } abre ese pago · { fondoId } abre Fondos.
++  pagos:             (extra) => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil, { inicial: extra || null }) }),
 ```
 
 ```diff
  const CLIENTE = {
    home:   (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(FichaCliente, { clienteKey: ck }) }),
-+  pagos:  (ck) => ({ tipo: 'push', key: `pagos-${ck}`, el: h(PagosMovil, { clienteKey: ck }) }),
++  pagos:  (ck, extra) => ({ tipo: 'push', key: `pagos-${ck}`, el: h(PagosMovil, { clienteKey: ck, inicial: extra || null }) }),
 ```
 
 ### 2.4 `src/components/kit/siluetas.js`
@@ -213,6 +217,24 @@ formato que las demás reglas, así que el resto de `taskGenerarAlertas` (alta/b
 notificación de críticas) funciona sin tocar nada. Los cinco tipos entran con una sola
 entrada en `REGLAS`; si prefieres que el resumen los cuente por separado, divídela en cinco
 llamadas filtrando por `tipo`.
+
+**Destinatarios (regla de Fernando, 2026-09-12).** Las alertas de Pagos van **dirigidas a una
+persona** con `alertas.para_usuario`, igual que `agenda_asignado`: una fila por destinatario y el
+`user_id` dentro de la `clave`. Los `user_id` se resuelven dentro de la propia regla leyendo
+`perfiles` por correo (`CORREOS_PAGOS` en `api/_pagos.js`); si un perfil no se resuelve, esa alerta
+cae a aviso general (sin `para_usuario`) para no perderse.
+
+| Tipo | Destinatario |
+|------|--------------|
+| `pago_por_solicitar` | Fernando **y** Karolina (dos alertas dirigidas) |
+| `pago_sin_autorizar_5d` | Fernando |
+| `pago_sin_folio` | Karolina |
+| `pago_vence_7d` (folio sin pago) | Karolina |
+| `fondo_negativo` | Fernando |
+
+En el móvil, `src/movil/pestanas/Alertas.jsx` manda estas alertas a Pagos con
+`extra: { pagoId }` (o `{ fondoId }`) y la pantalla abre ese pago (o la pestaña Fondos con el
+fondo arriba).
 
 **(e) `vercel.json`** — nuevo cron (08:00 CDMX = 14:00 UTC; el día 2 de cada mes):
 

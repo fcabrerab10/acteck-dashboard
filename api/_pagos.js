@@ -11,12 +11,13 @@
 //   calcularPagosDelPeriodo({ anio, mes, sbGetAll })       → propuestas del motor
 //   aplicarPagosCalculados({ propuestas, sbGetAll, sbPost }) → inserta las que faltan (idempotente por clave_calculo)
 //   taskPagosCalcular({ sbGetAll, sbPost, hoy })           → lo que llama el cron
-//   reglasAlertasPagos({ sbGetAll, hoy })                  → alertas de la bandeja
-//     · pago_por_solicitar      calculado y sin solicitar
-//     · pago_sin_autorizar_5d   solicitado hace 5 días o más
-//     · pago_sin_folio          autorizado y sin folio
-//     · pago_vence_7d           vence en 7 días o menos (o ya venció)
-//     · fondo_negativo          saldo de un fondo por debajo de cero
+//   reglasAlertasPagos({ sbGetAll, hoy })                  → alertas de la bandeja, DIRIGIDAS por persona
+//     (regla de Fernando 2026-09-12; user_id resuelto desde `perfiles` por correo, ver CORREOS_PAGOS)
+//     · pago_por_solicitar      calculado y sin solicitar        → Fernando y Karolina (dos alertas)
+//     · pago_sin_autorizar_5d   solicitado hace 5 días o más     → Fernando
+//     · pago_sin_folio          autorizado y sin folio           → Karolina
+//     · pago_vence_7d           vence en 7 días o menos          → Karolina
+//     · fondo_negativo          saldo de un fondo bajo cero      → Fernando
 
 import M from '../src/modules/comercial/pagosv3/motor.js';
 import { CLIENTE_LABEL, CLIENTES } from '../src/modules/comercial/pagosv3/reglas.js';
@@ -166,14 +167,37 @@ export async function taskPagosCalcular({ sbGetAll, sbPost, hoy = hoyCDMX(), ani
 // ───────────────────────── Alertas de la bandeja ─────────────────────────
 const navegar = (clienteKey, label) => ({ tipo: 'navegar', clienteKey, pagina: 'pagos', label });
 
+// Quién recibe cada alerta (regla de Fernando, 2026-09-12). Igual que `agenda_asignado` en api/cron.js:
+// una alerta POR PERSONA con `para_usuario` y el user_id dentro de la clave (la central sólo se la muestra
+// a ella y el resumen por correo también). Si el perfil no se resuelve, cae a un aviso general (sin destinatario).
+export const CORREOS_PAGOS = {
+  fernando: 'fernando.cabrera@acteck.com',
+  karolina: 'karolina.veliz@acteck.com',
+};
+
+export async function destinatariosPagos(sbGetAll) {
+  let filas = [];
+  try { filas = await sbGetAll('perfiles?select=user_id,email,activo&activo=eq.true'); } catch { filas = []; }
+  const por = (mail) => (filas || []).find((p) => String(p.email || '').trim().toLowerCase() === mail)?.user_id || null;
+  return { fernando: por(CORREOS_PAGOS.fernando), karolina: por(CORREOS_PAGOS.karolina) };
+}
+
+/** Una alerta por destinatario (clave con el user_id). Sin destinatarios resueltos → un aviso general. */
+function dirigida(base, uids = []) {
+  const reales = [...new Set(uids.filter(Boolean))];
+  if (!reales.length) return [base];
+  return reales.map((u) => ({ ...base, para_usuario: u, clave: `${base.clave}|${u}` }));
+}
+
 /**
  * Reglas de alerta de Pagos. Devuelve filas con la forma que espera taskGenerarAlertas
  * (tipo, severidad, clave, titulo, detalle, cliente_key, area, accion, valor, meta).
  */
 export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
-  const [pagos, fondos] = await Promise.all([
+  const [pagos, fondos, quien] = await Promise.all([
     sbGetAll('pagos?select=id,cliente,concepto,monto,estado,tipo,periodo,folio,fecha_programada,solicitado_at,autorizado_at,folio_at,created_at&estado=in.(calculado,solicitado,autorizado,folio)'),
     sbGetAll('v_pagos_fondos_saldo?select=fondo_id,cliente,fondo_key,nombre,saldo,activo'),
+    destinatariosPagos(sbGetAll),
   ]);
   const out = [];
   const nombre = (p) => `${p.concepto} (${CLIENTE_LABEL[p.cliente] || p.cliente})`;
@@ -184,7 +208,7 @@ export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
     const faltan = diasParaPago(p, hoy.iso);
 
     if (p.estado === 'calculado' && Number(p.monto) > 0) {
-      out.push({
+      out.push(...dirigida({
         tipo: 'pago_por_solicitar', severidad: 'info',
         clave: `pago_por_solicitar|${p.id}`,
         titulo: `Pago calculado sin solicitar · ${nombre(p)}`,
@@ -193,11 +217,11 @@ export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
         accion: navegar(cli, 'Solicitar'), caduca_at: null,
         valor: Math.round(Number(p.monto) || 0),
         meta: { pago_id: p.id, estado: p.estado, periodo: p.periodo, dias },
-      });
+      }, [quien.fernando, quien.karolina]));
     }
 
     if (p.estado === 'solicitado' && dias >= 5) {
-      out.push({
+      out.push(...dirigida({
         tipo: 'pago_sin_autorizar_5d', severidad: 'alta',
         clave: `pago_sin_autorizar_5d|${p.id}`,
         titulo: `Solicitud sin autorizar hace ${dias} días · ${nombre(p)}`,
@@ -206,11 +230,11 @@ export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
         accion: navegar(cli, 'Ver pago'), caduca_at: null,
         valor: Math.round(Number(p.monto) || 0),
         meta: { pago_id: p.id, dias, periodo: p.periodo },
-      });
+      }, [quien.fernando]));
     }
 
     if (p.estado === 'autorizado' && !String(p.folio || '').trim()) {
-      out.push({
+      out.push(...dirigida({
         tipo: 'pago_sin_folio', severidad: dias >= 4 ? 'alta' : 'info',
         clave: `pago_sin_folio|${p.id}`,
         titulo: `Autorizado sin folio · ${nombre(p)}`,
@@ -219,12 +243,12 @@ export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
         accion: navegar(cli, 'Capturar folio'), caduca_at: null,
         valor: Math.round(Number(p.monto) || 0),
         meta: { pago_id: p.id, dias, periodo: p.periodo },
-      });
+      }, [quien.karolina]));
     }
 
     if (faltan !== null && faltan <= 7) {
       const vencido = faltan < 0;
-      out.push({
+      out.push(...dirigida({
         tipo: 'pago_vence_7d', severidad: vencido ? 'critica' : 'alta',
         clave: `pago_vence_7d|${p.id}`,
         titulo: vencido
@@ -236,7 +260,7 @@ export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
         caduca_at: null,
         valor: Math.round(Number(p.monto) || 0),
         meta: { pago_id: p.id, dias_para_pago: faltan, estado: p.estado },
-      });
+      }, [quien.karolina]));
     }
   }
 
@@ -244,7 +268,7 @@ export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
     if (!f.activo) continue;
     const saldo = Number(f.saldo) || 0;
     if (saldo >= 0) continue;
-    out.push({
+    out.push(...dirigida({
       tipo: 'fondo_negativo', severidad: 'critica',
       clave: `fondo_negativo|${f.cliente}|${f.fondo_key}`,
       titulo: `Fondo en negativo · ${CLIENTE_LABEL[f.cliente] || f.cliente} · ${f.nombre}`,
@@ -253,10 +277,10 @@ export async function reglasAlertasPagos({ sbGetAll, hoy = hoyCDMX() }) {
       accion: navegar(f.cliente, 'Ver fondo'), caduca_at: null,
       valor: Math.round(saldo),
       meta: { fondo_id: f.fondo_id, fondo_key: f.fondo_key, saldo },
-    });
+    }, [quien.fernando]));
   }
 
   return out;
 }
 
-export default { taskPagosCalcular, calcularPagosDelPeriodo, aplicarPagosCalculados, reglasAlertasPagos, periodoACalcular, hoyCDMX, filaDePropuesta, traerDatos };
+export default { taskPagosCalcular, calcularPagosDelPeriodo, aplicarPagosCalculados, reglasAlertasPagos, periodoACalcular, hoyCDMX, filaDePropuesta, traerDatos, destinatariosPagos, CORREOS_PAGOS };
