@@ -141,7 +141,7 @@ export default function VisionGeneral() {
           ? <KpiM eyebrow={`Contribución ${modo === 'mes' ? 'MTD' : 'YTD'}`} big={moneyCompact(r.cur.contribucion)} sub={r.cur.mc != null ? `MC ${pct(r.cur.mc)} · ${moneyCompact(r.prev.contribucion)} en ${anio - 1}` : undefined} />
           : <KpiM eyebrow={`Fact Neta ${anio - 1}`} big={moneyCompact(r.prev.fact_neta)} sub={`mismo periodo · ${modo === 'mes' ? 'mes completo' : 'a mismo día'}`} />}
         <KpiM eyebrow="Cartera vencida" big={moneyCompact(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${moneyCompact(r.cartera.saldo)}${r.cartera.dso != null ? ` · DSO ${r.cartera.dso} d` : ''}` : 'sin saldo'} />
-        <KpiM eyebrow="Inventario + tránsito" big={moneyCompact(r.inv.valor)} sub={`${r.inv.cobertura != null ? `${r.inv.cobertura} d · ` : ''}${moneyCompact(r.inv.transitoValor)} en camino`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={() => nav.push(<FichaProducto />, 'ficha')} />
+        <KpiM eyebrow="Inventario + tránsito" big={moneyCompact(r.inv.valor)} sub={`${r.inv.cobertura != null ? `${r.inv.cobertura} d · ` : ''}${moneyCompact(r.inv.transitoValor)} en camino`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={() => nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal')} />
       </KpiGrid>
 
       <ListaAgrupada titulo={`Mix por canal · ${periodo}`} meta={r.canales.length || undefined} style={{ marginTop: 18 }} pie="Fact Neta del ERP · pill = % de la cuota del canal (cuotas_canales) o YoY. Toca un canal para ver sus clientes.">

@@ -16,6 +16,7 @@ import { colorSev, horaRelativa } from '../../components/notificaciones/Pila';
 import { completarItem } from '../../modules/agenda/datos';
 import { useNav } from '../nav';
 import { TituloGrande, Segmented, FilaDeslizable, Fila, Vacio, Skeleton, Pill, TituloSeccionM, toast } from '../piezas';
+import { idNodo } from '../../components/nav/arbol';
 import { nombreCliente } from '../datos';
 import FichaCliente from './FichaCliente';
 import FichaProducto from '../FichaProducto';
@@ -70,9 +71,10 @@ export default function Alertas() {
   const ver = (a) => {
     marcarLeidas([a.id]).catch(() => {});
     ejecutarAccion(a, (ck, pagina, ex) => {
-      if (ex?.sku || pagina === 'inventarioGlobal') { if (ex?.sku) nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha'); return; }
+      // 3er argumento de push = nodo del árbol que queda resaltado en el menú.
+      if (ex?.sku || pagina === 'inventarioGlobal') { if (ex?.sku) nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); return; }
       if (pagina === 'agenda' || pagina === 'adminInterna') { nav.navegar({ pagina: 'agenda', extra: a.meta?.item_id ? { itemId: a.meta.item_id } : null }); return; }
-      if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`); return; }
+      if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`, ['digitalife', 'pcel', 'dicotech'].includes(ck) ? idNodo(ck, 'home') : null); return; }
       nav.navegar({ pagina }); // rutas.js: Fuentes, Historial o "Próximamente"
     });
   };

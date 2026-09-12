@@ -16,6 +16,7 @@ import { usePreferencias, MODOS_MENU_MOVIL } from '../../lib/preferencias';
 import { cargoDe } from '../../components/perfil/comun';
 import { resolverFavoritos, CLIENTES_NAV } from '../../components/nav/arbol';
 import { BotonFav, PuntoCliente, TituloSeccion, Logotipo, hairline, esMidnight } from '../../components/nav/comun';
+import { useResaltadoDeslizante } from '../../components/nav/Resaltado';
 import { Segmented } from '../../components/kit';
 import { useNav } from '../nav';
 
@@ -79,6 +80,11 @@ export default function Cajon({ abierto, arrastre = null, onClose, onAbrirPerfil
   const favs = useMemo(() => resolverFavoritos(arbol, favoritos).filter((n) => n.id !== 'inicio'), [arbol, favoritos]);
   const elegir = (n) => { onClose?.(); nav.navegar(n); };
 
+  // Pastilla de vidrio deslizante. El cajón es una superficie casi blanca y plana → variante `plano`.
+  // Si la pestaña activa también está en FAVORITOS, la pastilla se queda arriba (en Favoritos).
+  const claveActiva = nav.activoId && favs.some((n) => n.id === nav.activoId) ? `fav-${nav.activoId}` : nav.activoId || null;
+  const res = useResaltadoDeslizante(cliente ? nav.activoId : claveActiva, { theme, radio: 9, plano: true, deps: `${cliente}-${favs.length}-${arbol.length}-${montado}` });
+
   if (!montado) return null;
 
   // Posición: gesto de apertura (sigue al dedo) > arrastre de cierre > abierto/cerrado.
@@ -117,7 +123,8 @@ export default function Cajon({ abierto, arrastre = null, onClose, onAbrirPerfil
         </button>
 
         {/* Árbol (o pestañas del cliente elegido) */}
-        <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0 10px 12px', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <nav ref={res.refContenedor} style={{ position: 'relative', flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0 10px 12px', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+          {res.pastilla}
           {clienteAbierto ? (
             <>
               <button type="button" onClick={() => setCliente(null)} style={{ display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 8px 0 0', border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 15, cursor: 'pointer' }}>
@@ -129,7 +136,7 @@ export default function Cajon({ abierto, arrastre = null, onClose, onAbrirPerfil
                 <span style={{ fontSize: 11, color: theme.textMuted, marginLeft: 'auto' }}>{clienteAbierto.marca}</span>
               </div>
               {clienteAbierto.nodos.map((n) => (
-                <Item key={n.id} theme={theme} nodo={n} activo={nav.activoId === n.id} fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)} />
+                <Item key={n.id} theme={theme} nodo={n} activo={nav.activoId === n.id} innerRef={res.refItem(n.id)} fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)} />
               ))}
             </>
           ) : (
@@ -137,7 +144,7 @@ export default function Cajon({ abierto, arrastre = null, onClose, onAbrirPerfil
               {favs.length > 0 && (
                 <Seccion theme={theme} titulo="Favoritos">
                   {favs.map((n) => (
-                    <Item key={`fav-${n.id}`} theme={theme} nodo={n} activo={nav.activoId === n.id} fav onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)}
+                    <Item key={`fav-${n.id}`} theme={theme} nodo={n} activo={nav.activoId === n.id} innerRef={res.refItem(`fav-${n.id}`)} fav onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)}
                       etiqueta={n.tipo === 'cliente' ? `${CLIENTES_NAV[n.clienteKey]?.label} · ${n.label}` : n.label} />
                   ))}
                 </Seccion>
@@ -146,13 +153,13 @@ export default function Cajon({ abierto, arrastre = null, onClose, onAbrirPerfil
                 if (g.id === 'inicio') {
                   return (
                     <div key={g.id} style={{ marginTop: favs.length ? 8 : 4 }}>
-                      {g.nodos.map((n) => <Item key={n.id} theme={theme} nodo={n} activo={nav.activoId === n.id} fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)} />)}
+                      {g.nodos.map((n) => <Item key={n.id} theme={theme} nodo={n} activo={nav.activoId === n.id} innerRef={res.refItem(n.id)} fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)} />)}
                     </div>
                   );
                 }
                 return (
                   <Seccion key={g.id} theme={theme} titulo={g.label}>
-                    {g.nodos.map((n) => <Item key={n.id} theme={theme} nodo={n} activo={nav.activoId === n.id} fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)} />)}
+                    {g.nodos.map((n) => <Item key={n.id} theme={theme} nodo={n} activo={nav.activoId === n.id} innerRef={res.refItem(n.id)} fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => elegir(n)} />)}
                     {(g.clientes || []).map((c) => {
                       const activo = nav.activoId?.startsWith(`${c.key}:`);
                       return (
@@ -190,15 +197,16 @@ function Seccion({ theme, titulo, children }) {
   );
 }
 
-function Fila({ theme, leading, label, trailing, onClick, activo, peso = 500, title, disabled, hint }) {
+function Fila({ theme, leading, label, trailing, onClick, activo, peso = 500, title, disabled, hint, innerRef }) {
   const [down, setDown] = useState(false);
   return (
-    <button type="button" title={title || label} onClick={disabled ? undefined : onClick} disabled={disabled}
+    <button ref={innerRef} type="button" title={title || label} onClick={disabled ? undefined : onClick} disabled={disabled}
       onTouchStart={() => !disabled && setDown(true)} onTouchEnd={() => setDown(false)} onTouchCancel={() => setDown(false)}
       style={{
+        position: 'relative',
         width: '100%', height: 44, display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', border: 0, borderRadius: 9, cursor: disabled ? 'not-allowed' : 'pointer', marginBottom: 1,
-        background: activo ? theme.accent : down ? (esMidnight(theme) ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : 'transparent',
-        color: activo ? '#FFF' : disabled ? (theme.textSubtle || theme.textMuted) : theme.text,
+        background: !activo && down ? (esMidnight(theme) ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : 'transparent',
+        color: disabled ? (theme.textSubtle || theme.textMuted) : theme.text,
         fontFamily: TYPO.fontText, fontSize: 15, fontWeight: activo ? 600 : peso, letterSpacing: '-0.01em', textAlign: 'left',
         opacity: disabled ? 0.55 : 1, transition: `background ${DUR.state}ms ${EASE}, color ${DUR.state}ms ${EASE}`,
       }}>
@@ -210,11 +218,11 @@ function Fila({ theme, leading, label, trailing, onClick, activo, peso = 500, ti
   );
 }
 
-function Item({ theme, nodo, activo, fav, onFav, onClick, etiqueta }) {
+function Item({ theme, nodo, activo, fav, onFav, onClick, etiqueta, innerRef }) {
   const Icon = nodo.icon;
   return (
-    <Fila theme={theme} activo={activo} disabled={nodo.disabled} hint={nodo.hint} label={etiqueta || nodo.label} title={etiqueta || nodo.label} onClick={onClick}
+    <Fila theme={theme} activo={activo} disabled={nodo.disabled} hint={nodo.hint} label={etiqueta || nodo.label} title={etiqueta || nodo.label} onClick={onClick} innerRef={innerRef}
       leading={Icon ? <Icon size={17} strokeWidth={1.9} style={{ flexShrink: 0, opacity: activo ? 1 : 0.85 }} /> : null}
-      trailing={<BotonFav theme={activo ? { ...theme, textSubtle: 'rgba(255,255,255,0.8)', yellow: '#FFF' } : theme} activo={fav} visible onToggle={onFav} size={14} />} />
+      trailing={<BotonFav theme={theme} activo={fav} visible onToggle={onFav} size={14} />} />
   );
 }

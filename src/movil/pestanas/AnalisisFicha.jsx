@@ -94,7 +94,7 @@ export default function AnalisisFicha({ clienteNombre, canal, label }) {
   const texto = useMemo(() => (r ? textoFichaCliente({ cliente: nombre, mes, anio, mtd: r.mtd, ytd: r.ytd, yoyYtd: r.yoyYtd, top: data.top.slice(0, 5) }) : ''), [r, data, nombre, mes, anio]);
   const onCompartir = async () => { const res = await compartir(texto, { titulo: `Ficha ${nombre}` }); if (res === 'share') toast.ok('Compartido'); };
   const onCopiar = async () => { if (await copiar(texto)) toast.ok('Texto copiado'); else toast.error('No se pudo copiar'); };
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha'); };
+  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
 
   const color = data?.propio ? colorCliente(data.ck, theme) : theme.textMuted;
   const canalTxt = canalLabel(canal || data?.canal || 'otros');

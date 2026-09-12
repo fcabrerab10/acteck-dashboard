@@ -6,6 +6,7 @@ import { Star } from 'lucide-react';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { elevation, bordeFlotante } from '../../lib/elevation';
+import { estiloVidrio } from './Resaltado';
 
 export const esMidnight = (theme) => theme?.key === 'midnight';
 export const esMarfil = (theme) => theme?.key === 'marfil';
@@ -198,7 +199,8 @@ export function FilaAjustes({ theme, icon, color, label, sub, dato, trailing, on
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: '6px 12px', border: 0,
-        background: activo ? `${theme?.accent}14` : hover && !disabled ? hoverBg(theme) : 'transparent',
+        // Fila activa dentro de una hoja: vidrio plano estático (no se puede deslizar entre listas).
+        ...(activo ? estiloVidrio(theme, { plano: true }) : { background: hover && !disabled ? hoverBg(theme) : 'transparent' }),
         borderTop: primera ? 0 : `1px solid ${hairline(theme)}`,
         borderRadius: primera && ultima ? 12 : primera ? '12px 12px 0 0' : ultima ? '0 0 12px 12px' : 0,
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, textAlign: 'left', color: theme?.text, fontFamily: TYPO.fontText,

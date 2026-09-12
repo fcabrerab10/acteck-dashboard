@@ -5,6 +5,7 @@ import { useTheme } from '../../lib/themeContext';
 import { canalLabel } from '../../modules/general/inicio/config';
 import { useNav } from '../nav';
 import { TituloGrande, ListaAgrupada, Fila, Skeleton, Vacio } from '../piezas';
+import { idNodo } from '../../components/nav/arbol';
 import { useClientesMes, PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { money, moneyCompact, deltaPct, tonoCuota, tonoDelta, MESES, N } from '../util';
 import FichaCliente from './FichaCliente';
@@ -39,7 +40,8 @@ export default function Clientes() {
     return { propios, canales, otros };
   }, [data, anio, mes, hoy]);
 
-  const abrir = (key, tipo, label) => nav.push(<FichaCliente clienteKey={key} tipo={tipo} label={label} />, `cliente-${key}`);
+  // El 3er argumento fija el nodo activo del menú (sólo los clientes propios están en el árbol).
+  const abrir = (key, tipo, label) => nav.push(<FichaCliente clienteKey={key} tipo={tipo} label={label} />, `cliente-${key}`, PROPIOS.includes(key) ? idNodo(key, 'home') : null);
   const sub = `${MESES[mes - 1]} ${anio} · mes en curso`;
 
   if (error) return (<><TituloGrande titulo="Clientes" sub={sub} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudieron cargar los clientes" sub={error.message} /></>);

@@ -13,8 +13,9 @@ import { versionLabel } from '../../lib/version';
 import { AvatarImg, usePerfilVivo } from '../../lib/avatar';
 import { cargoDe } from '../perfil/comun';
 import { abrirPanelAvatar } from '../perfil/PanelAvatar';
-import { esNodoActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
+import { esNodoActivo, idActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
 import { Kbd, BotonFav, PuntoCliente, TituloSeccion, Logotipo, Monograma, vidrio, hoverBg, hairline, esMidnight } from './comun';
+import { useResaltadoDeslizante } from './Resaltado';
 
 export const SIDEBAR_ANCHO = 232;
 export const SIDEBAR_COLAPSADA = 56;
@@ -47,6 +48,18 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
   const compacta = densidad === 'compacta';
   const ancho = colapsada ? SIDEBAR_COLAPSADA : SIDEBAR_ANCHO;
 
+  // Pastilla de vidrio deslizante. La sidebar es una superficie casi blanca y plana: variante `plano`
+  // (rgba(0,0,0,.05) + luces internas), si no el vidrio translúcido no se lee sobre ella.
+  // Si la pestaña activa también está en FAVORITOS, la pastilla se queda en la fila de Favoritos
+  // (la de arriba); la copia de abajo conserva sólo el peso 600.
+  const activoNodo = idActivo(estado);
+  const claveActiva = useMemo(() => {
+    if (!activoNodo) return null;
+    if (favs.some((n) => n.id === activoNodo)) return `fav-${activoNodo}`;
+    return activoNodo;
+  }, [activoNodo, favs]);
+  const res = useResaltadoDeslizante(claveActiva, { theme, radio: 7, plano: true, deps: `${colapsada}-${compacta}-${clienteAbierto}-${favs.length}-${arbol.length}` });
+
   return (
     <aside style={{
       width: ancho, minWidth: ancho, height: '100vh', display: 'flex', flexDirection: 'column', flexShrink: 0,
@@ -77,11 +90,12 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
       </div>
 
       {/* Navegación */}
-      <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: colapsada ? '0 8px 12px' : '0 10px 12px', scrollbarWidth: 'thin' }}>
+      <nav ref={res.refContenedor} style={{ position: 'relative', flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: colapsada ? '0 8px 12px' : '0 10px 12px', scrollbarWidth: 'thin' }}>
+        {res.pastilla}
         {favs.length > 0 && (
           <Seccion theme={theme} titulo="Favoritos" colapsada={colapsada}>
             {favs.map((n) => (
-              <Item key={`fav-${n.id}`} theme={theme} nodo={n} colapsada={colapsada} compacta={compacta}
+              <Item key={`fav-${n.id}`} theme={theme} nodo={n} colapsada={colapsada} compacta={compacta} innerRef={res.refItem(`fav-${n.id}`)}
                 activo={esNodoActivo(n, estado)} fav={true} onFav={() => toggleFavorito(n.id)}
                 etiqueta={n.tipo === 'cliente' ? `${CLIENTES_NAV[n.clienteKey]?.label} · ${n.label}` : n.label}
                 onClick={() => irANodo(n, onNavegar)} />
@@ -94,7 +108,7 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
             return (
               <div key={g.id} style={{ marginTop: favs.length ? 8 : 4 }}>
                 {g.nodos.map((n) => (
-                  <Item key={n.id} theme={theme} nodo={n} colapsada={colapsada} compacta={compacta} activo={esNodoActivo(n, estado)}
+                  <Item key={n.id} theme={theme} nodo={n} colapsada={colapsada} compacta={compacta} activo={esNodoActivo(n, estado)} innerRef={res.refItem(n.id)}
                     fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => irANodo(n, onNavegar)} />
                 ))}
               </div>
@@ -103,7 +117,7 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
           return (
             <Seccion key={g.id} theme={theme} titulo={g.label} colapsada={colapsada}>
               {g.nodos.map((n) => (
-                <Item key={n.id} theme={theme} nodo={n} colapsada={colapsada} compacta={compacta} activo={esNodoActivo(n, estado)}
+                <Item key={n.id} theme={theme} nodo={n} colapsada={colapsada} compacta={compacta} activo={esNodoActivo(n, estado)} innerRef={res.refItem(n.id)}
                   fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => irANodo(n, onNavegar)} />
               ))}
               {(g.clientes || []).map((c) => {
@@ -120,7 +134,7 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
                       <div style={{ overflow: 'hidden' }}>
                         <div style={{ paddingLeft: 14, paddingBottom: 4 }}>
                           {c.nodos.map((n) => (
-                            <Item key={n.id} theme={theme} nodo={n} colapsada={false} compacta={compacta} activo={esNodoActivo(n, estado)}
+                            <Item key={n.id} theme={theme} nodo={n} colapsada={false} compacta={compacta} activo={esNodoActivo(n, estado)} innerRef={res.refItem(n.id)}
                               fav={favoritos.includes(n.id)} onFav={() => toggleFavorito(n.id)} onClick={() => irANodo(n, onNavegar)} />
                           ))}
                         </div>
@@ -198,17 +212,18 @@ function Seccion({ theme, titulo, colapsada, children }) {
   );
 }
 
-function FilaBase({ theme, colapsada, compacta, leading, label, trailing, onClick, activo, peso = 500, title, disabled, hint, extra }) {
+function FilaBase({ theme, colapsada, compacta, leading, label, trailing, onClick, activo, peso = 500, title, disabled, hint, extra, innerRef }) {
   const [h, setH] = useState(false);
   const alto = compacta ? 26 : 30;
   return (
-    <button type="button" title={title || label} onClick={disabled ? undefined : onClick} disabled={disabled}
+    <button ref={innerRef} type="button" title={title || label} onClick={disabled ? undefined : onClick} disabled={disabled}
       onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
       style={{
+        position: 'relative',
         width: '100%', height: alto, display: 'flex', alignItems: 'center', gap: 9, padding: colapsada ? 0 : '0 8px', justifyContent: colapsada ? 'center' : 'flex-start',
         border: 0, borderRadius: 7, cursor: disabled ? 'not-allowed' : 'pointer', marginBottom: 1,
-        background: activo ? theme.accent : h && !disabled ? hoverBg(theme) : 'transparent',
-        color: activo ? '#FFF' : disabled ? (theme.textSubtle || theme.textMuted) : theme.text,
+        background: activo ? 'transparent' : h && !disabled ? hoverBg(theme) : 'transparent',
+        color: disabled ? (theme.textSubtle || theme.textMuted) : theme.text,
         fontFamily: TYPO.fontText, fontSize: compacta ? 12.5 : 13, fontWeight: activo ? 600 : peso, letterSpacing: '-0.01em', textAlign: 'left',
         opacity: disabled ? 0.55 : 1, transition: `background ${DUR.state}ms ${EASE}, color ${DUR.state}ms ${EASE}`,
       }}>
@@ -221,16 +236,16 @@ function FilaBase({ theme, colapsada, compacta, leading, label, trailing, onClic
   );
 }
 
-function Item({ theme, nodo, colapsada, compacta, activo, fav, onFav, onClick, etiqueta }) {
+function Item({ theme, nodo, colapsada, compacta, activo, fav, onFav, onClick, etiqueta, innerRef }) {
   const Icon = nodo.icon;
   const leading = nodo.tipo === 'cliente' && !etiqueta && colapsada
     ? <PuntoCliente color={nodo.color} size={10} activo={activo} />
     : Icon ? <Icon size={colapsada ? 17 : 15} strokeWidth={1.9} style={{ flexShrink: 0, opacity: activo ? 1 : 0.85 }} /> : null;
   return (
-    <FilaBase theme={theme} colapsada={colapsada} compacta={compacta} activo={activo} disabled={nodo.disabled} hint={nodo.hint}
+    <FilaBase theme={theme} colapsada={colapsada} compacta={compacta} activo={activo} disabled={nodo.disabled} hint={nodo.hint} innerRef={innerRef}
       leading={leading} label={etiqueta || nodo.label} title={etiqueta || nodo.label} onClick={onClick}
       extra={(hover) => (
-        <BotonFav theme={activo ? { ...theme, textSubtle: 'rgba(255,255,255,0.8)', yellow: '#FFF' } : theme} activo={fav} visible={hover} onToggle={onFav} size={11} />
+        <BotonFav theme={theme} activo={fav} visible={hover} onToggle={onFav} size={11} />
       )} />
   );
 }

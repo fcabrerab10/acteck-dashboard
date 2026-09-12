@@ -99,7 +99,7 @@ export default function ForecastCliente({ clienteKey }) {
     return { skus, arribos, necesidadTotal, conFecha, propuestasCk, ultima };
   }, [data, ck, hoy, limite]);
 
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha'); };
+  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
   const label = nombreCliente(ck);
   const color = colorCliente(ck, theme);
   const subTitulo = (() => {

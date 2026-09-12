@@ -12,6 +12,7 @@ import { useAlertas, ejecutarAccion, accionAlerta } from '../../lib/alertas';
 import { colorSev } from '../../components/notificaciones/Pila';
 import { useNav } from '../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Skeleton, Vacio } from '../piezas';
+import { idNodo } from '../../components/nav/arbol';
 import { useHoyExtra, nombreCliente, colorCliente } from '../datos';
 import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente } from '../../lib/permisos';
 import { saludo, diaLargo, nombreCorto, hoyISO, moneyCompact, money, pct, deltaPct, tonoCuota, MESES, N } from '../util';
@@ -34,11 +35,13 @@ export default function Inicio() {
   const clientesVisibles = useMemo(() => ['digitalife', 'pcel', 'dicotech'].filter((k) => puedeVerCliente(perfil, k)), [perfil]);
   const r = useMemo(() => (data ? calcular(data, alertas, { anio, mesActual, hoy, modo: 'mes', sensible, clientesVisibles }) : null), [data, alertas, anio, mesActual, hoy, sensible, clientesVisibles]);
 
-  const abrirCliente = (ck) => nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`);
+  // 3er argumento de push = nodo del árbol que queda resaltado en el menú.
+  const abrirCliente = (ck) => nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`, ['digitalife', 'pcel', 'dicotech'].includes(ck) ? idNodo(ck, 'home') : null);
+  const abrirFicha = () => nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal');
   const navegarAlerta = (a) => ejecutarAccion(a, (ck, pagina, ex) => {
-    if (ex?.sku) { nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha'); return; }
+    if (ex?.sku) { nav.agregarSku(ex.sku); abrirFicha(); return; }
     if (ck) { abrirCliente(ck); return; }
-    if (pagina === 'inventarioGlobal') { nav.push(<FichaProducto />, 'ficha'); return; }
+    if (pagina === 'inventarioGlobal') { abrirFicha(); return; }
     nav.navegar({ pagina, label: pagina === 'sellIn' ? 'Sell In global' : undefined }); // rutas.js: Fuentes, Historial o "Próximamente"
   });
 
@@ -47,7 +50,7 @@ export default function Inicio() {
     if (!r) return [];
     const items = [];
     (extra?.pagos || []).forEach((p) => items.push({ key: `p${p.id}`, icon: Wallet, color: theme.orange, titulo: p.concepto || p.categoria || 'Pago', sub: `${nombreCliente(p.cliente)} · ${p.fecha_compromiso < hoyIso ? 'vencido' : 'vence hoy'}`, valor: money(p.monto), onClick: () => abrirCliente(p.cliente) }));
-    r.inv.arribos.filter((a) => a.eta === hoyIso).forEach((a) => items.push({ key: `a${a.po}`, icon: Ship, color: theme.accent, titulo: `Arribo PO ${a.po}`, sub: `${Math.round(a.piezas).toLocaleString('es-MX')} pz · ${a.skus} SKUs${a.cedis ? ` · ${a.cedis}` : ''}`, onClick: () => nav.push(<FichaProducto />, 'ficha') }));
+    r.inv.arribos.filter((a) => a.eta === hoyIso).forEach((a) => items.push({ key: `a${a.po}`, icon: Ship, color: theme.accent, titulo: `Arribo PO ${a.po}`, sub: `${Math.round(a.piezas).toLocaleString('es-MX')} pz · ${a.skus} SKUs${a.cedis ? ` · ${a.cedis}` : ''}`, onClick: abrirFicha }));
     (data?.marketing || []).filter((m) => m.fecha === hoyIso).forEach((m) => items.push({ key: `m${m.id}`, icon: Megaphone, color: theme.purple, titulo: m.nombre, sub: [nombreCliente(m.cliente), m.tipo].filter(Boolean).join(' · '), onClick: () => abrirCliente(m.cliente) }));
     (extra?.pendientes || []).forEach((p) => items.push({ key: `t${p.id}`, icon: ClipboardList, color: theme.green, titulo: p.titulo, sub: `${nombreCliente(p.cliente)}${p.responsable ? ` · ${p.responsable}` : ''}${p.fecha_entrega < hoyIso ? ' · atrasado' : ''}`, onClick: () => abrirCliente(p.cliente) }));
     (extra?.minutas || []).forEach((m) => items.push({ key: `n${m.id}`, icon: CalendarDays, color: theme.indigo, titulo: m.titulo || 'Minuta', sub: `${nombreCliente(m.cliente)} · reunión de hoy`, onClick: () => abrirCliente(m.cliente) }));
@@ -99,7 +102,7 @@ export default function Inicio() {
       <KpiGrid style={{ marginTop: 12 }}>
         <KpiM eyebrow={`Fact Neta YTD ${anio}`} big={fmtM(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1}` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />
         {veCobranza && <KpiM eyebrow="Cartera vencida" big={fmtM(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${fmtM(r.cartera.saldo)}` : 'sin saldo'} onClick={() => nav.navegar({ pagina: 'cobranzaGlobal' })} />}
-        {veInventario && <KpiM eyebrow="Inventario comercial" big={sensible ? fmtM(r.inv.valor) : `${Math.round(r.inv.piezas).toLocaleString('es-MX')} pz`} sub={r.inv.cobertura != null ? `${r.inv.cobertura} d de cobertura` : `${r.inv.skus} SKUs con stock`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={() => nav.push(<FichaProducto />, 'ficha')} />}
+        {veInventario && <KpiM eyebrow="Inventario comercial" big={sensible ? fmtM(r.inv.valor) : `${Math.round(r.inv.piezas).toLocaleString('es-MX')} pz`} sub={r.inv.cobertura != null ? `${r.inv.cobertura} d de cobertura` : `${r.inv.skus} SKUs con stock`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={abrirFicha} />}
         <KpiM eyebrow={`Sell-out ${soMes ? MESES[soMes - 1] : 'últ. mes'}`} big={soTotal > 0 ? fmtM(soTotal) : '—'} sub={soUltimo.length ? `${soUltimo.length} clientes · último mes cerrado` : 'sin sell-out cargado'} />
       </KpiGrid>
 

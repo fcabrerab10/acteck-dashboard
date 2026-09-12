@@ -9,6 +9,7 @@ import { EASE, DUR } from '../../lib/motion';
 import { elevation, bordeFlotante } from '../../lib/elevation';
 import { esNodoActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
 import { Hoja, IconoApp, FilaAjustes, TituloSeccion, BotonFav, hairline, hoverBg, esMidnight, esMarfil } from './comun';
+import { useResaltadoDeslizante, estiloVidrio } from './Resaltado';
 
 export const IPHONE_PADDING_INFERIOR = 88;
 
@@ -27,6 +28,9 @@ export default function BarraIphone({ arbol, favoritos, toggleFavorito, estado, 
   }, [estado]);
 
   const navegar = (c, p) => { setHoja(null); onNavegar?.(c, p); };
+  // Pastilla de vidrio deslizante (sustituye a la pastilla negra). La barra ya es de vidrio: variante translúcida.
+  const activoBarra = hoja == null ? activoId : hoja;
+  const res = useResaltadoDeslizante(activoBarra, { theme, radio: 999 });
   const entradas = [
     { id: 'inicio',   label: 'Inicio',   icon: LayoutGrid, onClick: () => inicio && irANodo(inicio, navegar) },
     { id: 'clientes', label: 'Clientes', icon: Users,      onClick: () => setHoja('clientes') },
@@ -37,23 +41,25 @@ export default function BarraIphone({ arbol, favoritos, toggleFavorito, estado, 
 
   return (
     <>
-      <nav aria-label="Navegación" style={{
+      <nav ref={res.refContenedor} aria-label="Navegación" style={{
         position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(14px + env(safe-area-inset-bottom))', zIndex: 50,
         height: 56, padding: '0 8px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 440,
         background: dark ? 'rgba(28,28,30,0.78)' : esMarfil(theme) ? 'rgba(255,251,244,0.82)' : 'rgba(255,255,255,0.80)',
         backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
         border: bordeFlotante(theme), boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText,
       }}>
+        {res.pastilla}
         {entradas.map((e) => {
           const on = activoId === e.id && hoja == null ? true : hoja === e.id;
           const Icon = e.icon;
           return (
-            <button key={e.id} type="button" onClick={e.onClick} title={e.label}
+            <button key={e.id} ref={res.refItem(e.id)} type="button" onClick={e.onClick} title={e.label}
               style={{
+                position: 'relative',
                 height: 44, minWidth: 80, padding: '0 14px', border: 0, borderRadius: 999, cursor: 'pointer',
                 display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
-                background: on ? (theme.surfaceInverse || '#000') : 'transparent', color: on ? (theme.textOnInverse || '#F5F5F7') : theme.textMuted,
-                transition: `background ${DUR.state}ms ${EASE}, color ${DUR.state}ms ${EASE}`,
+                background: 'transparent', color: on ? theme.text : theme.textMuted,
+                transition: `color ${DUR.state}ms ${EASE}`,
               }}>
               <Icon size={19} strokeWidth={on ? 2.2 : 1.9} />
               <span style={{ fontSize: 10.5, fontWeight: on ? 600 : 500, letterSpacing: '0.01em', fontFamily: TYPO.fontDisplay }}>{e.label}</span>
@@ -145,7 +151,8 @@ function HojaMas({ abierto, onClose, arbol, favoritos, toggleFavorito, estado, o
                   <button type="button" onClick={() => irANodo(n, onNavegar)} disabled={n.disabled} title={n.label}
                     style={{
                       width: '100%', padding: '8px 4px 6px', border: 0, borderRadius: 12, cursor: n.disabled ? 'not-allowed' : 'pointer',
-                      background: activo ? `${theme.accent}1A` : 'transparent', opacity: n.disabled ? 0.45 : 1,
+                      opacity: n.disabled ? 0.45 : 1,
+                      ...(activo ? estiloVidrio(theme, { plano: true, radio: 12 }) : { background: 'transparent' }),
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: theme.text, fontFamily: TYPO.fontText,
                     }}>
                     <IconoApp icon={Icon} color={n.color} />

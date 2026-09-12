@@ -9,9 +9,6 @@ import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skel
 import { useClientesMes, useSelloutMensual, PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { money, moneyCompact, deltaPct, tonoCuota, MESES, N } from '../util';
 import SellInCliente from './SellInCliente';
-import SellOutCliente from './SellOutCliente';
-import MarketingCliente from './MarketingCliente';
-import CobranzaCliente from './CobranzaCliente';
 
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
@@ -53,13 +50,15 @@ export default function FichaCliente({ clienteKey, tipo, label }) {
   }, [data, so, clienteKey, esCanal, anio, mes, hoy]);
 
   const proximamente = (que) => nav.abrirProximamente(`${nombre} · ${que}`);
+  const ir = (pagina, label) => nav.navegar({ clienteKey, pagina, label });
   const pestanas = propio
     ? [
-      { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: 'Avance de cuota · SKUs del mes · compartir avance', onClick: () => nav.push(<SellInCliente clienteKey={clienteKey} nombre={nombre} />, `sellin-${clienteKey}`) },
-      { id: 'sellOut', label: 'Sell Out', icon: ShoppingBag, sub: 'Sell-out del mes · inventario del cliente', onClick: () => nav.push(<SellOutCliente clienteKey={clienteKey} nombre={nombre} />, `sellout-${clienteKey}`) },
-      { id: 'marketing', label: 'Marketing', icon: Megaphone, sub: 'Actividades del mes · captura', onClick: () => nav.push(<MarketingCliente clienteKey={clienteKey} nombre={nombre} />, `marketing-${clienteKey}`) },
+      // nav.navegar (no nav.push) para que el nodo quede resaltado en el menú: pasa por rutas.js y fija activoId.
+      { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: 'Avance de cuota · SKUs del mes · compartir avance', onClick: () => ir('sellIn', 'Sell In') },
+      { id: 'sellOut', label: 'Sell Out', icon: ShoppingBag, sub: 'Sell-out del mes · inventario del cliente', onClick: () => ir('estrategia', 'Sell Out') },
+      { id: 'marketing', label: 'Marketing', icon: Megaphone, sub: 'Actividades del mes · captura', onClick: () => ir('marketing', 'Marketing') },
       { id: 'pagos', label: 'Pagos', icon: Wallet, sub: 'Próximamente', onClick: () => proximamente('Pagos') },
-      { id: 'cartera', label: 'Cobranza', icon: CreditCard, sub: 'Saldo · vencido · estado de cuenta', onClick: () => nav.push(<CobranzaCliente clienteKey={clienteKey} nombre={nombre} />, `cartera-${clienteKey}`) },
+      { id: 'cartera', label: 'Cobranza', icon: CreditCard, sub: 'Saldo · vencido · estado de cuenta', onClick: () => ir('cartera', 'Crédito y Cobranza') },
     ]
     : [
       { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: esCanal ? 'SKUs del canal por mes' : 'SKUs por mes · YoY', onClick: esCanal ? () => proximamente('Sell In por canal') : () => nav.push(<SellInCliente clienteKey={clienteKey} nombre={nombre} />, `sellin-${clienteKey}`) },

@@ -9,6 +9,7 @@ import { EASE, DUR } from '../../lib/motion';
 import { ChromeDerecho } from '../Topbar';
 import { esNodoActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
 import { BotonFav, PuntoCliente, Logotipo, esMidnight } from './comun';
+import { useResaltadoDeslizante } from './Resaltado';
 
 export const BARRA_ALTO = 48;
 const CORTO = { direccionGeneral: 'General', direccionComercial: 'Comercial', clientesPropios: 'Clientes', interno: 'Interno', axon: 'Axon' };
@@ -47,23 +48,28 @@ export default function BarraApple({ arbol, favoritos, toggleFavorito, estado, o
   const colorTexto = 'rgba(255,255,255,0.82)';
   const g = grupos.find((x) => x.id === abierto);
 
+  // Pastilla de vidrio que se desliza al grupo activo. La barra siempre es oscura (apple.com), aun en tema Claro.
+  const res = useResaltadoDeslizante(grupoActivo, { theme, radio: 999, oscuro: true, deps: `${grupos.length}-${!!inicio}` });
+
   return (
     <div ref={rootRef} style={{ position: 'sticky', top: 0, zIndex: 45 }} onMouseLeave={cerrarLuego} onMouseEnter={cancelar}>
-      <div style={{
+      <div ref={res.refContenedor} style={{
+        position: 'relative',
         height: BARRA_ALTO, display: 'flex', alignItems: 'center', gap: 2, padding: '0 14px',
         background: dark ? 'rgba(0,0,0,0.7)' : 'rgba(29,29,31,0.86)',
         backdropFilter: 'saturate(180%) blur(20px)', WebkitBackdropFilter: 'saturate(180%) blur(20px)',
         borderBottom: '1px solid rgba(255,255,255,0.08)', color: colorTexto, fontFamily: TYPO.fontText,
       }}>
+        {res.pastilla}
         {/* Marca */}
         <Logotipo theme={theme} oscuro size={15} title="Inicio" onClick={() => inicio && irANodo(inicio, onNavegar)} style={{ padding: '0 8px 0 4px', cursor: 'pointer' }} />
         <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.14)', margin: '0 8px' }} />
 
         {inicio && (
-          <ItemBarra label="Inicio" activo={grupoActivo === 'inicio'} onClick={() => irANodo(inicio, onNavegar)} onMouseEnter={() => abrir(null)} />
+          <ItemBarra label="Inicio" activo={grupoActivo === 'inicio'} innerRef={res.refItem('inicio')} onClick={() => irANodo(inicio, onNavegar)} onMouseEnter={() => abrir(null)} />
         )}
         {grupos.map((gr) => (
-          <ItemBarra key={gr.id} label={CORTO[gr.id] || gr.label} activo={grupoActivo === gr.id} abierto={abierto === gr.id} chevron
+          <ItemBarra key={gr.id} label={CORTO[gr.id] || gr.label} activo={grupoActivo === gr.id} abierto={abierto === gr.id} chevron innerRef={res.refItem(gr.id)}
             onClick={() => setAbierto(abierto === gr.id ? null : gr.id)} onMouseEnter={() => abrir(gr.id)} />
         ))}
 
@@ -95,13 +101,14 @@ export default function BarraApple({ arbol, favoritos, toggleFavorito, estado, o
   );
 }
 
-function ItemBarra({ label, activo, abierto, chevron, onClick, onMouseEnter }) {
+function ItemBarra({ label, activo, abierto, chevron, onClick, onMouseEnter, innerRef }) {
   const [h, setH] = useState(false);
   return (
-    <button type="button" onClick={onClick} onMouseEnter={() => { setH(true); onMouseEnter?.(); }} onMouseLeave={() => setH(false)}
+    <button ref={innerRef} type="button" onClick={onClick} onMouseEnter={() => { setH(true); onMouseEnter?.(); }} onMouseLeave={() => setH(false)}
       style={{
+        position: 'relative',
         height: 30, padding: '0 11px', border: 0, borderRadius: 999, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
-        background: activo ? 'rgba(255,255,255,0.14)' : h || abierto ? 'rgba(255,255,255,0.08)' : 'transparent',
+        background: activo ? 'transparent' : h || abierto ? 'rgba(255,255,255,0.08)' : 'transparent',
         color: activo || h || abierto ? '#FFF' : 'rgba(255,255,255,0.78)', fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: activo ? 600 : 500, letterSpacing: '-0.01em',
         transition: `background ${DUR.state}ms ${EASE}, color ${DUR.state}ms ${EASE}`,
       }}>

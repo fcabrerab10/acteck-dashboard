@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { Package, Users, LayoutGrid, Clock } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { construirArbol, nodosPlanos, CLIENTES_NAV, CLIENTES_ORDEN } from '../../components/nav/arbol';
+import { construirArbol, nodosPlanos, idNodo, CLIENTES_NAV, CLIENTES_ORDEN } from '../../components/nav/arbol';
 import { NOMBRE_CLIENTE } from '../../lib/alertas';
 import { useNav } from '../nav';
 import { TituloGrande, CampoBusqueda, ListaAgrupada, Fila, Vacio, Skeleton } from '../piezas';
@@ -47,8 +47,9 @@ export default function Buscar() {
     const lista = [item, ...recientes.filter((r) => !(r.tipo === item.tipo && r.id === item.id))].slice(0, 8);
     setRecientes(lista); guardarLS(LS_RECIENTES, lista);
   };
-  const abrirSku = (sku, desc) => { recordar({ tipo: 'sku', id: sku, label: sku, sub: desc }); nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha'); };
-  const abrirCliente = (c) => { recordar({ tipo: 'cliente', id: c.key, label: c.label, sub: c.sub, extra: c.tipo }); nav.push(<FichaCliente clienteKey={c.key} tipo={c.tipo} />, `cliente-${c.key}`); };
+  // 3er argumento de push = nodo del árbol que queda resaltado en el menú.
+  const abrirSku = (sku, desc) => { recordar({ tipo: 'sku', id: sku, label: sku, sub: desc }); nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const abrirCliente = (c) => { recordar({ tipo: 'cliente', id: c.key, label: c.label, sub: c.sub, extra: c.tipo }); nav.push(<FichaCliente clienteKey={c.key} tipo={c.tipo} />, `cliente-${c.key}`, CLIENTES_ORDEN.includes(c.key) ? idNodo(c.key, 'home') : null); };
   const abrirPestana = (n) => {
     recordar({ tipo: 'pestana', id: n.id, label: n.label, sub: n.clienteKey ? CLIENTES_NAV[n.clienteKey]?.label : n.grupoLabel, extra: n.pagina, ck: n.clienteKey || null });
     irAPestana(n.pagina, n.clienteKey, n.label);

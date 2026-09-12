@@ -10,6 +10,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePreferencias } from '../../lib/preferencias';
 import { BotonFav, PuntoCliente } from '../../components/nav/comun';
+import { estiloVidrio } from '../../components/nav/Resaltado';
 import { ListaAgrupada, Fila } from '../piezas';
 import { useNav } from '../nav';
 
@@ -37,9 +38,11 @@ export default function HojaGrupo({ entrada }) {
   const { secciones, clientes } = seccionesDe(nav.arbol || [], entrada);
   const elegir = (n) => { nav.cerrarHoja(); nav.navegar(n); };
 
+  // Fila activa: la hoja tiene varias ListaAgrupada (contenedores distintos), así que no se puede deslizar
+  // una sola pastilla → mismo vidrio pero estático, en variante plana (la lista es una superficie sólida).
   const fila = (n) => (
     <Fila key={n.id} icon={n.icon} color={n.color} titulo={n.label} sub={n.hint} onClick={n.disabled ? undefined : () => elegir(n)} chevron={false}
-      style={{ opacity: n.disabled ? 0.5 : 1, background: nav.activoId === n.id ? `${theme.accent}14` : undefined }}
+      style={{ opacity: n.disabled ? 0.5 : 1, ...(nav.activoId === n.id ? estiloVidrio(theme, { plano: true }) : null) }}
       trailing={<BotonFav theme={theme} activo={favoritos.includes(n.id)} visible onToggle={() => toggleFavorito(n.id)} size={15} />} />
   );
 
