@@ -356,9 +356,9 @@ export default function App() {
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
     const GLOBAL_PAGES = React.useMemo(() => new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','agenda','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
-    const [pagosCliente, setPagosCliente] = useState(null); // cliente preelegido al abrir Pagos desde un cliente o una alerta
       try { const p = localStorage.getItem('nav_pagina') || 'inicio'; return p === 'adminInterna' ? 'agenda' : p; } catch { return 'inicio'; }
     });
+    const [pagosCliente, setPagosCliente] = useState(null); // cliente preelegido al abrir Pagos desde un cliente o una alerta
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'inicio';
