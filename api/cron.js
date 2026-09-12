@@ -7,6 +7,7 @@
 //   ?task=actualizar-fill-rates  → cruza OCs activas con erp_ventas
 //   ?task=generar-alertas        → bandeja "qué atender hoy" (tabla alertas). Al final
 //                                  manda por correo las críticas nuevas (salvo dryRun).
+//   ?task=inventario-foto        → foto diaria de inventario (rpc snapshot_inventario_diario)
 //   ?task=resumen-programado     → correo-resumen por usuario (perfiles.preferencias.notif)
 //                                  con las alertas activas no críticas de las áreas en modo
 //                                  'resumen' + críticas nuevas inmediatas. RESUMEN_DRY_RUN=1
@@ -1063,6 +1064,30 @@ async function taskTipoCambio() {
   return { ok: true, filas: datos.length, ultimo: datos[datos.length - 1] };
 }
 
+// ── Foto diaria del inventario (task inventario-foto) ──────────────────────────
+// inventario_acteck es un snapshot que se reemplaza cada hora; `inventario_historico`
+// guarda UNA foto por día (fecha CDMX) para la pestaña "Tendencia" de Inventario global.
+// La disparaba sólo bridge/sync.mjs en la Mac mini: si esa máquina está apagada o sin
+// actualizar, el histórico se queda en blanco. Aquí se programa también desde Vercel
+// (vercel.json: 30 1 * * * UTC = 19:30 CDMX, después de la última corrida del puente).
+// El RPC es idempotente (ON CONFLICT DO UPDATE): correr dos veces el mismo día sólo
+// refresca la foto, nunca duplica filas.
+async function taskInventarioFoto() {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/snapshot_inventario_diario`, {
+    method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json' }, body: '{}',
+  });
+  const txt = await r.text();
+  if (!r.ok) return { ok: false, motivo: `rpc snapshot_inventario_diario HTTP ${r.status}: ${txt.slice(0, 200)}` };
+  let res = null; try { res = JSON.parse(txt); } catch { res = txt; }
+  // Cuántos días lleva acumulados el histórico (para verlo de un vistazo en el log del cron).
+  let dias = null;
+  try {
+    const d = await fetch(`${SB_URL}/rest/v1/v_inventario_historico_dia?select=fecha&order=fecha.desc&limit=400`, { headers: SB_HEADERS() });
+    if (d.ok) { const filas = await d.json(); dias = Array.isArray(filas) ? filas.length : null; }
+  } catch { dias = null; }
+  return { ok: true, fecha: res?.fecha ?? null, filas: res?.filas ?? null, dias_en_historico: dias };
+}
+
 async function taskAgendaHoy({ dryRun = esDryRun() } = {}) {
   const hoy = hoyCDMX();
   _agenda = null;
@@ -1540,13 +1565,16 @@ export default async function handler(req, res) {
       result = await taskResumenProgramado({ dryRun, hora: Number.isFinite(hora) ? hora : null });
     } else if (task === 'pagos-calcular') {
       result = await taskPagosCalcular({ dryRun: esDryRun() || req.query?.dryRun === '1' });
+    } else if (task === 'inventario-foto') {
+      // Foto diaria de inventario (vercel.json: 30 1 * * * UTC = 19:30 CDMX). Idempotente.
+      result = await taskInventarioFoto();
     } else if (task === 'agenda-hoy') {
       // Agenda (V3): resumen diario por persona a las 08:30 CDMX (vercel.json: 30 14 * * 1-6 UTC)
       result = await taskAgendaHoy({ dryRun: esDryRun() || req.query?.dryRun === '1' });
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | tipo-cambio | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1] | pagos-calcular[&dryRun=1]',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | tipo-cambio | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1] | pagos-calcular[&dryRun=1] | inventario-foto',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

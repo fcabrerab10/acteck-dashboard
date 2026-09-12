@@ -29,6 +29,8 @@ import { textoResumenMesCanal, compartir, copiar } from '../../lib/whatsapp';
 import Buscador from './sellin/Buscador';
 import Filtros from './sellin/Filtros';
 import DrillSku from './sellin/DrillSku';
+import ApoyoComercial from './sellin/ApoyoComercial';
+import EquipoComercial from './sellin/EquipoComercial';
 import { MESES, MESES_LARGO, normalizar, tokens, coincide, capitalizar, canalLabel, canalTone, N, fmtInt, fmtPct, fmtMoneyShort, pctDelta, anioColor, roadmapTone, CAT_COLORS } from './sellin/textos';
 
 // ─── Datos ───
@@ -468,6 +470,10 @@ function SellInGlobal({ sensible }) {
             renderExpandido={(r) => <DrillSku sku={r.sku} info={r} anio={anio} anioPrev={anioPrev} mesActual={mesActual} sensible={sensible} />} />
         </div>
       </Panel>
+
+      {/* Lo que ya estaba en erp_ventas y no se veía: el apoyo por concepto y el equipo comercial */}
+      <ApoyoComercial anio={anio} mes={mesActual} />
+      <EquipoComercial anio={anio} mes={mesActual} sensible={sensible} />
     </div>
   );
 }

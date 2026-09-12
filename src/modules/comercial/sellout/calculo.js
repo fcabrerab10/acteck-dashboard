@@ -149,6 +149,34 @@ export function sumaUltimosMeses(mensual, cuenta, anio, mes, n = 3, campo = 'can
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cuota de sell in (v_cuota_erp_mes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Índice de cuotas por cuenta y mes.
+ * @param {Array} filas v_cuota_erp_mes (cuenta_sellout, anio, mes, cuota_venta)
+ * @returns Map `cuenta|anio|mes` → cuota_venta (número; sólo las filas con cuenta)
+ */
+export function indiceCuotas(filas = []) {
+  const m = new Map();
+  for (const r of filas) {
+    if (!r.cuenta_sellout) continue;
+    const k = `${r.cuenta_sellout}|${N(r.anio)}|${N(r.mes)}`;
+    m.set(k, N(m.get(k)) + N(r.cuota_venta));
+  }
+  return m;
+}
+
+/**
+ * % de alcance de cuota = sell in del mes / cuota de venta del mes.
+ * Regla de las medidas: los % NO se suman, se recalculan al agregar; sin cuota → null.
+ */
+export const alcanceCuota = (sellIn, cuota) => (cuota && cuota > 0 && sellIn != null ? (sellIn / cuota) * 100 : null);
+
+/** Semáforo del alcance: ≥ 100 verde · ≥ 85 azul · resto naranja. */
+export const toneCuota = (pctAlcance) => (pctAlcance == null ? 'gray' : pctAlcance >= 100 ? 'green' : pctAlcance >= 85 ? 'blue' : 'orange');
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Filas de la tabla
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -162,8 +190,10 @@ export function sumaUltimosMeses(mensual, cuenta, anio, mes, n = 3, campo = 'can
  * @param {number}  p.anio      año en curso de la pantalla
  * @param {number}  p.mes       mes seleccionado
  * @param {number}  p.corteDia  día de corte del MTD (último día con venta del mes)
+ * @param {Array}   p.cuotas    v_cuota_erp_mes (opcional; si no viene, la cuota va en null)
  */
-export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, mes, corteDia = 31 }) {
+export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, mes, corteDia = 31, cuotas = [] }) {
+  const cuotaDe = indiceCuotas(cuotas);
   const mtdAct = mtdPorCuenta(dias, anio, mes, corteDia);
   const mtdPrev = mtdPorCuenta(dias, anio - 1, mes, corteDia);
   const ytdAct = ytdPorCuenta(dias, anio, mes, corteDia);
@@ -203,6 +233,10 @@ export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, me
     const sellIn = fila.sell_in == null ? null : N(fila.sell_in);
     const invPiezas = fila.inv_piezas == null ? null : N(fila.inv_piezas);
     const reportaInv = fila.inv_valor != null || invPiezas != null;
+    // Cuota de sell in del mes (RevkoBi, por cliente del ERP). Las cuentas sin cuota
+    // cargada —el directo, que agrupa varios clientes— van en null y pintan "—".
+    const cuota = cuotaDe.get(`${c.cuenta}|${anio}|${mes}`) ?? null;
+    const pctCuota = alcanceCuota(sellIn, cuota);
 
     return {
       cuenta: c.cuenta,
@@ -227,6 +261,9 @@ export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, me
       invPiezas: reportaInv ? invPiezas : null,
       invSkus: reportaInv ? N(fila.inv_skus) : null,
       invSemanas: reportaInv ? semanasInventario(invPiezas, pz3m.get(c.cuenta)) : null,
+      cuota,
+      pctCuota,
+      faltaCuota: cuota == null ? null : cuota - N(sellIn),
       sucursales: fila.sucursales == null ? null : N(fila.sucursales),
       // Estados distintos que reporta la fuente ese mes; 0 = la fuente no trae estado (CT, Ingram, Dicotech…).
       estados: fila.estados == null ? null : N(fila.estados),
@@ -261,6 +298,7 @@ export function totalesDeFilas(filas = []) {
     nombre: `${filas.length} cuentas`, importe: 0, cantidad: 0, importePrev: 0, ytd: 0, ytdPrev: 0,
     sellIn: 0, sellInSinFuente: 0, sinFuente: 0, invValor: 0, invPiezas: 0, sucursales: 0, clientesFinales: 0, vendedores: 0,
     sinEstado: 0, mayoreoImporte: 0, conInventario: 0,
+    cuota: 0, sellInConCuota: 0, conCuota: 0, enCuota: 0,
   };
   for (const f of filas) {
     t.importe += f.importe; t.cantidad += f.cantidad; t.importePrev += f.importePrev;
@@ -272,11 +310,19 @@ export function totalesDeFilas(filas = []) {
     if (f.invValor != null) { t.invValor += f.invValor; t.invPiezas += N(f.invPiezas); t.conInventario += 1; }
     t.sucursales += N(f.sucursales); t.clientesFinales += N(f.clientesFinales); t.vendedores += N(f.vendedores);
     if (f.canal === 'mayoreo') { t.mayoreoImporte += f.importe; t.sinEstado += N(f.sinEstado); }
+    // La cuota sólo se suma donde hay cuota cargada: así el % del equipo compara
+    // manzanas con manzanas (sell in de esas cuentas contra su propia cuota).
+    if (f.cuota != null) {
+      t.cuota += f.cuota; t.sellInConCuota += N(f.sellIn); t.conCuota += 1;
+      if (f.pctCuota != null && f.pctCuota >= 100) t.enCuota += 1;
+    }
   }
   t.yoy = yoy(t.importe, t.importePrev);
   t.yoyYtd = yoy(t.ytd, t.ytdPrev);
   t.soSi = t.sellIn > 0 ? ratio(t.importe, t.sellIn) : null;
   t.pctSinEstado = ratio(t.sinEstado, t.mayoreoImporte);
+  t.pctCuota = alcanceCuota(t.sellInConCuota, t.cuota);
+  t.faltaCuota = t.conCuota ? t.cuota - t.sellInConCuota : null;
   return t;
 }
 
@@ -472,6 +518,6 @@ export function clientesFinalesDelMes(filas, anio, mes) {
 export default {
   MESES, MESES_LARGO, CANALES, canalLabel, canalTone, N, idxMes, deIdx, yoy, ratio, ultimosMeses,
   mtdPorCuenta, ytdPorCuenta, totalDe, ultimoDiaConVenta, ultimoMesConVenta, semanasInventario,
-  sumaUltimosMeses, construirFilas, totalesDeFilas, porCanal, composicion, serie12, porEstado,
+  sumaUltimosMeses, indiceCuotas, alcanceCuota, toneCuota, construirFilas, totalesDeFilas, porCanal, composicion, serie12, porEstado,
   skusDeCuenta, alertasDeCuenta, ritmoProyectado, agregarDimension, clientesFinalesDelMes,
 };

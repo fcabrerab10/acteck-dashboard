@@ -30,6 +30,26 @@ export function useAnalisisClientes(anio) {
   });
 }
 
+/**
+ * Cuota de venta por cliente del ERP y mes (v_cuota_erp_mes). 29 clientes × 12 meses × 2 años.
+ * Mapa en supabase/migrations/20260912_cuotas_clientes_mapa.sql.
+ */
+export function useCuotasClientes(anio) {
+  return useQuery({
+    queryKey: ['analisis_clientes', 'cuotas', anio],
+    enabled: !!anio,
+    queryFn: async () => {
+      const { data, error } = await cachedQuery(
+        supabase.from('v_cuota_erp_mes').select('cliente_erp,cuota_cliente,anio,mes,cuota_venta').in('anio', [anio - 1, anio]),
+      );
+      if (error) throw error;
+      return data || [];
+    },
+    // 5 min como el resto: la app puede editar cuotas_mensuales desde Sell In.
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 /** Detalle SKU × mes de un cliente (mv_analisis_cliente_sku_mes, por código ERP) para el drill-down. */
 export function useDetalleCliente(clienteCodigo, anio, enabled = true) {
   return useQuery({

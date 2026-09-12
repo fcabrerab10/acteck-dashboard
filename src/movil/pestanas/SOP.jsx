@@ -10,13 +10,14 @@
 // Datos SOLO vía src/lib/queries.js (fetchAll con cache 5 min) + React Query; el borrador se lee con useSolicitudes.
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, Ship, Plus, Trash2, ClipboardList, Package, AlertTriangle, Lock } from 'lucide-react';
+import { Search, Ship, Plus, Trash2, ClipboardList, Package, AlertTriangle, Lock, Factory, Anchor } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { fetchAll } from '../../lib/queries';
 import { puedeVerPestanaGlobal, puedeEditarPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { calcularForecast } from '../../modules/comercial/forecast/calculo';
 import { useSolicitudes } from '../../modules/comercial/forecast/useSolicitudes';
+import { useEmbarquesTiempos, resumen as resumenEmb, nombreProveedor } from '../../modules/comercial/forecast/useEmbarquesTiempos';
 import { tonoCobertura, etiquetaCobertura, CEDIS_CORTO } from '../../modules/comercial/inventario/constantes';
 import { useNav } from '../nav';
 import { TituloGrande, Cabecera, HeroM, ListaAgrupada, Fila, BotonGrande, CampoBusqueda, Vacio, Skeleton, Pill, HojaM, toast } from '../piezas';
@@ -205,6 +206,8 @@ export default function SOP() {
                 valor={`${int(a.piezas)} pz`} valorSub={a.eta ? `${fechaCorta(a.eta)}${vencida ? ' · vencida' : ''}` : 'sin ETA'} onClick={() => setPoAbierta(a.po)} />;
             })}
           </ListaAgrupada>
+
+          <TiemposReales sensible={sensible} theme={theme} />
         </>
       )}
 
@@ -223,6 +226,43 @@ export default function SOP() {
       </HojaM>
 
       <SOPExport sensible={sensible} abierto={exportAbierto} onClose={() => setExportAbierto(false)} sol={sol} borrador={borrador} lineas={lineas} rows={rows} puedeEditar={puedeEditar} />
+    </>
+  );
+}
+
+// ── Proveedores y navieras · tiempos reales (vistas v_embarques_*, migración 20260912) ──
+// Mismos números que el Panel de escritorio: mediana de los contenedores YA arribados del año.
+function TiemposReales({ sensible, theme }) {
+  const anio = new Date().getFullYear();
+  const { loading, proveedores, navieras } = useEmbarquesTiempos(anio, true);
+  const tot = useMemo(() => resumenEmb(proveedores), [proveedores]);
+  if (loading || !proveedores.length) return null;
+  const d = (v) => (v == null ? '—' : `${Math.round(v)} d`);
+  return (
+    <>
+      <ListaAgrupada titulo="Proveedores · tiempos reales" meta={proveedores.length} style={{ marginTop: 18 }}
+        pie={`Mediana de los contenedores ya arribados en ${anio}: producción + tránsito ETD → CEDIS. El ciclo completo de una PO (emisión → CEDIS) va a la derecha.`}>
+        {proveedores.slice(0, 8).map((r) => (
+          <Fila key={r.supplier} icon={Factory} color={theme.accent} titulo={nombreProveedor(r.supplier)}
+            sub={[`${int(r.embarques)} cnt`, r.dias_produccion_med != null ? `producción ${d(r.dias_produccion_med)}` : null, r.dias_transito_med != null ? `tránsito ${d(r.dias_transito_med)}` : null].filter(Boolean).join(' · ')}
+            valor={d(r.dias_total_med)} valorSub="ciclo PO" chevron={false} />
+        ))}
+      </ListaAgrupada>
+
+      {navieras.length > 0 && (
+        <ListaAgrupada titulo="Navieras" meta={navieras.length}
+          pie={sensible ? 'Flete por CBM del contenedor (el master lo captura por contenedor, no por renglón). La naviera viene capturada en 43 % de los embarques.' : 'La naviera viene capturada en 43 % de los embarques.'}>
+          {navieras.slice(0, 6).map((r) => (
+            <Fila key={r.naviera} icon={Anchor} color={theme.textMuted} titulo={r.naviera}
+              sub={[`${int(r.contenedores)} cnt`, r.cbm ? `${int(r.cbm)} CBM` : null, sensible && r.usd_por_cbm ? `$${Math.round(r.usd_por_cbm)}/CBM` : null].filter(Boolean).join(' · ')}
+              valor={d(r.dias_transito_med)} valorSub="tránsito" chevron={false} />
+          ))}
+        </ListaAgrupada>
+      )}
+
+      <div style={{ padding: '6px 28px 0', fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.textMuted }}>
+        Ciclo real de una PO ≈ {d(tot.totalMed)} · tránsito ETD → CEDIS ≈ {d(tot.transitoMed)}{sensible && tot.usdPorCbm ? ` · flete $${Math.round(tot.usdPorCbm)}/CBM` : ''}.
+      </div>
     </>
   );
 }

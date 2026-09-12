@@ -39,7 +39,7 @@ export function subHero(canales, tot, cuentasActivas, cuentasTotal, cuentasCaen,
 }
 
 /** Texto de "Compartir resumen del mes" (sin nada sensible). */
-export function textoResumenMes({ anio, mes, tot, canales, top = [], corteDia, cuentasActivas, cuentasTotal }) {
+export function textoResumenMes({ anio, mes, tot, canales, top = [], corteDia, cuentasActivas, cuentasTotal, cuotas = [] }) {
   const L = [];
   L.push(`SELL OUT · ${etiquetaMes(anio, mes).toUpperCase()}`);
   L.push(corteDia ? `Al día ${corteDia} · montos sin IVA` : 'Montos sin IVA');
@@ -48,6 +48,7 @@ export function textoResumenMes({ anio, mes, tot, canales, top = [], corteDia, c
   L.push(`Piezas: ${int(tot.cantidad)}`);
   L.push(`YTD ${anio}: ${money(tot.ytd)} (${signo(tot.yoyYtd)})`);
   if (tot.soSi != null) L.push(`Sell out / sell in del mes: ${pct(tot.soSi)}`);
+  if (tot.pctCuota != null) L.push(`Cuota de sell in: ${pct(tot.pctCuota)} (${money(tot.sellInConCuota)} de ${money(tot.cuota)}) · ${int(tot.enCuota)} de ${int(tot.conCuota)} cuentas en cuota`);
   if (tot.conInventario > 0) L.push(`Inventario en clientes: ${money(tot.invValor)} · ${int(tot.invPiezas)} pz`);
   L.push('');
   L.push('POR CANAL');
@@ -56,6 +57,11 @@ export function textoResumenMes({ anio, mes, tot, canales, top = [], corteDia, c
     L.push('');
     L.push('TOP CUENTAS');
     top.slice(0, 8).forEach((f, i) => L.push(`${i + 1}. ${f.nombre} — ${money(f.importe)} (${signo(f.yoy)})`));
+  }
+  if (cuotas.length) {
+    L.push('');
+    L.push('CUOTA DE SELL IN');
+    cuotas.slice(0, 8).forEach((f) => L.push(`· ${f.nombre}: ${pct(f.pctCuota)} de ${money(f.cuota)}`));
   }
   L.push('');
   L.push(`${int(cuentasActivas)} de ${int(cuentasTotal)} cuentas con venta en el mes.`);
@@ -71,6 +77,9 @@ export function textoEstatusCuenta({ fila, anio, mes, corteDia, topSkus = [], al
   L.push(`Sell out del mes: ${money(fila.importe)} · ${int(fila.cantidad)} pz (${signo(fila.yoy)} vs ${etiquetaMesCorta(anio - 1, mes)})`);
   L.push(`YTD ${anio}: ${money(fila.ytd)} (${signo(fila.yoyYtd)})`);
   if (fila.sellIn != null) L.push(`Sell in del mes: ${money(fila.sellIn)} · sell out / sell in ${pct(fila.soSi)}`);
+  if (fila.pctCuota != null) {
+    L.push(`Cuota de sell in: ${money(fila.cuota)} · cuota ${pct(fila.pctCuota)}${fila.faltaCuota > 0 ? ` · faltan ${money(fila.faltaCuota)}` : ''}`);
+  }
   if (fila.invValor != null) {
     L.push(`Inventario en su almacén: ${money(fila.invValor)} · ${int(fila.invPiezas)} pz · ${int(fila.invSkus)} SKUs`);
     if (fila.invSemanas != null) L.push(`Cobertura: ${fila.invSemanas.toFixed(1)} semanas al ritmo de los últimos 3 meses`);

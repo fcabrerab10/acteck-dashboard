@@ -16,6 +16,8 @@ import AnalisisFicha, { nombreBonito } from './AnalisisFicha';
 const STALE = 5 * 60 * 1000;
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
+/** % de cuota que toca enseñar según el orden elegido (mes o YTD). */
+const pctCuotaDe = (o, orden) => (orden === 'mes' ? o.pctCuotaMes : o.pctCuotaYtd);
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 function useAnalisisClientes(anio, mes) {
@@ -23,11 +25,14 @@ function useAnalisisClientes(anio, mes) {
     queryKey: ['movil', 'analisis-clientes', anio, mes], staleTime: STALE,
     queryFn: async () => {
       const anios = [anio - 1, anio];
-      const [mesRows, ytdRows] = await Promise.all([
+      const [mesRows, ytdRows, cuotaRows] = await Promise.all([
         fetchAll('facturacion_clientes', 'cliente_nombre,cliente_key,canal,anio,monto,piezas', (q) => q.in('anio', anios).eq('mes', mes)),
         fetchAll('v_vision_factura_clientes', 'anio,canal,cliente_nombre,venta,piezas,meses_activos', (q) => q.in('anio', anios)),
+        // Cuota por cliente del ERP (v_cuota_erp_mes). Esta pantalla agrupa por nombre, así que
+        // los dos códigos de Ingram caen en la misma fila y sus cuotas se suman igual que su venta.
+        fetchAll('v_cuota_erp_mes', 'cliente_nombre,anio,mes,cuota_venta', (q) => q.eq('anio', anio).lte('mes', mes)),
       ]);
-      return { mesRows, ytdRows };
+      return { mesRows, ytdRows, cuotaRows };
     },
   });
 }
@@ -48,10 +53,20 @@ export default function AnalisisClientes() {
     const by = new Map();
     const get = (n) => by.get(n) || (by.set(n, { nombre: n, canal: null, ck: null, mtd: 0, mtdPrev: 0, piezas: 0, ytd: 0, ytdPrev: 0, meses: 0 }), by.get(n));
     data.mesRows.forEach((r) => { const o = get(r.cliente_nombre || 'SIN NOMBRE'); if (r.canal && !o.canal) o.canal = r.canal; if (r.cliente_key && !o.ck) o.ck = r.cliente_key; if (N(r.anio) === anio) { o.mtd += N(r.monto); o.piezas += N(r.piezas); } else o.mtdPrev += N(r.monto); });
+    const cuotaMes = new Map(), cuotaYtd = new Map();
+    (data.cuotaRows || []).forEach((r) => {
+      const n = r.cliente_nombre || 'SIN NOMBRE';
+      cuotaYtd.set(n, N(cuotaYtd.get(n)) + N(r.cuota_venta));
+      if (N(r.mes) === mes) cuotaMes.set(n, N(cuotaMes.get(n)) + N(r.cuota_venta));
+    });
     data.ytdRows.forEach((r) => { const o = get(r.cliente_nombre || 'SIN NOMBRE'); if (r.canal && !o.canal) o.canal = r.canal; if (N(r.anio) === anio) { o.ytd += N(r.venta); o.meses = N(r.meses_activos); } else o.ytdPrev += N(r.venta); });
     return [...by.values()].filter((o) => o.mtd || o.ytd || o.mtdPrev).map((o) => ({
       ...o, propio: PROPIOS.includes(o.ck), label: PROPIOS.includes(o.ck) ? nombreCliente(o.ck) : nombreBonito(o.nombre),
       yoy: delta(o.mtd, o.mtdPrev * factor),
+      // % de alcance de cuota; los % no se suman, se recalculan (src/lib/medidas.js).
+      cuotaMes: cuotaMes.get(o.nombre) ?? null,
+      pctCuotaMes: cuotaMes.get(o.nombre) ? (o.mtd / cuotaMes.get(o.nombre)) * 100 : null,
+      pctCuotaYtd: cuotaYtd.get(o.nombre) ? (o.ytd / cuotaYtd.get(o.nombre)) * 100 : null,
     }));
   }, [data, anio, mes, hoy]);
 
@@ -80,7 +95,7 @@ export default function AnalisisClientes() {
           {visibles.map((o) => (
             <Fila key={o.nombre} tono={o.propio ? colorCliente(o.ck, theme) : (o.mtd > 0 ? theme.accent : theme.textSubtle || theme.textMuted)}
               titulo={<span>{o.label}{o.propio && <span style={{ fontSize: 10.5, color: theme.textMuted, marginLeft: 6, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '0.04em' }}>PROPIO</span>}</span>}
-              sub={`${canalLabel(o.canal || 'otros')} · YTD ${moneyCompact(o.ytd)}${o.meses ? ` · ${o.meses} meses activo` : ''}`}
+              sub={`${canalLabel(o.canal || 'otros')} · YTD ${moneyCompact(o.ytd)}${pctCuotaDe(o, orden) == null ? '' : ` · cuota ${Math.round(pctCuotaDe(o, orden))} %`}${o.meses ? ` · ${o.meses} meses activo` : ''}`}
               valor={o.mtd > 0 ? money(o.mtd) : '—'} valorSub={orden === 'mes' ? undefined : moneyCompact(o.ytd)}
               pill={{ tone: tonoDelta(o.yoy), label: o.yoy != null ? deltaPct(o.yoy) : o.mtd > 0 ? 'nuevo' : 'sin venta' }} onClick={() => abrir(o)} />
           ))}

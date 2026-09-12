@@ -43,6 +43,7 @@ import ExportCart from './forecast/ExportCart';
 import ExportPreviewModal from './forecast/ExportPreviewModal';
 import UltimasComprasCard from './forecast/UltimasComprasCard';
 import TransitoTimeline from './forecast/TransitoTimeline';
+import TiemposProveedores from './forecast/TiemposProveedores';
 import Reuniones from './forecast/reuniones/Reuniones';
 import AgregarLineaModal from './forecast/AgregarLineaModal';
 import { guardarSnapshotMensual, esPerfilInterno } from './forecast/snapshot';
@@ -458,6 +459,8 @@ function ForecastPantalla({ perfil, sensible }) {
       <Panel plegable abiertoInicial={false} titulo="Calendario de tránsito" meta="qué llega cada mes · próximos 6 meses · click en el mes para familia → marca" padding="8px 12px">
         <TransitoTimeline embarques={data.embarques} metaBySku={metaBySku} sensible={sensible} />
       </Panel>
+
+      <TiemposProveedores ltPromedio={kpis.ltPromedio} sensible={sensible} />
 
       {pillExport}
       {hojaExportUI}

@@ -79,6 +79,25 @@ Cada cifra visible lleva su nombre oficial en el `title=` vía `tooltip('clave')
 
 **Precedencia de la cuota global** (`cuotas_canales` fila `TOTAL` anual ÷ 12 → si no, Σ `cuotas_mensuales.cuota_ideal`): estaba reimplementada en 4 pantallas (Inicio, Visión General, Sell In, móvil Sell In). Ahora vive en `cuotas()` de `src/lib/medidas.js`. `cuotas_canales` **está vacía hoy**, así que todo cae a la suma de clientes.
 
+### 2.1 Cuotas por cliente: mapa y dónde se ven (2026-09-12)
+
+`cuotas_mensuales.cliente` trae **29 slugs con cuota 2026** (los pone el puente al leer `RevkoBi.dbo.BP`), no sólo los tres clientes propios. El mapa a cliente del ERP vive en la vista **`v_cuota_cliente_erp`** (`cuota_cliente`, `cliente_erp`, `cliente_nombre`, `cuenta_sellout`) y la cuota ya traducida en **`v_cuota_erp_mes`** (migración `supabase/migrations/20260912_cuotas_clientes_mapa.sql`).
+
+La liga es siempre por **código** de cliente, nunca por nombre: "INGRAM MICRO MEXICO" son dos códigos (`00226` mayoreo = cuota `ingram`; `04126` retail representados = cuota `ingram_retail`) y hay dos clientes casi homónimos (`00514` TECHS MART DE MEXICO = cuota `techs_mart`; `00682` TECHSMART MAYOREO = cuota `techsmart`). El único slug que no coincide por nombre es **`unicom` → `00335` GRUPO UNIDADES DE COMPUTO** (cuenta de sell out `guc`).
+
+Trece slugs no son una de las 17 cuentas de Sell Out y sólo salen en Análisis por Cliente: decme, svenska, stuffactory, amazon, mercado_libre, techsmart, arrangoiz, keops, mavi, tony_tiendas, dsw, dist._liverpool, zona_digital. La cuenta `directo` (mostrador + e-commerce) se queda **sin cuota a propósito**: agrupa varios clientes y mezclar sus cuotas daría un alcance falso. Quedan fuera 24 slugs históricos con cuota sólo en 2023-2025 (listados en la migración).
+
+**% de alcance** = `[Fact Neta]` del cliente ÷ `[Cuota Venta]` del mismo periodo, con la regla de siempre: **los % no se suman**; el total se recalcula sobre los clientes que sí tienen cuota (`totalesDeFilas` en `sellout/calculo.js`, `alcanceCuota` en `analisis/calc.js`). Sin cuota cargada se pinta `—`, nunca 0 %. Semáforo: ≥ 100 % verde · ≥ 85 % azul · resto naranja.
+
+**Dónde se ve:**
+
+| Pantalla | Dónde |
+|---|---|
+| Sell Out consolidado (web) | Columna **Cuota** por cuenta (las semanas de inventario se fundieron en la celda de "Inv. cliente" para no pasarse de ancho) · stat del Hero "Cuentas en cuota" · caja **Cuota sell in** en el Resumen del drill · Excel y texto de "Compartir resumen del mes" |
+| Análisis por Cliente (web) | Columna **Cuota** (del mes o del YTD según el modo; "Venta neta" se movió al drill) · stat del Hero "Clientes en cuota" · KpiCard del drill · Excel |
+| Sell Out consolidado (celular) | `cuota 104 %` en el sub de cada cuenta · sub del Hero · Dato **Cuota sell in** en el Resumen de la cuenta · texto para compartir |
+| Análisis por cliente (celular) | `cuota 104 %` en el sub de cada cliente (mes o YTD según el orden elegido) |
+
 ---
 
 ## 3. Inventario — `inventario_acteck`, `inventario_historico`, `compras_oc`
@@ -112,6 +131,40 @@ Cada cifra visible lleva su nombre oficial en el `title=` vía `tooltip('clave')
 
 ---
 
+## 4.1 Apoyo comercial y vendedor (2026-09-12)
+
+Dos cosas que ya venían en `erp_ventas` (el puente las carga cada hora) y no se veían en ninguna pantalla.
+Migración: `supabase/migrations/20260912_bonificaciones_concepto.sql`.
+
+| Vista | Grano | Qué trae |
+|---|---|---|
+| **`v_bonificaciones_concepto_mes`** (MV `mv_bonificaciones_concepto_mes`) | anio, mes, cliente_key, **cliente (código)**, cliente_nombre, canal, **concepto_codigo**, concepto | `monto` (**negativo**, como en el ERP) y `renglones` |
+| **`v_medidas_ventas_vendedor_mes`** (MV `mv_medidas_ventas_vendedor_mes`) | anio, mes, **vendedor** | Las MISMAS columnas y fórmulas que `v_medidas_ventas_cliente_mes` (Fact Bruta/Neta, Devoluciones, RMA's, Bonificaciones, Venta Neta, costos, Contribución, Utilidad Comercial, Piezas, CV 3 meses, YTD, % MC / MC Bruta / MUC / Lost Profit, ticket y utilidad promedio) **+ `clientes`** = `count(distinct cliente)`. Sin cuota: no hay cuota por vendedor. |
+| **`v_ventas_vendedor_cliente_mes`** (MV `mv_ventas_vendedor_cliente_mes`) | anio, mes, vendedor, cliente_key, cliente, cliente_nombre | `fact_neta`, `piezas` — sólo para el drill del vendedor |
+
+- **Apoyo comercial = `[Bonificaciones]`.** Los renglones con `rama = 'SERVICIOS'` son exactamente los de
+  `movimiento_venta = 'Bonificacion Venta'` (verificado en 2026: 912 renglones, **−$34,445,391** en las dos
+  definiciones), así que el desglose por concepto suma la medida del director sin residuo. `articulo` es el
+  código del concepto (BPRM-101 promoción general de temporada, BVND-201 rebate/fondo de sell out,
+  BVND-202 apoyo de marketing, BINC-901 protección de precios, BADM-401 pronto pago…). Las pantallas lo
+  pintan **en positivo** con la etiqueta "apoyo"; el `%` que muestran es sobre la **Fact. Bruta** del mismo
+  universo (el director usa Fact Neta en `[% Lost Profit Bonif]`: son dos cifras distintas, cada una con su
+  etiqueta).
+- **La suma por vendedor cuadra con el total:** `Σ fact_neta` de 2026 por vendedor = `v_medidas_ventas_mes`
+  = **$393,588,783**. `vendedor` está lleno al 100 % (25 vendedores; 57 renglones sin vendedor de 176,955
+  caen en `SIN VENDEDOR`).
+- **Por qué las tres van materializadas:** el `count(distinct cliente)` del grano vendedor obliga a ordenar
+  las 177 K filas (3.7–4.7 s) y, en las otras dos, una consulta con `LIMIT` hacía elegir al planner un plan
+  de arranque rápido que se pasaba de los 3 s del rol `anon`. Materializadas son 424 / 2 K / 7 K filas y
+  responden en ms. Se refrescan dentro de `refresh_facturacion_clientes()` (el `finalize` de cada carga de
+  `erp_ventas`: puente y `api/import-central`), enganchadas con un `DO` idempotente para no reescribir esa
+  función entera.
+- **En JS:** cálculo puro en `src/modules/comercial/sellin/apoyo.js` (pruebas en
+  `scripts/test-sellin-ssr.mjs`), hooks en `src/modules/comercial/sellin/datos.js`. Los % del panel del
+  equipo se recalculan con `derivadas()` / `divide()` de `src/lib/medidas.js`: nunca se promedian.
+
+---
+
 ## 5. Qué pantalla usa qué (después del 2026-09-12)
 
 | Pantalla | Ventas | Inventario | Cuota | Cobertura/días |
@@ -119,7 +172,7 @@ Cada cifra visible lleva su nombre oficial en el `title=` vía `tooltip('clave')
 | Inicio (web y móvil) | `v_erp_medidas_mes` / `_cliente_mes` / `_canal_mes` | **`v_medidas_inventario`** | `cuotas()` de medidas.js | **`dias_inv`** |
 | Visión General (web y móvil) | `v_vision_factura_dimension_mes` (= Fact Neta, Contribucion) + `RentabilidadBloque` | **`v_medidas_inventario`** | `cuotas_canales`/`cuotas_mensuales` | **`dias_inv`** |
 | Inventario global | — | **`v_inventario_almacen_medida`** (bandera `en_inv_actual`) + **`v_medidas_inventario`** en el hero | — | **`dias_inv`** en el hero; cobertura por SKU en piezas, etiquetada aparte |
-| Sell In consolidado | `v_sellin_global_sku_canal_mes` (= Fact Neta) + `RentabilidadBloque` | `v_inventario_comercial` sólo como bandera "tiene stock" | **`cuotas()`** | — |
+| Sell In consolidado | `v_sellin_global_sku_canal_mes` (= Fact Neta) + `RentabilidadBloque` + **`v_bonificaciones_concepto_mes`** (apoyo) + **`v_medidas_ventas_vendedor_mes`** (equipo) | `v_inventario_comercial` sólo como bandera "tiene stock" | **`cuotas()`** | — |
 | Análisis por cliente global | `v_analisis_cliente_mes` (medidas del director) | — | — | — |
 | Estado de Resultados (puente) | `v_erp_medidas_mes` | — | — | — |
 | S&OP | `facturacion_clientes` (piezas) | `v_inventario_comercial` (motor por SKU) + **`v_medidas_inventario`** en el hero | `cuotas_mensuales` | **las dos**, etiquetadas |

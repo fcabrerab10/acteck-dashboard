@@ -485,7 +485,7 @@ function InventarioGlobalPantalla({ sensible }) {
       </Panel>
 
       {/* Próximos arribos (POs con ETA en 7/14/30 días, cruzados con la cobertura) */}
-      <ProximosArribos transito={transito} skuRows={skuRows} descripciones={descripciones}
+      <ProximosArribos transito={transito} skuRows={skuRows} descripciones={descripciones} sensible={sensible}
         onVerSku={(sku) => { setFiltros(FILTROS_VACIOS()); setBusqueda(sku); setSkuAbierto(sku); rootRef.current?.querySelector('input')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
 
       {/* Tendencia (histórico diario) */}

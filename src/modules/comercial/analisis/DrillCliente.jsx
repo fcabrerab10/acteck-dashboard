@@ -14,6 +14,8 @@ import ResumenSellOut from '../sellout/ResumenSellOut';
 import { CUENTA_POR_ERP } from '../sellout/datos';
 import { MESES, N, idxMes, enPeriodo, serie12, pctDe } from './calc';
 import { money, moneyFull, int, pct } from './formato';
+import { useApoyoCliente } from '../sellin/datos';
+import { agruparApoyo, totalesApoyo, factBruta, pctSobre } from '../sellin/apoyo';
 
 const SEV_TONE = { critica: 'red', alta: 'orange', media: 'yellow', info: 'gray' };
 
@@ -78,7 +80,11 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
           <ResumenSellOut cuenta={cuentaSellOut} anio={anio} mes={mesMax} compacto />
         </Panel>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 8 }}>
+        {/* Venta neta ya no va en la tabla (cabía a costa del ancho): vive aquí y en el Excel. */}
+        <KpiCard eyebrow={`Venta neta · ${periodoLbl}`} big={money(cliente.cur.venta_neta)}
+          bigSmall={cliente.cur.fact_neta ? `${pct(pctDe(cliente.cur.venta_neta, cliente.cur.fact_neta), 0)} de la fact. neta` : ''}
+          sub={cliente.pctCuota == null ? 'sin cuota cargada' : `cuota ${moneyFull(cliente.cuota)} · ${pct(cliente.pctCuota, 0)} de alcance`} />
         <KpiCard eyebrow="Mejor mes · últimos 12" big={kpis.mejor ? money(kpis.mejor.fact_neta) : '—'} bigSmall={kpis.mejor ? `${MESES[kpis.mejor.mes - 1]} ${kpis.mejor.anio}` : ''} sub="fact. neta" />
         <KpiCard eyebrow="Promedio mensual" big={money(kpis.prom)} bigSmall={`${kpis.mesesConCompra} de 12 meses con compra`} sub={cliente.ocasional ? 'compra ocasional' : 'cliente recurrente'} />
         <KpiCard eyebrow="Último mes con compra" big={cliente.ultimaCompra ? `${MESES[cliente.ultimaCompra.mes - 1]} ${cliente.ultimaCompra.anio}` : '—'} sub={cliente.ultimaCompra ? `${money(cliente.mensual.get(idxMes(cliente.ultimaCompra.anio, cliente.ultimaCompra.mes))?.fact_neta)} ese mes` : 'sin compras'} />
@@ -106,6 +112,7 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
               ))}
             </div>
           </Panel>
+          <ApoyoDelAnio codigo={cliente.cliente} anio={anio} mesMax={mesMax} />
           {cliente.propio && (
             <Panel titulo="Alertas activas" meta={alertasCliente.length ? `${alertasCliente.length} sin resolver` : 'sin alertas'}>
               {!alertasCliente.length && <div style={{ fontSize: 11, color: theme.textMuted }}>Nada pendiente para este cliente.</div>}
@@ -154,5 +161,50 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
         </div>
       </Panel>
     </div>
+  );
+}
+
+/**
+ * "Apoyo comercial del año": las bonificaciones que se le dieron a ESTE cliente, por concepto
+ * (rebate, marketing, protección de precios…), con su peso sobre la fact. bruta del cliente.
+ * Antes sólo existía como un total agregado dentro de la Venta Neta.
+ */
+function ApoyoDelAnio({ codigo, anio, mesMax }) {
+  const { theme } = useTheme();
+  const { data, isLoading } = useApoyoCliente(codigo, anio);
+  const filas = useMemo(() => agruparApoyo(data?.filas || [], { anio, mes: mesMax, por: 'concepto', hijo: 'mes' }), [data, anio, mesMax]);
+  const tot = useMemo(() => totalesApoyo(data?.filas || [], { anio, mes: mesMax }), [data, anio, mesMax]);
+  const fb = useMemo(() => factBruta(data?.fb || [], { anio, mes: mesMax }), [data, anio, mesMax]);
+  const pctTot = pctSobre(tot.ytd, fb.ytd);
+  if (isLoading) return null;
+  return (
+    <Panel titulo="Apoyo comercial del año" meta={`ene–${MESES[mesMax - 1].toLowerCase()} ${anio}${pctTot != null ? ` · ${pct(pctTot, 2)} de su fact. bruta` : ''}`}>
+      {!filas.length && <div style={{ fontSize: 11, color: theme.textMuted }}>Sin bonificaciones en {anio}.</div>}
+      <div style={{ display: 'grid', gap: 4 }}>
+        {filas.slice(0, 8).map((f) => {
+          const p = pctSobre(f.ytd, fb.ytd);
+          return (
+            <div key={f.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 60px 44px', gap: 8, alignItems: 'center', fontSize: 11 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: theme.text }} title={`${f.sub} · ${f.label}`}>{f.label}</div>
+                <div style={{ height: 3, borderRadius: 999, background: theme.border, marginTop: 2 }}>
+                  <div style={{ height: '100%', width: `${tot.ytd ? Math.max(2, (f.ytd / tot.ytd) * 100) : 2}%`, background: theme.orange || '#FF9500', borderRadius: 999 }} />
+                </div>
+              </div>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', textAlign: 'right', fontWeight: 600 }}>{money(f.ytd)}</span>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: theme.textMuted }}>{p == null ? '—' : pct(p, 1)}</span>
+            </div>
+          );
+        })}
+        {filas.length > 8 && <div style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>+ {filas.length - 8} conceptos más</div>}
+        {filas.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 60px 44px', gap: 8, alignItems: 'center', fontSize: 11, borderTop: `1px solid ${theme.border}`, paddingTop: 4, marginTop: 2 }}>
+            <span style={{ color: theme.textMuted }}>Total · {filas.length} conceptos</span>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', textAlign: 'right', fontWeight: 600 }}>{money(tot.ytd)}</span>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: theme.textMuted }}>{pctTot == null ? '—' : pct(pctTot, 1)}</span>
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }

@@ -26,10 +26,10 @@ import Filtros from './sellin/Filtros';
 import DrillCuenta from './sellout/DrillCuenta';
 // El mapa trae 82 KB de geometría: se carga sólo cuando se abre el panel.
 const MapaMexico = lazy(() => import('./sellout/MapaMexico'));
-import { useCuentas, useAnios, useDias, useMensual, useSkuMes, useEstadoMes } from './sellout/datos';
+import { useCuentas, useAnios, useDias, useMensual, useSkuMes, useEstadoMes, useCuotas } from './sellout/datos';
 import {
   MESES, CANALES, canalLabel, canalTone, construirFilas, totalesDeFilas, porCanal, composicion,
-  serie12, porEstado, ultimoDiaConVenta, ultimoMesConVenta, ultimosMeses, N,
+  serie12, porEstado, ultimoDiaConVenta, ultimoMesConVenta, ultimosMeses, toneCuota, N,
 } from './sellout/calculo';
 import { fmtMoney, fmtInt, fmtPct, fmtSigno, fraseHero, subHero, textoResumenMes, capitalizarEstado, etiquetaMes } from './sellout/textos';
 
@@ -68,6 +68,7 @@ export default function SellOutGlobal() {
   const { data: mensual = [], isLoading: cargandoMes } = useMensual(anio);
   const { data: skuMes = [] } = useSkuMes(anio, mes);
   const { data: estadoMes = [] } = useEstadoMes(anio, mes);
+  const { data: cuotas = [] } = useCuotas(anio);
 
   // Mes por defecto = el último con venta (el mes en curso casi siempre).
   useEffect(() => {
@@ -80,8 +81,8 @@ export default function SellOutGlobal() {
   const corteDia = useMemo(() => ultimoDiaConVenta(dias, anio, mes) || 31, [dias, anio, mes]);
 
   const filasBase = useMemo(
-    () => construirFilas({ cuentas, mensual, dias, anio, mes, corteDia }),
-    [cuentas, mensual, dias, anio, mes, corteDia],
+    () => construirFilas({ cuentas, mensual, dias, anio, mes, corteDia, cuotas }),
+    [cuentas, mensual, dias, anio, mes, corteDia, cuotas],
   );
 
   // Cuentas que quedan dentro del filtro de composición (marca / categoría) o del mapa.
@@ -152,6 +153,7 @@ export default function SellOutGlobal() {
       anio, mes, tot: totalesGlobal, canales,
       top: [...filasBase].sort((a, b) => b.importe - a.importe),
       corteDia: corteDia < 28 ? corteDia : null, cuentasActivas: activas, cuentasTotal: conFuente,
+      cuotas: [...filasBase].filter((f) => f.pctCuota != null).sort((a, b) => b.cuota - a.cuota),
     });
     try { await navigator.clipboard.writeText(txt); toast.ok('Resumen copiado'); }
     catch { toast.error('No se pudo copiar el resumen'); }
@@ -182,8 +184,17 @@ export default function SellOutGlobal() {
     { key: 'ytd', label: 'YTD', sort: true, fmt: fmtMoney, render: (f) => (f.sinFuente ? '—' : fmtMoney(f.ytd)) },
     { key: 'sellIn', label: `SI ${mesLbl}`, sort: true, fmt: money, render: (f) => (f.cuenta === 'directo' ? <span style={{ color: theme.textMuted }}>=</span> : money(f.sellIn)) },
     { key: 'soSi', label: 'SO/SI', width: 60, sort: true, render: (f) => (f.soSi == null ? '—' : <span title={f.soSi > 999 ? `${Math.round(f.soSi).toLocaleString('es-MX')} % — el sell in del mes apenas empieza` : undefined} style={{ color: f.soSi < 60 ? theme.orange : f.soSi > 999 ? theme.textMuted : theme.text }}>{f.soSi > 999 ? '> 999 %' : fmtPct(f.soSi)}</span>), renderTotal: (v) => fmtPct(v) },
-    { key: 'invValor', label: 'Inv. cliente', sort: true, fmt: fmtMoney, render: (f) => (f.invValor == null ? <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span> : fmtMoney(f.invValor)) },
-    { key: 'invSemanas', label: 'Sem.', width: 48, sort: true, render: (f) => (f.invSemanas == null ? '—' : <span style={{ color: f.invSemanas > 12 ? theme.orange : theme.text }}>{f.invSemanas.toFixed(1)}</span>) },
+    // Cuota de sell in del mes (RevkoBi por cliente del ERP): ≥ 100 % verde, ≥ 85 % azul, el resto naranja.
+    { key: 'pctCuota', label: 'Cuota', width: 62, sort: true, render: (f) => (f.pctCuota == null
+      ? <span style={{ color: theme.textMuted }} title="Este cliente no tiene cuota cargada">—</span>
+      : <Pill tone={toneCuota(f.pctCuota)} size="xs" title={`Cuota ${mesLbl}: ${money(f.cuota)} · sell in ${money(f.sellIn)}`}>{fmtPct(f.pctCuota)}</Pill>), renderTotal: (v) => (v == null ? '—' : fmtPct(v)) },
+    // Las semanas de cobertura van DENTRO de esta celda: una columna menos y la tabla cabe en la tarjeta.
+    { key: 'invValor', label: 'Inv. cliente', sort: true, fmt: fmtMoney, render: (f) => (f.invValor == null ? <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span> : (
+      <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, justifyContent: 'flex-end' }}>
+        {fmtMoney(f.invValor)}
+        {f.invSemanas != null && <span style={{ fontSize: 9.5, color: f.invSemanas > 12 ? theme.orange : theme.textMuted }}>{f.invSemanas.toFixed(1)} sem</span>}
+      </span>
+    )) },
     // Tendencia 6 m como mini trazo (90 px) en lugar de seis pastillas (≈ 280 px): la tabla cabe en la tarjeta.
     { key: 'tendencia', label: '6 m', align: 'left', width: 96, render: (f) => (
       f.sinFuente ? <span style={{ color: theme.textMuted, fontSize: 10.5 }}>—</span> : (
@@ -196,7 +207,7 @@ export default function SellOutGlobal() {
   const totalesFila = {
     nombre: `${filas.length} cuentas`, canal: '',
     importe: totales.importe, yoy: totales.yoy, ytd: totales.ytd, sellIn: totales.sellIn, soSi: totales.soSi,
-    invValor: totales.invValor, invSemanas: '', tendencia: '',
+    pctCuota: totales.pctCuota, invValor: totales.invValor, tendencia: '',
   };
 
   const excel = () => ({
@@ -212,13 +223,14 @@ export default function SellOutGlobal() {
         { label: 'Δ YoY', key: 'yoy', tipo: 'pct', ancho: 9 },
         { label: `YTD ${anio}`, key: 'ytd', tipo: 'moneda', ancho: 15 }, { label: `YTD ${anio - 1}`, key: 'ytdPrev', tipo: 'moneda', ancho: 15 },
         { label: `Sell in ${mesLbl}`, key: 'sellIn', tipo: 'moneda', ancho: 15 }, { label: 'Sell out / sell in', key: 'soSi', tipo: 'pct', ancho: 11 },
+        { label: `Cuota sell in ${mesLbl}`, key: 'cuota', tipo: 'moneda', ancho: 15 }, { label: '% de cuota', key: 'pctCuota', tipo: 'pct', ancho: 10 },
         { label: 'Inventario en el cliente', key: 'invValor', tipo: 'moneda', ancho: 16 }, { label: 'Piezas inv.', key: 'invPiezas', tipo: 'numero', ancho: 11 },
         { label: 'Semanas inv.', key: 'invSemanas', tipo: 'numero', ancho: 11 },
         { label: 'Sucursales', key: 'sucursales', tipo: 'numero', ancho: 10 }, { label: 'Clientes finales', key: 'clientesFinales', tipo: 'numero', ancho: 12 },
         { label: 'Vendedores', key: 'vendedores', tipo: 'numero', ancho: 10 },
       ],
       filas: filas.map((f) => ({ ...f, canalTxt: canalLabel(f.canal) })),
-      totales: { nombre: 'TOTAL', importe: totales.importe, ytd: totales.ytd, sellIn: totales.sellIn, invValor: totales.invValor, sucursales: totales.sucursales, clientesFinales: totales.clientesFinales, vendedores: totales.vendedores },
+      totales: { nombre: 'TOTAL', importe: totales.importe, ytd: totales.ytd, sellIn: totales.sellIn, cuota: totales.cuota, pctCuota: totales.pctCuota, invValor: totales.invValor, sucursales: totales.sucursales, clientesFinales: totales.clientesFinales, vendedores: totales.vendedores },
     }],
   });
 
@@ -250,6 +262,8 @@ export default function SellOutGlobal() {
           { k: `Sell out ${mesLbl}`, v: fmtMoney(totalesGlobal.importe), sub: `${totalesGlobal.yoy == null ? 'sin comparativo' : `${fmtSigno(totalesGlobal.yoy)} vs ${anio - 1}`} · ${fmtInt(totalesGlobal.cantidad)} pz` },
           { k: `YTD ${anio}`, v: fmtMoney(totalesGlobal.ytd), sub: totalesGlobal.yoyYtd == null ? `sin ${anio - 1}` : `${fmtSigno(totalesGlobal.yoyYtd)} vs ${anio - 1}` },
           { k: 'Sell out / sell in', v: totalesGlobal.soSi == null ? '—' : fmtPct(totalesGlobal.soSi), sub: 'del mes' },
+          { k: 'Cuentas en cuota', v: `${fmtInt(totalesGlobal.enCuota)} de ${fmtInt(totalesGlobal.conCuota)}`,
+            sub: totalesGlobal.pctCuota == null ? 'sin cuota cargada' : `${fmtPct(totalesGlobal.pctCuota)} de su cuota de sell in` },
         ]}>
         <div style={{ marginTop: 8 }}>
           <FrescuraPill pantalla="sellOutGlobal" detallado inverso

@@ -6,6 +6,7 @@ import {
   idxMes, deIdx, yoy, ratio, ultimosMeses, mtdPorCuenta, ytdPorCuenta, totalDe, ultimoDiaConVenta,
   ultimoMesConVenta, semanasInventario, sumaUltimosMeses, construirFilas, totalesDeFilas, porCanal,
   composicion, serie12, porEstado, skusDeCuenta, alertasDeCuenta, ritmoProyectado,
+  indiceCuotas, alcanceCuota, toneCuota,
 } from '../src/modules/comercial/sellout/calculo.js';
 import { textoResumenMes, textoEstatusCuenta, capitalizarEstado, fraseHero } from '../src/modules/comercial/sellout/textos.js';
 
@@ -48,6 +49,13 @@ const MENSUAL = [
   mesFila('digitalife', 2025, 9, { importe: 500, cantidad: 50, sell_in: 900 }),
   mesFila('directo', 2026, 9, { importe: 90, cantidad: 9 }),
   mesFila('directo', 2025, 9, { importe: 60, cantidad: 6 }),
+];
+
+// Cuota de sell in por cuenta (v_cuota_erp_mes). `directo` nunca tiene cuota: agrupa clientes.
+const CUOTAS = [
+  { cuota_cliente: 'ct',         cliente_erp: '00183', cuenta_sellout: 'ct',         anio: 2026, mes: 9, cuota_venta: 1600 },
+  { cuota_cliente: 'digitalife', cliente_erp: '00764', cuenta_sellout: 'digitalife', anio: 2026, mes: 9, cuota_venta: 1000 },
+  { cuota_cliente: 'decme',      cliente_erp: '00714', cuenta_sellout: null,         anio: 2026, mes: 9, cuota_venta: 9999 },
 ];
 
 // ── Utilidades de mes ─────────────────────────────────────────────────────────
@@ -330,4 +338,73 @@ test('fraseHero se lee como una frase', () => {
   assert.equal(f, 'El equipo desplazó $18.4 M, 12 % arriba de sep 25 a mismo día; es el 47 % del sell in del mes.');
   const sinPrev = fraseHero({ importe: 100, yoy: null, soSi: null }, 2026, 9);
   assert.match(sinPrev, /sin comparativo/);
+});
+
+// ── Cuota de sell in ─────────────────────────────────────────────────────────
+test('indiceCuotas ignora las cuotas sin cuenta de sell out y suma por cuenta y mes', () => {
+  const i = indiceCuotas([...CUOTAS, { cuenta_sellout: 'ct', anio: 2026, mes: 9, cuota_venta: 400 }]);
+  assert.equal(i.get('ct|2026|9'), 2000);            // 1600 + 400
+  assert.equal(i.get('digitalife|2026|9'), 1000);
+  assert.equal(i.size, 2);                            // decme no tiene cuenta: fuera
+});
+
+test('alcanceCuota y su semáforo', () => {
+  assert.equal(alcanceCuota(2000, 1600), 125);
+  assert.equal(alcanceCuota(800, 1000), 80);
+  assert.equal(alcanceCuota(500, 0), null);           // sin cuota no hay %
+  assert.equal(alcanceCuota(500, null), null);
+  assert.equal(alcanceCuota(null, 1000), null);
+  assert.equal(toneCuota(125), 'green');
+  assert.equal(toneCuota(100), 'green');
+  assert.equal(toneCuota(90), 'blue');
+  assert.equal(toneCuota(80), 'orange');
+  assert.equal(toneCuota(null), 'gray');
+});
+
+test('construirFilas pone la cuota del mes y lo que falta', () => {
+  const filas = construirFilas({ cuentas: CUENTAS, mensual: MENSUAL, dias: DIAS, anio: 2026, mes: 9, corteDia: 10, cuotas: CUOTAS });
+  const ct = filas.find((f) => f.cuenta === 'ct');
+  const dl = filas.find((f) => f.cuenta === 'digitalife');
+  const dir = filas.find((f) => f.cuenta === 'directo');
+  assert.equal(ct.cuota, 1600);
+  assert.equal(ct.pctCuota, 125);                     // sell in 2000 / cuota 1600
+  assert.equal(ct.faltaCuota, -400);                  // ya va arriba de la cuota
+  assert.equal(dl.pctCuota, 80);
+  assert.equal(dl.faltaCuota, 200);
+  assert.equal(dir.cuota, null);                      // el directo no tiene cuota
+  assert.equal(dir.pctCuota, null);
+});
+
+test('sin cuotas cargadas la columna queda en null, nunca en 0 %', () => {
+  const filas = construirFilas({ cuentas: CUENTAS, mensual: MENSUAL, dias: DIAS, anio: 2026, mes: 9, corteDia: 10 });
+  assert.ok(filas.every((f) => f.cuota === null && f.pctCuota === null && f.faltaCuota === null));
+});
+
+test('el total recalcula el % de cuota sólo con las cuentas que tienen cuota', () => {
+  const filas = construirFilas({ cuentas: CUENTAS, mensual: MENSUAL, dias: DIAS, anio: 2026, mes: 9, corteDia: 10, cuotas: CUOTAS });
+  const t = totalesDeFilas(filas);
+  assert.equal(t.conCuota, 2);
+  assert.equal(t.enCuota, 1);                         // sólo CT llega a 100 %
+  assert.equal(t.cuota, 2600);
+  assert.equal(t.sellInConCuota, 2800);               // 2000 + 800, sin el directo
+  assert.equal(Math.round(t.pctCuota * 100) / 100, 107.69);
+  assert.equal(t.faltaCuota, -200);
+  // El % del total NO es el promedio de los % de las filas (125 y 80 → 102.5).
+  assert.notEqual(Math.round(t.pctCuota), 103);
+});
+
+test('el resumen para compartir lleva la cuota y sigue sin nada sensible', () => {
+  const filas = construirFilas({ cuentas: CUENTAS, mensual: MENSUAL, dias: DIAS, anio: 2026, mes: 9, corteDia: 10, cuotas: CUOTAS });
+  const tot = totalesDeFilas(filas);
+  const txt = textoResumenMes({
+    anio: 2026, mes: 9, tot, canales: porCanal(filas), top: filas, corteDia: 10,
+    cuentasActivas: 3, cuentasTotal: 3, cuotas: filas.filter((f) => f.pctCuota != null),
+  });
+  assert.match(txt, /Cuota de sell in: 108 %/);
+  assert.match(txt, /CUOTA DE SELL IN/);
+  for (const prohibida of [/margen/i, /contribuci/i, /utilidad/i, /costo/i, /\bMC\b/, /\bMUC\b/]) {
+    assert.ok(!prohibida.test(txt), `el resumen no debe mencionar ${prohibida}`);
+  }
+  const est = textoEstatusCuenta({ fila: filas.find((f) => f.cuenta === 'digitalife'), anio: 2026, mes: 9, corteDia: 10 });
+  assert.match(est, /Cuota de sell in: \$1 K · cuota 80 % · faltan \$200/);
 });

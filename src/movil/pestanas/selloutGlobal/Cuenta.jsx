@@ -183,6 +183,12 @@ function Resumen({ fila, anio, mes, corteDia, skus, alertas, campos, hayInv, car
         <Dato k="Sell out / sell in" v={fila.soSi == null ? '—' : fmtPct(fila.soSi)}
           sub={fila.sellIn == null || fila.sellIn <= 0 ? 'sin sell in en el mes' : `sell in ${fmtMoney(fila.sellIn)}`}
           color={fila.soSi != null && fila.soSi < 60 ? theme.orange : undefined} />
+        {/* Cuota de sell in del mes (RevkoBi por cliente del ERP); sin cuota cargada no se pinta. */}
+        {fila.cuota != null && (
+          <Dato k={`Cuota sell in · ${MESES[mes - 1]}`} v={fmtPct(fila.pctCuota)}
+            sub={fila.faltaCuota > 0 ? `faltan ${fmtMoney(fila.faltaCuota)} de ${fmtMoney(fila.cuota)}` : `${fmtMoney(-fila.faltaCuota)} arriba de ${fmtMoney(fila.cuota)}`}
+            color={fila.pctCuota >= 100 ? theme.green : fila.pctCuota >= 85 ? undefined : theme.orange} />
+        )}
         {hayInv && (
           <Dato k="Inventario del cliente" v={fmtMoney(fila.invValor)}
             sub={`${fmtInt(fila.invPiezas)} pz · ${fmtInt(fila.invSkus)} SKUs`} />

@@ -13,6 +13,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
+import ApoyoComercial from './sellin/ApoyoComercial';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -377,6 +378,9 @@ export default function SellInDicotech({ clienteKey }) {
         orden={orden} onToggleSort={toggleSort}
         familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
       />
+
+      {/* Apoyo comercial: bonificaciones por concepto (erp_ventas · rama SERVICIOS) */}
+      <ApoyoComercial anio={anio} mes={mesActual} clienteKey={clienteKey} />
     </div>
   );
 }

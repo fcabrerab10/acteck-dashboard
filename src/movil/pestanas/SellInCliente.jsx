@@ -18,6 +18,7 @@ import { PROPIOS } from '../datos';
 import { money, moneyCompact, int, deltaPct, tonoDelta, tonoCuota, MESES, MONO, N } from '../util';
 import FichaProducto from '../FichaProducto';
 import TablaAnual from './sellout/TablaAnual';
+import ApoyoM from './sellin/ApoyoM';
 
 const STALE = 5 * 60 * 1000;
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
@@ -261,6 +262,9 @@ export default function SellInCliente({ clienteKey, nombre }) {
           </ListaAgrupada>
 
           <ComposicionCategorias filas={r.categorias} total={r.total} pie="Categoría del roadmap · % del monto facturado en el mes." />
+
+          {/* Bonificaciones del ERP por concepto (rama SERVICIOS) */}
+          <ApoyoM anio={r.a} mes={r.m} clienteKey={clienteKey} />
 
           <div style={{ padding: '18px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <BotonGrande primario icon={Share2} disabled={!r.mtd} onClick={() => setCompartiendo(true)}>Compartir avance</BotonGrande>

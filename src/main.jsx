@@ -27,7 +27,7 @@ const updateSW = registerSW({
 // vieja y entra a una pestaña que aún no había cargado, el chunk da 404 y React tira "Se rompió algo".
 // Aquí se detecta ese caso (vite:preloadError o error de import dinámico) y, en vez del error, se
 // activa el SW nuevo y se recarga. Guardia de 60 s en sessionStorage para no entrar en bucle.
-const esErrorDeVersion = (err) => /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|error loading dynamically|Failed to fetch/i.test(String(err?.message || err || ''));
+const esErrorDeVersion = (err) => /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|error loading dynamically/i.test(String(err?.message || err || ''));
 let recuperando = false;
 async function recuperarVersion() {
   if (recuperando) return;

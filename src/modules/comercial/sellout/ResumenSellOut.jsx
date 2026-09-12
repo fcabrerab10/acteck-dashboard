@@ -14,9 +14,9 @@ import { TYPO } from '../../../lib/themeTokens';
 import { Pill, DeltaPill, GraficaLineas, TablaCompacta, Cargando } from '../../../components/kit';
 import { disponibilidadDeCampos } from '../../../lib/disponibilidad';
 import { moneyCompact } from '../../../lib/format';
-import { useCuentas, useDias, useMensual, useDrillSkus, useDrillInventario } from './datos';
+import { useCuentas, useDias, useMensual, useDrillSkus, useDrillInventario, useCuotas } from './datos';
 import {
-  construirFilas, skusDeCuenta, alertasDeCuenta, ritmoProyectado, composicion, ultimoDiaConVenta, MESES,
+  construirFilas, skusDeCuenta, alertasDeCuenta, ritmoProyectado, composicion, ultimoDiaConVenta, toneCuota, MESES,
 } from './calculo';
 import { fmtMoney, fmtInt, fmtPct, fmtSigno, capitalizarEstado } from './textos';
 
@@ -56,6 +56,7 @@ export default function ResumenSellOut({ cuenta, anio, mes, corteDia, compacto =
   const { data: mensual = [], isLoading: cargandoMes } = useMensual(anio);
   const { data: skuMes = [], isLoading: cargandoSkus } = useDrillSkus(cuenta, anio);
   const { data: inv = [], isLoading: cargandoInv } = useDrillInventario(cuenta);
+  const { data: cuotas = [] } = useCuotas(anio);
 
   const cargando = cargandoDias || cargandoMes || cargandoSkus || cargandoInv;
 
@@ -63,8 +64,8 @@ export default function ResumenSellOut({ cuenta, anio, mes, corteDia, compacto =
   const fila = useMemo(() => {
     const def = cuentas.find((c) => c.cuenta === cuenta);
     if (!def) return null;
-    return construirFilas({ cuentas: [def], mensual, dias, anio, mes, corteDia: corte })[0];
-  }, [cuentas, cuenta, mensual, dias, anio, mes, corte]);
+    return construirFilas({ cuentas: [def], mensual, dias, anio, mes, corteDia: corte, cuotas })[0];
+  }, [cuentas, cuenta, mensual, dias, anio, mes, corte, cuotas]);
 
   const campos = useMemo(() => disponibilidadDeCampos(cuenta, inv, ['stock', 'valor', 'dias_sin_venta', 'fecha_ultima_venta'], { soloUltimaSemana: false }), [cuenta, inv]);
   const skus = useMemo(() => skusDeCuenta(skuMes, inv, anio, mes, 'piezas'), [skuMes, inv, anio, mes]);
@@ -112,6 +113,24 @@ export default function ResumenSellOut({ cuenta, anio, mes, corteDia, compacto =
         <Cifra v={fila.soSi == null ? '—' : fmtPct(fila.soSi)}
           sub={fila.sellIn == null || fila.sellIn <= 0 ? 'sin sell in en el mes' : `sell in ${MESES[mes - 1].toLowerCase()} ${fmtMoney(fila.sellIn)}`}
           color={fila.soSi != null && fila.soSi < 60 ? theme.orange : undefined} />
+      </Caja>
+
+      {/* Cuota de sell in del mes (RevkoBi). Sin cuota cargada lo dice, no desaparece. */}
+      <Caja titulo={`Cuota sell in · ${MESES[mes - 1]} ${anio}`}>
+        {fila.cuota == null ? (
+          <Cifra v="—" sub="este cliente no tiene cuota cargada" color={theme.textMuted} />
+        ) : (
+          <>
+            <Cifra v={fmtPct(fila.pctCuota)}
+              sub={`${fmtMoney(fila.sellIn)} de ${fmtMoney(fila.cuota)}`}
+              color={fila.pctCuota >= 100 ? theme.green : fila.pctCuota >= 85 ? undefined : theme.orange} />
+            <div style={{ marginTop: 3 }}>
+              <Pill tone={toneCuota(fila.pctCuota)} size="xs">
+                {fila.faltaCuota > 0 ? `faltan ${fmtMoney(fila.faltaCuota)}` : `${fmtMoney(-fila.faltaCuota)} arriba de la cuota`}
+              </Pill>
+            </div>
+          </>
+        )}
       </Caja>
 
       {!compacto && (

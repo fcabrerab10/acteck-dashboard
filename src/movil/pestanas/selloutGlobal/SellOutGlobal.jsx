@@ -25,7 +25,7 @@ import {
 } from '../../piezas';
 import { moneyCompact, int, deltaPct, tonoDelta, MESES, MESES_LARGO, MONO, N } from '../../util';
 import { SelectorMes } from '../SellInCliente';
-import { useCuentas, useDias, useMensual, useSkuMes } from '../../../modules/comercial/sellout/datos';
+import { useCuentas, useDias, useMensual, useSkuMes, useCuotas } from '../../../modules/comercial/sellout/datos';
 import {
   CANALES, canalLabel, construirFilas, totalesDeFilas, porCanal, composicion, serie12,
   ultimoDiaConVenta, ultimoMesConVenta,
@@ -53,6 +53,7 @@ export default function SellOutGlobal() {
   const { data: dias = [], isLoading: lDias, error: eDias } = useDias(sel.anio);
   const { data: mensual = [], isLoading: lMes } = useMensual(sel.anio);
   const { data: skuMes = [] } = useSkuMes(sel.anio, sel.mes);
+  const { data: cuotas = [] } = useCuotas(sel.anio);
 
   // Mes por defecto = el último con venta (casi siempre el mes en curso, pero el puente
   // puede ir un día atrás y entonces el mes en curso arrancaría vacío).
@@ -69,7 +70,7 @@ export default function SellOutGlobal() {
     if (!cuentas.length) return null;
     const { anio, mes } = sel;
     const corteDia = ultimoDiaConVenta(dias, anio, mes) || 31;
-    const filasBase = construirFilas({ cuentas, mensual, dias, anio, mes, corteDia });
+    const filasBase = construirFilas({ cuentas, mensual, dias, anio, mes, corteDia, cuotas });
     const filas = canalSel === 'todos' ? filasBase : filasBase.filter((f) => f.canal === canalSel);
     const tot = totalesDeFilas(filas);
     const totGlobal = totalesDeFilas(filasBase);
@@ -101,13 +102,14 @@ export default function SellOutGlobal() {
       activas, conFuente, conInv, disponibles,
       enCurso: anio === anioActual && mes === mesActual,
     };
-  }, [cuentas, mensual, dias, skuMes, sel, canalSel, dimension, anioActual, mesActual]);
+  }, [cuentas, mensual, dias, skuMes, cuotas, sel, canalSel, dimension, anioActual, mesActual]);
 
   const textoCompartir = useMemo(() => (r ? textoResumenMes({
     anio: r.anio, mes: r.mes, tot: r.totGlobal, canales: r.canales,
     top: [...r.filasBase].sort((a, b) => b.importe - a.importe),
     corteDia: r.corteDia < 28 ? r.corteDia : null,
     cuentasActivas: r.activas, cuentasTotal: r.conFuente,
+    cuotas: [...r.filasBase].filter((f) => f.pctCuota != null).sort((a, b) => b.cuota - a.cuota),
   }) : ''), [r]);
 
   const onCompartir = async () => { if (await compartir(textoCompartir, { titulo: `Sell Out ${MESES_LARGO[sel.mes - 1]} ${sel.anio}` }) === 'share') toast.ok('Compartido'); };
@@ -133,7 +135,7 @@ export default function SellOutGlobal() {
           <HeroM
             eyebrow={`Consolidado · ${MESES[r.mes - 1]} ${r.anio}${r.corteDia < 28 ? ` · al día ${r.corteDia}` : ''}`}
             frase={fraseHero(r.totGlobal, r.anio, r.mes, r.activas, r.conFuente)}
-            sub={`${r.activas} de ${r.conFuente} cuentas con venta · ${fmtInt(r.totGlobal.cantidad)} pz${r.totGlobal.conInventario ? ` · inventario en clientes ${fmtMoney(r.totGlobal.invValor)}` : ''}`}
+            sub={`${r.activas} de ${r.conFuente} cuentas con venta · ${fmtInt(r.totGlobal.cantidad)} pz${r.totGlobal.conCuota ? ` · ${r.totGlobal.enCuota} de ${r.totGlobal.conCuota} en cuota` : ''}${r.totGlobal.conInventario ? ` · inventario en clientes ${fmtMoney(r.totGlobal.invValor)}` : ''}`}
             stats={[
               { k: `Sell out ${MESES[r.mes - 1]}`, v: moneyCompact(r.tot.importe), sub: canalSel === 'todos' ? `${fmtInt(r.tot.cantidad)} pz` : canalLabel(canalSel) },
               { k: `YTD ${r.anio}`, v: moneyCompact(r.tot.ytd), sub: r.tot.yoyYtd == null ? `sin ${r.anio - 1}` : `${deltaPct(r.tot.yoyYtd)} vs ${r.anio - 1}` },
@@ -188,6 +190,7 @@ export default function SellOutGlobal() {
                   sub={[
                     f.erp ? `Nº ${f.erp}` : null,
                     f.sinFuente ? `sólo sell in ${moneyCompact(f.sellIn)}` : null,
+                    f.pctCuota != null ? `cuota ${fmtPct(f.pctCuota)}` : null,
                     !f.sinFuente && f.invValor != null ? `inv ${moneyCompact(f.invValor)}${f.invSemanas != null ? ` · ${f.invSemanas.toFixed(1)} sem` : ''}` : null,
                   ].filter(Boolean).join(' · ') || undefined}
                   valor={f.sinFuente ? '—' : moneyCompact(f.importe)}

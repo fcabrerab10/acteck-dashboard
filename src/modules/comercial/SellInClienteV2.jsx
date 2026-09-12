@@ -17,6 +17,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
 import { ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
+import ApoyoComercial from './sellin/ApoyoComercial';
 import RentabilidadBloque from './RentabilidadBloque';
 import ComparadorPeriodos from './ComparadorPeriodos';
 import ExportMenu from '../../components/ExportMenu';
@@ -495,6 +496,9 @@ export default function SellInClienteV2({ clienteKey }) {
         facturacion={facturacion} facturacionAll={facturacionAll}
         pdfRef={rootRef} clienteKey={clienteKey}
       />
+
+      {/* Apoyo comercial: bonificaciones por concepto (erp_ventas · rama SERVICIOS) */}
+      <ApoyoComercial anio={anio} mes={mesActual} clienteKey={clienteKey} />
     </div>
   );
 }

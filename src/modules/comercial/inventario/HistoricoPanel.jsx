@@ -1,6 +1,9 @@
 // Panel "Tendencia" · histórico diario del inventario comercial (v_inventario_historico_dia):
 // valor a costo (sólo con permiso sensible) / piezas y días de inventario a la demanda actual.
 // LineChart de Recharts sin animación. Con 1 sola foto muestra "histórico desde hoy".
+// La foto la guardan DOS fuentes independientes (idempotentes, la última del día gana):
+// el puente SQL de la Mac mini tras cada carga de inventario y el cron de Vercel
+// (?task=inventario-foto, 19:30 CDMX). La serie se va formando día con día.
 import React, { useMemo } from 'react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -27,7 +30,7 @@ export default function HistoricoPanel({ historico, demandaDia, sensible }) {
   const hace30 = fotoHace(datos, 30);
 
 
-  const meta = n === 0 ? 'sin fotos todavía · la primera se guarda hoy con la carga del puente'
+  const meta = n === 0 ? 'sin fotos todavía · se guarda una cada noche'
     : n === 1 ? `histórico desde ${fmtFechaCorta(primero.fecha)} · 1 foto`
     : `${fmtInt(n)} fotos · ${fmtFechaCorta(primero.fecha)} → ${fmtFechaCorta(ultimo.fecha)}${hace30 ? ` · vs ${fmtFechaCorta(hace30.fecha)}` : ''}`;
 
@@ -45,11 +48,11 @@ export default function HistoricoPanel({ historico, demandaDia, sensible }) {
 
   return (
     <Panel titulo="Tendencia del inventario" meta={meta} plegable abiertoInicial padding="10px 12px">
-      {n === 0 && <p style={{ margin: 0, fontSize: 12, color: theme.textMuted, fontFamily: TYPO.fontText }}>Aún no hay fotos diarias. El puente SQL guarda una al cierre de cada día (inventario_historico).</p>}
+      {n === 0 && <p style={{ margin: 0, fontSize: 12, color: theme.textMuted, fontFamily: TYPO.fontText }}>Aún no hay fotos diarias. Cada noche se guarda una (19:30 CDMX, tabla inventario_historico) y la serie se va formando día con día: la tendencia aparece en cuanto haya dos.</p>}
       {n > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontFamily: TYPO.fontText }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            {n === 1 && <Pill tone="gray" size="xs" dot>histórico desde hoy · la tendencia aparece con las próximas fotos</Pill>}
+            {n === 1 && <Pill tone="gray" size="xs" dot>histórico desde hoy · se guarda una foto cada noche, la tendencia se va formando día con día</Pill>}
             {n > 1 && !hace30 && <Pill tone="gray" size="xs" dot>aún sin 30 días de histórico · comparativo vs la primera foto</Pill>}
             {n > 1 && ['piezas', 'dias', ...(sensible ? ['valor'] : [])].map((k) => {
               const ref = hace30 || primero;
@@ -66,7 +69,7 @@ export default function HistoricoPanel({ historico, demandaDia, sensible }) {
             {grafica({ titulo: 'Días de inventario · a demanda actual', dataKey: 'dias', fmt: (v) => (v == null ? '—' : `${fmtInt(v)} d`), color: theme.orange })}
             {sensible && grafica({ titulo: 'Piezas', dataKey: 'piezas', fmt: fmtInt, color: theme.green })}
           </div>
-          <div style={{ fontSize: 10, color: theme.textMuted }}>Foto de fin de día (última corrida del puente) · almacenes comerciales · días = piezas ÷ demanda ERP diaria de 3 meses cerrados (la de hoy, aplicada a todo el histórico).</div>
+          <div style={{ fontSize: 10, color: theme.textMuted }}>Foto de fin de día (cron de Vercel 19:30 CDMX + puente SQL) · almacenes comerciales · días = piezas ÷ demanda ERP diaria de 3 meses cerrados (la de hoy, aplicada a todo el histórico).</div>
         </div>
       )}
     </Panel>

@@ -14,8 +14,8 @@ import ExportMenu from '../../components/ExportMenu';
 import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando } from '../../components/kit';
 import { tooltip } from '../../lib/medidas';
 import ComparadorPeriodos from './ComparadorPeriodos';
-import { useAniosDisponibles, useAnalisisClientes } from './analisis/useAnalisisData';
-import { MESES, PROPIOS, OTROS_KEY, OCASIONAL, agregarClientes, filaOtros, aplanar, ultimoMesConVenta, totalesMensuales, idxMes, yoyDe, mcDe, ajustesDe, sumarPeriodo, pctDe, vacio } from './analisis/calc';
+import { useAniosDisponibles, useAnalisisClientes, useCuotasClientes } from './analisis/useAnalisisData';
+import { MESES, PROPIOS, OTROS_KEY, OCASIONAL, agregarClientes, filaOtros, aplanar, ultimoMesConVenta, totalesMensuales, idxMes, yoyDe, mcDe, ajustesDe, sumarPeriodo, pctDe, vacio, mapaCuotas, cuotaPeriodo, alcanceCuota } from './analisis/calc';
 import { money, moneyFull, int, pct, signo, toneDe, toneCanal, labelCanal } from './analisis/formato';
 import DrillCliente from './analisis/DrillCliente';
 import ParetoPanel from './analisis/ParetoPanel';
@@ -41,6 +41,8 @@ export default function AnalisisClientesGlobal() {
   const { data: anios = [] } = useAniosDisponibles();
   const { data: rows, isLoading } = useAnalisisClientes(anio);
   const { data: alertas = [] } = useAlertas({ enabled: true });
+  const { data: cuotasRows = [] } = useCuotasClientes(anio);
+  const cuotas = useMemo(() => mapaCuotas(cuotasRows), [cuotasRows]);
 
   useEffect(() => { if (anios.length && !anios.includes(anio)) setAnio(anios[0]); }, [anios, anio]);
   useEffect(() => { setAbierto(null); }, [anio, modo, canalFiltro, origen, busqueda]);
@@ -71,8 +73,13 @@ export default function AnalisisClientesGlobal() {
     };
     const lista = filtrar(agg.clientes);
     const perdidos = filtrar(agg.soloPrev); // sólo compraron el año anterior: cuentan en el YoY del total
-    const regulares = lista.filter((c) => !c.ocasional).map(aplanar);
-    const ocas = lista.filter((c) => c.ocasional).map(aplanar);
+    // Cuota del periodo (mes o YTD) por código de cliente; los que no tienen van en null → "—".
+    const conCuota = (f) => {
+      const cuota = cuotaPeriodo(cuotas, f.cliente, anio, mesMax, modo);
+      return { ...f, cuota, pctCuota: cuota == null ? null : alcanceCuota(f.fact_neta, cuota) };
+    };
+    const regulares = lista.filter((c) => !c.ocasional).map(aplanar).map(conCuota);
+    const ocas = lista.filter((c) => c.ocasional).map(aplanar).map(conCuota);
     const dir = orden.dir === 'asc' ? 1 : -1;
     const col = orden.col;
     regulares.sort((a, b) => {
@@ -80,13 +87,20 @@ export default function AnalisisClientesGlobal() {
       if (typeof va === 'string' || typeof vb === 'string') return String(va ?? '').localeCompare(String(vb ?? '')) * dir;
       return ((va ?? -Infinity) - (vb ?? -Infinity)) * dir;
     });
-    const filas = ocas.length ? [...regulares, aplanar(filaOtros(ocas))] : regulares;
-    const tot = { cliente: `${lista.length} clientes`, nombre: null, fact_bruta: 0, devoluciones: 0, rmas: 0, bonificaciones: 0, fact_neta: 0, venta_neta: 0, piezas: 0, contribucion: 0, prevFn: 0 };
+    const filas = ocas.length ? [...regulares, conCuota(aplanar(filaOtros(ocas)))] : regulares;
+    const tot = { cliente: `${lista.length} clientes`, nombre: null, fact_bruta: 0, devoluciones: 0, rmas: 0, bonificaciones: 0, fact_neta: 0, venta_neta: 0, piezas: 0, contribucion: 0, prevFn: 0, cuota: 0, fnConCuota: 0, clientesConCuota: 0, clientesEnCuota: 0 };
     for (const c of lista) { for (const k of ['fact_bruta', 'devoluciones', 'rmas', 'bonificaciones', 'fact_neta', 'venta_neta', 'contribucion']) tot[k] += c.cur[k]; tot.piezas += c.cur.piezas_venta_neta; tot.prevFn += c.prev.fact_neta; }
     for (const c of perdidos) tot.prevFn += c.prev.fact_neta;
+    // El % de cuota del total se recalcula sobre los clientes CON cuota: los % nunca se suman.
+    for (const f of [...regulares, ...ocas]) {
+      if (f.cuota == null) continue;
+      tot.cuota += f.cuota; tot.fnConCuota += f.fact_neta; tot.clientesConCuota += 1;
+      if (f.pctCuota != null && f.pctCuota >= 100) tot.clientesEnCuota += 1;
+    }
+    tot.pctCuota = alcanceCuota(tot.fnConCuota, tot.cuota);
     tot.yoy = yoyDe(tot.fact_neta, tot.prevFn); tot.mc = pctDe(tot.contribucion, tot.fact_neta);
     return { filas, ocasionales: ocas, totales: tot };
-  }, [agg, busqueda, canalFiltro, origen, orden]);
+  }, [agg, busqueda, canalFiltro, origen, orden, cuotas, anio, mesMax, modo]);
 
   const onSort = (col) => setOrden((o) => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: col === 'nombre' || col === 'cliente' || col === 'canal' ? 'asc' : 'desc' }));
 
@@ -116,12 +130,16 @@ export default function AnalisisClientesGlobal() {
     { key: 'rmas', fmt: moneyFull, label: 'NC', sort: true, sum: true, render: (r) => <span style={{ color: r.rmas < 0 ? theme.red : theme.textMuted }}>{moneyFull(r.rmas)}</span> },
     { key: 'bonificaciones', fmt: moneyFull, label: 'Bonif.', sort: true, sum: true, render: (r) => <span style={{ color: r.bonificaciones < 0 ? theme.orange : theme.textMuted }}>{moneyFull(r.bonificaciones)}</span> },
     { key: 'fact_neta', fmt: moneyFull, label: 'Fact. neta', sort: true, sum: true, bold: true, render: (r) => moneyFull(r.fact_neta) },
-    { key: 'venta_neta', fmt: moneyFull, label: 'Venta neta', sort: true, sum: true, render: (r) => moneyFull(r.venta_neta) },
     { key: 'piezas', fmt: int, label: 'Pz', sort: true, sum: true, render: (r) => int(r.piezas) },
     { key: 'yoy', label: 'YoY', width: 64, sort: true, render: (r) => <DeltaPill value={r.yoy} />, renderTotal: (v) => <DeltaPill value={v} /> },
+    // Cuota de RevkoBi por cliente (v_cuota_erp_mes): % de alcance del mes o del YTD según el modo.
+    { key: 'pctCuota', label: 'Cuota', width: 62, sort: true, render: (r) => (r.pctCuota == null
+      ? <span style={{ color: theme.textMuted }} title="Este cliente no tiene cuota cargada">—</span>
+      : <Pill tone={r.pctCuota >= 100 ? 'green' : r.pctCuota >= 85 ? 'blue' : 'orange'} size="xs" title={`Cuota ${periodoLbl}: ${moneyFull(r.cuota)}`}>{pct(r.pctCuota, 0)}</Pill>),
+      renderTotal: (v) => (v == null ? '—' : pct(v, 0)) },
     ...(verSensible ? [{ key: 'mc', label: 'MC %', width: 56, sort: true, render: (r) => <span style={{ color: r.mc == null ? theme.textMuted : r.mc < 0 ? theme.red : theme.text }}>{pct(r.mc)}</span>, renderTotal: (v) => pct(v) }] : []),
   ];
-  const totalesFila = { ...totales, mc: totales.mc, yoy: totales.yoy };
+  const totalesFila = { ...totales, mc: totales.mc, yoy: totales.yoy, pctCuota: totales.pctCuota };
 
   const excelClientes = () => {
     const todos = [...agg.clientes].filter((c) => (origen === 'propios' ? c.propio : origen === 'erp' ? !c.propio : true)).filter((c) => canalFiltro === 'TODOS' || c.canal === canalFiltro).map(aplanar).sort((a, b) => b.fact_neta - a.fact_neta);
@@ -135,10 +153,14 @@ export default function AnalisisClientesGlobal() {
           { label: 'Fact. bruta', key: 'fact_bruta', tipo: 'moneda', ancho: 15 }, { label: 'Devoluciones', key: 'devoluciones', tipo: 'moneda', ancho: 14 }, { label: 'Notas de crédito', key: 'rmas', tipo: 'moneda', ancho: 14 },
           { label: 'Bonificaciones', key: 'bonificaciones', tipo: 'moneda', ancho: 14 }, { label: 'Fact. neta', key: 'fact_neta', tipo: 'moneda', ancho: 15 }, { label: 'Venta neta', key: 'venta_neta', tipo: 'moneda', ancho: 15 },
           { label: 'Piezas', key: 'piezas', tipo: 'numero', ancho: 10 }, { label: `Fact. neta ${anio - 1}`, key: 'prevFn', tipo: 'moneda', ancho: 15 }, { label: 'Δ YoY', key: 'yoy', tipo: 'pct', ancho: 9 },
+          { label: 'Cuota del periodo', key: 'cuota', tipo: 'moneda', ancho: 15 }, { label: '% de cuota', key: 'pctCuota', tipo: 'pct', ancho: 10 },
           ...(verSensible ? [{ label: 'MC %', key: 'mc', tipo: 'pct', ancho: 8 }] : []),
         ],
-        filas: todos.map((c) => ({ ...c, propioTxt: c.propio ? 'Sí' : '', ocasTxt: c.ocasional ? 'Sí' : '', prevFn: c.prev.fact_neta })),
-        totales: { nombre: 'TOTAL', fact_bruta: totales.fact_bruta, devoluciones: totales.devoluciones, rmas: totales.rmas, bonificaciones: totales.bonificaciones, fact_neta: totales.fact_neta, venta_neta: totales.venta_neta, piezas: totales.piezas, prevFn: totales.prevFn, yoy: totales.yoy, ...(verSensible ? { mc: totales.mc } : {}) },
+        filas: todos.map((c) => {
+          const cuota = cuotaPeriodo(cuotas, c.cliente, anio, mesMax, modo);
+          return { ...c, propioTxt: c.propio ? 'Sí' : '', ocasTxt: c.ocasional ? 'Sí' : '', prevFn: c.prev.fact_neta, cuota, pctCuota: cuota == null ? null : alcanceCuota(c.fact_neta, cuota) };
+        }),
+        totales: { nombre: 'TOTAL', cuota: totales.cuota, pctCuota: totales.pctCuota, fact_bruta: totales.fact_bruta, devoluciones: totales.devoluciones, rmas: totales.rmas, bonificaciones: totales.bonificaciones, fact_neta: totales.fact_neta, venta_neta: totales.venta_neta, piezas: totales.piezas, prevFn: totales.prevFn, yoy: totales.yoy, ...(verSensible ? { mc: totales.mc } : {}) },
       }],
     };
   };
@@ -166,6 +188,8 @@ export default function AnalisisClientesGlobal() {
           { k: `Fact Neta ${mesLbl}`, medida: tooltip('fact_neta', mesLbl), v: money(global.mes.fact_neta), sub: global.yoyMes != null ? `${signo(global.yoyMes)} vs ${anio - 1}` : `sin ${anio - 1}` },
           { k: `YTD ${anio}`, medida: tooltip('fact_neta', `YTD ${anio}`), v: money(global.ytd.fact_neta), sub: global.yoyYtd != null ? `${signo(global.yoyYtd)} vs ${anio - 1}` : `sin ${anio - 1}` },
           { k: `Clientes activos ${mesLbl}`, v: int(agg.activosMes), sub: `de ${int(agg.clientes.length)} en el año` },
+          { k: 'Clientes en cuota', v: `${int(totales.clientesEnCuota)} de ${int(totales.clientesConCuota)}`,
+            sub: totales.pctCuota == null ? 'sin cuota cargada' : `${pct(totales.pctCuota, 0)} de su cuota · ${periodoLbl}` },
         ]} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8 }}>

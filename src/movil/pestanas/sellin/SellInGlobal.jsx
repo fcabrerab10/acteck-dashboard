@@ -27,6 +27,8 @@ import { SelectorMes, ComposicionCategorias, ultimosMeses } from '../SellInClien
 import { BarraMes } from './piezas';
 import { useSellInGlobal } from './datos';
 import FichaSku from './FichaSku';
+import ApoyoM from './ApoyoM';
+import EquipoM from './EquipoM';
 
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
@@ -284,6 +286,10 @@ export default function SellInGlobal() {
               </button>
             ))}
           </ListaAgrupada>
+
+          {/* Lo que ya venía en erp_ventas y no se veía: apoyo por concepto y equipo comercial */}
+          <ApoyoM anio={r.a} mes={r.m} />
+          <EquipoM anio={r.a} mes={r.m} />
 
           <TituloSeccionM style={{ marginTop: 18, padding: '0 28px 6px' }}>Fuente</TituloSeccionM>
           <div style={{ padding: '0 28px', fontSize: 11, color: theme.textSubtle || theme.textMuted, lineHeight: 1.45, fontFamily: TYPO.fontText }}>

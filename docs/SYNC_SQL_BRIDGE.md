@@ -247,6 +247,8 @@ no se derivó nada desde ahí.
 
 **2026-09-11 · histórico diario de inventario.** Tras cada carga de `inventario` el puente llama al RPC `snapshot_inventario_diario()` (migración `20260911_inventario_historico.sql`), que guarda la foto del día CDMX en `inventario_historico` (la corrida de las 19:00 deja el cierre). Requiere `git pull` en la Mac mini y modo DIRECTO (service role key); no cambian los plists. pg_cron no está habilitado en Supabase; si algún día se habilita, la migración trae el `cron.schedule` equivalente.
 
+
+**2026-09-12 · la foto diaria ya no depende de la Mac mini.** `api/cron.js` tiene la tarea `inventario-foto` (llama al mismo RPC `snapshot_inventario_diario()` con el service role) y `vercel.json` la programa a las **01:30 UTC = 19:30 CDMX**, después de la última corrida del puente (19:00). Las dos fuentes conviven: el RPC es idempotente (`ON CONFLICT DO UPDATE`), así que la última escritura del día es la que queda. Si la Mac mini está apagada o sin `git pull`, el histórico se sigue llenando desde Vercel. Comprobar a mano: `curl -s "https://acteck-dashboard.vercel.app/api/cron?task=inventario-foto" -H "Authorization: Bearer $CRON_SECRET"` → `{ fecha, filas, dias_en_historico }`.
 ## Problemas comunes
 
 | Síntoma | Causa · solución |

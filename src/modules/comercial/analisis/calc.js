@@ -104,6 +104,36 @@ export function agregarClientes(rows, anio, mesMax, modo) {
   return { clientes: visibles, soloPrev, totales, activosMes, concentracion10 };
 }
 
+// ───────────────────────── cuota de venta por cliente ─────────────────────────
+// v_cuota_erp_mes (supabase/migrations/20260912_cuotas_clientes_mapa.sql) ya trae la cuota
+// de RevkoBi traducida al CÓDIGO de cliente del ERP, que es la llave de esta pantalla.
+
+/** Map `cliente|anio|mes` → cuota_venta. */
+export function mapaCuotas(rows = []) {
+  const m = new Map();
+  for (const r of rows) {
+    if (!r.cliente_erp) continue;
+    const k = `${r.cliente_erp}|${N(r.anio)}|${N(r.mes)}`;
+    m.set(k, N(m.get(k)) + N(r.cuota_venta));
+  }
+  return m;
+}
+
+/** Cuota del periodo en pantalla: el mes, o la suma de enero a mesMax en modo YTD. */
+export function cuotaPeriodo(mapa, cliente, anio, mesMax, modo) {
+  if (!mapa || !cliente) return null;
+  if (modo === 'mes') return mapa.get(`${cliente}|${anio}|${mesMax}`) ?? null;
+  let s = 0, hay = false;
+  for (let m = 1; m <= mesMax; m += 1) {
+    const v = mapa.get(`${cliente}|${anio}|${m}`);
+    if (v !== undefined) { s += v; hay = true; }
+  }
+  return hay ? s : null;
+}
+
+/** % de alcance = fact. neta del periodo / cuota del periodo. Sin cuota → null (pinta "—"). */
+export const alcanceCuota = (factNeta, cuota) => (cuota && cuota > 0 ? (factNeta / cuota) * 100 : null);
+
 /** Fila-grupo "Otros · compra ocasional" a partir de sus clientes. */
 export function filaOtros(hijos) {
   const g = { cliente: OTROS_KEY, nombre: `Otros · compra ocasional (${hijos.length} clientes)`, key: 'otros', canal: '—', propio: false, esGrupo: true, hijos, cur: vacio(), prev: vacio(), ytd: vacio(), ytdPrev: vacio(), mesesCompra12: null, ultimaCompra: null };

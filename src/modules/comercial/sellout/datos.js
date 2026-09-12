@@ -57,6 +57,22 @@ export function useMensual(anio) {
   ), { enabled: !!anio }));
 }
 
+/**
+ * Cuota de sell in por cuenta y mes (v_cuota_erp_mes, mapa de
+ * supabase/migrations/20260912_cuotas_clientes_mapa.sql). ~700 filas para dos años.
+ */
+export function useCuotas(anio) {
+  return useQuery(q(['sellout_global', 'cuotas', anio], async () => {
+    const { data, error } = await cachedQuery(
+      supabase.from('v_cuota_erp_mes').select('cuota_cliente,cliente_erp,cuenta_sellout,anio,mes,cuota_venta,cuota_piezas')
+        .in('anio', [anio - 1, anio]),
+    );
+    if (error) throw error;
+    return data || [];
+    // 5 min como el resto: la app puede editar cuotas_mensuales desde Sell In.
+  }, { enabled: !!anio }));
+}
+
 /** SKU × cuenta del mes elegido y del mismo mes del año anterior (composición por marca / categoría). */
 export function useSkuMes(anio, mes) {
   return useQuery(q(['sellout_global', 'sku_mes', anio, mes], () => fetchAllQ(
