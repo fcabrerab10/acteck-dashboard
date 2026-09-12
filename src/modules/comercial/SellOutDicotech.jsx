@@ -8,13 +8,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRoadmap, useInventarioCliente } from '../../lib/queries';
+import { disponibilidadDeCampos } from '../../lib/disponibilidad';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, X, ChevronRight } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
@@ -112,8 +113,6 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'estrategia')) {
     return <SinAcceso motivo={`No tienes acceso a Sell Out de ${clienteKey || 'este cliente'}.`} />;
   }
-  // Información sensible: valor del inventario a costo.
-  const sensible = puedeVerSensible(perfil);
   const { theme } = useTheme();
   const P = paletteFromTheme(theme);
   const isDark = theme.mode === 'dark';
@@ -341,6 +340,13 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   }, [familiasSOYTD]);
 
   // Inventario (para columna Inv. tabla)
+  // Qué trae de verdad la carga de Dicotech (última semana): lo que no viene no se pinta.
+  // Hoy su Excel no manda dias_sin_venta ni precio_venta → el badge "sin venta ≥60d" no existe.
+  const camposInv = useMemo(() => {
+    const d = disponibilidadDeCampos(clienteKey, inventarioCliente, ['valor', 'costo_convenio', 'precio_venta', 'dias_sin_venta', 'fecha_ultima_venta']);
+    return { ...d.campos, valor: d.hay('valor') || d.hay('costo_convenio') };
+  }, [clienteKey, inventarioCliente]);
+
   const inventarioMap = useMemo(() => {
     const m = new Map();
     for (const r of inventarioCliente) {
@@ -366,6 +372,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   // Totales de inventario en cliente — para KPI card "Inventario en Dicotech"
   const invTotales = useMemo(() => {
     let piezas = 0, valor = 0, skus = 0, sinVentaCritico = 0;
+    const conDias = camposInv.dias_sin_venta;
     for (const [, v] of inventarioMap) {
       if (v.stock > 0) {
         piezas += v.stock;
@@ -374,8 +381,9 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         if (v.dias_sin_venta != null && v.dias_sin_venta >= 60) sinVentaCritico++;
       }
     }
-    return { piezas, valor, skus, sinVentaCritico };
-  }, [inventarioMap]);
+    // La carga de Dicotech no trae días sin venta: sin el dato el badge no se pinta.
+    return { piezas, valor, skus, sinVentaCritico, conDias };
+  }, [inventarioMap, camposInv]);
 
   const skusConInventario = useMemo(() => {
     const s = new Set();
@@ -779,13 +787,13 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         {/* KPI NUEVO: Inventario en Dicotech */}
         <KpiCard theme={theme} P={P}
           eyebrow="Inventario en Dicotech"
-          badge={invTotales.sinVentaCritico > 0 ? { l: `${invTotales.sinVentaCritico} sin venta ≥60d`, tone: 'warn' } : { l: 'nuevo', tone: 'new' }}
+          badge={invTotales.conDias && invTotales.sinVentaCritico > 0 ? { l: `${invTotales.sinVentaCritico} sin venta ≥60d`, tone: 'warn' } : null}
           title="Stock del cliente"
           big={fmt.int(invTotales.piezas)}
           bigColor={P.orange}
           bigSmall="pz"
           sub={<>
-            {sensible && invTotales.valor > 0 && <><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(invTotales.valor)}</strong> valor</>}
+            {camposInv.valor && invTotales.valor > 0 && <><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(invTotales.valor)}</strong> valor</>}
             {invTotales.skus > 0 && <> · {fmt.int(invTotales.skus)} SKUs</>}
             {kpis.mtdTx > 0 && invTotales.piezas > 0 && (
               <> · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{(invTotales.piezas / (kpis.mtdPiezas > 0 ? kpis.mtdPiezas : 1)).toFixed(1)}×</strong> meses de venta</>
@@ -1390,14 +1398,14 @@ function headHeatFirst(theme) {
 
 // ═══════════════ Ranking sucursales · mini-cards grid 3×2 + drill inline ═══════════════
 function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSucursal, drillData, mesActualLabel }) {
-  // Información sensible: el inventario se mide a costo; sin el permiso se mide en piezas.
-  const sensible = puedeVerSensible(usePerfil());
   const [modo, setModo] = useState('venta'); // venta | inv | ventames
   const rows = sucursales.slice(0, 6);
-  const invMetrica = (r) => (sensible ? r.invValor : r.invStock);
+  // Si la fuente del cliente no trae valor de inventario, el modo "inv" se lee en piezas.
+  const hayInvValor = sucursales.some((r) => (r.invValor || 0) > 0);
+  const invMetrica = (r) => (hayInvValor ? r.invValor : r.invStock);
   const valueOf = (r) => modo === 'venta' ? r.monto : modo === 'inv' ? invMetrica(r) : r.ventaMes;
   const maxVal = Math.max(1, ...rows.map(valueOf));
-  const formatValue = (r) => (modo === 'inv' && !sensible ? `${fmt.int(valueOf(r))} pz` : fmt.money(valueOf(r)));
+  const formatValue = (r) => (modo === 'inv' && !hayInvValor ? `${fmt.int(valueOf(r))} pz` : fmt.money(valueOf(r)));
   const isDark = theme.mode === 'dark';
   // Título dinámico del modo
   const modoTitle = modo === 'venta' ? 'Ranking sucursales · YTD' : modo === 'inv' ? `Inventario por sucursal · snapshot` : `Ranking sucursales · ${mesActualLabel || 'mes'}`;
@@ -2392,8 +2400,6 @@ function AnalisisMensualMini({ theme, P, isDark, mensuales, precioLista }) {
 }
 
 function InvSucursalMini({ theme, P, isDark, inv, total }) {
-  // Información sensible: el valor a costo por sucursal.
-  const sensible = puedeVerSensible(usePerfil());
   const SIETE = ['dicoags2', 'leon2', 'Arboledas', 'GDL', 'ZACATECAS', 'santafe', 'DC'];
   const byName = new Map(inv.map((x) => [x.sucursal, x]));
   const cells = SIETE.map((s) => ({ key: s, label: (SUCURSAL_META[s]?.label || s).slice(0, 3), data: byName.get(s) }));
@@ -2429,7 +2435,7 @@ function InvSucursalMini({ theme, P, isDark, inv, total }) {
                 }}>
                   <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, fontWeight: 600 }}>{c.label}</div>
                   <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 700, color: theme.text, marginTop: 1, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{has ? fmt.int(c.data.stock) : '—'}</div>
-                  <div style={{ fontSize: 8.5, color: theme.textSubtle || theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>{sensible && has && c.data.valor > 0 ? fmt.money(c.data.valor) : ''}</div>
+                  <div style={{ fontSize: 8.5, color: theme.textSubtle || theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>{has && c.data.valor > 0 ? fmt.money(c.data.valor) : ''}</div>
                 </div>
               );
             })}
@@ -2453,7 +2459,7 @@ function InvSucursalMini({ theme, P, isDark, inv, total }) {
             fontSize: 10, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace',
           }}>
             <span>{inv.length} sucursales con stock</span>
-            <span>Total <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.int(total.stock)} pz</strong>{sensible ? <> · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(total.valor)}</strong></> : null}</span>
+            <span>Total <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.int(total.stock)} pz</strong>{total.valor > 0 ? <> · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(total.valor)}</strong></> : null}</span>
           </div>
         </>
       )}

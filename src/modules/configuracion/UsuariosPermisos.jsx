@@ -220,12 +220,12 @@ function FichaUsuario({ u, usuarios, actualizar, refetch, soyYo, ts }) {
         </div>
       </Panel>
 
-      <Panel titulo="Información sensible" meta="márgenes, utilidad, contribución y costos" padding="6px 12px">
+      <Panel titulo="Información sensible" meta="márgenes, utilidad, contribución y costos de Acteck" padding="6px 12px">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.005em' }}>Márgenes, utilidad, contribución y costos</span>
+            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.005em' }}>Márgenes, utilidad, contribución y costos de Acteck</span>
             <span style={{ display: 'block', fontSize: 10.5, color: theme.textSubtle || theme.textMuted }}>
-              {esSuper ? 'Super admin: siempre visible.' : 'Sin esto ve ventas, cuotas, mix e inventario en piezas, pero no MC %, contribución, utilidad, costos ni el valor del inventario a costo, en ninguna pantalla (web y móvil).'}
+              {esSuper ? 'Super admin: siempre visible.' : 'Sin esto ve ventas, cuotas y mix, pero no MC %, contribución, utilidad, costos de Acteck, costos USD, precio de compra ni el valor del inventario de Acteck, en ninguna pantalla (web y móvil). El valor del inventario de los clientes (Digitalife, PCEL, Dicotech) NO entra aquí: se ve siempre.'}
             </span>
           </span>
           <Interruptor theme={theme} on={esSuper || permisos.sensible === true} onChange={esSuper ? undefined : setSensible} title={esSuper ? 'Super admin: acceso total por código' : 'Mostrar u ocultar información sensible'} />

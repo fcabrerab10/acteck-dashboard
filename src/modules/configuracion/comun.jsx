@@ -40,7 +40,7 @@ export const permisosVacios = () => ({
 });
 
 /** Normaliza permisos de la BD (pueden faltar claves) sin perder valores existentes.
- *  `sensible` (bool): información sensible — márgenes, utilidad, contribución y costos (puedeVerSensible). */
+ *  `sensible` (bool): información sensible de Acteck — márgenes, utilidad, contribución y costos propios (puedeVerSensible). El valor del inventario de los clientes NO entra. */
 export function normalizarPermisos(p) {
   const base = permisosVacios();
   const clientes = { ...base.clientes };

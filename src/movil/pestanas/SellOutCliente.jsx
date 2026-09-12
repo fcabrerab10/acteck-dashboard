@@ -10,18 +10,20 @@
 //   Sell-in del mes (ratio) → v_fact_cliente_mes (useClientesMes).
 // PCEL no reporta importe: su monto se valúa a precio de lista "PCEL PROVISIONAL" vigente (respaldo
 // "Mayoreo AAA"), la misma cascada de v_sellout_unificado; el hero lo avisa con la pill "valuado a lista".
-// Valor del inventario y costos: SÓLO con puedeVerSensible(); sin permiso van piezas y SKUs.
+// Valor del inventario del cliente: se muestra siempre (es inventario del cliente, no de Acteck).
+// Lo que la fuente del cliente NO trae, NO se pinta: `campos` (disponibilidadDeCampos) decide
+// qué KPIs existen. Hoy Dicotech no manda dias_sin_venta ni precio_venta, y PCEL no manda
+// ni días sin venta ni fecha de última venta.
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { puedeVerSensible } from '../../lib/permisos';
 import { useNav } from '../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Cabecera, Skeleton, HeatCell, Pill, Vacio, CampoBusqueda, Segmented } from '../piezas';
 import { useClientesMes, useSelloutMensual } from '../datos';
-import { money, moneyCompact, int, deltaPct, tonoDelta, MESES, N } from '../util';
+import { money, moneyCompact, int, deltaPct, tonoDelta, MESES, N, disponibilidadDeCampos } from '../util';
 import { SelectorMes, ComposicionCategorias, ultimosMeses, catalogoSkus, agruparCategorias } from './SellInCliente';
 import FichaSkuSellOut from './sellout/FichaSkuSellOut';
 import { preciosPcel } from './sellout/datos';
@@ -66,20 +68,25 @@ async function cargarSellOutSku(ck, anios) {
 }
 
 // Foto de inventario del cliente en la última semana cargada.
-// det: sku → { stock, valor, costo, precioVenta, dias, semana } · valor SIEMPRE se calcula (la pantalla decide si lo enseña).
+// det: sku → { stock, valor, costo, precioVenta, dias, semana }.
+// `campos` dice qué trae realmente la fuente de ESTE cliente: lo que no viene, no se pinta.
+const CAMPOS_INV = ['valor', 'costo_convenio', 'precio_venta', 'dias_sin_venta', 'fecha_ultima_venta'];
+
 async function cargarInventario(ck, aSku = (c) => c) {
-  const vacio = { stock: new Map(), det: new Map(), nombres: new Map(), semana: null, totalPz: 0, totalValor: 0, skus: 0, sinVenta30: 0, conSinVenta: false, etiquetaSinVenta: 'sin venta 30+ días' };
+  const sinCampos = Object.fromEntries(CAMPOS_INV.map((c) => [c, false]));
+  const vacio = { stock: new Map(), det: new Map(), nombres: new Map(), semana: null, totalPz: 0, totalValor: 0, skus: 0, sinVenta30: 0, campos: sinCampos };
   if (ck === 'pcel') {
     const { data: ult } = await cachedQuery(supabase.from('sellout_pcel').select('anio,semana').not('anio', 'is', null).order('anio', { ascending: false, nullsFirst: false }).order('semana', { ascending: false, nullsFirst: false }).limit(1));
     const u = ult?.[0]; if (!u) return vacio;
     const rows = await fetchAll('sellout_pcel', 'sku,pcel_sku,producto,inventario,costo_promedio,vta_mes_actual,vta_mes_1', (q) => q.eq('anio', u.anio).eq('semana', u.semana));
+    // sellout_pcel no trae días sin venta, fecha de última venta ni precio de venta del cliente.
+    const dispo = disponibilidadDeCampos(ck, rows, ['inventario', 'costo_promedio'], { soloUltimaSemana: false });
     const stock = new Map(), det = new Map(), nombres = new Map();
     rows.forEach((r) => {
       const k = aSku(r.pcel_sku || r.sku), pz = N(r.inventario);
       stock.set(k, (stock.get(k) || 0) + pz);
-      const o = det.get(k) || (det.set(k, { stock: 0, valor: 0, costo: N(r.costo_promedio), precioVenta: null, dias: null, sinVentaReciente: true, semana: `S${u.semana} ${u.anio}` }), det.get(k));
+      const o = det.get(k) || (det.set(k, { stock: 0, valor: 0, costo: N(r.costo_promedio), precioVenta: null, dias: null, semana: `S${u.semana} ${u.anio}` }), det.get(k));
       o.stock += pz; o.valor += pz * N(r.costo_promedio);
-      if (N(r.vta_mes_actual) > 0 || N(r.vta_mes_1) > 0) o.sinVentaReciente = false;
       if (r.producto && !nombres.has(k)) nombres.set(k, r.producto);
     });
     const lista = [...det.values()];
@@ -87,14 +94,15 @@ async function cargarInventario(ck, aSku = (c) => c) {
       stock, det, nombres, semana: `S${u.semana} ${u.anio}`,
       totalPz: lista.reduce((s, o) => s + o.stock, 0), totalValor: lista.reduce((s, o) => s + o.valor, 0),
       skus: lista.filter((o) => o.stock > 0).length,
-      sinVenta30: lista.filter((o) => o.stock > 0 && o.sinVentaReciente).length, conSinVenta: true,
-      etiquetaSinVenta: 'sin venta en 2 meses',           // sellout_pcel no trae días sin venta
+      sinVenta30: 0,
+      campos: { ...sinCampos, valor: dispo.hay('inventario') && dispo.hay('costo_promedio'), costo_convenio: dispo.hay('costo_promedio') },
     };
   }
   const { data: ult } = await supabase.from('inventario_cliente').select('anio,semana').eq('cliente', ck).not('anio', 'is', null).order('anio', { ascending: false, nullsFirst: false }).order('semana', { ascending: false, nullsFirst: false }).limit(1);
   const u = ult?.[0]; if (!u) return vacio;
   const rows = await fetchAll('inventario_cliente', 'sku,stock,valor,costo_convenio,precio_venta,dias_sin_venta', (q) => q.eq('cliente', ck).eq('anio', u.anio).eq('semana', u.semana));
   const semana = `S${u.semana} ${u.anio}`;
+  const dispo = disponibilidadDeCampos(ck, rows, CAMPOS_INV, { soloUltimaSemana: false });
   const stock = new Map(), det = new Map();
   rows.forEach((r) => {
     const pz = N(r.stock);
@@ -109,8 +117,8 @@ async function cargarInventario(ck, aSku = (c) => c) {
     totalPz: lista.reduce((s, o) => s + o.stock, 0), totalValor: lista.reduce((s, o) => s + o.valor, 0),
     skus: lista.filter((o) => o.stock > 0).length,
     sinVenta30: lista.filter((o) => o.stock > 0 && o.dias != null && o.dias >= 30).length,
-    conSinVenta: lista.some((o) => o.dias != null),     // dicotech no trae días sin venta
-    etiquetaSinVenta: 'sin venta 30+ días',
+    // `valor` viene vacío en Digitalife pero se reconstruye con costo_convenio: cuenta como disponible.
+    campos: { ...dispo.campos, valor: dispo.hay('valor') || dispo.hay('costo_convenio') },
   };
 }
 
@@ -139,7 +147,6 @@ export default function SellOutCliente({ clienteKey, nombre }) {
   const { data, isLoading, error } = useSellOutCliente(clienteKey, anioActual);
   const { data: totales } = useSelloutMensual(clienteKey, anioActual);
   const { data: cli } = useClientesMes(anioActual);
-  const sensible = puedeVerSensible(nav?.perfil);
   const esPcel = clienteKey === 'pcel';
   const usaMonto = unidad === 'monto';
 
@@ -209,13 +216,15 @@ export default function SellOutCliente({ clienteKey, nombre }) {
     const filas = data.rows.filter((x) => x.sku === sku).map((x) => ({ anio: x.anio, mes: x.mes, piezas: x.piezas, monto: x.monto }));
     const det = data.inv.det?.get(sku) || null;
     nav.push(
-      <FichaSkuSellOut sku={sku} info={data.cat.get(sku) || {}} clienteKey={clienteKey} nombre={nombre} filas={filas} inv={det}
+      <FichaSkuSellOut sku={sku} info={data.cat.get(sku) || {}} clienteKey={clienteKey} nombre={nombre} filas={filas} inv={det} campos={data.inv?.campos || {}}
         codigosPcel={data.inversoPcel?.get(sku) || null} unidadInicial={unidad} valuadoALista={!!data.valuadoALista} />,
       `sellout-sku-${sku}`,
     );
   };
 
   const inv = data?.inv;
+  // Campos que la fuente de ESTE cliente trae realmente: lo que falta, no se pinta.
+  const campos = inv?.campos || {};
   const sub = r ? `${nombre} · ${r.fmt(r.total)} en ${r.skus.length} SKUs` : nombre;
 
   return (
@@ -244,12 +253,17 @@ export default function SellOutCliente({ clienteKey, nombre }) {
           <KpiGrid style={{ marginTop: 12 }}>
             <KpiM eyebrow={`vs ${r.a - 1}`} big={r.yoy != null ? deltaPct(r.yoy, 1) : '—'} bigColor={r.yoy == null ? undefined : r.yoy >= 0 ? theme.green : theme.red} sub={`${r.fmt(r.valorPrev)} en ${MESES[r.m - 1]} ${r.a - 1}${r.enCurso ? ' · mes completo' : ''}`} />
             <KpiM eyebrow="Inventario del cliente" big={inv.totalPz ? `${int(inv.totalPz)} pz` : '—'} sub={inv.semana ? `${inv.skus} SKUs con stock · ${inv.semana}` : 'sin inventario cargado'} />
-            <KpiM eyebrow={sensible ? 'Valor del inventario' : 'SKUs con stock'}
-              big={sensible ? (inv.totalValor > 0 ? money(inv.totalValor) : '—') : (inv.skus ? int(inv.skus) : '—')}
-              sub={sensible ? (inv.totalValor > 0 ? `a costo convenio · ${inv.semana || 'sin semana'}` : 'sin costo convenio cargado') : `de ${inv.det.size} en la foto · sin permiso de importes`} />
-            <KpiM eyebrow={inv.etiquetaSinVenta} big={inv.semana && inv.conSinVenta ? int(inv.sinVenta30) : '—'}
-              bigColor={inv.conSinVenta && inv.sinVenta30 > 0 ? theme.orange : undefined}
-              sub={!inv.semana ? 'sin inventario cargado' : !inv.conSinVenta ? 'la fuente de este cliente no trae la fecha de última venta' : inv.skus ? `de ${inv.skus} SKUs con stock (${Math.round((inv.sinVenta30 / Math.max(1, inv.skus)) * 100)}%)` : 'sin SKUs con stock'} />
+            {/* El valor del inventario del cliente se muestra siempre; sólo se omite si su fuente no trae con qué valuarlo. */}
+            {campos.valor && (
+              <KpiM eyebrow="Valor del inventario" big={inv.totalValor > 0 ? money(inv.totalValor) : '—'}
+                sub={`${esPcel ? 'a costo promedio' : 'a costo convenio'} · ${inv.semana || 'sin semana'}`} />
+            )}
+            {/* Dicotech y PCEL no mandan días sin venta: el KPI no existe para ellos. */}
+            {campos.dias_sin_venta && (
+              <KpiM eyebrow="Sin venta 30+ días" big={inv.semana ? int(inv.sinVenta30) : '—'}
+                bigColor={inv.sinVenta30 > 0 ? theme.orange : undefined}
+                sub={!inv.semana ? 'sin inventario cargado' : inv.skus ? `de ${inv.skus} SKUs con stock (${Math.round((inv.sinVenta30 / Math.max(1, inv.skus)) * 100)}%)` : 'sin SKUs con stock'} />
+            )}
           </KpiGrid>
 
           <div style={{ padding: '18px 16px 8px' }}><CampoBusqueda value={q} onChange={setQ} placeholder="Buscar SKU o producto del mes" /></div>

@@ -10,7 +10,7 @@
 //   useInventarioSkuAnio(…)  → historial semanal del inventario del cliente para UN sku en el año en curso
 //                              → stock al cierre de cada mes (última semana cargada de ese mes).
 //
-// Nada sensible viaja de más: el costo/valor se lee aquí pero la pantalla sólo lo muestra con puedeVerSensible().
+// El costo/valor que se lee aquí es del propio cliente (costo convenio / costo promedio): se muestra siempre.
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { fetchAll } from '../../../lib/queries';

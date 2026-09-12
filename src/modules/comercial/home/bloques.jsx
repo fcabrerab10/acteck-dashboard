@@ -5,8 +5,6 @@ import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, fecha, fechaCorta } from '../../../lib/format';
 import { Panel, TablaCompacta, HeatCell, Pill, Boton, GraficaLineas, SelectorTrimestres, etiquetaTrimestres } from '../../../components/kit';
 import { MESES, META_INV_DIAS } from './config';
-import { usePerfil } from '../../../lib/perfilContext';
-import { puedeVerSensible } from '../../../lib/permisos';
 
 const signo = (v, d = 1) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneRatio = (v) => (v == null ? 'gray' : v >= 80 ? 'green' : v >= 60 ? 'orange' : 'red');
@@ -91,8 +89,6 @@ export function TopSkusTabla({ top, onNavegar }) {
 
 // ── Inventario del cliente · snapshot + días + SKUs críticos
 export function InventarioPanel({ r, onNavegar }) {
-  // Información sensible: el valor del inventario del cliente está a costo.
-  const sensible = puedeVerSensible(usePerfil());
   const { theme } = useTheme();
   const dias = r.diasInv;
   const cols = [
@@ -105,8 +101,7 @@ export function InventarioPanel({ r, onNavegar }) {
   return (
     <Panel titulo="Inventario del cliente" meta={r.inv.semana ? `semana ${r.inv.semana} · ${r.inv.anio}` : 'sin snapshot'} acciones={onNavegar && <Boton onClick={onNavegar}>Ver detalle</Boton>}>
       <FilaStats>
-        {sensible && <Stat k="Valor" v={$c(r.inv.valor)} sub={`${int(r.inv.stock)} pzs · ${int(r.inv.skus)} SKUs con stock`} />}
-        {!sensible && <Stat k="Stock" v={`${int(r.inv.stock)} pzs`} sub={`${int(r.inv.skus)} SKUs con stock`} />}
+        <Stat k="Valor" v={$c(r.inv.valor)} sub={`${int(r.inv.stock)} pzs · ${int(r.inv.skus)} SKUs con stock`} />
         <Stat k="Días de inventario" v={dias != null ? `${dias}d` : '—'} sub={`meta ${META_INV_DIAS}d${dias != null && dias > META_INV_DIAS ? ` · ▲${dias - META_INV_DIAS}d` : ''}`} color={dias == null ? theme.textMuted : dias > META_INV_DIAS ? theme.orange : theme.green} />
         <Stat k="Cobertura" v={dias == null ? '—' : dias <= 30 ? 'Riesgo stockout' : dias <= 90 ? 'Óptimo' : dias <= 150 ? 'Alto' : 'Sobreinventario'} color={dias == null ? theme.textMuted : dias <= 30 ? theme.red : dias <= 90 ? theme.green : theme.orange} />
         {r.inv.transito > 0 && <Stat k="Tránsito del cliente" v={`${int(r.inv.transito)} pzs`} />}

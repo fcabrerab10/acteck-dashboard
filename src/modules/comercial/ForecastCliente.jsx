@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from '../../lib/supabase';
 import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
-import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerSensible } from '../../lib/permisos';
 
 export default function ForecastCliente({ cliente, clienteKey }) {
-  // Información sensible: todo lo valuado a costo (stock, sugerido de compra, capital
-  // inmovilizado). Sin el permiso el forecast se lee en piezas y semanas de cobertura.
-  const sensible = puedeVerSensible(usePerfil());
+  // El forecast se valúa al costo del propio cliente (productos_cliente.costo_promedio /
+  // inventario_cliente.costo_convenio): no es información sensible de Acteck.
   const [loading, setLoading] = React.useState(true);
   const [ventas, setVentas] = React.useState([]);
   const [sellInSku, setSellInSku] = React.useState([]);
@@ -258,10 +255,10 @@ export default function ForecastCliente({ cliente, clienteKey }) {
   var renderResumen = function() {
     var kpis = [
       { label: 'Demanda Mensual Prom.', value: fmtN(totalDemanda) + ' pzas', sub: 'Basado en sell-out ponderado', color: '#6366f1' },
-      { label: 'Stock Disponible', value: fmtN(totalStock) + ' pzas', sub: sensible ? fmt(totalStock * (forecastData.length > 0 ? forecastData.reduce(function(s,d){return s+d.costoUnitario;},0)/forecastData.length : 0)) : forecastData.length + ' SKUs', color: '#10b981' },
+      { label: 'Stock Disponible', value: fmtN(totalStock) + ' pzas', sub: fmt(totalStock * (forecastData.length > 0 ? forecastData.reduce(function(s,d){return s+d.costoUnitario;},0)/forecastData.length : 0)), color: '#10b981' },
       { label: 'En Tr\u00e1nsito', value: fmtN(totalTransito) + ' pzas', sub: enCamino.length + ' pedidos activos', color: '#f59e0b' },
       { label: 'Cobertura Global', value: coberturaGlobal.toFixed(1) + ' semanas', sub: coberturaGlobal < 4 ? 'Nivel bajo' : coberturaGlobal > 12 ? 'Sobrestock' : 'Nivel saludable', color: coberturaGlobal < 4 ? '#dc2626' : '#10b981' },
-      { label: 'Sugerido de Compra', value: fmtN(totalSugerido) + ' pzas', sub: sensible ? fmt(totalValorSugerido) : 'Sobre demanda ponderada', color: '#8b5cf6' },
+      { label: 'Sugerido de Compra', value: fmtN(totalSugerido) + ' pzas', sub: fmt(totalValorSugerido), color: '#8b5cf6' },
       { label: 'SKUs en Riesgo', value: criticos + bajos, sub: criticos + ' cr\u00edticos, ' + bajos + ' bajos', color: criticos > 0 ? '#dc2626' : '#f59e0b' }
     ];
 
@@ -396,7 +393,7 @@ export default function ForecastCliente({ cliente, clienteKey }) {
           React.createElement('p', { style: { fontSize: '13px', color: '#7c3aed' } }, 'Total piezas'),
           React.createElement('p', { style: { fontSize: '28px', fontWeight: 700, color: '#5b21b6' } }, fmtN(totalPzas))
         ),
-        sensible && React.createElement('div', { style: { textAlign: 'center' } },
+        React.createElement('div', { style: { textAlign: 'center' } },
           React.createElement('p', { style: { fontSize: '13px', color: '#7c3aed' } }, 'Inversi\u00f3n estimada'),
           React.createElement('p', { style: { fontSize: '28px', fontWeight: 700, color: '#5b21b6' } }, fmt(totalVal))
         )
@@ -406,7 +403,7 @@ export default function ForecastCliente({ cliente, clienteKey }) {
         React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px' } },
           React.createElement('thead', null,
             React.createElement('tr', { style: { backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' } },
-              ['SKU', 'Marca', 'Demanda/mes', 'Stock', 'Tr\u00e1nsito', 'Cobertura', 'Sugerido'].concat(sensible ? ['Valor'] : []).map(function(h, i) {
+              ['SKU', 'Marca', 'Demanda/mes', 'Stock', 'Tr\u00e1nsito', 'Cobertura', 'Sugerido', 'Valor'].map(function(h, i) {
                 return React.createElement('th', { key: i, style: { padding: '10px 12px', textAlign: i > 1 ? 'right' : 'left', color: '#64748b', fontWeight: 600 } }, h);
               })
             )
@@ -421,7 +418,7 @@ export default function ForecastCliente({ cliente, clienteKey }) {
                 React.createElement('td', { style: { padding: '10px 12px', textAlign: 'right', color: '#f59e0b' } }, fmtN(d.enTransito)),
                 React.createElement('td', { style: { padding: '10px 12px', textAlign: 'right' } }, riskBadge(d.riesgo)),
                 React.createElement('td', { style: { padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#7c3aed' } }, fmtN(d.sugerido) + ' pzas'),
-                sensible && React.createElement('td', { style: { padding: '10px 12px', textAlign: 'right', color: '#5b21b6' } }, fmt(d.valorSugerido))
+                React.createElement('td', { style: { padding: '10px 12px', textAlign: 'right', color: '#5b21b6' } }, fmt(d.valorSugerido))
               );
             })
           )
@@ -511,7 +508,7 @@ export default function ForecastCliente({ cliente, clienteKey }) {
 
     // Critical stockout
     forecastData.filter(function(d) { return d.riesgo === 'critico'; }).forEach(function(d) {
-      alertas.push({ tipo: 'critico', icon: '\uD83D\uDEA8', titulo: 'Riesgo de desabasto: ' + d.sku, desc: d.descripcion + ' \u2014 Cobertura: ' + d.coberturaSemanas.toFixed(1) + ' semanas. Stock: ' + d.stockActual + ' pzas, demanda: ' + d.demandaMensual + ' pzas/mes', accion: 'Compra urgente: ' + d.sugerido + ' pzas' + (sensible ? ' (' + fmt(d.valorSugerido) + ')' : '') });
+      alertas.push({ tipo: 'critico', icon: '\uD83D\uDEA8', titulo: 'Riesgo de desabasto: ' + d.sku, desc: d.descripcion + ' \u2014 Cobertura: ' + d.coberturaSemanas.toFixed(1) + ' semanas. Stock: ' + d.stockActual + ' pzas, demanda: ' + d.demandaMensual + ' pzas/mes', accion: 'Compra urgente: ' + d.sugerido + ' pzas' + ' (' + fmt(d.valorSugerido) + ')' });
     });
 
     // Low stock
@@ -522,12 +519,12 @@ export default function ForecastCliente({ cliente, clienteKey }) {
     // Overstock
     forecastData.filter(function(d) { return d.riesgo === 'sobrestock'; }).slice(0, 10).forEach(function(d) {
       var mesesStock = d.demandaMensual > 0 ? Math.round(d.stockTotal / d.demandaMensual) : 999;
-      alertas.push({ tipo: 'sobrestock', icon: '\uD83D\uDCE6', titulo: 'Sobrestock: ' + d.sku, desc: d.stockTotal + ' pzas = ' + mesesStock + ' meses de inventario.' + (sensible ? ' Capital inmovilizado: ' + fmt(d.stockTotal * d.costoUnitario) : ''), accion: 'Evaluar promoci\u00f3n o redistribuci\u00f3n' });
+      alertas.push({ tipo: 'sobrestock', icon: '\uD83D\uDCE6', titulo: 'Sobrestock: ' + d.sku, desc: d.stockTotal + ' pzas = ' + mesesStock + ' meses de inventario.' + ' Capital inmovilizado: ' + fmt(d.stockTotal * d.costoUnitario), accion: 'Evaluar promoci\u00f3n o redistribuci\u00f3n' });
     });
 
     // Dead inventory (stock > 0, demanda = 0)
     forecastData.filter(function(d) { return d.stockActual > 0 && d.demandaMensual === 0; }).slice(0, 5).forEach(function(d) {
-      alertas.push({ tipo: 'muerto', icon: '\uD83D\uDC80', titulo: 'Inventario muerto: ' + d.sku, desc: d.stockActual + ' pzas sin demanda.' + (sensible ? ' Valor: ' + fmt(d.stockActual * d.costoUnitario) : ''), accion: 'Liquidar o regresar a proveedor' });
+      alertas.push({ tipo: 'muerto', icon: '\uD83D\uDC80', titulo: 'Inventario muerto: ' + d.sku, desc: d.stockActual + ' pzas sin demanda.' + ' Valor: ' + fmt(d.stockActual * d.costoUnitario), accion: 'Liquidar o regresar a proveedor' });
     });
 
     var colorMap = { critico: { bg: '#fef2f2', border: '#fecaca', text: '#991b1b' }, bajo: { bg: '#fffbeb', border: '#fde68a', text: '#92400e' }, sobrestock: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' }, muerto: { bg: '#f8fafc', border: '#e2e8f0', text: '#334155' } };

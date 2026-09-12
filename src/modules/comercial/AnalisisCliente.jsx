@@ -4,9 +4,10 @@ import { clientes } from '../../lib/constants';
 import { Target } from 'lucide-react';
 import { fetchSelloutSku, fetchSelloutSkuRango, fetchInventarioCliente } from '../../lib/pcelAdapter';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import { fetchAllQ } from '../../lib/queries';
+import { disponibilidadDeCampos } from '../../lib/disponibilidad';
 import { GraficaLineas } from '../../components/kit';
 
 export default function AnalisisCliente({ cliente, clienteKey }) {
@@ -14,8 +15,6 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'analisis')) {
     return React.createElement(SinAcceso, { motivo: `No tienes acceso a Análisis de ${clienteKey || 'este cliente'}.` });
   }
-  // Información sensible: valor del inventario a costo (el resto se lee en piezas y $ de venta).
-  var sensible = puedeVerSensible(perfil);
   var el = React.createElement;
   var MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   var MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -306,18 +305,24 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       var soDiario = ytd.so / (ytd.mesesConDatos * 30);
       var diasCob = soDiario > 0 ? Math.round(invValorTotal / soDiario) : 0;
       if (diasCob > 120) {
-        // Top SKUs por inventario parado (stock * costo, con días sin venta > 30)
+        // Top SKUs por inventario parado. Si el cliente manda días sin venta se usan (>30d);
+        // si no los manda (Dicotech, PCEL) el criterio es tener stock y cero sell-out del año.
+        var conDias = !!(skuAnalysis && skuAnalysis.hayDiasSinVenta);
         var topLentos = (skuAnalysis && skuAnalysis.all ? skuAnalysis.all : [])
-          .filter(function(s) { return s.invStock > 0 && s.diasSinVenta > 30; })
+          .filter(function(s) { return s.invStock > 0 && (conDias ? s.diasSinVenta > 30 : s.soTotal === 0); })
           .sort(function(a, b) { return b.invValor - a.invValor; })
           .slice(0, 3);
         var mesesCob = (diasCob / 30).toFixed(1);
         lista.push({
           tipo: 'alerta', icono: '📦', titulo: 'Sobreinventario (' + diasCob + ' días ≈ ' + mesesCob + ' meses)',
-          descripcion: (sensible ? 'Inventario de ' + fmtMoney(invValorTotal) : 'El inventario') + ' con rotación actual cubre demasiado tiempo.',
+          descripcion: (invValorTotal > 0 ? 'Inventario de ' + fmtMoney(invValorTotal) : 'El inventario') + ' con rotación actual cubre demasiado tiempo.',
           accion: 'Acelerar desplazamiento de estos SKUs lentos con promoción/marketing:',
           sublist: topLentos.map(function(s) {
-            return { sku: s.sku, desc: s.desc, detail: fmtNum(s.invStock) + ' pzs · ' + (sensible ? fmtMoney(s.invValor) + ' · ' : '') + (s.diasSinVenta||0).toFixed(0) + 'd sin vender' };
+            var det = fmtNum(s.invStock) + ' pzs';
+            if (s.invValor > 0) det += ' · ' + fmtMoney(s.invValor);
+            if (conDias && s.diasSinVenta != null) det += ' · ' + s.diasSinVenta.toFixed(0) + 'd sin vender';
+            else if (!conDias) det += ' · sin sell-out este año';
+            return { sku: s.sku, desc: s.desc, detail: det };
           })
         });
       }
@@ -433,10 +438,14 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var inventarioLatest = maxA > 0 ? inventario.filter(function(inv) {
       return Number(inv.anio) === maxA && Number(inv.semana) === maxS;
     }) : inventario;
+    // ¿La fuente de ESTE cliente trae días sin venta? (Dicotech no; PCEL tampoco.)
+    // Lo que no viene no se pinta: sin el dato no se habla de "días sin vender".
+    var dispoInv = disponibilidadDeCampos(clienteKey, inventarioLatest, ['dias_sin_venta', 'fecha_ultima_venta', 'valor', 'costo_convenio'], { soloUltimaSemana: false });
+    var hayDiasSinVenta = dispoInv.hay('dias_sin_venta');
     var skuMap = {};
     var ensure = function(sku) {
       if (!skuMap[sku]) {
-        skuMap[sku] = { sku: sku, desc: sku, marca: "", categoria: "", costo: 0, precio: 0, siTotal: 0, soTotal: 0, invStock: 0, invValor: 0, diasSinVenta: 0 };
+        skuMap[sku] = { sku: sku, desc: sku, marca: "", categoria: "", costo: 0, precio: 0, siTotal: 0, soTotal: 0, invStock: 0, invValor: 0, diasSinVenta: null };
       }
       return skuMap[sku];
     };
@@ -457,7 +466,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       var rawValor = Number(inv.valor || 0);
       var costoConv = Number(inv.costo_convenio || 0);
       s.invValor = rawValor > 0 ? rawValor : (s.invStock * costoConv);
-      s.diasSinVenta = Number(inv.dias_sin_venta || 0);
+      s.diasSinVenta = inv.dias_sin_venta == null ? null : Number(inv.dias_sin_venta);
       if (!s.desc || s.desc === s.sku) s.desc = inv.titulo || inv.descripcion || s.sku;
       if (!s.marca) s.marca = inv.marca || "";
       if (!s.precio) s.precio = Number(inv.precio_venta || 0);
@@ -477,8 +486,8 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var bottomSO = all.filter(function(s){return s.siTotal>0 && s.soTotal===0;}).sort(function(a,b){return b.siTotal-a.siTotal;}).slice(0,10);
     // Inventory health — only count SKUs with actual stock (invStock > 0)
     // SKUs with stock=0 already sold out, not "dead inventory"
-    var sinVenta60 = all.filter(function(s){return s.diasSinVenta>60 && s.invStock>0;});
-    var sinVenta90 = all.filter(function(s){return s.diasSinVenta>90 && s.invStock>0;});
+    var sinVenta60 = all.filter(function(s){return s.diasSinVenta != null && s.diasSinVenta>60 && s.invStock>0;});
+    var sinVenta90 = all.filter(function(s){return s.diasSinVenta != null && s.diasSinVenta>90 && s.invStock>0;});
     var invMuerto = sinVenta90.reduce(function(s,p){return s+p.invValor;},0);
     // Margins by brand
     var byMarca = {};
@@ -487,7 +496,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       byMarca[s.marca].piezas += s.soTotal;
       byMarca[s.marca].margenTotal += s.margenPesos;
     });
-    return { all: all, topSO: topSO, bottomSO: bottomSO, sinVenta60: sinVenta60, sinVenta90: sinVenta90, invMuerto: invMuerto, byMarca: byMarca, total: all.length };
+    return { all: all, topSO: topSO, bottomSO: bottomSO, sinVenta60: sinVenta60, sinVenta90: sinVenta90, invMuerto: invMuerto, byMarca: byMarca, total: all.length, hayDiasSinVenta: hayDiasSinVenta };
   }, [productos, sellInSku, sellOutSku, inventario]);
 
   // Component-level cuota calculations (needed in render)
@@ -527,8 +536,9 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var diasColor = (diasInv >= 80 && diasInv <= 120) ? "#10b981" : (diasInv >= 60 && diasInv <= 140) ? "#f59e0b" : "#ef4444";
     var diasDetalle = diasInv < 70 ? "⚠ Riesgo de desabasto" : diasInv > 130 ? "⚠ Sobreinventario" : diasInv >= 90 && diasInv <= 110 ? "✓ Saludable (90-110d)" : "Cercano a rango ideal";
     items.push({ label: "D\u00edas de Inventario", value: diasInv + " d\u00edas", color: diasColor, detail: diasDetalle });
-    // 3. Valor del inventario (stock × costo_convenio) — sensible; sin permiso, piezas en piso.
-    if (sensible) {
+    // 3. Valor del inventario del cliente (stock × costo convenio del propio cliente).
+    //    Si la fuente no trae valor, se muestran las piezas en piso en su lugar.
+    if (invValorTotal > 0) {
       items.push({ label: "Valor del Inventario", value: fmtMoney(invValorTotal), color: "#3B82F6", detail: "Stock \u00d7 Costo Convenio" });
     } else {
       var invPzTotal = _invLatest.reduce(function(s, r) { return s + (Number(r.stock) || 0); }, 0);
@@ -954,7 +964,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-Out pzs"),
                 !esPcel && el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-Out $"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv pzs"),
-                sensible && el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv $")
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv $")
               )
             ),
             el("tbody", null,
@@ -967,7 +977,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.soPiezas.toLocaleString("es-MX")),
                   !esPcel && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.soMonto)),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.invPiezas.toLocaleString("es-MX")),
-                  sensible && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.invValor))
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.invValor))
                 );
               })
             )
@@ -988,7 +998,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
             el("thead", null,
               el("tr", { style: { borderBottom: "1px solid #e2e8f0" } },
                 el("th", { style: { textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Categoría"),
-                sensible && el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Valor Inventario"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Valor Inventario"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, esPcel ? "Sell-Out pzs" : "Sell-Out $"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "% SO"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "SKUs c/Inv")
@@ -1001,7 +1011,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
                 var soDisplay = esPcel ? c.soPiezas.toLocaleString("es-MX") : fmtMoney(c.soMonto);
                 return el("tr", { key: cat, style: { borderBottom: "1px solid #f1f5f9" } },
                   el("td", { style: { padding: "10px 12px", color: "#1e293b", fontWeight: 600 } }, cat),
-                  sensible && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(c.invValor)),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(c.invValor)),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, soDisplay),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, pctTxt),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0")

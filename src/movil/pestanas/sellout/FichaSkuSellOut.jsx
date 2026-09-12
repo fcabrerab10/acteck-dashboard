@@ -4,8 +4,8 @@
 //   2. Sell-out del AÑO EN CURSO mes a mes (Ene–mes actual) con el año anterior completo como fila
 //      comparativa, más columnas Prom (sólo meses con dato) y Total (TablaAnual).
 //   3. Inventario del cliente para ESE producto: stock de la última semana cargada, semanas de cobertura
-//      al ritmo de los últimos 3 meses con dato, días sin venta y —sólo con puedeVerSensible()— su valor
-//      a costo convenio. Sin el permiso no se muestra ningún importe de inventario, sólo piezas.
+//      al ritmo de los últimos 3 meses con dato, su valor al costo del propio cliente y —sólo si la fuente
+//      de ese cliente lo trae— los días sin venta. Lo que la fuente no manda no se pinta (`campos`).
 //   4. Stock al cierre de cada mes del año (última semana cargada de cada mes) con su promedio, para ver
 //      si el inventario del cliente sube o baja frente a su venta.
 //   5. "Ver disponibilidad" → Ficha de producto (inventario Acteck, tránsito y precio de lista).
@@ -17,7 +17,6 @@ import React, { useMemo, useState } from 'react';
 import { PackageSearch } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { puedeVerSensible } from '../../../lib/permisos';
 import { useNav } from '../../nav';
 import { TituloGrande, Cabecera, KpiM, KpiGrid, TituloSeccionM, BotonGrande, Skeleton, Pill, Vacio, Segmented } from '../../piezas';
 import { money, moneyCompact, int, deltaPct, tonoDelta, MESES, MONO, N } from '../../util';
@@ -33,15 +32,15 @@ const SEMANAS_MES = 4.345;
  * sku, info {descripcion, marca, categoria} · clienteKey, nombre
  * filas: [{ anio, mes, piezas, monto }] del SKU (año en curso y anterior; monto ya valuado)
  * inv:   { stock, valor, costo, precioVenta, dias, semana } de la última semana cargada (o null)
+ * campos: qué trae la fuente de este cliente (disponibilidadDeCampos) → { valor, dias_sin_venta, … }
  * codigosPcel: códigos PCEL del sku (sólo cliente pcel) · unidadInicial: 'monto' | 'piezas'
  */
-export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, filas = [], inv = null, codigosPcel = null, unidadInicial = 'monto', valuadoALista = false }) {
+export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, filas = [], inv = null, campos = {}, codigosPcel = null, unidadInicial = 'monto', valuadoALista = false }) {
   const { theme } = useTheme();
   const nav = useNav();
   const [unidad, setUnidad] = useState(unidadInicial);
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
-  const sensible = puedeVerSensible(nav?.perfil);
   const esPcel = clienteKey === 'pcel';
 
   const { data: histo, isLoading: lHisto } = useInventarioSkuAnio(clienteKey, sku, anio, codigosPcel);
@@ -83,6 +82,9 @@ export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, fi
   const cobertura = stock != null && a.ritmoMes > 0 ? (stock / a.ritmoMes) * SEMANAS_MES : null;
   const valorInv = inv ? (inv.valor != null ? N(inv.valor) : N(inv.stock) * N(inv.costo)) : null;
   const dias = inv?.dias ?? null;
+  // `campos` = qué trae la fuente del cliente. Sin él, se decide con el propio renglón.
+  const hayValor = (campos.valor ?? true) && valorInv != null && valorInv > 0;
+  const hayDias = (campos.dias_sin_venta ?? true) && dias != null;
 
   const stockMes = histo?.porMes || null;
   const filasStock = useMemo(() => {
@@ -142,19 +144,19 @@ export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, fi
           {!inv && <div style={{ fontSize: 12.5, color: theme.textMuted, textAlign: 'center', padding: '6px 0' }}>Este SKU no aparece en la última foto de inventario del cliente.</div>}
           {inv && (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${sensible ? 3 : 3}, minmax(0,1fr))`, gap: 10 }}>
+              {/* Sólo se pinta lo que la fuente de este cliente trae: el valor del inventario del
+                  cliente si hay con qué valuarlo, los días sin venta si vienen en la carga. */}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${2 + (hayValor ? 1 : 0) + (hayDias ? 1 : 0)}, minmax(0,1fr))`, gap: 10 }}>
                 <Dato k="Stock" v={`${int(stock)} pz`} sub={inv.semana ? inv.semana : undefined} color={stock === 0 ? theme.red : theme.text} theme={theme} />
                 <Dato k="Cobertura" v={cobertura != null ? `${cobertura.toFixed(1)} sem` : '—'} sub={a.ritmoMes > 0 ? `${int(a.ritmoMes)} pz/mes` : 'sin ritmo'} color={colorCob} theme={theme} />
-                {sensible
-                  ? <Dato k="Valor (costo)" v={valorInv != null ? money(valorInv) : '—'} sub={N(inv.costo) > 0 ? `${money(inv.costo)} / pz convenio` : 'sin costo convenio'} theme={theme} />
-                  : <Dato k="Días sin venta" v={dias != null ? `${int(dias)} d` : '—'} sub={dias != null ? (dias >= 30 ? 'sin rotación' : 'con rotación') : 'sin dato'} color={dias != null && dias >= 30 ? theme.orange : undefined} theme={theme} />}
+                {hayValor && <Dato k="Valor (costo)" v={valorInv != null ? money(valorInv) : '—'} sub={N(inv.costo) > 0 ? `${money(inv.costo)} / pz ${esPcel ? 'promedio' : 'convenio'}` : undefined} theme={theme} />}
+                {hayDias && <Dato k="Días sin venta" v={`${int(dias)} d`} sub={dias >= 30 ? 'sin rotación' : 'con rotación'} color={dias >= 30 ? theme.orange : undefined} theme={theme} />}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 11.5, color: theme.textMuted, flexWrap: 'wrap' }}>
-                {sensible && dias != null && <span style={{ color: dias >= 30 ? theme.orange : theme.textMuted }}>{int(dias)} días sin venta</span>}
-                {sensible && dias == null && <span>sin días sin venta en la fuente</span>}
-                {N(inv.precioVenta) > 0 && <span>precio de venta del cliente {money(inv.precioVenta)}</span>}
-                {!sensible && <span>Sin permiso de información sensible: no se muestran costos ni el valor del inventario.</span>}
-              </div>
+              {N(inv.precioVenta) > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 11.5, color: theme.textMuted, flexWrap: 'wrap' }}>
+                  <span>precio de venta del cliente {money(inv.precioVenta)}</span>
+                </div>
+              )}
             </>
           )}
         </div>

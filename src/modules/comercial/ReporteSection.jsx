@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditarPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
+import { puedeEditarPestanaGlobal } from '../../lib/permisos';
 import { toast } from '../../lib/toast';
 import { formatMXN } from '../../lib/utils';
 import {
@@ -780,9 +780,8 @@ function PrecioCell({ valor, esManual, canEdit, tipo, onSave, placeholder }) {
 
 // ────────── Detalle expandido ──────────
 function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApartado, invPorAlmacen, precioAaa }) {
-  // Información sensible: la demanda de PCEL se valúa a costo promedio, así que sin el
-  // permiso ese renglón se lee sólo en piezas.
-  const sensible = puedeVerSensible(usePerfil());
+  // El renglón de PCEL se valúa al costo promedio del propio cliente (no es costo de
+  // Acteck): por decisión de Fernando el inventario/demanda del cliente no es sensible.
   const [data, setData] = useState({ loading: true });
 
   useEffect(() => {
@@ -1068,7 +1067,7 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
                     <span className="flex-1 text-gray-700">
                       {c.label}
-                      {sensible && aCosto && pzs > 0 && (
+                      {aCosto && pzs > 0 && (
                         <span className="ml-1 text-[9px] text-amber-600 font-medium">(a costo)</span>
                       )}
                     </span>
@@ -1076,7 +1075,7 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
                       {FMT_N(pzs)} pzs
                     </span>
                   </div>
-                  {mxn > 0 && (sensible || !aCosto) && (
+                  {mxn > 0 && (
                     <div className="ml-4 text-[10px] text-gray-500 tabular-nums">
                       ${Math.round(mxn).toLocaleString('es-MX')} MXN
                     </div>

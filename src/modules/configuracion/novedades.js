@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.20.0', fecha: '2026-09-11', titulo: 'Inventario de clientes visible · cada cliente muestra lo que trae',
+    items: [
+      'El valor del inventario de los clientes (Digitalife, PCEL, Dicotech) ya NO es información sensible: se ve siempre, en web y celular. El permiso sigue cubriendo márgenes, contribución, utilidad, costos de Acteck, costos USD, precio de compra y el valor del inventario propio.',
+      'Si la carga de un cliente no trae un dato, ese KPI o columna ya no aparece (ni guion ni aviso): Dicotech no manda días sin venta, PCEL tampoco manda días sin venta ni fecha de última venta.',
+      'Se quitó el proxy "sin venta en 2 meses" de PCEL: no se muestra lo que la fuente no reporta.',
+    ],
+  },
+  {
     version: '3.19.0', fecha: '2026-09-11', titulo: 'Sell Out por cliente en montos (celular)',
     items: [
       'Toggle Monto · Piezas en Sell Out por cliente; PCEL valuado a su lista de precios (con aviso).',

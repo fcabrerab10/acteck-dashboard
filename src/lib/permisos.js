@@ -87,9 +87,14 @@ export const puedeConfigurar = (perfil) => !!perfil?.es_super_admin;
 export const puedeActualizarDatos = (perfil) => !!perfil?.es_super_admin;
 
 /**
- * ¿Puede ver información sensible (márgenes, utilidad, contribución y costos)?
+ * ¿Puede ver información sensible de ACTECK (márgenes, utilidad, contribución, costos de
+ * Acteck, costos USD, precio de compra y el valor del inventario propio)?
  * Flag global `permisos.sensible === true` (se asigna en Administración → ficha de usuario)
- * o super admin. Se aplica pantalla por pantalla; hoy: Visión General (web y móvil).
+ * o super admin. Se aplica pantalla por pantalla.
+ *
+ * NO entra aquí (decisión de Fernando, 2026-09-11): el valor del inventario de los CLIENTES
+ * (inventario_cliente.valor o stock × costo_convenio, sellout_pcel inventario × costo_promedio,
+ * inventario_cliente_sucursal). Es el costo del propio cliente, no el de Acteck: se ve siempre.
  */
 export const puedeVerSensible = (perfil) =>
   !!perfil?.es_super_admin || perfil?.permisos?.sensible === true;

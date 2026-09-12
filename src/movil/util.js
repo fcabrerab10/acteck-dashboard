@@ -1,5 +1,7 @@
 // Utilidades de la app móvil V3 · fechas locales, saludo, formato.
 export { money, moneyCompact, int, pct, fechaCorta, relativo } from '../lib/format';
+// Qué campos trae realmente la fuente de cada cliente (ver src/lib/disponibilidad.js).
+export { disponibilidadDeCampos, filasUltimaSemana, ultimaSemana } from '../lib/disponibilidad';
 
 export const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 export const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];

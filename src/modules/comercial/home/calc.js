@@ -41,9 +41,7 @@ function aging(detalle) {
 }
 
 // ── Resumen principal: KPIs, hero, cartera, inventario, pagos, marketing, proyección, sugerido, recos
-// `sensible` = permiso de información sensible. Sin él no se calcula ni se narra nada
-// valuado a costo (valor del inventario).
-export function calcular(d, cfg, anio, mesActual, sensible = false) {
+export function calcular(d, cfg, anio, mesActual) {
   const siCur = porMes(d.facturacion, anio, 'monto'), siPrev = porMes(d.facturacion, anio - 1, 'monto');
   const soCur = porMes(d.so.mes, anio, 'monto'), soPrev = porMes(d.so.mes, anio - 1, 'monto');
   const soPzCur = porMes(d.so.mes, anio, 'piezas');
@@ -114,7 +112,7 @@ export function calcular(d, cfg, anio, mesActual, sensible = false) {
     let s = Math.max(0, Math.round(prom * 3 - stock));
     if (cfg.sugeridoMinimo && stock < prom && s > 0 && s < cfg.sugeridoMinimo) s = cfg.sugeridoMinimo;
     s = Math.min(s, actBy[sku] || 0);
-    if (s > 0) { sug.piezas += s; sug.monto += s * (d.marcas[sku]?.precio || (sensible ? stockBy[sku]?.costo : 0) || 0); sug.skus++; }
+    if (s > 0) { sug.piezas += s; sug.monto += s * (d.marcas[sku]?.precio || stockBy[sku]?.costo || 0); sug.skus++; }
   });
   criticos.sort((a, b) => a.dias - b.dias);
   const sinMovimiento = d.inv.filas.filter((r) => r.stock > 0 && !rot[r.sku]).length;
@@ -122,7 +120,7 @@ export function calcular(d, cfg, anio, mesActual, sensible = false) {
   // Recomendaciones / insights → pills en el Hero
   const recos = [];
   const fm = (n) => `$${(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M`;
-  if (diasInv != null && diasInv > META_INV_DIAS + 15) recos.push({ tone: 'orange', t: `Inventario alto · ${diasInv}d`, s: `Meta ${META_INV_DIAS}d${sensible ? ` · valor ${fm(inv.valor)}` : ''}. Cabe una promo para rotar.` });
+  if (diasInv != null && diasInv > META_INV_DIAS + 15) recos.push({ tone: 'orange', t: `Inventario alto · ${diasInv}d`, s: `Meta ${META_INV_DIAS}d · valor ${fm(inv.valor)}. Cabe una promo para rotar.` });
   if (cartera.vencido > 0) { const riesgo = sum(cartera.buckets.d61_90, (f) => f.saldo) + sum(cartera.buckets.mas90, (f) => f.saldo); recos.push({ tone: cartera.vencido > cartera.total * 0.15 ? 'red' : 'orange', t: `${fm(cartera.vencido)} vencido en cartera`, s: riesgo > 0 ? `${fm(riesgo)} > 60d en riesgo` : 'Revisa antes de que envejezca' }); }
   if (pctCuota != null && pctCuota >= 100) recos.push({ tone: 'green', t: `${(pctCuota - 100).toFixed(1)}% arriba de cuota`, s: 'Sube meta trimestral para mantener incentivo' });
   else if (pctCuota != null && pctCuota < 85 && siMes > 0) recos.push({ tone: 'orange', t: `Sell In al ${Math.round(pctCuota)}% de cuota`, s: `Faltan ${fm(cuota.ideal - siMes)} para la ideal` });

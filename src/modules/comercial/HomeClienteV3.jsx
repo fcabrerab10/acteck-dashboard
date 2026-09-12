@@ -5,7 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import { moneyCompact as $c, fecha } from '../../lib/format';
 import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, usePersistTrimestres, mesesDeTrimestres } from '../../components/kit';
@@ -28,9 +28,7 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
   const [rangoSplit, setRangoSplit] = usePersistTrimestres(`homeSplit:${clienteKey}`, () => new Set([qDe(mesActual)])); // split marca / sucursal
   const { loading, error, data } = useHomeData(clienteKey, cfg, anio);
 
-  // Información sensible: el valor del inventario del cliente está a costo.
-  const sensible = puedeVerSensible(perfil);
-  const r = useMemo(() => (data ? calcular(data, cfg, anio, mesActual, sensible) : null), [data, cfg, anio, mesActual, sensible]);
+  const r = useMemo(() => (data ? calcular(data, cfg, anio, mesActual) : null), [data, cfg, anio, mesActual]);
   const serie = useMemo(() => (r ? serieMensual(r, mesesDeTrimestres(rango), mesActual) : null), [r, rango, mesActual]);
   const split = useMemo(() => (r ? splitPor(data, cfg, r, mesesDeTrimestres(rangoSplit), anio) : []), [data, cfg, r, rangoSplit, anio]);
   const top = useMemo(() => (r ? topSkus(data, r) : null), [data, r]);
@@ -81,7 +79,7 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
           onClick={ir('estrategia')} />
         <KpiCard eyebrow="Inventario del cliente" badge={{ l: dias == null ? 'sin datos' : dias > META_INV_DIAS ? `▲${dias - META_INV_DIAS}d vs meta` : 'en meta', tone: dias == null ? 'gray' : dias > META_INV_DIAS ? 'orange' : 'green' }}
           big={dias != null ? `${dias}d` : '—'} bigSmall={`meta ${META_INV_DIAS}d`} bigColor={dias == null ? theme.textMuted : dias > META_INV_DIAS ? theme.orange : theme.green}
-          sub={`${sensible ? $c(r.inv.valor) : `${r.inv.stock.toLocaleString('es-MX')} pzs`} · ${r.inv.skus} SKUs${r.inv.semana ? ` · semana ${r.inv.semana}` : ''}${r.criticos.length ? ` · ${r.criticos.length} críticos` : ''}`}
+          sub={`${$c(r.inv.valor)} · ${r.inv.skus} SKUs${r.inv.semana ? ` · semana ${r.inv.semana}` : ''}${r.criticos.length ? ` · ${r.criticos.length} críticos` : ''}`}
           progress={dias != null ? Math.min(100, (dias / META_INV_DIAS) * 100) : undefined} progressColor={dias != null && dias > META_INV_DIAS ? theme.orange : theme.green} onClick={ir('estrategia')} />
         <KpiCard eyebrow="Pagos y rebates" badge={r.pagos.vencidos.length ? { l: `${r.pagos.vencidos.length} vencido${r.pagos.vencidos.length > 1 ? 's' : ''}`, tone: 'red' } : { l: `${r.pagos.n} pendiente${r.pagos.n === 1 ? '' : 's'}`, tone: r.pagos.n ? 'orange' : 'green' }}
           big={$c(r.pagos.total)} bigSmall="por pagar"
