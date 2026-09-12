@@ -77,6 +77,7 @@ function MideBandas({ indices, etiquetas, onMedir }) {
 export default function GraficaLineas({
   datos = [], series = [], formato = moneyCompact, alto = 240, mesActivo = null, mesesAtenuados = null, onClickMes,
   compacto = false, mostrarMinMax = true, puntos, titulo, meta, acciones, desdeCero = true, leyenda, cabecera, style,
+  mini = false, // trazo del kit en miniatura (sparkline): sin ejes, sin cuadrícula, sin cursor; sólo área + línea + punto final
 }) {
   const { theme } = useTheme();
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -89,10 +90,11 @@ export default function GraficaLineas({
   const otras = series.filter((s) => s !== principal && s !== anterior && s.tipo !== 'cuota');
   const etiquetas = useMemo(() => datos.map((d) => String(d.x ?? '')), [datos]);
   const atenuados = useMemo(() => new Set(mesesAtenuados || []), [mesesAtenuados]);
-  const conPuntos = puntos ?? datos.length <= 24;
+  const conPuntos = mini ? false : (puntos ?? datos.length <= 24);
   const conEjeDer = series.some((s) => s.eje === 'der');
-  const verLeyenda = leyenda ?? !compacto;
-  const verCabecera = cabecera ?? !compacto;
+  if (mini) compacto = true;
+  const verLeyenda = mini ? false : (leyenda ?? !compacto);
+  const verCabecera = mini ? false : (cabecera ?? !compacto);
 
   // Último mes con dato en la principal · máximo y mínimo (sólo entre valores no nulos).
   const { ultimo, idxMax, idxMin } = useMemo(() => {
@@ -180,7 +182,7 @@ export default function GraficaLineas({
     if (i >= 0 && i < datos.length) onClickMes(i, datos[i]);
   };
 
-  const margen = compacto ? { top: 6, right: 8, left: 8, bottom: 0 } : { top: mostrarMinMax ? 18 : 8, right: 12, left: 0, bottom: 0 };
+  const margen = mini ? { top: 3, right: 4, left: 2, bottom: 2 } : compacto ? { top: 6, right: 8, left: 8, bottom: 0 } : { top: mostrarMinMax ? 18 : 8, right: 12, left: 0, bottom: 0 };
   const grafica = (
     <div style={{ position: 'relative', width: '100%', height: alto, minWidth: 0, fontFamily: TYPO.fontText }}>
       <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height: alto }}>
@@ -198,12 +200,12 @@ export default function GraficaLineas({
               );
             })}
           </defs>
-          <CartesianGrid vertical={false} stroke={theme.border} strokeOpacity={0.6} />
-          <XAxis dataKey="x" tick={tickX} axisLine={false} tickLine={false} interval={compacto && datos.length > 12 ? 'preserveStartEnd' : 0} height={compacto ? 18 : 22} />
+          {!mini && <CartesianGrid vertical={false} stroke={theme.border} strokeOpacity={0.6} />}
+          <XAxis dataKey="x" hide={mini} tick={tickX} axisLine={false} tickLine={false} interval={compacto && datos.length > 12 ? 'preserveStartEnd' : 0} height={mini ? 0 : compacto ? 18 : 22} />
           <YAxis yAxisId="izq" hide={compacto} tickFormatter={ejeYFmt} tick={tick} axisLine={false} tickLine={false} width={compacto ? 0 : 40}
             tickCount={4} domain={desdeCero ? [0, 'auto'] : ['auto', 'auto']} />
           {conEjeDer && <YAxis yAxisId="der" orientation="right" hide domain={[0, 'auto']} />}
-          <Tooltip cursor={{ stroke: theme.text, strokeOpacity: 0.5, strokeDasharray: '3 3', strokeWidth: 1 }} content={() => null} isAnimationActive={false} />
+          {!mini && <Tooltip cursor={{ stroke: theme.text, strokeOpacity: 0.5, strokeDasharray: '3 3', strokeWidth: 1 }} content={() => null} isAnimationActive={false} />}
           {series.map((s, i) => {
             const { color, width, dash } = estiloSerie(theme, s, i);
             const eje = s.eje === 'der' ? 'der' : 'izq';
@@ -211,7 +213,7 @@ export default function GraficaLineas({
               return (
                 <Area key={s.key} yAxisId={eje} type="monotone" dataKey={s.key} name={s.label} stroke={color} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round"
                   strokeDasharray={dash} fill={`url(#gl-${uid}-${s.key})`} fillOpacity={1} isAnimationActive={false} connectNulls={false}
-                  dot={conPuntos ? puntoPrincipal(color) : false} activeDot={puntoActivo(color)}>
+                  dot={conPuntos ? puntoPrincipal(color) : mini ? ((pr) => (pr.index === ultimo ? <circle key={pr.index} cx={pr.cx} cy={pr.cy} r={2.6} fill={color} stroke={theme.surface} strokeWidth={1.2} /> : null)) : false} activeDot={mini ? false : puntoActivo(color)}>
                   {!compacto && mostrarMinMax && <LabelList dataKey={s.key} content={etiquetaMinMax} />}
                 </Area>
               );

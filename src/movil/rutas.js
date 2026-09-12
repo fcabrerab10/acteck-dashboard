@@ -23,6 +23,7 @@ const SOP              = lazy(() => import('./pestanas/SOP'));
 const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
 const Agenda           = lazy(() => import('./pestanas/agenda/Agenda'));
 const SellInGlobal     = lazy(() => import('./pestanas/sellin/SellInGlobal'));
+const Equipo           = lazy(() => import('./pestanas/equipo/Equipo'));
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Ninguna aparece como nodo salvo `inicio`. */
 export const TABS_RAIZ = ['inicio', 'clientes', 'alertas', 'buscar'];
@@ -39,6 +40,7 @@ const GLOBALES = {
   inventarioGlobal:  ficha,                           // Inventario → Ficha de producto (canasta de SKUs)
   estrategiaPrecios: ficha,                           // Estrategia de precios → Ficha de producto (precio por lista)
   historialCambios:  () => ({ tipo: 'push', key: 'historial', el: h(Historial) }),
+  telemetria:        () => ({ tipo: 'push', key: 'equipo', el: h(Equipo) }),   // Actividad del equipo (sólo super admin)
   actualizacion:     () => ({ tipo: 'push', key: 'fuentes', el: h(Fuentes) }), // Importador (sólo lectura)
   visionGeneral:     () => ({ tipo: 'push', key: 'vision', el: h(VisionGeneral) }),
   sellIn:            () => ({ tipo: 'push', key: 'sellin-global', el: h(SellInGlobal) }), // Sell In consolidado (sin clienteKey)

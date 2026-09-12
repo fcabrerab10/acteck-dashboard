@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.17.0', fecha: '2026-09-11', titulo: 'Actividad del equipo en el celular',
+    items: [
+      'Pulso del equipo, lista de todos los usuarios (internos y externos) con última entrada, pendientes y acciones de la semana; deslizar para "Recordar pendientes".',
+      'Ficha por persona con Semana · Pendientes · Evaluación; captura de la evaluación mensual desde el celular con guardado al momento.',
+      'Mini tendencias por canal de Sell In móvil con el trazo del kit.',
+    ],
+  },
+  {
     version: '3.16.0', fecha: '2026-09-11', titulo: 'Sell In consolidado en el celular',
     items: [
       'Sell In de toda la empresa en el móvil: mes actual o cualquier mes, MTD vs cuota, por canal con tendencia, composición por categoría y marca, top SKUs y "Compartir resumen del mes por canal".',

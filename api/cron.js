@@ -1006,9 +1006,10 @@ async function reglaAgendaAsignado(hoy) {
     for (const u of it.notificar_a) {
       if (!porUsuario.has(u)) continue;
       const cierre = it.notificar_motivo === 'cierre';
+      const recordatorio = it.notificar_motivo === 'recordatorio'; // "Recordar pendientes" desde Actividad del equipo (móvil)
       out.push({
-        tipo: 'agenda_asignado', severidad: 'media', clave: `agenda_asignado|${it.id}|${u}|${it.updated_at?.slice(0, 16) || ahora.slice(0, 16)}`, para_usuario: u,
-        titulo: cierre ? `Quedó a tu cargo al cerrar la reunión: ${it.titulo.slice(0, 80)}` : `${quien ? primerNombre(quien) : 'Alguien'} te asignó: ${it.titulo.slice(0, 80)}`,
+        tipo: 'agenda_asignado', severidad: recordatorio ? 'alta' : 'media', clave: `agenda_asignado|${it.id}|${u}|${it.updated_at?.slice(0, 16) || ahora.slice(0, 16)}`, para_usuario: u,
+        titulo: recordatorio ? `Recordatorio · pendiente vencido: ${it.titulo.slice(0, 80)}` : cierre ? `Quedó a tu cargo al cerrar la reunión: ${it.titulo.slice(0, 80)}` : `${quien ? primerNombre(quien) : 'Alguien'} te asignó: ${it.titulo.slice(0, 80)}`,
         detalle: `${it.cliente_key ? `${nombreCliente(it.cliente_key)} · ` : ''}${it.fecha_limite ? `límite ${it.fecha_limite}` : 'sin fecha'}${it.reunion_id && reu.get(it.reunion_id) ? ` · reunión «${reu.get(it.reunion_id).titulo}»` : ''}.`,
         cliente_key: ['digitalife', 'pcel', 'dicotech'].includes(it.cliente_key) ? it.cliente_key : null, sku: null, area: 'agenda', accion: ACCION_AGENDA,
         caduca_at: new Date(Date.now() + 7 * 86400000).toISOString(), valor: null, meta: { item_id: it.id, motivo: it.notificar_motivo || 'asignado', por: it.creado_por || null },

@@ -16,7 +16,7 @@ import { Share2, Copy, AlertTriangle, Package } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
-import { Cargando } from '../../../components/kit';
+import { Cargando, GraficaLineas } from '../../../components/kit';
 import FrescuraPill from '../../../components/FrescuraPill';
 import { textoResumenMesCanal, compartir, copiar } from '../../../lib/whatsapp';
 import { normalizar, tokens, coincide, canalLabel } from '../../../modules/comercial/sellin/textos';
@@ -24,7 +24,7 @@ import { useNav } from '../../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, HeatCell, Pill, Vacio, CampoBusqueda, HojaM, BotonGrande, Segmented, TituloSeccionM, toast } from '../../piezas';
 import { money, moneyCompact, int, deltaPct, tonoDelta, tonoCuota, MESES, MESES_LARGO, MONO, N } from '../../util';
 import { SelectorMes, ComposicionCategorias, ultimosMeses } from '../SellInCliente';
-import { BarraMes, Sparkline } from './piezas';
+import { BarraMes } from './piezas';
 import { useSellInGlobal } from './datos';
 import FichaSku from './FichaSku';
 
@@ -241,7 +241,7 @@ export default function SellInGlobal() {
                   titulo={canalLabel(c.canal)} sub={r.totalCanales > 0 ? `${Math.round((c.monto / r.totalCanales) * 100)}% del mes` : 'sin venta'}
                   valor={moneyCompact(c.monto)} valorSub={c.cuota > 0 ? `de ${moneyCompact(c.cuota)}` : undefined}
                   pill={pctC != null ? { tone: tonoCuota(pctC), label: `${Math.round(pctC)}% cuota` } : { tone: tonoDelta(c.yoy), label: c.yoy != null ? `${deltaPct(c.yoy)} YoY` : r.comparable ? 'nuevo' : '—' }}
-                  trailing={<Sparkline valores={c.serie} ancho={46} color={on ? theme.accent : undefined} />}
+                  trailing={<div style={{ width: 64, height: 28 }}><GraficaLineas mini alto={28} datos={(c.serie || []).map((v, i) => ({ x: String(i), v: Number(v) || 0 }))} series={[{ key: 'v', label: 'Mes', tipo: 'principal', color: on ? theme.accent : undefined }]} /></div>}
                   chevron={false} onClick={() => setCanalSel(on ? null : c.canal)}
                   style={{ gap: 8, ...(on ? { background: `${theme.accent}0E` } : null) }} />
               );
