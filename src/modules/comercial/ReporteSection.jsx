@@ -803,11 +803,14 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
         // Migrado desde sell_in_sku; mapeo cliente_key→cliente, monto→monto_pesos abajo.
         supabase.from('facturacion_clientes').select('cliente_key, piezas, monto').eq('sku', sku)
           .then((res) => ({ ...res, data: (res.data || []).map((r) => ({ cliente: r.cliente_key, piezas: r.piezas, monto_pesos: r.monto })) })),
-        // sellout_pcel para este SKU últimos 3 meses → MXN a costo coherente
-        // con la tarjeta de PCEL en Resumen Clientes.
+        // sellout_pcel para este SKU últimos 3 meses. PCEL no manda pesos: se valúa con
+        // la MISMA lista oficial que el resto del dashboard (v_precio_pcel_sku:
+        // PCEL PROVISIONAL → Mayoreo AAA), con el costo promedio sólo de respaldo.
         supabase.from('sellout_pcel').select('anio, semana, vta_semana, costo_promedio')
           .eq('sku', sku),
       ]);
+      const { data: precioPcelRow } = await supabase.from('v_precio_pcel_sku').select('precio').eq('sku', sku).maybeSingle();
+      const precioPcel = Number(precioPcelRow?.precio) || 0;
 
       const compras = calcularHistoricoCompras(embRes.data || [], hoyISO);
 
@@ -828,6 +831,7 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
         leadTime: ltRes.data?.dias_promedio,
         compras,
         costoPromedioSku,
+        precioPcel,
         selloutPcel: soPcelRes.data || [],
       });
     })();
@@ -969,7 +973,7 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
       const s = Number(r.semana) || 0;
       if (s < desdeSem || s > ultSemPcel) return;
       const p = Number(r.vta_semana || 0);
-      const c = Number(r.costo_promedio || 0);
+      const c = Number(data.precioPcel) || Number(r.costo_promedio || 0);
       if (p > 0 && c > 0) dem.pcel.monto += p * c;
     });
   }

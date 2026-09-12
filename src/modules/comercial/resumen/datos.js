@@ -51,7 +51,8 @@ export function useResumenData() {
         supabase.from('cuotas_mensuales').select('cliente, mes, anio, cuota_min, cuota_ideal').in('cliente', CLIENTE_KEYS).gte('anio', anioActual - 2),
         supabase.from('clientes_credito_config').select('cliente, plazo_dias_credito, linea_credito_usd').in('cliente', CLIENTE_KEYS),
         q(() => supabase.from('sellout_sku').select('cliente, anio, mes, monto_pesos').in('cliente', CLIENTE_KEYS).gte('anio', anioActual - 2)),
-        q(() => supabase.from('sellout_pcel_mensual').select('sku, anio, mes, piezas').gte('anio', anioActual - 1)),
+        // PCEL: valuación ÚNICA (piezas × precio de lista PCEL PROVISIONAL) desde la vista oficial.
+        q(() => supabase.from('v_sellout_pcel_sku_mes').select('sku, anio, mes, piezas, monto').gte('anio', anioActual - 1)),
         q(() => supabase.from('sellout_pcel').select('sku, anio, semana, inventario, costo_promedio').gte('anio', anioActual - 1)),
         q(() => supabase.from('inventario_cliente').select('cliente, sku, stock, valor, costo_convenio, anio, semana').in('cliente', CLIENTE_KEYS).not('anio', 'is', null)),
         q(() => supabase.from('estados_cuenta').select('id, cliente, fecha_corte, saldo_actual, saldo_vencido, dso, aging_mas90').in('cliente', CLIENTE_KEYS).gte('fecha_corte', desdeIso)),

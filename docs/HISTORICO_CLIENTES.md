@@ -196,4 +196,21 @@ Los `Resumen PCEL 2025.xlsx` / `Cierre PCEL 2025.xlsx` / `Resumen Dicotech 2026.
 5. **Pedir a crédito y cobranza** los cortes históricos de EdC de Digitalife (no queda ni un archivo en disco) y los huecos 24/26/28 de 2026.
 6. Limpiar las 3 filas basura de `inventario_cliente` (`__test__`, el `<!DOCTYPE html>`, y el bloque `anio`/`semana` NULL de 1,424 filas).
 
-> Nada de lo anterior se aplicó. Este documento es sólo el diagnóstico.
+---
+
+## ✅ Aplicado el 2026-09-12 (sesión `sweet-kare-624569`)
+
+| Paso | Estado |
+|---|---|
+| 1 · Estados de cuenta históricos de PCEL | ✅ cargados los 4: **sem 49/2025**, **sem 5/2026**, **sem 17/2026** y **sem 27/2026** (ésta pasó de 0 a 80 facturas de detalle). El #6 (PCEL ~sem 28/2025, sin fecha al pie) **no** se cargó |
+| 2 · Sell out de Dicotech semanas 19-20 | ✅ reconstruidas desde `sellout_general` (2026-05-01 → 05-17, 900 filas) y todo may–sep recargado desde los CSV semanales |
+| 3 · Pedir a PCEL el sell out 2025 + ene-2026 | ⏳ pendiente (fuera de la máquina) |
+| 4 · `semanaSnapshot()` + los 3 inventarios de §4.2 | ✅ `semanaDeCorte()` en `src/lib/parsers/_util.js` + columna "Corte" en el importador; cargados **Dicotech sem 23 y 32** y **Digitalife sem 15** |
+| 5 · Pedir a crédito los cortes de EdC faltantes | ⏳ pendiente (fuera de la máquina) |
+| 6 · Filas basura de `inventario_cliente` | ✅ borradas las 1,426 (respaldo `_respaldo_inventario_cliente_20260912`) |
+
+Detalle, conteos y cómo revertir: **`docs/CORRECCION_CLIENTES_20260912.md`**.
+
+Huecos que siguen abiertos: inventario semana 27 (Digitalife y Dicotech), inventario
+Digitalife semana 23, EdC semanas 24/26/28 de 2026 y todo el EdC histórico de Digitalife,
+sell out de PCEL de 2025 y enero-2026, y `erp_ventas` 2023-2024.

@@ -100,18 +100,27 @@ export default function CargasManuales({ status, upload, fuentes = [], perfil, o
   const [abierta, setAbierta] = useState(null);
   const [cargas, setCargas] = useState({});     // id → { pct, texto }
   const [casillas, setCasillas] = useState({}); // id → { historico: bool }
+  const [cortes, setCortes] = useState({});     // id → 'YYYY-MM-DD' (fecha del corte elegida a mano)
   const ahora = useMemo(() => new Date(), [status]);
   const editable = puedeConfigurar(perfil);
   const quien = perfil?.nombre || perfil?.email || null;
 
+  // Confirmación del corte: el snapshot se guarda con la semana del ARCHIVO, no la de hoy.
+  const confirmarPeriodo = (f) => (periodo, opciones) => {
+    const origen = opciones.fechaCorte ? 'la fecha que elegiste' : 'la fecha del archivo';
+    return window.confirm(`${f.titulo}\n\nSe guardará como semana ${periodo.semana} de ${periodo.anio} (según ${origen}).\n\nSi no es el corte correcto, cancela y escribe la fecha en la columna "Corte".`);
+  };
+
   const subir = async (f, file) => {
     if (cargas[f.id]) return;
-    const opts = casillas[f.id] || {};
+    const opts = { ...(casillas[f.id] || {}) };
+    if (cortes[f.id]) opts.fechaCorte = `${cortes[f.id]}T12:00:00Z`;
     setCargas((c) => ({ ...c, [f.id]: { pct: 0, texto: 'Leyendo…' } }));
     try {
-      const r = await subirArchivo(f, file, { opts, onProgress: (pct, texto) => setCargas((c) => ({ ...c, [f.id]: { pct, texto } })) });
+      const r = await subirArchivo(f, file, { opts, confirmarPeriodo: confirmarPeriodo(f), onProgress: (pct, texto) => setCargas((c) => ({ ...c, [f.id]: { pct, texto } })) });
       toast.ok(`${f.titulo}: ${r.filas.toLocaleString('es-MX')} filas en ${(r.ms / 1000).toFixed(0)} s`);
       setCasillas((c) => ({ ...c, [f.id]: {} }));
+      setCortes((c) => ({ ...c, [f.id]: '' }));
       setAbierta(f.id);
     } catch (e) {
       toast.error(`${f.titulo}: ${e.message}`, { ms: 0 });
@@ -151,6 +160,12 @@ export default function CargasManuales({ status, upload, fuentes = [], perfil, o
       </div>
     ) : <span style={{ color: theme.textMuted }}>sin carga</span> },
     { key: 'registros', label: 'Registros', align: 'right', render: (r) => { const n = r.fr.ev?.status === 'success' ? r.fr.ev.filas : (r.fr.item?.registros || null); return n != null ? Number(n).toLocaleString('es-MX') : '—'; } },
+    { key: 'corte', label: 'Corte', align: 'left', render: (r) => r.f.tipo !== 'semana' ? <span style={{ color: theme.textMuted }}>—</span> : (
+      <input type="date" value={cortes[r.f.id] || ''} onClick={(e) => e.stopPropagation()}
+        onChange={(e) => setCortes((c) => ({ ...c, [r.f.id]: e.target.value }))}
+        title="Fecha del corte del archivo. Vacío = la que traiga el archivo (nombre, pie o fecha de descarga). Nunca el día de hoy."
+        style={{ height: 24, padding: '0 6px', borderRadius: 7, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 11 }} />
+    ) },
     { key: 'estado', label: 'Estado', align: 'left', render: (r) => <Pill tone={r.pill.tone} dot>{r.pill.txt}</Pill> },
     { key: 'esperada', label: 'Esperada', align: 'left', render: (r) => editable
       ? <EditorCadencia key={`${r.f.id}-${JSON.stringify(r.f.cadencia)}`} fuente={r.f} theme={theme} onGuardado={{ quien, cb: onRefetch }} />

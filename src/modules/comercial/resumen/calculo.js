@@ -169,16 +169,14 @@ export function calcularResumen(clienteKey, data, periodo) {
     }
   }
 
-  // Sell out (Digitalife/Dicotech = precio venta · PCEL = piezas × costo)
-  const selloutACosto = clienteKey === 'pcel';
+  // Sell out SIN IVA. Digitalife/Dicotech: sellout_sku (Σ subtotal − descuento).
+  // PCEL: v_sellout_pcel_sku_mes, la única valuación oficial (piezas × precio de lista),
+  // ya calculada en Postgres — antes cada pantalla inventaba la suya (aquí era a costo).
+  const selloutEstimado = clienteKey === 'pcel';
   const soPorMes = new Map(); // `${a}-${m}` → monto
   const addSo = (a, m, v) => { const k = `${a}-${m}`; soPorMes.set(k, (soPorMes.get(k) || 0) + v); };
-  if (selloutACosto) {
-    const costoDe = (sku) => costoInvPorSku[sku] || costoPromedioSku[sku] || 0;
-    for (const r of data.selloutPcelMensual) {
-      const c = costoDe(String(r.sku || '')); const p = N(r.piezas);
-      if (p > 0 && c > 0) addSo(N(r.anio), N(r.mes), p * c);
-    }
+  if (selloutEstimado) {
+    for (const r of data.selloutPcelMensual) addSo(N(r.anio), N(r.mes), N(r.monto));
   } else {
     for (const r of data.selloutSku) if (r.cliente === clienteKey) addSo(N(r.anio), N(r.mes), N(r.monto_pesos));
   }
@@ -226,7 +224,7 @@ export function calcularResumen(clienteKey, data, periodo) {
     cumplMin, cumplIdeal, cumplYTDMin, cumplYTDIdeal,
     // compat: "cumplimiento" = contra la ideal (la que se comparte)
     cumplimientoMes: cumplIdeal, cumplimientoYTD: cumplYTDIdeal,
-    soMes, soMesAnt, soYoY, soYTD, selloutACosto,
+    soMes, soMesAnt, soYoY, soYTD, selloutEstimado,
     inventarioValor, inventarioPiezas, inventarioSemana, coberturaDias,
     corteFecha: corte?.fecha_corte || null, saldoActual, saldoVencido, pctVencido, facturasAbiertas,
     dsoReal, dsoErp: corte?.dso != null ? N(corte.dso) : null, dsoPlazo: plazo,

@@ -3,7 +3,7 @@
 // B) "Antigüedad de Saldos" (sin semana: se calcula ISO desde la fecha del pie).
 // No va por import-central: devuelve { endpoint: '/api/upload-estado-cuenta', body }
 // (upsert de estados_cuenta por cliente/anio/semana + detalle + tipo de cambio).
-import { XLSX, objSnake, toStr, toNum, toInt, toISODate, isoWeek } from './_util';
+import { XLSX, objSnake, toStr, toNum, toInt, toISODate, isoWeek, anioSemanaISO } from './_util';
 
 const MESES_ES = {
   ene: 1, enero: 1, feb: 2, febrero: 2, mar: 3, marzo: 3, abr: 4, abril: 4, may: 5, mayo: 5, jun: 6, junio: 6,
@@ -120,6 +120,15 @@ function formatoAntiguedad(sh, cliente) {
     const txt = (arr[i] || []).map((x) => String(x || '').toLowerCase()).join('|');
     if (txt.includes('movimiento') && (txt.includes('al corriente') || txt.includes('vencimiento'))) { headerRow = i; break; }
   }
+  if (headerRow < 0) {
+    // Variante simple: Fecha Expedicion · Factura · … · Importe · Días Vencido (sin cubetas).
+    for (let i = 0; i < Math.min(arr.length, 10); i++) {
+      const txt = (arr[i] || []).map((x) => String(x || '').toLowerCase()).join('|');
+      if (txt.includes('factura') && txt.includes('importe') && txt.includes('vencid')) {
+        return formatoAntiguedadSimple(sh, cliente, i, arr, parseFechaES);
+      }
+    }
+  }
   if (headerRow < 0) headerRow = 1;
   const headers = (arr[headerRow] || []).map((h) => String(h || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim());
   const colIdx = (substr) => headers.findIndex((h) => h.includes(substr));
@@ -175,6 +184,54 @@ function formatoAntiguedad(sh, cliente) {
   };
 }
 
+// Formato C · "Antigüedad de Saldos" SIMPLE (sin cubetas de aging):
+//   Fecha Expedicion · Factura · Condicion · Fecha Vencimiento · Importe · Moneda · Referencia · Días Vencido
+// Lo manda crédito para algunos cortes de PCEL. El aging se reconstruye con "Días Vencido".
+function formatoAntiguedadSimple(sh, cliente, headerRow, arr, parseFechaES) {
+  const headers = (arr[headerRow] || []).map((h) => String(h || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim());
+  const col = (...subs) => headers.findIndex((h) => subs.some((x) => h.includes(x)));
+  const idx = { emision: col('expedicion', 'emision'), factura: col('factura'), condicion: col('condicion'), vencimiento: col('vencimiento'), importe: col('importe'), referencia: col('referencia'), dias: col('dias') };
+  const detalle = [];
+  const tot = { corr: 0, d1_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, d181: 0 };
+  let notas_credito = 0;
+  for (let i = headerRow + 1; i < arr.length; i++) {
+    const r = arr[i] || [];
+    const factura = toStr(r[idx.factura]);
+    if (!factura || /^(sub)?total/i.test(factura)) continue;
+    const importe = toNum(r[idx.importe]);
+    if (importe == null) continue;
+    if (importe < 0) notas_credito += importe;
+    const dias = toInt(r[idx.dias]) ?? 0;
+    const ag = { corriente: 0, d01_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, d181: 0 };
+    if (dias <= 0) { ag.corriente = importe; tot.corr += importe; }
+    else if (dias <= 30) { ag.d01_30 = importe; tot.d1_30 += importe; }
+    else if (dias <= 60) { ag.d31_60 = importe; tot.d31_60 += importe; }
+    else if (dias <= 90) { ag.d61_90 = importe; tot.d61_90 += importe; }
+    else if (dias <= 180) { ag.d91_180 = importe; tot.d91_180 += importe; }
+    else { ag.d181 = importe; tot.d181 += importe; }
+    detalle.push({
+      movimiento: factura, condicion: toStr(r[idx.condicion]), referencia: toStr(r[idx.referencia]),
+      fecha_emision: parseFechaES(r[idx.emision]), vencimiento: parseFechaES(r[idx.vencimiento]),
+      importe_factura: importe, dias_moratorios: dias, saldo_actual: importe,
+      aging_corriente: ag.corriente, aging_01_30: ag.d01_30, aging_31_60: ag.d31_60, aging_61_90: ag.d61_90, aging_91_180: ag.d91_180, aging_181_mas: ag.d181,
+    });
+  }
+  const fechas = detalle.map((d) => d.fecha_emision).filter(Boolean).sort();
+  const fecha_corte = fechas.length ? fechas[fechas.length - 1] : new Date().toISOString().slice(0, 10);
+  const corte = new Date(fecha_corte + 'T00:00:00');
+  const saldo_vencido = tot.d1_30 + tot.d31_60 + tot.d61_90 + tot.d91_180 + tot.d181;
+  return {
+    resumen: {
+      cliente, anio: corte.getFullYear(), semana: isoWeek(corte), fecha_corte,
+      saldo_actual: tot.corr + saldo_vencido, saldo_vencido, notas_credito, saldo_a_vencer: tot.corr,
+      razon_social: RAZON[cliente] || RAZON.digitalife,
+      aging_d0_30: tot.d1_30, aging_d31_60: tot.d31_60, aging_d61_90: tot.d61_90, aging_mas90: tot.d91_180 + tot.d181,
+      ...vencimientos(detalle, corte), dso: dso(detalle, corte),
+    },
+    detalle,
+  };
+}
+
 export default function estadoCuenta(wb, fileName, opts = {}) {
   const cliente = opts.cliente;
   if (!cliente) throw new Error('estadoCuenta: falta opts.cliente');
@@ -182,9 +239,17 @@ export default function estadoCuenta(wb, fileName, opts = {}) {
   const a1 = String((sh['A1'] && sh['A1'].v) || '').toLowerCase();
   const data = a1.includes('antig') && a1.includes('saldos') ? formatoAntiguedad(sh, cliente) : formatoSemanal(sh, cliente, fileName);
   const r = data.resumen;
+  // El corte manda sobre lo que traiga el archivo: si el usuario eligió la fecha/semana
+  // en el importador, esa gana (permite cargar histórico sin pisar la semana vigente).
+  if (opts.anio && opts.semana) { r.anio = Number(opts.anio); r.semana = Number(opts.semana); }
+  else if (opts.fechaCorte) {
+    const d = new Date(opts.fechaCorte);
+    if (!isNaN(d)) { const { anio, semana } = anioSemanaISO(d); r.anio = anio; r.semana = semana; r.fecha_corte = d.toISOString().slice(0, 10); }
+  }
+  if (!r.semana) throw new Error('El archivo no trae la semana ni la fecha de corte: elígela en el importador antes de subir.');
   const $ = (n) => Math.round(n || 0).toLocaleString('es-MX');
   return {
-    endpoint: '/api/upload-estado-cuenta', body: data, filas: data.detalle.length,
+    endpoint: '/api/upload-estado-cuenta', body: data, filas: data.detalle.length, periodo: { anio: r.anio, semana: r.semana },
     resumen: `sem ${r.semana}/${r.anio} · saldo ${$(r.saldo_actual)} · vencido ${$(r.saldo_vencido)} · DSO ${r.dso ?? '—'}d · ${data.detalle.length} facturas`,
   };
 }

@@ -127,7 +127,7 @@ export default function TarjetaCliente({ cliente, resumen: r, margen, verSensibl
 
         {/* KPIs */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <KpiCard eyebrow={r.selloutACosto ? 'Sell Out · costo' : 'Sell Out'} big={fmtCompact(r.soMes)} badge={yoyBadge(r.soYoY)}
+          <KpiCard eyebrow={r.selloutEstimado ? 'Sell Out · estimado a lista' : 'Sell Out · sin IVA'} big={fmtCompact(r.soMes)} badge={yoyBadge(r.soYoY)}
             sub={r.soMes > 0 && r.siMes > 0 ? `${fmtPct((r.soMes / r.siMes) * 100)} del sell in` : 'Sin sell out del mes'} />
           <KpiCard eyebrow="Cartera" big={fmtCompact(r.saldoActual)} bigColor={r.pctVencido > 15 ? red : theme.text}
             badge={r.saldoVencido > 0 ? { l: `${fmtCompact(r.saldoVencido)} venc.`, tone: r.pctVencido > 15 ? 'red' : 'orange' } : (r.corteFecha ? { l: 'al día', tone: 'green' } : null)}

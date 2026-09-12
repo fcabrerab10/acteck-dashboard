@@ -57,7 +57,7 @@ async function logEvento(fuente, ev) {
  * subirArchivo(fuente, file, { opts, onProgress(pct 0..1, texto) }) → { filas, lineas, ms }
  * Lanza Error con mensaje legible si algo falla (ya registrado en sync_events).
  */
-export async function subirArchivo(fuente, file, { opts = {}, onProgress } = {}) {
+export async function subirArchivo(fuente, file, { opts = {}, onProgress, confirmarPeriodo } = {}) {
   const t0 = Date.now();
   const lineas = [];
   const paso = (pct, txt) => onProgress?.(pct, txt);
@@ -67,7 +67,14 @@ export async function subirArchivo(fuente, file, { opts = {}, onProgress } = {})
     const parser = P[fuente.parser];
     if (!parser) throw new Error(`Parser desconocido: ${fuente.parser}`);
     paso(0.08, 'Interpretando…');
-    const jobs = [].concat(parser(wb, file.name, { ...(fuente.opts || {}), ...opts }));
+    // Los snapshots (inventario, estados de cuenta) se fechan con el CORTE, no con el día
+    // de la carga: fecha elegida en la fila → nombre del archivo → file.lastModified → datos.
+    const opciones = { ...(fuente.opts || {}), fechaArchivo: file.lastModified ? new Date(file.lastModified) : null, ...opts };
+    const jobs = [].concat(parser(wb, file.name, opciones));
+    // Nunca pisar una semana sin que el usuario la vea.
+    const periodo = jobs.map((j) => j.periodo).find(Boolean);
+    if (periodo && confirmarPeriodo && !(await confirmarPeriodo(periodo, opciones))) throw new Error('Carga cancelada: revisa la semana del corte.');
+    if (periodo) lineas.push(`corte: semana ${periodo.semana}/${periodo.anio}`);
     const totalFilas = jobs.reduce((s, j) => s + (j.rows?.length ?? j.filas ?? 0), 0);
     if (!totalFilas) throw new Error('El archivo no trajo filas válidas (revisa la hoja y los encabezados).');
     let subidas = 0, filas = 0;

@@ -316,7 +316,7 @@ const SOURCES = [
     ]
   },
   // ── Dicotech ──
-  { id:'dicotech-sellout', grupo:'dicotech', tipo:'sellout', statusKey:'sellout_dicotech', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
+  { id:'dicotech-sellout', grupo:'dicotech', tipo:'sellout', statusKey:'sellout_dicotech', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle SIN IVA (dedup determinista por Venta+SKU+Fecha+Cantidad+Precio). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
   { id:'dicotech-inv', grupo:'dicotech', tipo:'semana', statusKey:'inv_dicotech', title:'Dicotech · Inventario semanal', desc:'Archivo "Reporte-Inventario_Inventario Acteck Semanal.csv". Stock distribuido en 8 almacenes (DC, Arboledas, Amazon, Dicoags2, Guadalajara, Zacatecas, santafe, leon2). Se guarda TANTO el agregado por SKU (inventario_cliente) COMO el desglose por sucursal (inventario_cliente_sucursal) en un mismo upload.', file:'Reporte-Inventario_Inventario Acteck Semanal.csv',
     combined: [
       { table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'dicotechInv', label:'Agregado por SKU' },
@@ -617,24 +617,25 @@ const PARSERS = {
       return o;
     }).filter(Boolean);
   },
-  // Sellout semanal de Dicotech — CSV con 22 columnas (separador coma).
-  // Columnas relevantes: Fecha, Venta (folio), Clave (código interno),
-  // Cantidad, Descripcion, Marca, total_venta, total_venta_antes_IVA,
-  // precio_venta_antes_IVA, Numero de parte (SKU canónico).
+  // Sellout semanal de Dicotech — CSV del correo de Revko.
+  // RÉPLICA de src/lib/parsers/dicotech.js (fuente de verdad). Si cambia uno, cambiar el otro.
+  //   · raw:true — con raw:false SheetJS reformatea la fecha en hora local y le resta un día.
+  //   · El CSV vigente ya NO trae `total_venta` (con IVA), `Clave`, `Familia` ni
+  //     "Sucursal que despacha": el monto sale de total_venta_antes_IVA (o cantidad × precio).
+  //   · Todo el sell-out del dashboard va SIN IVA: subtotal = total = total_venta_antes_IVA.
+  //   · row_hash determinista (sin índice de fila): recargar no duplica.
   dicotechSelloutSemanal(wb){
     const sh = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, raw:false});
-    return rows.map((r, i) => {
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, raw:true});
+    return rows.map((r) => {
       const fecha = toISODate(r['Fecha']);
-      const noParte = toStr(r['Numero de parte']);
+      const noParte = (toStr(r['Numero de parte']) || '').toUpperCase() || null;
       if (!fecha || !noParte) return null;
       const cantidad = toNum(r['Cantidad']);
-      const totalSinIVA = toNum(r['total_venta_antes_IVA']);
-      const totalConIVA = toNum(r['total_venta']);
-      const precioSinIVA = toNum(r['precio_venta_antes_IVA']);
-      const ivaCalc = Math.max(0, totalConIVA - totalSinIVA);
-      // Hash determinístico: Venta (folio) + Clave + Cantidad + total + índice
-      const hashSrc = [r['Venta'], r['Clave'], cantidad, totalSinIVA, i].join('|');
+      const precio = toNum(r['precio_venta_antes_IVA']);
+      const descuento = toNum(r['Descuento'] ?? r['descuento']) || 0;
+      let neto = toNum(r['total_venta_antes_IVA']);
+      if (neto == null && cantidad != null && precio != null) neto = Math.round((cantidad * precio - descuento) * 10000) / 10000;
       return {
         cliente: 'dicotech',
         fecha,
@@ -642,12 +643,12 @@ const PARSERS = {
         no_parte: noParte,
         descripcion: toStr(r['Descripcion']),
         cantidad,
-        precio: precioSinIVA,
+        precio,
         descuento: 0,
-        iva: ivaCalc,
-        subtotal: totalSinIVA,
-        total: totalConIVA,
-        row_hash: hash(hashSrc),
+        iva: 0,
+        subtotal: neto,
+        total: neto,
+        row_hash: hash(['REVKO', toStr(r['Venta']) ?? '', noParte, fecha, cantidad ?? '', precio ?? ''].join('|')),
       };
     }).filter(Boolean);
   },
@@ -662,6 +663,9 @@ const PARSERS = {
     const semana = Math.ceil((days + jan1.getDay() + 1) / 7);
     return rows.map(r => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
+      const stock = toInt(obj.stock ?? obj.inventario);
+      const costo = toNum(obj.costo_convenio);
+      const valor = toNum(obj.valor);
       return {
         cliente: 'digitalife',
         sku: toStr(obj.parte ?? obj.sku ?? obj.no_parte),
@@ -669,12 +673,13 @@ const PARSERS = {
         semana,
         marca: toStr(obj.marca),
         titulo: toStr(obj.titulo ?? obj.descripcion),
-        stock: toInt(obj.stock ?? obj.inventario),
-        costo_convenio: toNum(obj.costo_convenio),
+        stock,
+        costo_convenio: costo,
         precio_venta: toNum(obj.precio_venta),
         fecha_ultima_venta: toISODate(obj.fecha_ultima_venta),
         dias_sin_venta: toNum(obj.dias_sin_venta),
-        valor: toNum(obj.valor),
+        // El archivo dejó de traer columna "Valor": se calcula stock × costo convenio.
+        valor: valor != null ? valor : (stock != null && costo != null ? Math.round(stock * costo * 100) / 100 : null),
       };
     }).filter(r => r.sku);
   },

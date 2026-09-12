@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.22.0', fecha: '2026-09-12', titulo: 'Datos de clientes corregidos',
+    items: [
+      'Dicotech: una sola fuente (carga manual), sin duplicados, agosto y septiembre con monto, semanas 19 y 20 reconstruidas; ya no se cuenta doble en Visión General.',
+      'Todo el sell-out sin IVA; PCEL con una sola valuación (a lista) y mes real por semana; SKUs sin mapeo visibles.',
+      'El importador toma la semana del archivo (no del día de carga) y pide confirmar el corte; históricos cargados: 4 estados de cuenta de PCEL y 3 inventarios.',
+    ],
+  },
+  {
     version: '3.20.0', fecha: '2026-09-11', titulo: 'Inventario de clientes visible · cada cliente muestra lo que trae',
     items: [
       'El valor del inventario de los clientes (Digitalife, PCEL, Dicotech) ya NO es información sensible: se ve siempre, en web y celular. El permiso sigue cubriendo márgenes, contribución, utilidad, costos de Acteck, costos USD, precio de compra y el valor del inventario propio.',

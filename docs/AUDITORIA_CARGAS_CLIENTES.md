@@ -392,4 +392,32 @@ Consulta `inventario_cliente` e `inventario_cliente_sucursal` con `cliente='pcel
 6. `valor` calculado en `digitalifeInv`; semana del archivo y no del día de carga.
 7. `facturas` real en `v_sellout_dicotech_mensual`; `SellOutPcel.jsx` al inventario correcto.
 
-> Nada de lo anterior se aplicó. Este documento es sólo el diagnóstico.
+---
+
+## ✅ Aplicado el 2026-09-12 (sesión `sweet-kare-624569`)
+
+Ya no es sólo diagnóstico. Lo corregido, con respaldos y cómo revertir, está en
+**`docs/CORRECCION_CLIENTES_20260912.md`**. Resumen:
+
+| Hallazgo | Estado |
+|---|---|
+| #1 Dicotech doble en Visión General | ✅ `v_sellout_unificado` excluye `mayorista='DICOTECH'` de la rama mayoreo |
+| #2 Dicotech septiembre en $0 | ✅ monto canónico = `subtotal − descuento`; parser lee `total_venta_antes_IVA` |
+| #3 `row_hash` con índice de fila | ✅ hash determinista `REVKO\|folio\|sku\|fecha\|cantidad\|precio` + recarga completa de may–sep |
+| #4 Dicotech mezcla con/sin IVA | ✅ toda la serie sin IVA |
+| #5 Digitalife con IVA | ✅ `sellout_sku`, vistas y pantallas usan `subtotal − descuento` |
+| #6 PCEL con cinco valuaciones | ✅ una sola: `v_precio_pcel_sku` (PCEL PROVISIONAL → Mayoreo AAA) |
+| #7 PCEL con `(semana−1)/4+1` | ✅ mes ISO (jueves de la semana) |
+| #8 `v_sellout_pcel_sku_mes` INNER JOIN | ✅ LEFT JOIN + aviso de SKUs sin mapear en pantalla |
+| #9 `valor` NULL en Digitalife | ✅ el parser calcula `stock × costo_convenio` |
+| #10 Semana del día de carga | ✅ `semanaDeCorte()` + columna "Corte" y confirmación en el importador |
+| #11 `facturas` = sucursales | ✅ `count(distinct factura)` desde `v_sellout_general_dicotech` |
+| #12, #13, #14, #15, #16, #17, #18 | ⏳ pendientes |
+
+**Hallazgo nuevo (no estaba en la auditoría):**
+- `sellout_general` de DICOTECH mezcla dos orígenes (puente SQL con `id > 0` y carga
+  manual del CSV con `id < 0`) y en may–ago 2026 la misma venta está en los dos: el
+  $1.97 M de agosto de esta auditoría también venía inflado. La cifra real de agosto es
+  **$1.62 M**. `v_sellout_general_dicotech` deduplica por mes.
+- El parser de Dicotech leía las fechas con `raw:false` y SheetJS las reformateaba en hora
+  local: **todas las ventas quedaban un día antes**. Corregido con `raw:true`.

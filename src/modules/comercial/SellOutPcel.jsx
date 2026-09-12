@@ -123,7 +123,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
     setLoading(true);
     (async () => {
       const [mes, skuMes, invSuc, mrcMes] = await Promise.all([
-        fetchAll('v_sellout_pcel_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
+        fetchAll('v_sellout_pcel_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas,skus_sin_mapear,piezas_sin_mapear'),
         fetchAll('v_sellout_pcel_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
         fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
@@ -138,6 +138,13 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
       setLoading(false);
     })();
   }, [clienteKey, anio, anioPrev]);
+
+  // SKUs de PCEL sin mapeo a SKU Acteck en el año en curso (aviso en pantalla).
+  const sinMapear = useMemo(() => {
+    let skus = 0, piezas = 0;
+    for (const r of mensual) if (r.anio === anio) { skus = Math.max(skus, Number(r.skus_sin_mapear) || 0); piezas += Number(r.piezas_sin_mapear) || 0; }
+    return { skus, piezas };
+  }, [mensual, anio]);
 
   // Mes actual = último con data
   const mesActual = useMemo(() => {
@@ -471,7 +478,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
         <div>
           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'rgba(255,255,255,0.55)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: '#5E5CE6' }} />
-            Sell Out · PCEL · {MESES_LARGO[mesActual - 1]} {anio}
+            Sell Out · PCEL · {MESES_LARGO[mesActual - 1]} {anio} · estimado a lista
           </span>
           <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, margin: '3px 0 2px', color: '#FFF', letterSpacing: '-0.025em' }}>
             {narrativa()}
@@ -484,6 +491,15 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
         <HeroStat k={`YTD ${anio}`} v={fmt.money(kpis.ytdMonto)} sub={`${fmt.int(kpis.ytdPiezas)} pzs`} />
         <HeroStat k={`YoY ${MESES[mesActual - 1]}`} v={kpis.yoyMtd != null ? `${kpis.yoyMtd >= 0 ? '+' : ''}${kpis.yoyMtd.toFixed(1)}%` : '—'} sub={`vs ${anioPrev}`} valColor={kpis.yoyMtd == null ? undefined : kpis.yoyMtd >= 0 ? P.green : P.red} />
       </div>
+
+      {/* Aviso: PCEL manda códigos propios; los que no tienen mapeo a SKU Acteck se
+          muestran con su código (ya no se descartan) pero no cruzan con roadmap ni precios. */}
+      {sinMapear.skus > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface, fontSize: 11.5, color: theme.textMuted }}>
+          <span style={{ width: 7, height: 7, borderRadius: 999, background: P.orange || P.red, flex: '0 0 auto' }} />
+          <span><strong style={{ color: theme.text }}>{sinMapear.skus} SKUs de PCEL sin mapear</strong> ({fmt.int(sinMapear.piezas)} pz en {anio}): se muestran con el código de PCEL y sin valuación. Agrégalos a <span style={{ fontFamily: TYPO.fontDisplay }}>pcel_sku_map</span> para que crucen con roadmap y precios.</span>
+        </div>
+      )}
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>

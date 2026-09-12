@@ -1,6 +1,6 @@
 // Digitalife · sell out histórico (hoja "Sellout Digitalife") → sellout_detalle y
 // snapshot semanal de inventario (Hoja39) → inventario_cliente.
-import { XLSX, objSnake, toStr, toNum, toInt, toISODate, hash, primeraHoja, semanaSnapshot } from './_util';
+import { XLSX, objSnake, toStr, toNum, toInt, toISODate, hash, primeraHoja, semanaDeCorte } from './_util';
 
 // opts.historico = true → el archivo es el histórico completo: se reemplaza todo el
 // sell out del cliente (deleteCliente → import-central borra cliente=digitalife) antes de insertar.
@@ -29,18 +29,28 @@ export function digitalifeSellout(wb, fileName, opts = {}) {
   };
 }
 
-export function digitalifeInv(wb) {
+// El archivo de Digitalife NO trae columna "Valor" desde 2026: se calcula stock × costo_convenio
+// (antes quedaba NULL en el 100 % de las filas).
+// La semana sale del corte (elegida / nombre / fecha del archivo / datos), nunca del día de carga.
+export function digitalifeInv(wb, fileName, opts = {}) {
   const sh = primeraHoja(wb, 'Hoja39');
   const rows = XLSX().utils.sheet_to_json(sh, { defval: null });
-  const { anio, semana } = semanaSnapshot();
-  const out = rows.map((r) => {
-    const obj = objSnake(r);
+  const objs = rows.map(objSnake);
+  const { anio, semana } = semanaDeCorte(opts, {
+    fileName,
+    fechasDatos: objs.flatMap((o) => [toISODate(o.ultima_entrada), toISODate(o.fecha_ultima_venta)]).filter(Boolean),
+  });
+  const out = objs.map((obj) => {
+    const stock = toInt(obj.stock ?? obj.inventario);
+    const costo = toNum(obj.costo_convenio);
+    const valor = toNum(obj.valor);
     return {
       cliente: 'digitalife', sku: toStr(obj.parte ?? obj.sku ?? obj.no_parte), anio, semana,
       marca: toStr(obj.marca), titulo: toStr(obj.titulo ?? obj.descripcion),
-      stock: toInt(obj.stock ?? obj.inventario), costo_convenio: toNum(obj.costo_convenio), precio_venta: toNum(obj.precio_venta),
-      fecha_ultima_venta: toISODate(obj.fecha_ultima_venta), dias_sin_venta: toNum(obj.dias_sin_venta), valor: toNum(obj.valor),
+      stock, costo_convenio: costo, precio_venta: toNum(obj.precio_venta),
+      fecha_ultima_venta: toISODate(obj.fecha_ultima_venta), dias_sin_venta: toNum(obj.dias_sin_venta),
+      valor: valor != null ? valor : (stock != null && costo != null ? Math.round(stock * costo * 100) / 100 : null),
     };
   }).filter((r) => r.sku);
-  return { table: 'inventario_cliente', onConflict: 'cliente,sku,anio,semana', rows: out, resumen: `${out.length} SKUs · semana ${semana}/${anio}` };
+  return { table: 'inventario_cliente', onConflict: 'cliente,sku,anio,semana', rows: out, periodo: { anio, semana }, resumen: `${out.length} SKUs · semana ${semana}/${anio}` };
 }

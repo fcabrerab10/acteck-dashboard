@@ -53,13 +53,14 @@ export async function fetchSelloutSku(clienteKey, anio) {
     );
   }
 
-  // PCEL — preferir sellout_pcel_mensual (datos mensuales reportados por el
-  // cliente, más precisos que agregar semanales). Fallback: agregar de
-  // sellout_pcel por ISO week → mes si la tabla mensual está vacía.
+  // PCEL — v_sellout_pcel_sku_mes: piezas oficiales de sellout_pcel_mensual, SKU ya
+  // traducido a Acteck (LEFT JOIN: los códigos sin mapeo se conservan) y la valuación
+  // ÚNICA de PCEL (piezas × precio de lista PCEL PROVISIONAL, respaldo Mayoreo AAA).
+  // Antes esto devolvía monto_pesos = 0 y Análisis de Cliente mostraba $0 para PCEL.
   const mensual = await fetchAllPages(() =>
     supabase
-      .from("sellout_pcel_mensual")
-      .select("anio, mes, sku, piezas, nombre_mes")
+      .from("v_sellout_pcel_sku_mes")
+      .select("anio, mes, sku, piezas, monto, mapeado")
       .eq("anio", anio)
   );
   if (mensual.length > 0) {
@@ -69,7 +70,9 @@ export async function fetchSelloutSku(clienteKey, anio) {
       anio: r.anio,
       mes: r.mes,
       piezas: Number(r.piezas) || 0,
-      monto_pesos: 0, // sin precio venta disponible para PCEL aún
+      monto_pesos: Number(r.monto) || 0,   // estimado a lista: PCEL nunca manda pesos
+      estimado: true,
+      mapeado: r.mapeado !== false,
     }));
   }
 
