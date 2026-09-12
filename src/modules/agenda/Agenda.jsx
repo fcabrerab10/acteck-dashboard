@@ -119,9 +119,9 @@ export default function Agenda({ onNavegar }) {
           {puedeEditar && <Boton icon={CalendarPlus} onClick={() => setFormReunion({})} style={ghost}>Reunión</Boton>}
           {puedeEditar && <Boton icon={CalendarPlus} onClick={() => setFormReunion({ tipo: 'evento' })} style={ghost}>Evento</Boton>}
           <Boton icon={Share2} onClick={compartirHoy} style={ghost} title="Compartir mi día por WhatsApp">Compartir hoy</Boton>
-          {g.cargando ? null : g.conectado
+          {g.conectado
             ? <Boton style={ghost} title={`Google Calendar · ${g.email || ''}${g.ultimaSync ? ` · sync ${new Date(g.ultimaSync).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}` : ''}`} onClick={() => ir(null, 'agenda')}>Google conectado ✓</Boton>
-            : <Boton style={ghost} onClick={onConectar} title="Conecta tu Google Calendar (cada quien el suyo)">Conectar Google</Boton>}
+            : <Boton icon={CalendarPlus} primario onClick={onConectar} disabled={g.cargando} title="Conecta tu Google Calendar (cada quien el suyo)">Conectar Google</Boton>}
         </div>
       </Hero>
 
