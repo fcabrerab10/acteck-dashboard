@@ -14,10 +14,10 @@ import { Send, Check, Hash, FileText, XCircle, Mail, RotateCcw } from 'lucide-re
 import { supabase, DB_CONFIGURED } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/themeContext';
 import { usePerfil } from '../../../lib/perfilContext';
-import { TituloGrande, HeroM, ListaAgrupada, Fila, Segmented, Vacio, toast } from '../../piezas';
+import { TituloGrande, HeroM, ListaAgrupada, Fila, Segmented, Vacio, HojaM, toast } from '../../piezas';
 import { Cargando } from '../../../components/kit';
 import { money, moneyCompact, MESES_LARGO, N } from '../../util';
-import { FilaGesto } from '../agenda/comun';
+import { FilaGesto, ChipM } from '../agenda/comun';
 import { clientesVisibles, puedeEditarPagos, cambiarEstado } from '../../../modules/comercial/pagosv3/datos';
 import { CLIENTE_LABEL, CLIENTE_COLOR } from '../../../modules/comercial/pagosv3/reglas';
 import { ESTADO_META, TIPO_META, estaVencido, venceEn, diasParaPago } from '../../../modules/comercial/pagosv3/estados';
@@ -45,13 +45,14 @@ function usePagosMovil(clientes) {
     staleTime: STALE,
     enabled: clientes.length > 0 && DB_CONFIGURED,
     queryFn: async () => {
-      const [pagos, fondos, reglas] = await Promise.all([
+      const [pagos, fondos, reglas, movs] = await Promise.all([
         supabase.from('pagos').select('*').in('cliente', clientes).order('fecha_programada', { ascending: true }),
         supabase.from('v_pagos_fondos_saldo').select('*'),
         supabase.from('pagos_reglas').select('cliente,seccion,config,vigente_hasta').is('vigente_hasta', null),
+        supabase.from('pagos_fondos_movimientos').select('id,fondo_id,cliente,fecha,tipo,monto,concepto,origen,notas').in('cliente', clientes).order('fecha', { ascending: false }).limit(600),
       ]);
       if (pagos.error) throw pagos.error;
-      return { pagos: pagos.data || [], fondos: fondos.data || [], reglas: reglas.data || [] };
+      return { pagos: pagos.data || [], fondos: fondos.data || [], reglas: reglas.data || [], movs: movs.data || [] };
     },
   });
 }
@@ -70,6 +71,9 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
   const [hoja, setHoja] = useState(null);         // { tipo, pago }
   const [ocupado, setOcupado] = useState(false);
   const [fondoFoco, setFondoFoco] = useState(null);
+  const [fondoAbierto, setFondoAbierto] = useState(null);   // estado de cuenta del fondo (hoja)
+  const [histTipo, setHistTipo] = useState(null);            // filtros del historial
+  const [histRango, setHistRango] = useState('anio');
 
   const visibles = useMemo(() => clientesVisibles(perfil), [perfil]);
 
@@ -221,10 +225,33 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
     );
   };
 
-  const historial = pagos
+  const fechaHist = (p) => String(p.pagado_at || p.updated_at || fechaDe(p) || '').slice(0, 10);
+  const historialBase = pagos
     .filter((p) => ['pagado', 'cancelado'].includes(p.estado))
-    .sort((a, b) => String(b.pagado_at || b.updated_at || '').localeCompare(String(a.pagado_at || a.updated_at || '')))
-    .slice(0, 60);
+    .sort((a, b) => fechaHist(b).localeCompare(fechaHist(a)));
+  const desdeRango = (() => {
+    const d = new Date(hoy);
+    if (histRango === 'mes') return `${anio}-${pad(mes)}-01`;
+    if (histRango === '3m') { d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); }
+    if (histRango === 'anio') return `${hoy.slice(0, 4)}-01-01`;
+    return '0000-00-00';
+  })();
+  const tiposHist = Object.keys(TIPO_META).filter((t) => historialBase.some((p) => p.tipo === t));
+  const historial = historialBase
+    .filter((p) => fechaHist(p) >= desdeRango)
+    .filter((p) => !histTipo || p.tipo === histTipo)
+    .slice(0, 120);
+  const totalHist = historial.filter((p) => p.estado === 'pagado').reduce((s, p) => s + N(p.monto), 0);
+
+  // Estado de cuenta del fondo abierto: movimientos con saldo acumulado (del más viejo al más nuevo, mostrado al revés).
+  const fondoSel = (data?.fondos || []).find((f) => String(f.fondo_id) === String(fondoAbierto)) || null;
+  const movsFondo = (() => {
+    if (!fondoSel) return [];
+    const lista = (data?.movs || []).filter((m) => String(m.fondo_id) === String(fondoSel.fondo_id))
+      .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || N(a.id) - N(b.id));
+    let acum = 0;
+    return lista.map((m) => { const signo = m.tipo === 'cargo' ? -1 : 1; acum += signo * N(m.monto); return { ...m, signo, acum }; }).reverse();
+  })();
 
   return (
     <>
@@ -312,7 +339,7 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
                   sub={`Abonos ${moneyCompact(f.abonos_ytd)} · cargos ${moneyCompact(f.cargos_ytd)}`}
                   valor={money(f.saldo)}
                   tono={String(f.fondo_id) === fondoFoco ? theme.accent : CLIENTE_COLOR[f.cliente]}
-                  chevron={false}
+                  onClick={() => setFondoAbierto(f.fondo_id)}
                   pill={N(f.saldo) < 0 ? { tone: 'red', label: 'negativo' } : undefined} />
               ))}
           </ListaAgrupada>
@@ -321,10 +348,22 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
 
       {vista === 'historial' && (
         <div style={{ padding: '12px 0' }}>
+          <div style={{ padding: '0 16px 10px' }}>
+            <Segmented size="sm" style={{ display: 'flex', width: '100%' }} value={histRango} onChange={setHistRango}
+              options={[{ id: 'mes', label: 'Este mes' }, { id: '3m', label: '3 meses' }, { id: 'anio', label: hoy.slice(0, 4) }, { id: 'todo', label: 'Todo' }]} />
+          </div>
+          {tiposHist.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', overflowX: 'auto' }}>
+              <ChipM on={!histTipo} onClick={() => setHistTipo(null)}>Todos</ChipM>
+              {tiposHist.map((t) => (
+                <ChipM key={t} on={histTipo === t} onClick={() => setHistTipo(histTipo === t ? null : t)}>{TIPO_META[t].label}</ChipM>
+              ))}
+            </div>
+          )}
           {historial.length === 0
-            ? <Vacio icon={XCircle} color={theme.textMuted} titulo="Sin historial" sub="Aquí aparecen los pagos ya aplicados o cancelados." />
+            ? <Vacio icon={XCircle} color={theme.textMuted} titulo="Sin historial" sub={historialBase.length ? 'Nada con esos filtros.' : 'Aquí aparecen los pagos ya aplicados o cancelados.'} />
             : (
-              <ListaAgrupada titulo="Pagados y cancelados" meta={historial.length}>
+              <ListaAgrupada titulo="Pagados y cancelados" meta={`${historial.length} · ${moneyCompact(totalHist)} pagados`}>
                 {historial.map((p) => (
                   <Fila key={p.id}
                     titulo={p.concepto}
@@ -338,6 +377,42 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
             )}
         </div>
       )}
+
+      {/* Estado de cuenta del fondo */}
+      <HojaM abierto={!!fondoSel} onClose={() => setFondoAbierto(null)} titulo={fondoSel?.nombre || 'Fondo'}
+        sub={fondoSel ? `${CLIENTE_LABEL[fondoSel.cliente] || fondoSel.cliente} · saldo ${money(fondoSel.saldo)}` : ''} alto="82vh">
+        {fondoSel && (
+          <div style={{ padding: '4px 0 16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '0 16px 12px' }}>
+              {[
+                { k: 'Saldo', v: money(fondoSel.saldo), color: N(fondoSel.saldo) < 0 ? theme.red : theme.text },
+                { k: `Abonos ${hoy.slice(0, 4)}`, v: moneyCompact(fondoSel.abonos_ytd) },
+                { k: `Cargos ${hoy.slice(0, 4)}`, v: moneyCompact(fondoSel.cargos_ytd) },
+              ].map((x) => (
+                <div key={x.k} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '8px 10px', minWidth: 0 }}>
+                  <div style={{ fontSize: 10, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{x.k}</div>
+                  <div style={{ fontVariantNumeric: 'tabular-nums', fontSize: 15, fontWeight: 600, color: x.color || theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.v}</div>
+                </div>
+              ))}
+            </div>
+            {fondoSel.regla && <div style={{ padding: '0 16px 10px', fontSize: 11.5, color: theme.textMuted }}>{fondoSel.regla}</div>}
+            {movsFondo.length === 0
+              ? <Vacio icon={null} titulo="Sin movimientos" sub="Los abonos y cargos aparecerán aquí con su saldo." style={{ padding: 18 }} />
+              : (
+                <ListaAgrupada titulo="Estado de cuenta" meta={movsFondo.length} pie="Saldo después de cada movimiento. Cargo = actividad o pago que se descuenta del fondo.">
+                  {movsFondo.map((m) => (
+                    <Fila key={m.id} chevron={false}
+                      titulo={m.concepto || (m.signo < 0 ? 'Cargo' : 'Abono')}
+                      sub={[String(m.fecha || '').slice(0, 10), m.origen, m.notas].filter(Boolean).join(' · ')}
+                      valor={<span style={{ color: m.signo < 0 ? theme.red : theme.green }}>{m.signo < 0 ? '−' : '+'}{money(m.monto)}</span>}
+                      valorSub={`saldo ${money(m.acum)}`}
+                      tono={m.signo < 0 ? theme.red : theme.green} />
+                  ))}
+                </ListaAgrupada>
+              )}
+          </div>
+        )}
+      </HojaM>
 
       {/* Hojas de acción (las abre el gesto o el detalle) */}
       <HojaCorreo pago={hoja?.tipo === 'correo' ? hoja.pago : null} abierto={hoja?.tipo === 'correo'} onCerrar={() => setHoja(null)}
