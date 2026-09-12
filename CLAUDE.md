@@ -173,6 +173,8 @@ En Vercel ya están configuradas (más SMTP y `CRON_SECRET` para el cron de avis
 
 ## Flujo de trabajo
 
+**Deploy en Vercel (regla desde 2026-09-11).** El plan Hobby permite **12 funciones serverless** por deploy (archivos en `api/` sin `_`); la 13ª hizo fallar todos los deploys de la 3.13.0 a la 3.19.1 sin que nadie lo notara. `npm run build` corre antes `scripts/verificar-deploy.mjs` (conteo de funciones, `vercel.json`, import de cada API en Node) y falla con mensaje claro; Vercel también lo ejecuta. Reglas: (1) usar `npm run build`, no `npx vite build`, antes de cada push; (2) endpoint nuevo = fusionarlo en uno existente con `?action=` salvo que se libere espacio; (3) tras cada push, comprobar que producción sirve la versión nueva: `curl -s https://acteck-dashboard.vercel.app/ | grep -o '/assets/index-[^"]*\.js'` y buscar la versión dentro de ese archivo; si no cambia en 3 minutos, el deploy falló.
+
 ```bash
 npm install
 npm run dev          # localhost:5173

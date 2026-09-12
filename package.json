@@ -4,6 +4,8 @@
   "version": "3.19.2",
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/verificar-deploy.mjs",
+    "verificar-deploy": "node scripts/verificar-deploy.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
