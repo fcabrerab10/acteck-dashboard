@@ -2496,7 +2496,7 @@ async function logSyncEvent(srcOrId, meta){
   // 3) Fire-and-forget POST al server.
   try {
     const payload = localMetaToServer(srcId, meta, { status_key: statusKey });
-    const r = await fetch('/api/admin/log-sync-event', {
+    const r = await fetch('/api/admin/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -2529,7 +2529,7 @@ async function fetchServerHistorial(srcId, limit){
     const q = new URLSearchParams();
     if (srcId) q.set('src_id', srcId);
     q.set('limit', String(limit || HISTORIAL_MAX));
-    const r = await fetch('/api/admin/sync-history?' + q.toString(), { cache: 'no-store' });
+    const r = await fetch('/api/admin/sync?' + q.toString(), { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     const arr = Array.isArray(j?.events) ? j.events : [];

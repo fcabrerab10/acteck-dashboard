@@ -42,9 +42,9 @@ CREATE POLICY sync_events_insert ON sync_events FOR INSERT
 
 ## Endpoints que usan la tabla
 
-- `POST /api/admin/log-sync-event` — registra un evento. Auth: cualquier usuario autenticado.
+- `POST /api/admin/sync` — registra un evento. Auth: cualquier usuario autenticado.
   Body: `{ src_id, status_key?, status, filas?, filename?, duracion_ms?, detalles? }`.
-- `GET  /api/admin/sync-history?src_id=X&limit=10` — lista eventos. Auth: cualquier autenticado.
+- `GET  /api/admin/sync?src_id=X&limit=10` — lista eventos. Auth: cualquier autenticado.
   Sin `src_id`, retorna eventos cross-cards (últimos N globales). `limit` máx 50, default 10.
 
 Ambos endpoints usan `SUPABASE_SERVICE_ROLE_KEY` para escribir/leer y hacen su propio gate de autenticación con `requireAuth()` — el token JWT del usuario logueado se envía por el wrapper de `fetch()` del uploader (inyecta `Authorization: Bearer <access_token>` a todo `/api/*`).
@@ -76,7 +76,7 @@ Cada navegador tiene una llave `uploads_history_v1` en localStorage. Si Fernando
   }
   console.log('Subiendo', entries.length, 'eventos...');
   for (const ev of entries) {
-    await fetch('/api/admin/log-sync-event', {
+    await fetch('/api/admin/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ev),

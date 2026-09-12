@@ -49,7 +49,7 @@ async function postChunks(job, onProgress) {
 
 async function logEvento(fuente, ev) {
   try {
-    await apiFetch('/api/admin/log-sync-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ src_id: fuente.id, status_key: fuente.statusKey, ...ev }) });
+    await apiFetch('/api/admin/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ src_id: fuente.id, status_key: fuente.statusKey, ...ev }) });
   } catch { /* el historial no debe romper la carga */ }
 }
 
