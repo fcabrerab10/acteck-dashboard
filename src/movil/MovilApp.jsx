@@ -85,9 +85,9 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const luego = (fn, ms) => { const t = setTimeout(fn, reduceMotion() ? 0 : ms); timers.current.push(t); };
 
   // ── Pila ──
-  const push = useCallback((el, key) => {
+  const push = useCallback((el, key, activo) => {
     const k = `${key || 'p'}-${++seq}`;
-    setPilas((p) => ({ ...p, [tab]: [...p[tab], { key: k, el, fase: 'entrando' }] }));
+    setPilas((p) => ({ ...p, [tab]: [...p[tab], { key: k, el, fase: 'entrando', activo: activo || null }] }));
     luego(() => setPilas((p) => ({ ...p, [tab]: p[tab].map((e) => (e.key === k ? { ...e, fase: 'activa' } : e)) })), 20);
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const pop = useCallback(() => {
@@ -96,10 +96,13 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
       const top = pila[pila.length - 1];
       if (top.fase === 'saliendo') return p;
       luego(() => setPilas((q) => ({ ...q, [tab]: q[tab].filter((e) => e.key !== top.key) })), DUR.page);
+      const restantes = pila.filter((e) => e.key !== top.key);
+      const abajo = [...restantes].reverse().find((e) => e.activo)?.activo || TAB_A_NODO[tab] || null;
+      if (abajo) setActivoId(abajo);
       return { ...p, [tab]: pila.map((e) => (e.key === top.key ? { ...e, fase: 'saliendo' } : e)) };
     });
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
-  const popTodo = useCallback((t = tab) => setPilas((p) => ({ ...p, [t]: [] })), [tab]);
+  const popTodo = useCallback((t = tab) => { setPilas((p) => ({ ...p, [t]: [] })); if (TAB_A_NODO[t]) setActivoId(TAB_A_NODO[t]); }, [tab]);
 
   const tabRef = useRef(tab); tabRef.current = tab;
   const tabPrev = useRef('inicio');
@@ -129,7 +132,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     const label = nodo.label || buscarNodo(arbol, id)?.label;
     const d = destino({ pagina: nodo.pagina, clienteKey: nodo.clienteKey || null, label, extra: nodo.extra });
     if (d.tipo === 'tab') { irATab(d.tab); return; }
-    if (d.tipo === 'push') { setActivoId(id); push(d.el, nodo.extra ? `${d.key}-${Date.now()}` : d.key); return; }
+    if (d.tipo === 'push') { setActivoId(id); push(d.el, nodo.extra ? `${d.key}-${Date.now()}` : d.key, id); return; }
     abrirProximamente(d.label);
   }, [arbol, irATab, push, abrirProximamente]);
 
@@ -198,7 +201,13 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   }), [perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegar, abrirHoja, cerrarHoja, abrirProximamente, refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta]);
 
   const sinBarra = modo === 'cajon';
-  const activoBarra = perfilAbierto ? 'perfil' : hojaAbierta && hoja?.grupo ? hoja.grupo : tab === 'inicio' ? 'inicio' : tab === 'clientes' ? 'clientesPropios' : null;
+  const grupoActivo = useMemo(() => {
+    if (!activoId) return null;
+    if (activoId === 'inicio') return 'inicio';
+    if (activoId.includes(':')) return 'clientesPropios';
+    return buscarNodo(arbol, activoId)?.grupo || null;
+  }, [arbol, activoId]);
+  const activoBarra = perfilAbierto ? 'perfil' : hojaAbierta && hoja?.grupo ? hoja.grupo : tab === 'inicio' ? 'inicio' : tab === 'clientes' ? 'clientesPropios' : grupoActivo;
 
   return (
     <NavContext.Provider value={ctx}>

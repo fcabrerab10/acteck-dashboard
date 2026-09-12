@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.18.0', fecha: '2026-09-11', titulo: 'Administración en el celular',
+    items: [
+      'Usuarios y permisos con TriNivel táctil, "Información sensible", "Se evalúa", copiar permisos, ver como e invitar usuario.',
+      'Datos (puente, corridas, pedir corrida, cargas manuales con frescura), Notificaciones del equipo por usuario y Sistema (versión, novedades, servicios, retención).',
+      'El menú del celular vuelve a resaltar la pestaña correcta al regresar con el gesto o al cambiar de pestaña.',
+    ],
+  },
+  {
     version: '3.17.0', fecha: '2026-09-11', titulo: 'Actividad del equipo en el celular',
     items: [
       'Pulso del equipo, lista de todos los usuarios (internos y externos) con última entrada, pendientes y acciones de la semana; deslizar para "Recordar pendientes".',

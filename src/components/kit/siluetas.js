@@ -74,6 +74,8 @@ export const SILUETAS = {
   movilMinuta: [fila(1, 44), hero(3), panel(3, { alto: 110 }), panel(6, { alto: 240 }), fila(1, 48)],
   // Móvil · Actividad del equipo: hero (pulso, 3 stats) · 4 KPIs en 2×2 · fila del umbral · lista de internos · lista de externos
   movilEquipo: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), fila(1, 30), panel(6, { alto: 300 }), panel(3, { alto: 150 })],
+  // Móvil · Administración: hero (3 stats) · segmented de 4 secciones · buscador · lista de internos · lista de externos · botón
+  movilAdmin: [hero(3), fila(1, 34), fila(1, 38), panel(6, { alto: 300 }), panel(3, { alto: 150 }), panel(1, { alto: 50 })],
   adminInterna: [fila(1, 30), hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(300px,1fr)', [panel(12, { alto: 460 }), [panel(6, { alto: 240 }), panel(3, { alto: 140 })]]), panel(8, { alto: 360 })],
   historialCambios: [hero(3), panel(4, { alto: 120 }), tabla(14, 7)],
   actualizacion: [hero(4), tabla(6, 7, { alto: 300 }), tabla(9, 8, { alto: 400 }), fila(1, 28)],
