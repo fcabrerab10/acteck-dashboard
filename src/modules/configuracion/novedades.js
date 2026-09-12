@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.16.0', fecha: '2026-09-11', titulo: 'Sell In consolidado en el celular',
+    items: [
+      'Sell In de toda la empresa en el móvil: mes actual o cualquier mes, MTD vs cuota, por canal con tendencia, composición por categoría y marca, top SKUs y "Compartir resumen del mes por canal".',
+      'Ficha del SKU: heatmap de 6 meses, qué clientes lo compran y cuántas piezas al mes, disponibilidad con próximo arribo y "Compartir disponibilidad".',
+      'Pills de frescura por fuente (ERP, Sell In, Inventario, Estados de cuenta) con su propia última carga; Estado de Resultados fuera del menú móvil; permiso sensible aplicado en todas las pantallas.',
+    ],
+  },
+  {
     version: '3.15.0', fecha: '2026-09-11', titulo: 'Gráficas lineales y trimestres combinables',
     items: [
       'Todas las gráficas de evolución mensual (antes barras) usan la misma gráfica de líneas: punto por mes, año anterior punteado, cuota, máximo y mínimo, y valores del mes en la cabecera al pasar el cursor.',

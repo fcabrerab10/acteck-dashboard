@@ -69,6 +69,8 @@ export const SILUETAS = {
   // Móvil · Agenda A (hero 3 stats · segmented · lista), C tablero (segmented · una columna) y Minuta (título · hero · puntos · pie)
   movilAgenda: [hero(3), fila(1, 34), panel(6, { alto: 250 }), panel(4, { alto: 170 })],
   movilAgendaTablero: [fila(1, 34), panel(8, { alto: 420 }), fila(1, 16)],
+  // Móvil · Sell In consolidado: hero (3 stats + barra + pills) · 4 KPIs en 2×2 · lista de canales · buscador · composición · Top 10
+  movilSellInGlobal: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), panel(7, { alto: 320 }), fila(1, 38), panel(6, { alto: 240 }), panel(10, { alto: 420 })],
   movilMinuta: [fila(1, 44), hero(3), panel(3, { alto: 110 }), panel(6, { alto: 240 }), fila(1, 48)],
   adminInterna: [fila(1, 30), hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(300px,1fr)', [panel(12, { alto: 460 }), [panel(6, { alto: 240 }), panel(3, { alto: 140 })]]), panel(8, { alto: 360 })],
   historialCambios: [hero(3), panel(4, { alto: 120 }), tabla(14, 7)],
