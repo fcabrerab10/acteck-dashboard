@@ -1,3 +1,7 @@
+// SIN USO desde 2026-09-11: Sell In y Sell Out por cliente pasaron a la vista anual con Prom y Total
+// (src/movil/pestanas/sellout/TablaAnual.jsx). Se conserva por si alguna pantalla vuelve a querer el
+// heatmap de "últimos N meses" sin columnas de cierre; si no, se puede archivar.
+//
 // Heatmap de un SKU · filas (clientes finales, sucursales o "Piezas") × columnas (últimos N meses).
 // Cabecera con SKU y nombre, HeatCell del kit con 5 intensidades relativas al máximo de CADA fila,
 // primera columna fija y scroll horizontal. Pensado para abrirse dentro de una HojaM.

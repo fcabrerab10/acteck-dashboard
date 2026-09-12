@@ -1,8 +1,10 @@
 // Ficha del SKU dentro de Sell In consolidado (pantalla empujada).
 //   · Cabecera: sku, descripción, marca / categoría / roadmap.
-//   · Heatmap de los últimos 6 meses por canal (toggle piezas · monto) — datos ya cargados por la pantalla padre.
-//   · "Clientes que lo compran": cliente × 6 meses, ordenados por el periodo completo, con corte Pareto 80 %
-//     y "ver todos". Se carga bajo demanda (facturacion_clientes filtrado por sku, índice por sku).
+//   · Heatmap del AÑO por canal (Ene–Dic, toggle piezas · monto) con columnas Prom (sólo meses con dato)
+//     y Total, más un comparativo del año anterior completo. Mientras llega la consulta por SKU se pintan
+//     los 6 meses que ya trae la pantalla padre.
+//   · "Clientes que lo compran": cliente × 12 meses del año con Prom y Total por cliente, ordenados por el
+//     año, con corte Pareto 80 % y "ver todos" (facturacion_clientes filtrado por sku, índice por sku).
 //   · Disponibilidad hoy: disponible + próximo arribo con las piezas de ESE embarque (useFichaProducto).
 //   · "Compartir disponibilidad": exige elegir lista de precios; el texto lo arma textoDisponibilidad()
 //     (nunca nombra la lista, nunca lleva costo ni margen).
@@ -16,8 +18,8 @@ import { useNav } from '../../nav';
 import { TituloGrande, Cabecera, ListaAgrupada, Fila, BotonGrande, Vacio, Skeleton, Pill, HojaM, Segmented, TituloSeccionM, toast } from '../../piezas';
 import { useFichaProducto } from '../../datos';
 import { canalLabel } from '../../../modules/comercial/sellin/textos';
-import { money, moneyCompact, int, MONO, N } from '../../util';
-import { TablaHeat } from './piezas';
+import { money, moneyCompact, int, MESES, MONO, N } from '../../util';
+import TablaAnual from '../sellout/TablaAnual';
 import { useClientesSku } from './datos';
 
 const UNIDADES = [{ id: 'piezas', label: 'Piezas' }, { id: 'monto', label: 'Monto' }];
@@ -36,8 +38,14 @@ export default function FichaSku({ sku, info = {}, meses = [], porCanal = [] }) 
   const [eligiendo, setEligiendo] = useState(false);
   const [lista, setLista] = useState(null);
 
-  const columnas = meses.map((m) => m.label);
-  const anios = useMemo(() => [...new Set(meses.map((m) => m.anio))], [meses]);
+  // Año del que se habla: el del último mes que trae la pantalla padre (normalmente el año en curso).
+  const anio = meses.length ? meses[meses.length - 1].anio : new Date().getFullYear();
+  const mesTope = meses.length ? meses[meses.length - 1].mes : 12;
+  const anioActual = new Date().getFullYear();
+  const columnas = MESES;
+  // Los 12 meses del año + los 12 del anterior: el índice de la columna es el mes − 1.
+  const mesesAnio = useMemo(() => MESES.map((label, i) => ({ anio, mes: i + 1, label })), [anio]);
+  const anios = useMemo(() => [anio - 1, anio], [anio]);
   const fmt = unidad === 'monto' ? moneyCompact : (n) => Math.round(n).toLocaleString('es-MX');
 
   const { data: clientes, isLoading: lClientes } = useClientesSku(sku, anios);
@@ -47,22 +55,58 @@ export default function FichaSku({ sku, info = {}, meses = [], porCanal = [] }) 
   const listaValida = lista && listas.includes(lista) ? lista : null;
   const precioSel = listaValida && it ? it.precios[listaValida] || null : null;
 
-  // ── Canales × meses (datos ya en memoria) ──
-  const filasCanal = useMemo(() => porCanal
-    .map((c) => ({ label: canalLabel(c.canal), valores: unidad === 'monto' ? c.monto : c.piezas }))
-    .filter((f) => f.valores.some((v) => N(v) > 0))
-    .sort((a, b) => b.valores.reduce((s, v) => s + N(v), 0) - a.valores.reduce((s, v) => s + N(v), 0)), [porCanal, unidad]);
-  const totalPeriodo = useMemo(() => porCanal.reduce((s, c) => s + c.monto.reduce((a, b) => a + N(b), 0), 0), [porCanal]);
+  // ── Canales × 12 meses del año (de los renglones del SKU, que ya traen canal) ──
+  // Se usan estos renglones y no `porCanal` (6 meses) porque la vista anual necesita Ene–Dic.
+  const anual = useMemo(() => {
+    const cero = () => Array.from({ length: 12 }, () => 0);
+    const canales = new Map();
+    const cur = { piezas: cero(), monto: cero() }, prev = { piezas: cero(), monto: cero() };
+    (clientes || []).forEach((r) => {
+      const y = N(r.anio), m = N(r.mes); if (m < 1 || m > 12) return;
+      if (y === anio) {
+        cur.piezas[m - 1] += N(r.piezas); cur.monto[m - 1] += N(r.monto);
+        const ck = String(r.canal || 'otros').toUpperCase();
+        const o = canales.get(ck) || (canales.set(ck, { canal: ck, piezas: cero(), monto: cero() }), canales.get(ck));
+        o.piezas[m - 1] += N(r.piezas); o.monto[m - 1] += N(r.monto);
+      } else if (y === anio - 1) { prev.piezas[m - 1] += N(r.piezas); prev.monto[m - 1] += N(r.monto); }
+    });
+    return { canales: [...canales.values()], cur, prev };
+  }, [clientes, anio]);
 
-  // ── Clientes × meses (lazy) con corte Pareto 80 % ──
+  const filasCanal = useMemo(() => {
+    // Antes de que llegue la consulta por SKU se pintan los 6 meses que ya trae el padre.
+    const base = anual.canales.length
+      ? anual.canales.map((c) => ({ label: canalLabel(c.canal), valores: unidad === 'monto' ? c.monto : c.piezas }))
+      : porCanal.map((c) => {
+        const v = Array.from({ length: 12 }, () => 0);
+        meses.forEach((m, i) => { if (m.anio === anio) v[m.mes - 1] = N((unidad === 'monto' ? c.monto : c.piezas)[i]); });
+        return { label: canalLabel(c.canal), valores: v };
+      });
+    return base.filter((f) => f.valores.some((v) => N(v) > 0))
+      .sort((a, b) => b.valores.reduce((s, v) => s + N(v), 0) - a.valores.reduce((s, v) => s + N(v), 0));
+  }, [anual, porCanal, meses, unidad, anio]);
+
+  const comparativo = useMemo(() => {
+    const v = (o) => (unidad === 'monto' ? o.monto : o.piezas);
+    const out = [];
+    if (v(anual.cur).some((x) => x !== 0)) out.push({ label: String(anio), sub: anio === anioActual ? `Ene–${MESES[mesTope - 1]}` : 'año completo', valores: v(anual.cur) });
+    if (v(anual.prev).some((x) => x !== 0)) out.push({ label: String(anio - 1), sub: 'año completo', valores: v(anual.prev) });
+    return out;
+  }, [anual, unidad, anio, anioActual, mesTope]);
+
+  const totalPeriodo = useMemo(() => (anual.canales.length
+    ? anual.cur.monto.reduce((s, v) => s + N(v), 0)
+    : porCanal.reduce((s, c) => s + c.monto.reduce((a, b) => a + N(b), 0), 0)), [anual, porCanal]);
+
+  // ── Clientes × 12 meses del año (lazy) con corte Pareto 80 % ──
   const paretoClientes = useMemo(() => {
     if (!clientes) return null;
-    const idx = new Map(meses.map((m, i) => [`${m.anio}-${m.mes}`, i]));
     const by = new Map();
     clientes.forEach((r) => {
-      const i = idx.get(`${N(r.anio)}-${N(r.mes)}`); if (i == null) return;
+      if (N(r.anio) !== anio) return;
+      const i = N(r.mes) - 1; if (i < 0 || i > 11) return;
       const lbl = nombreBonito(r.cliente_nombre);
-      const o = by.get(lbl) || (by.set(lbl, { label: lbl, piezas: meses.map(() => 0), monto: meses.map(() => 0) }), by.get(lbl));
+      const o = by.get(lbl) || (by.set(lbl, { label: lbl, piezas: mesesAnio.map(() => 0), monto: mesesAnio.map(() => 0) }), by.get(lbl));
       o.piezas[i] += N(r.piezas); o.monto[i] += N(r.monto);
     });
     const todas = [...by.values()]
@@ -74,7 +118,7 @@ export default function FichaSku({ sku, info = {}, meses = [], porCanal = [] }) 
     let acc = 0, corte = 0;
     for (const o of todas) { acc += o.total; corte++; if (gran > 0 && acc / gran >= 0.8) break; }
     return { todas, corte: Math.max(1, Math.min(corte, todas.length)), gran };
-  }, [clientes, meses, unidad]);
+  }, [clientes, mesesAnio, unidad, anio]);
 
   const filasClientes = paretoClientes ? (verTodos ? paretoClientes.todas : paretoClientes.todas.slice(0, paretoClientes.corte)) : [];
 
@@ -92,7 +136,7 @@ export default function FichaSku({ sku, info = {}, meses = [], porCanal = [] }) 
     </div>
   );
 
-  const periodo = meses.length ? `${meses[0].label} – ${meses[meses.length - 1].label}` : '';
+  const periodo = anio === anioActual ? `Ene–${MESES[mesTope - 1]} ${anio}` : String(anio);
   return (
     <>
       <Cabecera onVolver={nav.pop} etiqueta="Sell In" derecha={<Segmented value={unidad} onChange={setUnidad} options={UNIDADES} />} />
@@ -104,23 +148,37 @@ export default function FichaSku({ sku, info = {}, meses = [], porCanal = [] }) 
         {info.rdmp && <Pill tone="purple">{info.rdmp}</Pill>}
       </div>
 
-      <TituloSeccionM style={{ padding: '0 28px 6px' }} meta={periodo}>Últimos 6 meses por canal</TituloSeccionM>
+      <TituloSeccionM style={{ padding: '0 28px 6px' }} meta={periodo}>{anio} por canal</TituloSeccionM>
       <div style={{ padding: '0 16px' }}>
-        <TablaHeat columnas={columnas} filas={filasCanal} fmt={fmt} etiquetaFilas={filasCanal.length > 1 ? `${filasCanal.length} canales` : ''} totalLabel="Total" />
+        {lClientes && !filasCanal.length && <Skeleton h={140} r={12} />}
+        <TablaAnual columnas={columnas} filas={filasCanal} fmt={fmt} etiquetaFilas={filasCanal.length > 1 ? `${filasCanal.length} canales` : ''} totalLabel="Total"
+          vacio={`Sin facturación de este SKU en ${anio}.`} />
         <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 12px 0', lineHeight: 1.4 }}>
-          {unidad === 'monto' ? 'Monto facturado' : 'Piezas facturadas'} por canal · intensidad relativa al máximo de cada fila.
+          {unidad === 'monto' ? 'Monto facturado' : 'Piezas facturadas'} por canal en {anio} · <strong>Prom</strong> = promedio sólo de los meses con dato · <strong>Total</strong> = año.
         </div>
       </div>
 
-      <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta={paretoClientes ? `${paretoClientes.todas.length}` : undefined}>Clientes que lo compran</TituloSeccionM>
+      {comparativo.length > 1 && (
+        <>
+          <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta={`${anio - 1} vs ${anio}`}>Comparativo anual</TituloSeccionM>
+          <div style={{ padding: '0 16px' }}>
+            <TablaAnual columnas={columnas} filas={comparativo} fmt={fmt} etiquetaFilas="2 años" conTotalFila={false} />
+            <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 12px 0', lineHeight: 1.4 }}>
+              Total de todos los canales por mes · el año anterior va completo para poder comparar el cierre.
+            </div>
+          </div>
+        </>
+      )}
+
+      <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta={paretoClientes ? `${paretoClientes.todas.length}` : undefined}>Clientes que lo compran · {anio}</TituloSeccionM>
       <div style={{ padding: '0 16px' }}>
         {lClientes && <Skeleton h={160} r={12} />}
-        {!lClientes && paretoClientes && paretoClientes.todas.length === 0 && <Vacio icon={null} titulo="Sin clientes en estos meses" sub="Nadie facturó este SKU en el periodo." />}
+        {!lClientes && paretoClientes && paretoClientes.todas.length === 0 && <Vacio icon={null} titulo={`Sin clientes en ${anio}`} sub="Nadie facturó este SKU en el año." />}
         {!lClientes && filasClientes.length > 0 && (
           <>
-            <TablaHeat columnas={columnas} filas={filasClientes} fmt={fmt} etiquetaFilas={`${filasClientes.length} clientes`} totalLabel={verTodos ? 'Total' : 'Subtotal 80 %'} />
+            <TablaAnual columnas={columnas} filas={filasClientes} fmt={fmt} etiquetaFilas={`${filasClientes.length} clientes`} totalLabel={verTodos ? 'Total' : 'Subtotal 80 %'} />
             <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 12px 0', lineHeight: 1.4 }}>
-              {verTodos ? 'Todos los clientes del periodo' : `Los ${paretoClientes.corte} que concentran el 80 % del periodo`} · nombre del cliente en el ERP.
+              {verTodos ? `Todos los clientes de ${anio}` : `Los ${paretoClientes.corte} que concentran el 80 % de ${anio}`} · nombre del cliente en el ERP · <strong>Prom</strong> por mes con compra y <strong>Total</strong> del año por cliente.
             </div>
             {paretoClientes.todas.length > paretoClientes.corte && (
               <button type="button" onClick={() => setVerTodos((v) => !v)} style={{ width: '100%', height: 44, marginTop: 4, border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
@@ -171,7 +229,7 @@ export default function FichaSku({ sku, info = {}, meses = [], porCanal = [] }) 
       </HojaM>
 
       <div style={{ padding: '18px 16px 0', fontSize: 11, color: theme.textSubtle || theme.textMuted, lineHeight: 1.45, fontFamily: TYPO.fontText }}>
-        Periodo {periodo} · {money(totalPeriodo)} facturados en {filasCanal.length} canal{filasCanal.length === 1 ? '' : 'es'} (<span style={{ fontFamily: MONO }}>facturacion_clientes</span>).
+        {periodo} · {money(totalPeriodo)} facturados en {filasCanal.length} canal{filasCanal.length === 1 ? '' : 'es'} (<span style={{ fontFamily: MONO }}>facturacion_clientes</span>).
       </div>
     </>
   );

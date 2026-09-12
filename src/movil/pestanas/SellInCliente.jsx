@@ -1,28 +1,29 @@
 // Sell In del cliente (push) · consulta rápida: hero MTD vs cuota ideal/mínima (barra), YTD, YoY y frase;
 // selector de mes (año en curso y anterior); lista de SKUs del mes con piezas, monto y YoY + buscador;
-// tocar un SKU abre HeatmapSku (clientes finales × últimos 6 meses; si el cliente factura con un solo
-// nombre en el ERP queda una fila "Piezas") y desde ahí "Ver disponibilidad" → Ficha de producto;
+// tocar un SKU abre su ficha en hoja (el AÑO elegido mes a mes con columnas Prom y Total, el año anterior
+// como fila comparativa y los clientes finales del año, en piezas o monto) y desde ahí "Ver disponibilidad";
 // composición por categoría (roadmap_sku) y "Compartir avance" (texto limpio, sin pagos ni márgenes).
 // Fuentes: facturacion_clientes (3 años, por cliente_key) · cuotas_mensuales · roadmap_sku / catalogo_articulos.
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, Share2, Copy } from 'lucide-react';
+import { ChevronDown, Share2, Copy, PackageSearch } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { textoAvance, compartir, copiar } from '../../lib/whatsapp';
 import { useNav } from '../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, HeatCell, Pill, Vacio, CampoBusqueda, HojaM, BotonGrande, toast } from '../piezas';
-import HeatmapSku from '../piezas/HeatmapSku';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, HeatCell, Pill, Vacio, CampoBusqueda, HojaM, BotonGrande, Segmented, toast } from '../piezas';
 import { PROPIOS } from '../datos';
 import { money, moneyCompact, int, deltaPct, tonoDelta, tonoCuota, MESES, MONO, N } from '../util';
 import FichaProducto from '../FichaProducto';
+import TablaAnual from './sellout/TablaAnual';
 
 const STALE = 5 * 60 * 1000;
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const UNIDADES_SKU = [{ id: 'piezas', label: 'Piezas' }, { id: 'monto', label: 'Monto' }];
 
 /** Últimos `n` meses terminando en (anio, mes): [{ anio, mes, label }]. */
 export function ultimosMeses(anio, mes, n = 6) {
@@ -129,9 +130,11 @@ export default function SellInCliente({ clienteKey, nombre }) {
   const [q, setQ] = useState('');
   const [verTodo, setVerTodo] = useState(false);
   const [skuHeat, setSkuHeat] = useState(null);
+  const [unidadSku, setUnidadSku] = useState('piezas');
   const [compartiendo, setCompartiendo] = useState(false);
   const { data, isLoading, error } = useSellInCliente(clienteKey, anioActual);
   const propio = PROPIOS.includes(clienteKey);
+  const fmtSku = unidadSku === 'monto' ? moneyCompact : (n) => Math.round(n).toLocaleString('es-MX');
 
   const r = useMemo(() => {
     if (!data) return null;
@@ -175,18 +178,38 @@ export default function SellInCliente({ clienteKey, nombre }) {
   const visibles = verTodo || q ? filtrados : filtrados.slice(0, 25);
   const maxPz = Math.max(0, ...visibles.map((o) => o.piezas));
 
-  // Heatmap: clientes finales (cliente_nombre dentro del cliente_key) × últimos 6 meses del SKU
+  // Ficha del SKU: el AÑO elegido mes a mes (12 columnas + Prom + Total), el año anterior como fila
+  // comparativa, y debajo los clientes finales (cliente_nombre dentro del cliente_key) del mismo año.
   const heat = useMemo(() => {
     if (!skuHeat || !data) return null;
-    const cols = ultimosMeses(sel.anio, sel.mes, 6);
-    const key = (x) => `${x.anio}-${N(x.mes)}`;
-    const idx = new Map(cols.map((c, i) => [`${c.anio}-${c.mes}`, i]));
-    const filas = new Map();
-    data.rows.forEach((x) => { if (x.sku !== skuHeat) return; const i = idx.get(key(x)); if (i == null) return; const lbl = x.cliente_nombre || 'Sin nombre'; const f = filas.get(lbl) || (filas.set(lbl, { label: lbl, valores: cols.map(() => 0) }), filas.get(lbl)); f.valores[i] += N(x.piezas); });
-    let lista = [...filas.values()].sort((p, s) => sum(s.valores, (v) => v) - sum(p.valores, (v) => v));
-    if (lista.length === 1) lista = [{ ...lista[0], label: 'Piezas', sub: lista[0].label }];
-    return { cols: cols.map((c) => c.label), filas: lista, info: data.cat.get(skuHeat) || {} };
-  }, [skuHeat, data, sel]);
+    const a = sel.anio;
+    const vacio = () => Array.from({ length: 12 }, () => 0);
+    const anioCur = { piezas: vacio(), monto: vacio() }, anioPrev = { piezas: vacio(), monto: vacio() };
+    const clientes = new Map();
+    data.rows.forEach((x) => {
+      if (x.sku !== skuHeat) return;
+      const y = N(x.anio), m = N(x.mes); if (m < 1 || m > 12) return;
+      if (y === a) {
+        anioCur.piezas[m - 1] += N(x.piezas); anioCur.monto[m - 1] += N(x.monto);
+        const lbl = x.cliente_nombre || 'Sin nombre';
+        const f = clientes.get(lbl) || (clientes.set(lbl, { label: lbl, piezas: vacio(), monto: vacio() }), clientes.get(lbl));
+        f.piezas[m - 1] += N(x.piezas); f.monto[m - 1] += N(x.monto);
+      } else if (y === a - 1) { anioPrev.piezas[m - 1] += N(x.piezas); anioPrev.monto[m - 1] += N(x.monto); }
+    });
+    return { a, anioCur, anioPrev, clientes: [...clientes.values()], info: data.cat.get(skuHeat) || {} };
+  }, [skuHeat, data, sel.anio]);
+
+  // Filas listas para TablaAnual según la unidad elegida en la hoja.
+  const heatFilas = useMemo(() => {
+    if (!heat) return null;
+    const v = (o) => (unidadSku === 'monto' ? o.monto : o.piezas);
+    const hay = (arr) => arr.some((x) => x !== 0);
+    const anios = [];
+    if (hay(v(heat.anioCur))) anios.push({ label: String(heat.a), sub: heat.a === anioActual ? `Ene–${MESES[mesActual - 1]}` : 'año completo', valores: v(heat.anioCur) });
+    if (hay(v(heat.anioPrev))) anios.push({ label: String(heat.a - 1), sub: 'año completo', valores: v(heat.anioPrev) });
+    const clientes = heat.clientes.map((c) => ({ label: c.label, valores: v(c) })).filter((c) => hay(c.valores)).sort((p, s) => sum(s.valores, (x) => x) - sum(p.valores, (x) => x));
+    return { anios, clientes };
+  }, [heat, unidadSku, anioActual, mesActual]);
 
   const textoCompartir = useMemo(() => (r ? textoAvance({ cliente: nombre, mes: r.m, anio: r.a, mtd: r.mtd, cuota: r.cuotaIdeal, ytd: r.ytd, top: r.skus.slice(0, 5) }) : ''), [r, nombre]);
   const onCompartir = async () => { const res = await compartir(textoCompartir, { titulo: `Avance ${nombre}` }); if (res === 'share') toast.ok('Compartido'); };
@@ -218,7 +241,7 @@ export default function SellInCliente({ clienteKey, nombre }) {
           </KpiGrid>
 
           <div style={{ padding: '18px 16px 8px' }}><CampoBusqueda value={q} onChange={setQ} placeholder="Buscar SKU o producto del mes" /></div>
-          <ListaAgrupada titulo={`SKUs · ${MESES[r.m - 1]}`} meta={q ? `${filtrados.length} de ${r.skus.length}` : `${r.skus.length}`} pie="Celda = piezas del mes (intensidad relativa al SKU líder) · pill = monto vs mismo mes del año anterior. Toca un SKU para ver sus clientes finales por mes.">
+          <ListaAgrupada titulo={`SKUs · ${MESES[r.m - 1]}`} meta={q ? `${filtrados.length} de ${r.skus.length}` : `${r.skus.length}`} pie="Celda = piezas del mes (intensidad relativa al SKU líder) · pill = monto vs mismo mes del año anterior. Toca un SKU para ver su año mes a mes (con promedio y total) y sus clientes finales.">
             {visibles.length === 0 && <Vacio icon={null} titulo={q ? 'Sin coincidencias' : 'Sin facturación este mes'} sub={q ? undefined : 'Todavía no hay renglones cargados para este mes.'} />}
             {visibles.map((o, i) => (
               <button key={o.sku} type="button" onClick={() => setSkuHeat(o.sku)}
@@ -245,9 +268,38 @@ export default function SellInCliente({ clienteKey, nombre }) {
         </>
       )}
 
-      <HojaM abierto={!!skuHeat} onClose={() => setSkuHeat(null)} titulo="Clientes finales × mes" sub={`${nombre} · últimos 6 meses a ${MESES[sel.mes - 1]} ${sel.anio}`} alto="80vh">
-        {heat && <HeatmapSku sku={skuHeat} nombre={heat.info.descripcion} marca={heat.info.marca} columnas={heat.cols} filas={heat.filas} onDisponibilidad={() => abrirFicha(skuHeat)}
-          pie={heat.filas.length === 1 && heat.filas[0].sub ? `${nombre} factura como "${heat.filas[0].sub}" en el ERP: se muestran las piezas por mes.` : 'Piezas facturadas por cliente final (nombre en el ERP) · intensidad relativa al máximo de cada fila.'} />}
+      <HojaM abierto={!!skuHeat} onClose={() => setSkuHeat(null)} titulo={skuHeat || 'SKU'} sub={`${nombre} · ${sel.anio} mes a mes`} alto="86vh">
+        {heat && heatFilas && (
+          <div style={{ padding: '0 16px 8px', fontFamily: TYPO.fontText, color: theme.text }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.02em' }}>{skuHeat}{heat.info.marca && <span style={{ fontWeight: 500, fontSize: 12, color: theme.textMuted, marginLeft: 8, fontFamily: TYPO.fontText }}>{heat.info.marca}</span>}</div>
+                <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2, lineHeight: 1.35 }}>{heat.info.descripcion || 'Sin descripción'}</div>
+              </div>
+              <Segmented value={unidadSku} onChange={setUnidadSku} options={UNIDADES_SKU} style={{ flexShrink: 0 }} />
+            </div>
+
+            <TablaAnual columnas={MESES} filas={heatFilas.anios} fmt={fmtSku} etiquetaFilas={heatFilas.anios.length > 1 ? '2 años' : ''} conTotalFila={false}
+              vacio={`Sin facturación de este SKU en ${heat.a - 1}–${heat.a}.`} />
+            <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 4px 12px', lineHeight: 1.4 }}>
+              {unidadSku === 'monto' ? 'Monto facturado' : 'Piezas facturadas'} a {nombre} por mes · <strong>Prom</strong> = promedio sólo de los meses con dato · <strong>Total</strong> = año.
+            </div>
+
+            {heatFilas.clientes.length > 0 && (
+              <>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: theme.textSubtle || theme.textMuted, padding: '4px 4px 6px' }}>
+                  Clientes finales {heat.a}
+                </div>
+                <TablaAnual columnas={MESES} filas={heatFilas.clientes} fmt={fmtSku} etiquetaFilas={`${heatFilas.clientes.length} clientes`} totalLabel="Total" />
+                <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 4px 0', lineHeight: 1.4 }}>
+                  {heatFilas.clientes.length === 1 ? `${nombre} factura con un solo nombre en el ERP ("${heatFilas.clientes[0].label}").` : 'Nombre del cliente final en el ERP · intensidad relativa al máximo de cada fila.'}
+                </div>
+              </>
+            )}
+
+            <BotonGrande icon={PackageSearch} onClick={() => abrirFicha(skuHeat)} style={{ marginTop: 14 }}>Ver disponibilidad</BotonGrande>
+          </div>
+        )}
       </HojaM>
 
       <HojaM abierto={compartiendo} onClose={() => setCompartiendo(false)} titulo="Compartir avance" sub={`${nombre} · ${MESES[sel.mes - 1]} ${sel.anio} · sin pagos ni márgenes`} alto="70vh">

@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.19.0', fecha: '2026-09-11', titulo: 'Sell Out por cliente en montos (celular)',
+    items: [
+      'Toggle Monto · Piezas en Sell Out por cliente; PCEL valuado a su lista de precios (con aviso).',
+      'Ficha del producto: sell-out por mes de todo el año con promedio y total, año anterior comparativo, inventario del cliente de ese SKU (stock, cobertura, días sin venta, valor con permiso) y stock al cierre de cada mes.',
+      'KPIs de inventario del cliente: valor total en $ (con permiso), SKUs con stock y SKUs sin venta 30+ días.',
+      'La misma vista anual con promedio y total en la ficha del SKU de Sell In por cliente y de Sell In consolidado (también por cliente comprador).',
+    ],
+  },
+  {
     version: '3.18.0', fecha: '2026-09-11', titulo: 'Administración en el celular',
     items: [
       'Usuarios y permisos con TriNivel táctil, "Información sensible", "Se evalúa", copiar permisos, ver como e invitar usuario.',
