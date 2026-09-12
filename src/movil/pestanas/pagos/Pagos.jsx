@@ -1,5 +1,6 @@
-// Pagos (móvil) · mockup A aprobado: la pantalla principal es una BANDEJA POR ACCIÓN.
-//   Segmented: Hoy · Calendario · Fondos · Historial
+// Pagos (móvil) · diseño B (2026-09-12): arriba una tira con las TRES cuentas (mini resumen y selector);
+//   todo lo de abajo es de UN cliente a la vez. La pantalla principal sigue siendo una BANDEJA POR ACCIÓN.
+//   Segmented: Hoy · Calendario · Fondo · Historial
 //   Hoy      — grupos por etapa: Por solicitar · Por autorizar · Sin folio · Por registrar (folio sin pago) ·
 //              Vence en 7 días · Rechazados. Chips de cliente y hero con comprometido / pagado / vence 7 d.
 //   Gestos   — derecha = acción principal de la etapa (abre la hoja que toca) · izquierda = Copiar correo
@@ -16,7 +17,7 @@ import { usePerfil } from '../../../lib/perfilContext';
 import { TituloGrande, HeroM, ListaAgrupada, Fila, Segmented, Vacio, toast } from '../../piezas';
 import { Cargando } from '../../../components/kit';
 import { money, moneyCompact, MESES_LARGO, N } from '../../util';
-import { FilaGesto, ChipM } from '../agenda/comun';
+import { FilaGesto } from '../agenda/comun';
 import { clientesVisibles, puedeEditarPagos, cambiarEstado } from '../../../modules/comercial/pagosv3/datos';
 import { CLIENTE_LABEL, CLIENTE_COLOR } from '../../../modules/comercial/pagosv3/reglas';
 import { ESTADO_META, TIPO_META, estaVencido, venceEn, diasParaPago } from '../../../modules/comercial/pagosv3/estados';
@@ -56,6 +57,7 @@ function usePagosMovil(clientes) {
 }
 
 export default function PagosMovil({ clienteKey = null, inicial = null }) {
+  // `clienteKey` (ruta vieja de cliente) e `inicial.cliente` sólo PREELIGEN la cuenta: la pantalla es global.
   const perfil = usePerfil();
   const { theme } = useTheme();
   const hoy = hoyISO();
@@ -63,16 +65,13 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
   const [mes, setMes] = useState(Number(hoy.slice(5, 7)));
   const [dia, setDia] = useState(hoy);
   const [vista, setVista] = useState('hoy');
-  const [chip, setChip] = useState('todos');
+  const [cliente, setCliente] = useState(inicial?.cliente || clienteKey || null);
   const [abierto, setAbierto] = useState(null);   // DetallePago
   const [hoja, setHoja] = useState(null);         // { tipo, pago }
   const [ocupado, setOcupado] = useState(false);
   const [fondoFoco, setFondoFoco] = useState(null);
 
-  const visibles = useMemo(() => {
-    const todos = clientesVisibles(perfil);
-    return clienteKey ? todos.filter((k) => k === clienteKey) : todos;
-  }, [perfil, clienteKey]);
+  const visibles = useMemo(() => clientesVisibles(perfil), [perfil]);
 
   const { data, isLoading, refetch } = usePagosMovil(visibles);
   const todos = data?.pagos || [];
@@ -89,11 +88,38 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
     if (inicial.fondoId) { setVista('fondos'); setFondoFoco(String(inicial.fondoId)); }
   }, [inicial, data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pagos = useMemo(() => (chip === 'todos' ? todos : todos.filter((p) => p.cliente === chip)), [todos, chip]);
-  const delMes = useMemo(() => pagos.filter((p) => {
-    const f = fechaDe(p);
-    return f ? f.slice(0, 7) === per : p.periodo === per;
-  }), [pagos, per]);
+  const esDelMes = (p) => { const f = fechaDe(p); return f ? f.slice(0, 7) === per : p.periodo === per; };
+  const abiertoDe = (p) => !['pagado', 'cancelado', 'rechazado'].includes(p.estado);
+
+  // ── Mini resumen de las tres cuentas (tira de arriba, también selector) ──
+  const cuentas = useMemo(() => visibles.map((k) => {
+    const mios = todos.filter((p) => p.cliente === k);
+    const mesK = mios.filter(esDelMes).filter((p) => p.estado !== 'cancelado');
+    const fondo = (data?.fondos || []).filter((f) => f.cliente === k && f.activo !== false).reduce((s, f) => s + N(f.saldo), 0);
+    return {
+      key: k,
+      comprometido: mesK.reduce((s, p) => s + N(p.monto), 0),
+      porHacer: mios.filter(abiertoDe).filter((p) => p.estado !== 'calculado' || N(p.monto) > 0).length,
+      vencidos: mios.filter(abiertoDe).filter((p) => estaVencido(p, hoy)).length,
+      fondo,
+    };
+  }), [visibles, todos, data?.fondos, per, hoy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cuenta inicial: la que tenga algo por hacer; si no, la primera.
+  useEffect(() => {
+    if (cliente && visibles.includes(cliente)) return;
+    if (!visibles.length || !data) return;
+    setCliente((cuentas.find((c) => c.porHacer > 0) || cuentas[0])?.key || visibles[0]);
+  }, [visibles, cuentas, cliente, data]);
+  const clienteSel = cliente && visibles.includes(cliente) ? cliente : visibles[0];
+  const totalTres = {
+    comprometido: cuentas.reduce((s, c) => s + c.comprometido, 0),
+    porHacer: cuentas.reduce((s, c) => s + c.porHacer, 0),
+    vencidos: cuentas.reduce((s, c) => s + c.vencidos, 0),
+  };
+
+  const pagos = useMemo(() => todos.filter((p) => p.cliente === clienteSel), [todos, clienteSel]);
+  const delMes = useMemo(() => pagos.filter(esDelMes), [pagos, per]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Grupos de la bandeja (sin repetir: lo que vence sale de su etapa y va al grupo de urgencia) ──
   const grupos = useMemo(() => {
@@ -181,7 +207,6 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
           style={{ background: theme.surface }}
           titulo={p.concepto}
           sub={[
-            CLIENTE_LABEL[p.cliente] || p.cliente,
             TIPO_META[p.tipo]?.label || p.tipo,
             p.origen === 'auto' ? 'auto' : 'manual',
             fechaDe(p) ? fechaDe(p).slice(5, 10).replace('-', '/') : null,
@@ -203,12 +228,39 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
 
   return (
     <>
-      <TituloGrande titulo="Pagos" sub={porHacer > 0 ? `${porHacer} por atender · desliza una fila para actuar` : 'Todo al día'} />
+      <TituloGrande titulo="Pagos"
+        sub={visibles.length > 1
+          ? `Las tres cuentas · ${moneyCompact(totalTres.comprometido)} este mes${totalTres.porHacer ? ` · ${totalTres.porHacer} por atender` : ' · todo al día'}${totalTres.vencidos ? ` · ${totalTres.vencidos} vencido(s)` : ''}`
+          : (porHacer > 0 ? `${porHacer} por atender · desliza una fila para actuar` : 'Todo al día')} />
+
+      {/* Tira de cuentas: mini resumen de las tres y selector (desliza) */}
+      {visibles.length > 1 && (
+        <div style={{ display: 'flex', gap: 8, padding: '4px 16px 10px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity' }}>
+          {cuentas.map((c) => {
+            const on = c.key === clienteSel;
+            const color = CLIENTE_COLOR[c.key] || theme.accent;
+            return (
+              <button key={c.key} onClick={() => { setCliente(c.key); setAbierto(null); }}
+                style={{ flex: '0 0 auto', minWidth: 138, scrollSnapAlign: 'start', textAlign: 'left', padding: '9px 11px', borderRadius: 14, cursor: 'pointer',
+                  border: `1px solid ${on ? color : theme.border}`, background: on ? `${color}18` : theme.surface, color: theme.text,
+                  boxShadow: on ? `inset 0 0 0 1px ${color}` : 'none', transition: 'background 160ms, border-color 160ms' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 999, background: color }} />{CLIENTE_LABEL[c.key] || c.key}
+                </div>
+                <div style={{ fontVariantNumeric: 'tabular-nums', fontSize: 17, fontWeight: 600, letterSpacing: '-0.02em', marginTop: 2, lineHeight: 1.1 }}>{moneyCompact(c.comprometido)}</div>
+                <div style={{ fontSize: 10.5, color: c.vencidos ? theme.red : theme.textMuted, marginTop: 2, whiteSpace: 'nowrap' }}>
+                  {c.vencidos ? `${c.vencidos} vencido${c.vencidos > 1 ? 's' : ''}` : c.porHacer ? `${c.porHacer} por atender` : 'al día'} · fondo {moneyCompact(c.fondo)}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <HeroM
-        eyebrow={`${MESES_LARGO[mes - 1]} ${anio}${clienteKey ? ` · ${CLIENTE_LABEL[clienteKey]}` : ''}`}
+        eyebrow={`${CLIENTE_LABEL[clienteSel] || clienteSel} · ${MESES_LARGO[mes - 1]} ${anio}`}
         frase={`${moneyCompact(comprometido)} comprometidos este mes`}
-        sub={porHacer > 0 ? `${porHacer} cosa(s) que atender hoy` : 'Nada pendiente por ahora'}
+        sub={porHacer > 0 ? `${porHacer} cosa(s) que atender · desliza una fila para actuar` : 'Nada pendiente por ahora'}
         stats={[
           { k: 'Comprometido', v: moneyCompact(comprometido) },
           { k: 'Pagado', v: moneyCompact(pagado) },
@@ -221,21 +273,10 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
           options={[
             { id: 'hoy', label: 'Hoy', badge: porHacer || undefined },
             { id: 'calendario', label: 'Calendario' },
-            { id: 'fondos', label: 'Fondos' },
+            { id: 'fondos', label: 'Fondo' },
             { id: 'historial', label: 'Historial' },
           ]} />
       </div>
-
-      {!clienteKey && visibles.length > 1 && (
-        <div style={{ display: 'flex', gap: 6, padding: '10px 16px 0', overflowX: 'auto' }}>
-          <ChipM on={chip === 'todos'} onClick={() => setChip('todos')}>Todos</ChipM>
-          {visibles.map((c) => (
-            <ChipM key={c} on={chip === c} onClick={() => setChip(c)}>
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: CLIENTE_COLOR[c] }} />{CLIENTE_LABEL[c] || c}
-            </ChipM>
-          ))}
-        </div>
-      )}
 
       {vista === 'hoy' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 0' }}>
@@ -261,13 +302,13 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
 
       {vista === 'fondos' && (
         <div style={{ padding: '12px 0' }}>
-          <ListaAgrupada titulo="Fondos por cliente" pie="Saldo = abonos − cargos. Un fondo en negativo bloquea cargos nuevos.">
+          <ListaAgrupada titulo={`Fondo de ${CLIENTE_LABEL[clienteSel] || clienteSel}`} pie="Saldo = abonos − cargos. Un fondo en negativo bloquea cargos nuevos.">
             {(data?.fondos || [])
-              .filter((f) => visibles.includes(f.cliente) && (chip === 'todos' || f.cliente === chip))
+              .filter((f) => f.cliente === clienteSel)
               .sort((a, b) => (String(a.fondo_id) === fondoFoco ? 0 : 1) - (String(b.fondo_id) === fondoFoco ? 0 : 1))
               .map((f) => (
                 <Fila key={f.fondo_id}
-                  titulo={`${CLIENTE_LABEL[f.cliente] || f.cliente} · ${f.nombre}`}
+                  titulo={f.nombre}
                   sub={`Abonos ${moneyCompact(f.abonos_ytd)} · cargos ${moneyCompact(f.cargos_ytd)}`}
                   valor={money(f.saldo)}
                   tono={String(f.fondo_id) === fondoFoco ? theme.accent : CLIENTE_COLOR[f.cliente]}
@@ -287,7 +328,7 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
                 {historial.map((p) => (
                   <Fila key={p.id}
                     titulo={p.concepto}
-                    sub={[CLIENTE_LABEL[p.cliente] || p.cliente, TIPO_META[p.tipo]?.label || p.tipo, p.nc_folio ? `NC ${p.nc_folio}` : null, String(p.pagado_at || '').slice(0, 10) || null].filter(Boolean).join(' · ')}
+                    sub={[TIPO_META[p.tipo]?.label || p.tipo, p.nc_folio ? `NC ${p.nc_folio}` : null, String(p.pagado_at || '').slice(0, 10) || null].filter(Boolean).join(' · ')}
                     valor={money(p.monto)}
                     tono={CLIENTE_COLOR[p.cliente]}
                     pill={{ tone: ESTADO_META[p.estado]?.tone || 'gray', label: ESTADO_META[p.estado]?.label || p.estado }}

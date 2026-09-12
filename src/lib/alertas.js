@@ -40,6 +40,7 @@ export function destinoAlerta(a) {
     case 'devoluciones_anormales': return CLIENTES_CON_TAB.has(a.cliente_key)
                                      ? { clienteKey: a.cliente_key, pagina: 'sellIn' }
                                      : { clienteKey: null, pagina: 'sellIn' };
+    // Pagos es pestaña global (diseño B): el cliente viaja como preselección, App lo redirige.
     case 'rebate_por_generar':     return { clienteKey: a.cliente_key || 'dicotech', pagina: 'pagos' };
     case 'pago_por_solicitar': case 'pago_sin_autorizar_5d': case 'pago_sin_folio': case 'pago_vence_7d': case 'fondo_negativo':
       return { clienteKey: a.cliente_key || null, pagina: 'pagos' };

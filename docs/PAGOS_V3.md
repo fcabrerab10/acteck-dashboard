@@ -15,6 +15,15 @@ con los bloques comunes (cálculo, fondos, reglas).
 
 ---
 
+## 0 · Diseño B (3.27.0 · 2026-09-12)
+
+Fernando vio la primera versión (eje A, tres clientes y cinco tipos en una sola tabla) y la encontró repetida y
+revuelta. Se cambió al **diseño B**: un cliente a la vez, con un mini resumen de las tres cuentas arriba que también
+sirve de selector. La pestaña Pagos **desapareció de cada cliente**: los enlaces cliente › Pagos abren la global con
+ese cliente preelegido (`App.jsx` → `pagosCliente`; móvil → `inicial.cliente`). Ninguna cifra vive en dos bloques:
+el hero cuenta en dinero, el flujo cuenta en pagos, la fila de KpiCards se eliminó y los filtros de cliente sobre la
+tabla también. Lo secundario (Cálculo · Marketing · Fondo · Reglas · Historial) se ve una sección a la vez.
+
 ## 1 · Archivos
 
 ### Nuevos (esta entrega)

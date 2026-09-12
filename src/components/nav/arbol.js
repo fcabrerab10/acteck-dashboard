@@ -27,7 +27,6 @@ const PESTANAS_CLIENTE = [
   { pagina: 'sellIn',     label: 'Sell In',            icon: ShoppingCart },
   { pagina: 'estrategia', label: 'Sell Out',           icon: ShoppingBag },
   { pagina: 'marketing',  label: 'Marketing',          icon: Megaphone },
-  { pagina: 'pagos',      label: 'Pagos',              icon: Wallet },
   { pagina: 'cartera',    label: 'Crédito y Cobranza', icon: CreditCard },
 ];
 // Pestañas deshabilitadas por cliente (se muestran atenuadas con hint).

@@ -21,7 +21,7 @@ const mesDe = (a) => {
   return i >= 0 ? i + 1 : 0;
 };
 
-export default function PanelMarketing({ actividades, clientes, anio, mes, fondos, puedeEditar, onCambio, onCrearPago, pagos }) {
+export default function PanelMarketing({ actividades, clientes, anio, mes, fondos, puedeEditar, onCambio, onCrearPago, pagos, abiertoInicial = false }) {
   const { theme } = useTheme();
   const [guardando, setGuardando] = useState(null);
 
@@ -83,7 +83,7 @@ export default function PanelMarketing({ actividades, clientes, anio, mes, fondo
   ];
 
   return (
-    <Panel titulo="Marketing del mes" plegable abiertoInicial={false}
+    <Panel titulo="Marketing del mes" plegable={!abiertoInicial} abiertoInicial={abiertoInicial}
            meta={`${delMes.length} actividad(es) · cada una se carga al fondo o la paga la empresa`}>
       {delMes.length === 0
         ? <Nota>Sin actividades de marketing registradas en este mes.</Nota>

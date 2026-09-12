@@ -158,6 +158,24 @@ Pendientes conocidos de rendimiento: agregar en Postgres (vistas/RPC) lo que hoy
 - **Agenda (2026-09-11)**: pestaña `agenda` debajo de Inicio (permiso global `agenda`, migrado de `admin_interna`; `adminInterna` redirige). Modelo `agenda_items` (tareas y puntos de reunión; etiquetas `cliente_key` #cliente y `responsables` @persona; estados abierta·hecha·cancelada·arrastrada) + `agenda_reuniones` (reuniones con minuta y eventos `tipo='evento'`) + `agenda_google` (refresh_token sólo service role). Migraciones `20260911_agenda_modelo.sql` (tablas, RLS `agenda_puede_ver/editar`, auditoría, `alertas.para_usuario`, copia idempotente de `pendientes_equipo`/`pendientes`/`minutas`/`minuta_acuerdos`/`eventos_equipo` con `migrado_de`; RPCs `agenda_cerrar_reunion` y `agenda_arrastrar_pendientes`) y `20260911_agenda_google.sql`. Código en `src/modules/agenda/` (Agenda.jsx orquesta A Bandeja / C Tablero según pref `agenda.modo`; lógica pura `calculo.js`/`etiquetas.js`/`textos.js` con tests `scripts/test-agenda-*.mjs`; datos en `datos.js` con `useBandejaHoy` que también alimenta el bloque "Hoy" de Inicio). Cron: reglas `agenda_vencida`/`agenda_asignado` en `generar-alertas` (la app deja `notificar_a` en el ítem) y task `agenda-hoy` 08:30 CDMX; las alertas de agenda van dirigidas (`para_usuario`). Google Calendar: `api/google-calendar.js` (OAuth propio, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, redirect `/api/google-calendar?action=callback`). Las tablas viejas no se borran. Pantallas legacy borradas: `AdministracionInterna`, `MinutasPanel`, `RecurrentesPanel`; `PendientesCalendarioV2` en `src/_archivo/agenda-v2/`.
 - Pendientes V3: archivar `src/components/Mobile*.jsx`, app móvil (usa la navegación iPhone), pantallas restantes al kit (Configuración, Análisis, Estrategia, Forecast, S&OP, Propuestas), colocar `FrescuraPill` en cada pantalla, borrar `UserMenu`/`Sidebar.jsx` legacy, migrar helpers de formato a `src/lib/format.js`.
 
+### Pagos unificados · diseño B (3.27.0 · 2026-09-12)
+
+Pantalla global `pagos` (`src/modules/comercial/PagosUnificados.jsx` + `pagosv3/`; móvil `src/movil/pestanas/pagos/`).
+**Ya no existe la pestaña Pagos dentro de cada cliente** (quitada de `PESTANAS_CLIENTE` en `arbol.js`, de `rutas.js` CLIENTE
+y del árbol móvil): cualquier enlace "cliente › Pagos" (Home del cliente, alertas `pago_*`, FichaCliente móvil) pasa por
+`handleNavegar` / `nav.navegar` y abre la global con ese cliente **preelegido** (`App.jsx` estado `pagosCliente`; móvil
+`inicial.cliente`). Estructura: mini resumen de las tres cuentas (tarjetas = selector) → Hero del cliente elegido (únicas
+cifras en dinero) → flujo del mes en pagos (5 etapas, filtran la tabla) → tabla + calendario lado a lado → una sección
+secundaria a la vez (Segmented Cálculo · Marketing · Fondo · Reglas · Historial). Regla: ninguna cifra se repite en dos
+bloques. Detalle en `docs/PAGOS_V3.md`.
+
+### Regla de ancho (2026-09-12)
+
+Navegar horizontalmente lo menos posible: lo que va dentro de una tarjeta cabe en su ancho. `TablaCompacta` pinta el
+`renderExpandido` sticky al ancho visible del contenedor (el drill nunca viaja con el scroll de la tabla); en tablas
+anchas se recortan columnas (el detalle va al drill) y las tendencias van como mini trazo de `GraficaLineas` (90 px),
+no como pastillas. Las pastillas de lectura de `GraficaLineas` van en fila propia, nunca en la cabecera del Panel.
+
 ### Sell Out consolidado (3.24.0 · 2026-09-12)
 
 Pantalla global `sellOut` (`src/modules/comercial/SellOutGlobal.jsx` + `sellout/`), permiso `sell_out`,

@@ -13,7 +13,7 @@ import { mxn, MONO, Nota, CampoInline, Entrada, ClientePill } from './ui';
 const pctIn = (v) => (v == null ? '' : String(Number((Number(v) * 100).toFixed(4))));
 const pctOut = (v) => (v === '' || v == null ? 0 : Number(v) / 100);
 
-export default function PanelReglas({ clientes, reglas, puedeEditar, onGuardar }) {
+export default function PanelReglas({ clientes, reglas, puedeEditar, onGuardar, abiertoInicial = false }) {
   const { theme } = useTheme();
   const [cliente, setCliente] = useState(clientes[0] || 'digitalife');
   const [desbloqueado, setDesbloqueado] = useState(false);
@@ -55,11 +55,11 @@ export default function PanelReglas({ clientes, reglas, puedeEditar, onGuardar }
 
   return (
     <Panel
-      titulo="Reglas por cliente" plegable abiertoInicial={false}
+      titulo="Reglas por cliente" plegable={!abiertoInicial} abiertoInicial={abiertoInicial}
       meta="lo que el motor calcula solo · con candado"
       acciones={
         <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          <Segmented size="sm" options={clientes.map((k) => ({ id: k, label: CLIENTE_LABEL[k] }))} value={cliente} onChange={setCliente} />
+          {clientes.length > 1 && <Segmented size="sm" options={clientes.map((k) => ({ id: k, label: CLIENTE_LABEL[k] }))} value={cliente} onChange={setCliente} />}
           {puedeEditar(cliente) && (
             <Boton icon={desbloqueado ? Unlock : Lock} primario={desbloqueado} onClick={desbloquear}>
               {desbloqueado ? 'Editando' : 'Desbloquear para editar'}

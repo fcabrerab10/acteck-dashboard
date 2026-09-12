@@ -71,7 +71,8 @@ const GLOBALES = {
 // Pestañas de cliente propio (nodo.clienteKey = digitalife | pcel | dicotech).
 const CLIENTE = {
   home:   (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(FichaCliente, { clienteKey: ck }) }),
-  pagos:  (ck, extra) => ({ tipo: 'push', key: `pagos-${ck}`, el: h(PagosMovil, { clienteKey: ck, inicial: extra || null }) }),
+  // Pagos ya no es pestaña de cliente (diseño B): el cliente sólo queda preelegido en la pantalla global.
+  pagos:  (ck, extra) => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil, { inicial: { ...(extra || {}), cliente: ck } }) }),
   sellIn: (ck) => ({ tipo: 'push', key: `sellin-${ck}`, el: h(SellInCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
   estrategia: (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
   sellOut:    (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),

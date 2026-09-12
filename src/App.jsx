@@ -356,6 +356,7 @@ export default function App() {
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
     const GLOBAL_PAGES = React.useMemo(() => new Set(['inicio','resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','agenda','adminInterna','telemetria','historialCambios','axonMexico','buscar','actualizacion']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
+    const [pagosCliente, setPagosCliente] = useState(null); // cliente preelegido al abrir Pagos desde un cliente o una alerta
       try { const p = localStorage.getItem('nav_pagina') || 'inicio'; return p === 'adminInterna' ? 'agenda' : p; } catch { return 'inicio'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
@@ -470,6 +471,8 @@ export default function App() {
   // Sidebar navigation bridge
   const handleNavegar = (clienteId, paginaId) => {
     if (paginaId === 'adminInterna') paginaId = 'agenda'; // página vieja "Pendientes & Calendario" → Agenda
+    // Pagos ya no es pestaña de cliente: cualquier enlace "cliente › Pagos" abre la pestaña global con ese cliente elegido.
+    if (paginaId === 'pagos') { setPagosCliente(clienteId || null); setVistaActual(null); setClienteActivo(null); setPaginaActiva('pagos'); return; }
     if (paginaId === 'configuracion') { setVistaActual('configuracion'); return; }
     setVistaActual(null);
     if (clienteId) {
@@ -497,7 +500,6 @@ export default function App() {
     { id: "sellIn",     label: "Sell In",                icono: "°", habilitado: true  },
     { id: "estrategia", label: "Sell Out",               icono: "°", habilitado: true  },
     { id: "marketing",  label: "Marketing",              icono: "°", habilitado: true  },
-    { id: "pagos",      label: "Pagos",                  icono: "°°", habilitado: true  },
     { id: "cartera",    label: "Crdito y Cobranza",     icono: "°", habilitado: true  },
     ...(puedeActualizar ? [{ id: "actualizacion", label: "Actualizaci�n de datos", icono: "=", habilitado: true, admin: true }] : []),
   ]
@@ -614,7 +616,7 @@ export default function App() {
                   : <InventarioGlobal />)
               : <SinAcceso motivo="No tienes acceso a Inventario." />
           )}
-          {paginaActiva === "pagos" && !clienteActivo && <PagosUnificados clienteKey={null} />}
+          {paginaActiva === "pagos" && !clienteActivo && <PagosUnificados clienteKey={pagosCliente} />}
           {paginaActiva === "cobranzaGlobal" && (
             puedeVerPestanaGlobal(perfil, "cobranza_global")
               ? (mobile
@@ -715,7 +717,6 @@ export default function App() {
               ? <CreditoCobranzaV2 cliente={c?.nombre || clienteActivo} clienteKey={clienteActivo} />
               : <CreditoCobranza cliente={c} clienteKey={clienteActivo} />
         )}
-        {paginaActiva === "pagos"   && <PagosUnificados clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && (
               mobile

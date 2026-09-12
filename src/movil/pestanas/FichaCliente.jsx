@@ -57,7 +57,7 @@ export default function FichaCliente({ clienteKey, tipo, label }) {
       { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: 'Avance de cuota · SKUs del mes · compartir avance', onClick: () => ir('sellIn', 'Sell In') },
       { id: 'sellOut', label: 'Sell Out', icon: ShoppingBag, sub: 'Sell-out del mes · inventario del cliente', onClick: () => ir('estrategia', 'Sell Out') },
       { id: 'marketing', label: 'Marketing', icon: Megaphone, sub: 'Actividades del mes · captura', onClick: () => ir('marketing', 'Marketing') },
-      { id: 'pagos', label: 'Pagos', icon: Wallet, sub: 'Próximamente', onClick: () => proximamente('Pagos') },
+      { id: 'pagos', label: 'Pagos', icon: Wallet, sub: 'Rebates, spiffs, fondos · flujo de pago', onClick: () => nav.navegar({ pagina: 'pagos', label: 'Pagos', extra: { cliente: clienteKey } }) },
       { id: 'cartera', label: 'Cobranza', icon: CreditCard, sub: 'Saldo · vencido · estado de cuenta', onClick: () => ir('cartera', 'Crédito y Cobranza') },
     ]
     : [
