@@ -44,6 +44,27 @@ for (const f of fns) {
   catch (e) { errores.push(`${relative(raiz, f)} no se puede importar en Node: ${String(e.message).split('\n')[0]}`); }
 }
 
+// 4. Humo de cada API: invocar el handler con una petición mínima sin sesión; debe responder (401/405/400…), nunca lanzar.
+const resMock = () => ({ code: 200, status(c) { this.code = c; return this; }, json() { return this; }, send() { return this; }, end() { return this; }, setHeader() {}, getHeader() {} });
+const casos = [];
+for (const f of fns) {
+  const rel = relative(raiz, f);
+  if (rel === 'api/admin.js') {
+    const { default: h } = await import(pathToFileURL(f).href);
+    for (const accion of ['create-user', 'resend-invitation', 'sync', 'toggle-suspend', 'update-user']) {
+      casos.push([`${rel}?accion=${accion} GET`, () => h({ method: 'GET', url: `/api/admin/${accion}`, query: { accion }, headers: {}, body: {} }, resMock())]);
+      casos.push([`${rel}?accion=${accion} POST`, () => h({ method: 'POST', url: `/api/admin/${accion}`, query: { accion }, headers: {}, body: {} }, resMock())]);
+    }
+  } else if (rel !== 'api/cron.js') {
+    const { default: h } = await import(pathToFileURL(f).href);
+    if (typeof h === 'function') casos.push([`${rel} GET`, () => h({ method: 'GET', url: `/${rel.replace(/\.js$/, '')}`, query: {}, headers: {}, body: {} }, resMock())]);
+  }
+}
+for (const [nombre, fn] of casos) {
+  try { await Promise.race([fn(), new Promise((r) => setTimeout(r, 4000))]); }
+  catch (e) { errores.push(`${nombre} lanzó una excepción con una petición sin sesión: ${String(e.message).split('\n')[0]}`); }
+}
+
 if (errores.length) {
   console.error('\n✖ Verificación de deploy fallida:\n');
   for (const e of errores) console.error(`• ${e}\n`);

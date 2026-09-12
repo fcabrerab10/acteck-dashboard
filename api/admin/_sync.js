@@ -3,6 +3,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../_auth.js';
 
+const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ALLOWED_STATUS = new Set(['success', 'error', 'warning']);
+
 export default async function handler(req, res) {
   if (req.method === 'POST') return registrar(req, res);
   if (req.method === 'GET') return historial(req, res);
