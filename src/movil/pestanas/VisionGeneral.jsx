@@ -110,7 +110,7 @@ export default function VisionGeneral() {
     return extra.clientes.filter((c) => String(c.canal || 'otros').toUpperCase() === String(canalAbierto).toUpperCase()).sort((a, b) => N(b.venta) - N(a.venta)).slice(0, 40);
   }, [canalAbierto, extra]);
 
-  const sub = <><span>{MESES_LARGO[mesActual - 1].replace(/^./, (c) => c.toUpperCase())} {anio} · día {hoy.getDate()}</span><span>·</span><FrescuraPill fuentes={FUENTES_INICIO} /></>;
+  const sub = <><span>{MESES_LARGO[mesActual - 1].replace(/^./, (c) => c.toUpperCase())} {anio} · día {hoy.getDate()}</span><span>·</span><FrescuraPill fuentes={FUENTES_INICIO} detallado /></>;
   if (error) return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Visión General" sub={sub} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudieron cargar los datos" sub={error} /></>);
   if (loading || !r) {
     return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Visión General" sub={sub} /><div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={160} r={12} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /></div><Skeleton h={220} r={12} /></div></>);

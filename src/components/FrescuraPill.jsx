@@ -25,7 +25,29 @@ const INVERSO = {
   gray:   { background: 'rgba(255,255,255,0.10)', color: 'rgba(245,245,247,0.78)' },
 };
 
-export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = false, onClick, style }) {
+// Etiqueta cortísima por fuente para el modo detallado (una pill por fuente).
+const CORTA = {
+  erp_ventas: 'ERP', facturacion_clientes: 'Sell In', inventario_acteck: 'Inventario', precios_sku: 'Precios',
+  estados_cuenta: 'Edo. cuenta', sellout_general: 'Sell Out', sellout_detalle: 'Sell Out', sellout_sku: 'Sell Out',
+  sellout_pcel: 'Sell Out PCEL', inventario_cliente: 'Inv. cliente', embarques_compras: 'Embarques', cuotas_mensuales: 'Cuotas',
+  programacion_arribos: 'Arribos', compras_oc: 'OC compras', guias_erp: 'Guías', roadmap_sku: 'Roadmap', estados_resultados: 'P&L',
+};
+const cortaDe = (r) => CORTA[r.fuente] || etiquetaCorta(r);
+
+// Hora si fue hoy, "ayer · 19:29" si fue ayer, si no "8 sep · 11:45".
+const TZ = 'America/Mexico_City';
+const diaISO = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+function cuando(ts) {
+  if (!ts) return 'sin carga';
+  const d = new Date(ts); if (Number.isNaN(d.getTime())) return '—';
+  const hoy = new Date(), ayer = new Date(Date.now() - 86400000);
+  const hora = new Intl.DateTimeFormat('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }).format(d);
+  if (diaISO(d) === diaISO(hoy)) return `hoy · ${hora}`;
+  if (diaISO(d) === diaISO(ayer)) return `ayer · ${hora}`;
+  return formatFrescura(ts);
+}
+
+export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = false, onClick, style, detallado = false }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const slugs = fuentesDe(pantalla, clienteKey, fuentes);
@@ -63,6 +85,19 @@ export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = 
     } else colores = INVERSO[tone];
   }
   const estilo = { fontVariantNumeric: 'tabular-nums', ...colores, ...style };
+  // Modo detallado: una pill por fuente con SU última carga (en vez de resumir en la más vieja).
+  if (detallado && !cargando && !error) {
+    return (
+      <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, ...style }} title={title}>
+        {slugs.map((sl) => {
+          const r = porFuente[sl];
+          if (!r) return null;
+          const t = r.estado === 'atrasada' ? 'orange' : r.estado === 'ok' ? 'green' : 'gray';
+          return <Pill key={sl} tone={t} dot size="xs" onClick={click} style={{ fontVariantNumeric: 'tabular-nums', ...(inverso ? (theme.mode === 'dark' ? null : INVERSO[t]) : null) }}>{cortaDe(r)} {cuando(r.ultima_carga)}</Pill>;
+        })}
+      </span>
+    );
+  }
   return (
     <Pill tone={tone} dot size="sm" onClick={click} title={title} style={estilo}>
       {texto}

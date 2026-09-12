@@ -57,7 +57,7 @@ export default function Inicio() {
   }, [r, extra, data, hoyIso, theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const titulo = `${saludo(hoy)}, ${nombreCorto(nav.perfil) || 'hola'}`;
-  const sub = <><span>{diaLargo(hoy).replace(/^./, (c) => c.toUpperCase())}</span><span>·</span><FrescuraPill fuentes={FUENTES_INICIO} /></>;
+  const sub = <><span>{diaLargo(hoy).replace(/^./, (c) => c.toUpperCase())}</span><span>·</span><FrescuraPill fuentes={FUENTES_INICIO} detallado /></>;
 
   if (error) {
     return (<><TituloGrande titulo={titulo} sub={sub} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudieron cargar los datos" sub={error} /></>);
