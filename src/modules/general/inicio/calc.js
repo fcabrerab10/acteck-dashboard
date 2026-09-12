@@ -1,6 +1,7 @@
 // Cálculos puros de Inicio · sin React, sin red. Entrada: data de useInicioData + alertas + modo ('mes' | 'anio').
 // Los % (MC, MUC, lost profit) se calculan SIEMPRE al agregar, nunca se suman ni se promedian.
 import { MESES, MESES_LARGO, CLIENTES, DIAS_AGENDA } from './config';
+import { inventarioDesdeVista } from '../../../lib/medidas';
 import { SEV_ORDEN } from '../../../lib/alertas';
 
 const N = (v) => Number(v) || 0;
@@ -54,28 +55,46 @@ function cartera(estados) {
 }
 
 // ── Inventario comercial + tránsito (agrupado por PO) + arribos ≤ 7 días
-function inventario(d, cv3, hoyISO, limiteISO) {
+//
+// 2026-09-12: el valor, las piezas y la cobertura ya NO se calculan aquí.
+// Salen de `v_medidas_inventario` con las medidas del director:
+//   Inv Actual  = Σ CostoInventario · almacén no exclusivo de Inventario · Rama PRODUCTO
+//   Dias de Inv = Inv Actual / CV Últimos 3 Meses × 90  (3 meses CERRADOS)
+// Antes Inicio hacía Σ inventario × AVG(costopromedio) sobre v_inventario_comercial
+// y dividía entre cv3/90 — daba un número distinto al de Inventario global y al
+// de Visión General. v_inventario_comercial se sigue leyendo SÓLO para tener el
+// costo por SKU con el que se valúa el tránsito.
+function inventario(d, hoyISO, limiteISO) {
+  const m = inventarioDesdeVista(d.medInv) || {};
   const costo = {};
-  let valor = 0, piezas = 0, skus = 0;
-  d.inv.forEach((r) => { const c = N(r.costo_promedio), q = N(r.inventario); costo[r.sku] = c; valor += q * c; piezas += q; if (q > 0) skus++; });
-  const diario = cv3 > 0 ? cv3 / 90 : 0;
-  const cobertura = diario > 0 && valor > 0 ? Math.round(valor / diario) : null;
+  d.inv.forEach((r) => { costo[r.sku] = N(r.costo_promedio); });
+  const valor = m.inv_actual;
+  const piezas = m.inv_actual_piezas;
+  const skus = m.skus_con_stock;
+  const cobertura = m.dias_inv != null ? Math.round(m.dias_inv) : null;
 
   const pos = {};
-  let transitoPzs = 0, transitoValor = 0;
+  let transitoPzs = 0, transitoValor = 0, transitoSinCosto = 0;
   d.transito.forEach((r) => {
-    transitoPzs += N(r.cantidad); transitoValor += N(r.cantidad) * (costo[r.sku] || 0);
+    const c = costo[r.sku];
+    if (c == null) transitoSinCosto += N(r.cantidad);
+    transitoPzs += N(r.cantidad); transitoValor += N(r.cantidad) * N(c);
     const det = Array.isArray(r.embarques_detalle) ? r.embarques_detalle : [];
     det.forEach((e) => {
       const k = e.po || 'sin PO';
       const o = pos[k] || (pos[k] = { po: k, eta: e.eta || null, piezas: 0, skus: new Set(), estatus: e.estatus, cedis: e.cedis, valor: 0 });
-      o.piezas += N(e.cantidad); o.valor += N(e.cantidad) * (costo[r.sku] || 0); o.skus.add(r.sku);
+      o.piezas += N(e.cantidad); o.valor += N(e.cantidad) * N(c); o.skus.add(r.sku);
       if (e.eta && (!o.eta || e.eta < o.eta)) o.eta = e.eta;
     });
   });
   const porPo = Object.values(pos).map((o) => ({ ...o, skus: o.skus.size })).sort((a, b) => String(a.eta || '9').localeCompare(String(b.eta || '9')));
   const arribos = porPo.filter((o) => o.eta && o.eta >= hoyISO && o.eta <= limiteISO);
-  return { valor, piezas, skus, cobertura, transitoPzs, transitoValor, pos: porPo.length, arribos };
+  return {
+    valor, piezas, skus, cobertura, transitoPzs, transitoValor, transitoSinCosto,
+    pos: porPo.length, arribos,
+    invTotal: m.inv_total, diasInvTotal: m.dias_inv_total != null ? Math.round(m.dias_inv_total) : null,
+    cv3: m.cv_ultimos_3_meses, costoPromedio: m.costo_promedio, actualizado: m.actualizado,
+  };
 }
 
 // ── Sell-out del cliente: último mes cerrado con datos (< mesActual) + YoY
@@ -132,8 +151,7 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
   const runRateYoy = delta(runRate, mesPrev.fact_neta);
 
   const cart = cartera(d.estados);
-  const cv3 = N(d.medidas.find((r) => N(r.anio) === anio && N(r.mes) === mesActual)?.cv_ultimos_3_meses);
-  const inv = inventario(d, cv3, hoyISO, limiteISO);
+  const inv = inventario(d, hoyISO, limiteISO);
   const activas = alertas || [];
   const decision = activas.filter((a) => a.severidad === 'critica' || a.severidad === 'alta');
   inv.skusRiesgo = activas.filter((a) => a.tipo === 'stock_vs_transito').length;

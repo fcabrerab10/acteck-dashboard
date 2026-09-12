@@ -12,6 +12,7 @@ import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { useAlertas } from '../../lib/alertas';
 import ExportMenu from '../../components/ExportMenu';
 import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando } from '../../components/kit';
+import { tooltip } from '../../lib/medidas';
 import ComparadorPeriodos from './ComparadorPeriodos';
 import { useAniosDisponibles, useAnalisisClientes } from './analisis/useAnalisisData';
 import { MESES, PROPIOS, OTROS_KEY, OCASIONAL, agregarClientes, filaOtros, aplanar, ultimoMesConVenta, totalesMensuales, idxMes, yoyDe, mcDe, ajustesDe, sumarPeriodo, pctDe, vacio } from './analisis/calc';
@@ -161,21 +162,21 @@ export default function AnalisisClientesGlobal() {
         titulo={`${money(modo === 'mes' ? global.mes.fact_neta : global.ytd.fact_neta)} de facturación neta en ${int(agg.clientes.filter((c) => c.cur.fact_neta > 0).length)} clientes.`}
         sub={`Los 10 primeros concentran el ${pct(agg.concentracion10, 0)} · ${int(agg.clientes.filter((c) => c.ocasional).length)} clientes de compra ocasional (< ${OCASIONAL.MIN_MESES} meses con compra en ${OCASIONAL.VENTANA} o < ${(OCASIONAL.PCT_MIN * 100).toFixed(1)} % del YTD) van agrupados en "Otros".`}
         stats={[
-          { k: `Fact. neta ${mesLbl}`, v: money(global.mes.fact_neta), sub: global.yoyMes != null ? `${signo(global.yoyMes)} vs ${anio - 1}` : `sin ${anio - 1}` },
-          { k: `YTD ${anio}`, v: money(global.ytd.fact_neta), sub: global.yoyYtd != null ? `${signo(global.yoyYtd)} vs ${anio - 1}` : `sin ${anio - 1}` },
+          { k: `Fact Neta ${mesLbl}`, medida: tooltip('fact_neta', mesLbl), v: money(global.mes.fact_neta), sub: global.yoyMes != null ? `${signo(global.yoyMes)} vs ${anio - 1}` : `sin ${anio - 1}` },
+          { k: `YTD ${anio}`, medida: tooltip('fact_neta', `YTD ${anio}`), v: money(global.ytd.fact_neta), sub: global.yoyYtd != null ? `${signo(global.yoyYtd)} vs ${anio - 1}` : `sin ${anio - 1}` },
           { k: `Clientes activos ${mesLbl}`, v: int(agg.activosMes), sub: `de ${int(agg.clientes.length)} en el año` },
         ]} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8 }}>
-        <KpiCard eyebrow={`Fact. neta · ${mesLbl} ${anio}`} badge={global.yoyMes != null ? { l: `${signo(global.yoyMes)} YoY`, tone: toneDe(global.yoyMes) } : undefined}
+        <KpiCard medida={tooltip('fact_neta')} eyebrow={`Fact Neta · ${mesLbl} ${anio}`} badge={global.yoyMes != null ? { l: `${signo(global.yoyMes)} YoY`, tone: toneDe(global.yoyMes) } : undefined}
           big={money(global.mes.fact_neta)} bigSmall={`vs ${money(global.mesPrev.fact_neta)}`} sub={`${mesLbl} ${anio - 1} · ${int(global.mes.piezas_venta_neta)} pzs`} />
-        <KpiCard eyebrow={`YTD ene–${mesLbl.toLowerCase()} ${anio}`} badge={global.yoyYtd != null ? { l: `${signo(global.yoyYtd)} YoY`, tone: toneDe(global.yoyYtd) } : undefined}
+        <KpiCard medida={tooltip('fact_neta', 'YTD')} eyebrow={`YTD ene–${mesLbl.toLowerCase()} ${anio}`} badge={global.yoyYtd != null ? { l: `${signo(global.yoyYtd)} YoY`, tone: toneDe(global.yoyYtd) } : undefined}
           big={money(global.ytd.fact_neta)} bigSmall={`vs ${money(global.ytdPrev.fact_neta)}`} sub={`mismo periodo ${anio - 1} · ${int(global.ytd.piezas_venta_neta)} pzs`} />
-        <KpiCard eyebrow={`Dev + NC + bonif · ${mesLbl}`} badge={global.ajustesMes != null && global.ajustesMesPrev != null ? { l: `${signo(global.ajustesMes - global.ajustesMesPrev)} pp`, tone: global.ajustesMes - global.ajustesMesPrev <= 0 ? 'green' : 'red' } : undefined}
+        <KpiCard medida={`${tooltip('devoluciones')} · ${tooltip('rmas')} · ${tooltip('bonificaciones')}`} eyebrow={`Dev + RMA's + bonif · ${mesLbl}`} badge={global.ajustesMes != null && global.ajustesMesPrev != null ? { l: `${signo(global.ajustesMes - global.ajustesMesPrev)} pp`, tone: global.ajustesMes - global.ajustesMesPrev <= 0 ? 'green' : 'red' } : undefined}
           big={pct(global.ajustesMes)} bigSmall="de la fact. bruta" bigColor={global.ajustesMes > 5 ? theme.red : undefined}
           sub={`dev ${money(global.mes.devoluciones)} · NC ${money(global.mes.rmas)} · bonif ${money(global.mes.bonificaciones)}`} />
         {verSensible
-          ? <KpiCard eyebrow={`MC % · YTD ${anio}`} badge={global.mcYtd != null && global.mcYtdPrev != null ? { l: `${signo(global.mcYtd - global.mcYtdPrev)} pp`, tone: toneDe(global.mcYtd - global.mcYtdPrev) } : undefined}
+          ? <KpiCard medida={tooltip('pct_mc')} eyebrow={`% MC · YTD ${anio}`} badge={global.mcYtd != null && global.mcYtdPrev != null ? { l: `${signo(global.mcYtd - global.mcYtdPrev)} pp`, tone: toneDe(global.mcYtd - global.mcYtdPrev) } : undefined}
               big={pct(global.mcYtd)} bigSmall={`contribución ${money(global.ytd.contribucion)}`} sub={`MC ${anio - 1}: ${pct(global.mcYtdPrev)}`} />
           : <KpiCard eyebrow="MC % · YTD" big="—" bigSmall="sensible" sub={sensibleTip} />}
       </div>

@@ -8,6 +8,7 @@ import { Panel, TablaCompacta, Pill } from '../../../components/kit';
 import { money, moneyCompact } from '../../../lib/format';
 import { UMBRAL_PUENTE_PCT } from './calculo';
 import { NOTA_PUENTE, textoAlertaPuente } from './textos';
+import { tooltip } from '../../../lib/medidas';
 
 const fmtDelta = (n) => (n == null ? '—' : `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(1)}%`);
 
@@ -31,13 +32,13 @@ export default function Puente({ puente, anio, mesMax, onMesClick }) {
         {r.soloPl && <Pill tone="gray" size="xs">sin ERP</Pill>}
       </span>) },
     { key: 'plVentaNeta', label: 'Venta neta P&L', render: (r) => dinero(r.plVentaNeta), fmt: moneyCompact },
-    { key: 'erpVentaNeta', label: 'Venta neta ERP', render: (r) => dinero(r.erpVentaNeta), fmt: moneyCompact },
+    { key: 'erpVentaNeta', label: 'Venta Neta ERP', titulo: tooltip('venta_neta'), render: (r) => dinero(r.erpVentaNeta), fmt: moneyCompact },
     { key: 'difVentaNeta', label: 'Δ $', render: (r) => difDinero(r.difVentaNeta), renderTotal: (v) => difDinero(v) },
     { key: 'difVentaNetaPct', label: 'Δ %', render: (r) => difPct(r.difVentaNetaPct, r.alerta), renderTotal: (v) => difPct(v, grande(v)) },
-    { key: 'erpFactNeta', label: 'Fact. neta ERP', render: (r) => <span style={muted}>{dinero(r.erpFactNeta)}</span>, fmt: moneyCompact },
+    { key: 'erpFactNeta', label: 'Fact Neta ERP', titulo: tooltip('fact_neta'), render: (r) => <span style={muted}>{dinero(r.erpFactNeta)}</span>, fmt: moneyCompact },
     { key: 'difFactNetaPct', label: 'Δ % vs P&L', render: (r) => <span style={{ ...muted, fontVariantNumeric: 'tabular-nums' }} title={r.difFactNeta != null ? money(r.difFactNeta) : ''}>{fmtDelta(r.difFactNetaPct)}</span>, renderTotal: (v) => <span style={muted}>{fmtDelta(v)}</span> },
     { key: 'plUtilBruta', label: 'Utilidad bruta P&L', render: (r) => dinero(r.plUtilBruta), fmt: moneyCompact },
-    { key: 'erpContribucion', label: 'Contribución ERP', render: (r) => dinero(r.erpContribucion), fmt: moneyCompact },
+    { key: 'erpContribucion', label: 'Contribucion ERP', titulo: tooltip('contribucion'), render: (r) => dinero(r.erpContribucion), fmt: moneyCompact },
     { key: 'difContrib', label: 'Δ $', render: (r) => difDinero(r.difContrib), renderTotal: (v) => difDinero(v) },
     { key: 'difContribPct', label: 'Δ %', render: (r) => (r.difContribPct == null ? '—' : <span style={{ fontVariantNumeric: 'tabular-nums', color: theme.textMuted }}>{fmtDelta(r.difContribPct)}</span>), renderTotal: (v) => <span style={muted}>{fmtDelta(v)}</span> },
   ];
@@ -56,7 +57,7 @@ export default function Puente({ puente, anio, mesMax, onMesClick }) {
   return (
     <Panel
       titulo="Ventas del ERP vs P&L"
-      meta={`por mes · ${anio} · P&L hasta ${puente.filas[mesMax - 1]?.lbl || '—'} · umbral ${UMBRAL_PUENTE_PCT} %`}
+      meta={`por mes · ${anio} · P&L hasta ${puente.filas[mesMax - 1]?.lbl || '—'} · umbral ${UMBRAL_PUENTE_PCT} % · ERP = medidas del director (Fact Neta · Venta Neta · Contribucion)`}
       plegable abiertoInicial
       acciones={alertaTxt
         ? <Pill tone="orange" dot title="Meses con diferencia mayor al umbral entre Venta neta del ERP y Venta neta del P&L">{alertaTxt}</Pill>

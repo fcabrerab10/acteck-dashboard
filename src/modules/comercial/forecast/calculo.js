@@ -46,7 +46,12 @@ export function calcularForecast(data, horizonteMeses) {
     mesesRef6.push({ anio: d.getFullYear(), mes: d.getMonth() + 1, key: `${d.getFullYear()}-${d.getMonth() + 1}` });
   }
   const set6 = new Set(mesesRef6.map(m => m.key));
-  const setUlt3 = new Set(mesesRef6.slice(-3).map(m => m.key));
+  // 2026-09-12 · Los 3 meses CERRADOS anteriores al actual (slice(-4,-1)).
+  // Antes era slice(-3), que incluía el mes EN CURSO: un mes a medias hundía
+  // la demanda promedio e inflaba la cobertura. Es la misma ventana que usan
+  // Inventario global (mesesCerrados) y la medida [CV Ultimos 3 Meses] del
+  // director. Ver docs/MEDIDAS_DIRECTOR.md.
+  const setUlt3 = new Set(mesesRef6.slice(-4, -1).map(m => m.key));
 
   const demandaErpBySku = {};
   (facturacion || []).forEach((row) => {
@@ -432,6 +437,8 @@ export function calcularForecast(data, horizonteMeses) {
       for (const k of setUlt3) totalErp3m += Number(v.mensual[k] || 0);
     });
     const demandaMesErp = totalErp3m / 3;
+    // Cobertura POR SKU en piezas. No es la medida [Dias de Inv] del director
+    // (esa es en pesos a costo, global): se muestran ambas con su etiqueta.
     const coberturaDiasErp = demandaMesErp > 0 ? Math.round(inv / (demandaMesErp / 30)) : null;
 
     // Cobertura actual: inv / (demandaMesTotal/30) → días que cubre el stock

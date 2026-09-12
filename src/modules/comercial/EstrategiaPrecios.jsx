@@ -107,7 +107,8 @@ function Pantalla({ sensible }) {
         {sensible ? (
           <KpiCard eyebrow="Margen promedio Mayoreo AAA" big={kpi.margenAAA != null ? fmtPct(kpi.margenAAA, 1) : '—'} bigSmall={kpi.margenN ? `${fmtInt(kpi.margenN)} SKUs` : undefined}
             bigColor={kpi.margenAAA == null ? undefined : kpi.margenAAA < 10 ? (theme.red || '#FF3B30') : kpi.margenAAA < 20 ? (theme.orange || '#FF9500') : undefined}
-            sub="(precio AAA − costo promedio) / precio · promedio simple por SKU con costo" />
+            sub="(precio AAA − Costo Promedio) / precio · promedio simple por SKU con costo"
+            medida="Medida: Costo Promedio · Promedio de costopromedio con CostoInventario ≠ 0" />
         ) : (
           <KpiCard eyebrow="Promos vigentes" big={fmtInt(kpi.promos)} bigSmall="SKUs" sub="ya aplicadas en las listas (promos_temporada)" />
         )}

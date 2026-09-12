@@ -81,9 +81,12 @@ export function useCatalogoBusqueda(enabled = true) {
     queryFn: async () => {
       const [rm, inv] = await Promise.all([
         cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca,categoria').order('sku').limit(5000)),
-        fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
+        // Inventario = medida [Inv Actual] del director (v_medidas_inventario_sku),
+        // la misma que Inventario global, Visión General e Inicio. Antes:
+        // v_inventario_comercial (almacenes_config, sin filtro de Rama).
+        fetchAll('v_medidas_inventario_sku', 'articulo,inv_actual_disponible,inv_actual_piezas'),
       ]);
-      const disp = new Map((inv || []).map((r) => [r.sku, { disponible: N(r.disponible), inventario: N(r.inventario) }]));
+      const disp = new Map((inv || []).map((r) => [r.articulo, { disponible: N(r.inv_actual_disponible), inventario: N(r.inv_actual_piezas) }]));
       const skus = (rm.data || []).map((r) => ({ sku: r.sku, descripcion: r.descripcion || '', marca: r.marca || '', categoria: r.categoria || '', ...(disp.get(r.sku) || { disponible: 0, inventario: 0 }) }));
       const vistos = new Set(skus.map((s) => s.sku));
       disp.forEach((v, sku) => { if (!vistos.has(sku) && (v.inventario > 0)) skus.push({ sku, descripcion: '', marca: '', categoria: '', ...v }); });
@@ -104,7 +107,7 @@ export function useFichaProducto(skus) {
       const clave = new Set(meses.map((m) => m.key));
       const [desc, inv, tr, pr, ...fact] = await Promise.all([
         descripciones(lista),
-        cachedQuery(supabase.from('v_inventario_comercial').select('sku,disponible,inventario').in('sku', lista)),
+        cachedQuery(supabase.from('v_medidas_inventario_sku').select('articulo,inv_actual_disponible,inv_actual_piezas,inv_actual,costo_promedio').in('articulo', lista)),
         cachedQuery(supabase.from('v_transito_sku').select('sku,cantidad,eta_mas_cercana,embarques,embarques_detalle').in('sku', lista)),
         cachedQuery(supabase.from('v_estrategia_precios_lista').select('sku,lista,moneda,precio,anio,mes').in('sku', lista)),
         ...Array.from(porAnio.entries()).map(([a, ms]) => fetchAll('facturacion_clientes', 'sku,anio,mes,piezas', (q) => q.in('sku', lista).eq('anio', a).in('mes', ms))),
@@ -112,7 +115,7 @@ export function useFichaProducto(skus) {
       const hoy = hoyISO();
       const demanda = new Map();
       fact.flat().forEach((r) => { if (clave.has(`${r.anio}-${Number(r.mes)}`)) demanda.set(r.sku, (demanda.get(r.sku) || 0) + N(r.piezas)); });
-      const invBy = new Map((inv.data || []).map((r) => [r.sku, r]));
+      const invBy = new Map((inv.data || []).map((r) => [r.articulo, { inventario: r.inv_actual_piezas, disponible: r.inv_actual_disponible, valor: r.inv_actual, costo_promedio: r.costo_promedio }]));
       const trBy = new Map((tr.data || []).map((r) => [r.sku, r]));
       const precios = new Map(); // sku → { lista → { precio, moneda, anio, mes } }
       (pr.data || []).forEach((r) => { if (!precios.has(r.sku)) precios.set(r.sku, {}); precios.get(r.sku)[r.lista] = { precio: N(r.precio), moneda: r.moneda, anio: r.anio, mes: r.mes }; });
@@ -125,12 +128,15 @@ export function useFichaProducto(skus) {
         const proximo = det.find((e) => e.eta && e.eta >= hoy) || det.find((e) => e.eta) || null;
         const inventario = N(i.inventario), disponible = N(i.disponible);
         const demMes = (demanda.get(sku) || 0) / meses.length;
+        // Cobertura POR SKU en piezas, con los 3 meses CERRADOS (mesesCerrados()).
+        // No es [Dias de Inv] del director (esa es global, en pesos a costo).
         const cobertura = demMes > 0 ? inventario / (demMes / 30) : null;
         return {
           sku, descripcion: d.descripcion || '', marca: d.marca || '', inventario, disponible, reservado: Math.max(0, inventario - disponible),
           enCamino: N(t?.cantidad), embarques: det.length,
           proximoArribo: proximo ? { fecha: proximo.eta, piezas: N(proximo.cantidad), po: proximo.po, estatus: proximo.estatus, cedis: proximo.cedis } : null,
-          demandaMes: demMes, cobertura, precios: precios.get(sku) || {},
+          demandaMes: demMes, cobertura, valor: N(i.valor), costoPromedio: i.costo_promedio != null ? N(i.costo_promedio) : null,
+          precios: precios.get(sku) || {},
         };
       });
       return { items, listas, mesesRef: meses };

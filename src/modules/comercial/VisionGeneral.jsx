@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
@@ -215,7 +216,7 @@ function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, 
 }
 
 // ────────── MiniKpiRow · 3 cards horizontales 84px · Inventario · Cartera (próximamente) · Sell Out (próximamente) ──────────
-function MiniKpiRow({ inventario, ventaProm }) {
+function MiniKpiRow({ inventario }) {
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
   const invBg = theme.surfaceInverse;
@@ -227,10 +228,11 @@ function MiniKpiRow({ inventario, ventaProm }) {
   const red = theme.red;
   const pink = theme.pink;
 
-  // ── Ring cobertura (días a la venta promedio mensual YTD; misma fórmula que el bloque Inventario)
-  const dias = (ventaProm > 0 && inventario?.valor_inventario)
-    ? Math.round((Number(inventario.valor_inventario) / ventaProm) * 30)
-    : null;
+  // ── Ring [Dias de Inv] del director: Inv Actual / CV Últimos 3 Meses × 90.
+  // Antes esto era valor_inventario / venta promedio mensual × 30 — mezclaba
+  // inventario a COSTO con venta a PRECIO, así que subestimaba los días.
+  const inv = inventarioDesdeVista(inventario) || {};
+  const dias = inv.dias_inv != null ? Math.round(inv.dias_inv) : null;
   const diasCap = dias == null ? null : Math.min(180, dias);
   const ringPct = diasCap == null ? 0 : Math.min(1, diasCap / 120);
   const ringCol = dias == null ? theme.textMuted : (dias < 60 ? red : dias > 120 ? theme.orange : green);
@@ -409,13 +411,19 @@ export default function VisionGeneral() {
     (async () => {
       // Fact Neta oficial (Factura + Com.Ext33 + devoluciones sin nota de crédito) desde erp_ventas,
       // materializada por (anio, mes, dimension, valor). Rentabilidad: RentabilidadBloque (v_erp_medidas_mes).
-      const [a, p, p2, c, inv, q, qm, cRes,
+      const [a, p, p2, c, inv, invAgot, q, qm, cRes,
              sCan, sCanPrev, sMay, sRot, sMen, sMenPrev, sSkus, sCli, sPromo, sPromoSkus] = await Promise.all([
         cachedQuery(supabase.from('v_vision_factura_dimension_mes').select(DIM_COLS).eq('anio', anio)),
         cachedQuery(supabase.from('v_vision_factura_dimension_mes').select(DIM_COLS).eq('anio', anio - 1)),
         cachedQuery(supabase.from('v_vision_factura_dimension_mes').select(DIM_COLS).eq('anio', anio - 2)),
         cachedQuery(supabase.from('v_vision_factura_clientes').select('cliente_nombre,canal,venta,piezas,meses_activos').eq('anio', anio)),
-        cachedQuery(supabase.from('v_vision_inventario_global').select('valor_inventario,skus_con_stock,piezas_disponibles,skus_agotados').single()),
+        // 2026-09-12 · Inventario = medidas del director (v_medidas_inventario).
+        // Antes: v_vision_inventario_global (Σ costodisponible de almacenes_config.comercial,
+        // piezas = `disponible`) → daba $143.4M / 887K pzs mientras Inventario global
+        // mostraba $152.1M / 924K pzs e Inicio otra cifra más. skus_agotados sigue
+        // saliendo de la vista vieja porque es la única que cruza con demanda 90 d.
+        cachedQuery(supabase.from('v_medidas_inventario').select('*').single()),
+        cachedQuery(supabase.from('v_vision_inventario_global').select('skus_agotados')  .single()),
         cachedQuery(supabase.from('cuotas_canales').select('dimension_tipo,meta_facturacion').eq('anio', anio)),
         supabase.from('cuotas_mensuales').select('mes,cuota_ideal').eq('anio', anio), // la app la escribe: sin cache
         cachedQuery(supabase.from('v_vision_camino_resumen').select('bucket_estatus,valor_mxn,piezas,pos')),
@@ -434,7 +442,7 @@ export default function VisionGeneral() {
       setDimPrev(p.data || []);
       setDimPrev2(p2.data || []);
       setClientesDim(c.data || []);
-      setInventario(inv.data || null);
+      setInventario(inv.data ? { ...inv.data, skus_agotados: invAgot.data?.skus_agotados ?? null } : null);
       setCuotas(q.data || []);
       setCuotasMensuales(qm.data || []);
       setCaminoResumen(cRes.data || []);
@@ -701,7 +709,7 @@ export default function VisionGeneral() {
       <HeroCard kpis={kpis} anio={anio} mesMaxLabel={MESES_FULL[mesMax - 1]} />
 
       {/* KPIs mini · Inventario · Cartera (próximamente) · Sell Out (próximamente) */}
-      <MiniKpiRow inventario={inventario} ventaProm={kpis.ventaYTD > 0 ? kpis.ventaYTD / mesMax : 0} />
+      <MiniKpiRow inventario={inventario} />
 
       {/* Rentabilidad · medidas del director (v_erp_medidas_mes) · sólo con permiso de información sensible */}
       {sensible && <RentabilidadBloque anio={anio} mesMax={mesMax} />}
@@ -755,8 +763,7 @@ export default function VisionGeneral() {
       />
 
       {/* Sección de inventario · KPIs básicos */}
-      <InventarioSection inventario={inventario} caminoResumen={caminoResumen}
-        ventaPromMes={mesMax > 0 ? kpis.ventaYTD / mesMax : 0} />
+      <InventarioSection inventario={inventario} caminoResumen={caminoResumen} />
 
       <p style={{ fontSize: 11, color: theme.textSubtle, padding: '0 8px', fontFamily: TYPO.fontText }}>
         Fuente: erp_ventas renglón a renglón = Fact Neta oficial (Factura + Com.Ext33 + devoluciones sin nota de crédito),
@@ -1089,15 +1096,17 @@ function TendenciaCard({ data, anio, mesMax }) {
 // Fuentes: v_vision_inventario_global (almacenes comerciales) y v_vision_camino_resumen (Master Embarques).
 const BUCKETS_EN_CAMINO = ['produccion', 'transito', 'pendiente_modular', 'por_zarpar', 'por_consolidar'];
 
-function InventarioSection({ inventario, caminoResumen, ventaPromMes }) {
+function InventarioSection({ inventario, caminoResumen }) {
   const { theme } = useTheme();
   const green = theme.green, orange = theme.orange, red = theme.red;
 
-  const valorInv = Number(inventario?.valor_inventario) || 0;
-  const piezas   = Number(inventario?.piezas_disponibles) || 0;
-  const skus     = Number(inventario?.skus_con_stock) || 0;
+  // Medidas del director (v_medidas_inventario). Ver docs/MEDIDAS_DIRECTOR.md.
+  const m = inventarioDesdeVista(inventario) || {};
+  const valorInv = m.inv_actual || 0;
+  const piezas   = m.inv_actual_piezas || 0;
+  const skus     = m.skus_con_stock || 0;
   const agotados = Number(inventario?.skus_agotados) || 0;
-  const diasCob  = ventaPromMes > 0 && valorInv > 0 ? Math.round((valorInv / ventaPromMes) * 30) : null;
+  const diasCob  = m.dias_inv != null ? Math.round(m.dias_inv) : null;
   const cob = diasCob == null ? { l: '—', tone: 'gray', col: undefined }
     : diasCob < 60 ? { l: 'Bajo', tone: 'red', col: red }
     : diasCob > 120 ? { l: 'Alto', tone: 'orange', col: orange }
@@ -1119,16 +1128,16 @@ function InventarioSection({ inventario, caminoResumen, ventaPromMes }) {
           </h3>
         </div>
         <p style={{ fontSize: 11, color: theme.textMuted, margin: 0, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
-          Almacenes comerciales · Master Embarques
+          Medida Inv Actual (Rama PRODUCTO) · Master Embarques
         </p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
-        <KpiCard eyebrow="Inventario comercial" big={fmtCompact(valorInv)} sub={`${fmtInt(piezas)} piezas disponibles`} />
+        <KpiCard medida={tooltip('inv_actual')} eyebrow="Inv Actual" big={fmtCompact(valorInv)} sub={`${fmtInt(piezas)} piezas a costo`} />
         <KpiCard eyebrow="SKUs con stock" big={fmtInt(skus)} sub="con existencia en almacenes comerciales" />
-        <KpiCard eyebrow="Cobertura" big={diasCob != null ? `${fmtInt(diasCob)} d` : '—'} bigColor={cob.col}
+        <KpiCard medida={tooltip('dias_inv')} eyebrow="Días de Inv" big={diasCob != null ? `${fmtInt(diasCob)} d` : '—'} bigColor={cob.col}
           badge={diasCob != null ? { tone: cob.tone, l: cob.l } : undefined}
-          sub={ventaPromMes > 0 ? `a ${fmtCompact(ventaPromMes)}/mes de venta promedio YTD` : 'sin venta promedio'} />
+          sub={m.cv_ultimos_3_meses ? `Inv Actual / CV 3 meses (${fmtCompact(m.cv_ultimos_3_meses)}) × 90` : 'sin CV de 3 meses'} />
         <KpiCard eyebrow="En tránsito" big={fmtCompact(valorTransito)} bigSmall={`${fmtInt(posTransito)} POs`}
           sub={`${fmtInt(piezasTransito)} pzs · producción, por zarpar y en mar${pctStock != null ? ` · ${pctStock}% del stock` : ''}`} />
         <KpiCard eyebrow="Agotados con demanda" big={fmtInt(agotados)} bigColor={agotados > 0 ? red : undefined}

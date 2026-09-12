@@ -28,7 +28,12 @@ export function useDatosPrecios(sensible) {
         fetchAll('v_estrategia_precios_bajo', 'sku,cliente_bajo,precio_bajo,piezas_bajo'),
         fetchAll('promos_temporada', 'sku,campania,promo_pct,anio,mes,descripcion', (q) => q.eq('anio', hoy.getFullYear()).eq('mes', hoy.getMonth() + 1)),
         fetchAll('v_precios_cambios_mes', 'sku,lista,anio,mes,precio_actual,precio_anterior,anio_prev,mes_prev,delta_pct,tipo'),
-        sensible ? fetchAll('v_inventario_comercial', 'sku,costo_promedio,disponible') : Promise.resolve([]),
+        // 2026-09-12 · Costo = medida [Costo Promedio] del director:
+        // AVERAGE(Inventario[costopromedio]) con CostoInventario ≠ 0, resuelta en
+        // v_medidas_inventario_sku. Antes se leía v_inventario_comercial, que
+        // promedia sobre TODOS los almacenes comerciales (incluidos los que tienen
+        // costo 0) y además devuelve 1 fila por SKU que el Map colapsaba.
+        sensible ? fetchAll('v_medidas_inventario_sku', 'articulo,costo_promedio,inv_actual_disponible') : Promise.resolve([]),
         cachedQuery(supabase.from('precios_historico').select('primera_vez').order('primera_vez', { ascending: true }).limit(1).maybeSingle()),
       ]);
       return { precios, bajos, promos, cambios, costos, historicoDesde: desde?.data?.primera_vez || null };
@@ -53,10 +58,11 @@ export function useDrillPrecios(sku) {
         fetchAll('facturacion_clientes', 'anio,mes,cliente_nombre,cliente_key,canal,piezas,monto', (q) => q.eq('sku', sku).in('anio', [anio, anio - 1])),
         fetchAll('precios_historico', 'lista,anio,mes,precio,moneda,primera_vez,ultima_vez', (q) => q.eq('sku', sku)),
         fetchAll('promos_temporada', 'anio,mes,campania,promo_pct', (q) => q.eq('sku', sku)),
-        cachedQuery(supabase.from('v_inventario_comercial').select('sku,disponible,inventario,costo_promedio').eq('sku', sku).maybeSingle()),
+        cachedQuery(supabase.from('v_medidas_inventario_sku').select('articulo,inv_actual_disponible,inv_actual_piezas,costo_promedio,inv_actual').eq('articulo', sku).maybeSingle()),
         cachedQuery(supabase.from('v_transito_sku').select('sku,cantidad,eta_mas_cercana,embarques,embarques_detalle').eq('sku', sku).maybeSingle()),
       ]);
-      return { fact: fact || [], historico: historico || [], promosHist: promosHist || [], inv: inv?.data || null, tr: tr?.data || null };
+      const invRow = inv?.data ? { sku: inv.data.articulo, disponible: inv.data.inv_actual_disponible, inventario: inv.data.inv_actual_piezas, costo_promedio: inv.data.costo_promedio, valor: inv.data.inv_actual } : null;
+      return { fact: fact || [], historico: historico || [], promosHist: promosHist || [], inv: invRow, tr: tr?.data || null };
     },
   });
 }

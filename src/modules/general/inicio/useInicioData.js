@@ -5,7 +5,9 @@
 // Fuentes por bloque:
 //   Hero / KPIs / gráfica      → v_erp_medidas_mes (2 años) · cuotas_canales (TOTAL) o cuotas_mensuales (Σ)
 //   Cartera                    → estados_cuenta (último corte por cliente)
-//   Inventario + tránsito      → v_inventario_comercial · v_transito_sku (agrupado por PO en calc.js)
+//   Inventario + tránsito      → v_medidas_inventario (medidas del director: Inv Actual, Dias de Inv)
+//                                + v_inventario_comercial (SÓLO el costo por SKU, para valuar el tránsito)
+//                                + v_transito_sku (agrupado por PO en calc.js)
 //   Clientes                   → v_fact_cliente_mes · cuotas_mensuales · v_erp_medidas_cliente_mes ·
 //                                v_sellout_digitalife_mensual / v_sellout_pcel_mensual / v_sellout_dicotech_mensual
 //   Canales                    → v_erp_medidas_canal_mes (MV mv_erp_medidas_canal_mes, migración 20260911) · cuotas_canales (canal)
@@ -39,7 +41,7 @@ export function useInicioData(anio) {
       try {
         const [
           medidas, medidasCli, medidasCanal, cuotasCanales, cuotasMensuales, factCli,
-          soDl, soPcel, soDico, estados, inv, transito,
+          soDl, soPcel, soDico, estados, medInv, inv, transito,
           pagos, marketing, eventosEquipo, eventosCliente, auditoria,
         ] = await Promise.all([
           cachedQuery(supabase.from('v_erp_medidas_mes').select(`${MEDIDAS},cv_ultimos_3_meses`).in('anio', anios).order('anio').order('mes')),
@@ -51,6 +53,7 @@ export function useInicioData(anio) {
           cachedQuery(supabase.from('v_sellout_digitalife_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
           cachedQuery(supabase.from('v_sellout_pcel_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
           cachedQuery(supabase.from('v_sellout_dicotech_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
+          cachedQuery(supabase.from('v_medidas_inventario').select('*')),
           cachedQuery(supabase.from('estados_cuenta').select('cliente,fecha_corte,saldo_actual,saldo_vencido,saldo_a_vencer,aging_mas90,dso').order('fecha_corte', { ascending: false }).limit(60)),
           fetchAll('v_inventario_comercial', 'sku,inventario,costo_promedio'),
           fetchAll('v_transito_sku', 'sku,cantidad,eta_mas_cercana,embarques_detalle'),
@@ -65,7 +68,7 @@ export function useInicioData(anio) {
           medidas: medidas.data || [], medidasCli: medidasCli.data || [], medidasCanal: medidasCanal.data || [],
           cuotasCanales: cuotasCanales.data || [], cuotasMensuales, factCli: factCli.data || [],
           sellout: { digitalife: soDl.data || [], pcel: soPcel.data || [], dicotech: soDico.data || [] },
-          estados: estados.data || [], inv, transito,
+          estados: estados.data || [], medInv: (medInv.data || [])[0] || null, inv, transito,
           pagos, marketing, eventosEquipo, eventosCliente, auditoria,
         } });
       } catch (e) {

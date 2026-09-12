@@ -8,13 +8,15 @@ import { EASE, DUR } from '../../lib/motion';
 import { elevation } from '../../lib/elevation';
 import Pill from './Pill';
 
-export default function KpiCard({ eyebrow, badge, titulo, big, bigSmall, bigColor, sub, progress, progressColor, progressSecondary, onClick, style }) {
+// `medida`: nombre oficial de la medida del director (src/lib/medidas.js → tooltip()).
+// Se pinta como title= de la tarjeta para que cualquiera pueda verificar la fórmula.
+export default function KpiCard({ eyebrow, badge, titulo, big, bigSmall, bigColor, sub, progress, progressColor, progressSecondary, onClick, style, medida }) {
   const { theme } = useTheme();
   const [hover, setHover] = useState(false);
   const green = theme.green || '#34C759', orange = theme.orange || '#FF9500';
   const progCol = progressColor || (progress == null ? theme.textMuted : progress >= 100 ? green : progress >= 85 ? theme.text : orange);
   return (
-    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={onClick}
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={onClick} title={medida || undefined}
       style={{
         background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px',
         cursor: onClick ? 'pointer' : 'default', position: 'relative', minWidth: 0, fontFamily: TYPO.fontText,

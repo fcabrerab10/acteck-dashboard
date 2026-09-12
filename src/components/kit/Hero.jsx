@@ -4,11 +4,12 @@ import React from 'react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 
-export function HeroStat({ k, v, sub, color }) {
+// `medida`: tooltip con el nombre y la fórmula oficial (src/lib/medidas.js → tooltip()).
+export function HeroStat({ k, v, sub, color, medida }) {
   const { theme } = useTheme();
   const muted = theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)';
   return (
-    <div style={{ textAlign: 'right', minWidth: 0 }}>
+    <div title={medida || undefined} style={{ textAlign: 'right', minWidth: 0 }}>
       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: muted, fontWeight: 600, whiteSpace: 'nowrap' }}>{k}</div>
       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: color || (theme.textOnInverse || '#F5F5F7'), lineHeight: 1.15, whiteSpace: 'nowrap' }}>{v}</div>
       {sub != null && <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: muted, whiteSpace: 'nowrap' }}>{sub}</div>}

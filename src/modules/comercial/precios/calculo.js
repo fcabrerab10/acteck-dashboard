@@ -80,7 +80,8 @@ export function construirFilas({ roadmap, precios, bajos, promos, costos, cambio
   for (const p of precios || []) { if (!preciosMap.has(p.sku)) preciosMap.set(p.sku, {}); preciosMap.get(p.sku)[p.lista] = N(p.precio); }
   const bajoMap = new Map((bajos || []).map((b) => [b.sku, b]));
   const promoMap = mapaPromos(promos);
-  const costoMap = new Map((costos || []).map((c) => [c.sku, N(c.costo_promedio)]));
+  // [Costo Promedio] del director, 1 fila por SKU (v_medidas_inventario_sku).
+  const costoMap = new Map((costos || []).map((c) => [c.articulo ?? c.sku, N(c.costo_promedio)]));
   const cambioMap = new Map();
   for (const c of cambios || []) { if (!cambioMap.has(c.sku)) cambioMap.set(c.sku, {}); cambioMap.get(c.sku)[c.lista] = c; }
 

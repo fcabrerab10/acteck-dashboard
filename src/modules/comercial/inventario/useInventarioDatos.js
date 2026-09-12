@@ -1,5 +1,7 @@
 // Carga de datos de Inventario global · una sola fuente para la pantalla.
-// 1) inventario_acteck (bloquea el render) · 2) enriquecimientos en paralelo,
+// 1) v_inventario_almacen_medida (bloquea el render) — inventario_acteck + la
+//    bandera `en_inv_actual` de la medida [Inv Actual] del director, para que la
+//    pantalla NO vuelva a mantener su propia lista de almacenes comerciales. · 2) enriquecimientos en paralelo,
 // sin bloquear: descripciones (roadmap_sku), tránsito (v_transito_sku),
 // lead time (v_lead_time_sku), demanda ERP (facturacion_clientes, 3 meses
 // cerrados) e histórico diario (v_inventario_historico_dia). Todo pasa por lib/queries.js salvo roadmap_sku (la app la
@@ -26,6 +28,7 @@ export default function useInventarioDatos() {
   const [leadTime, setLeadTime] = useState(() => new Map());
   const [demanda, setDemanda] = useState(() => new Map());
   const [historico, setHistorico] = useState([]);
+  const [medidas, setMedidas] = useState(null); // fila única de v_medidas_inventario (Inv Actual, Dias de Inv…)
   const [enriqueciendo, setEnriqueciendo] = useState(true);
 
   useEffect(() => {
@@ -36,16 +39,21 @@ export default function useInventarioDatos() {
       let acc = [];
       try {
         acc = await fetchAllQ(
-          () => supabase.from('inventario_acteck').select('articulo, no_almacen, cedis, disponible, inventario, costopromedio, costodisponible, costoinventario'),
-          { pageSize: 5000, orderCol: 'articulo', label: 'inventario_acteck' },
+          () => supabase.from('v_inventario_almacen_medida').select('articulo, no_almacen, cedis, disponible, inventario, costopromedio, costodisponible, costoinventario, en_inv_actual, rama, exclusivo, comercial'),
+          { pageSize: 5000, orderCol: 'articulo', label: 'v_inventario_almacen_medida' },
         );
       } catch (e) {
-        console.error('[InventarioGlobal] inventario_acteck', e);
+        console.error('[InventarioGlobal] v_inventario_almacen_medida', e);
         acc = [];
       }
       if (cancel) return;
       setFilas(acc);
       setLoading(false);
+
+      // Medidas oficiales del director (una fila). Es la cifra que manda en el hero.
+      supabase.from('v_medidas_inventario').select('*').maybeSingle()
+        .then(({ data }) => { if (!cancel) setMedidas(data || null); })
+        .catch(() => {});
 
       const skus = Array.from(new Set(acc.map((r) => r.articulo).filter(Boolean)));
       const meses = mesesCerrados();
@@ -127,5 +135,5 @@ export default function useInventarioDatos() {
     return () => { cancel = true; };
   }, []);
 
-  return { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, mesesRef: mesesCerrados() };
+  return { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, medidas, mesesRef: mesesCerrados() };
 }

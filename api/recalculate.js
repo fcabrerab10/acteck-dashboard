@@ -180,27 +180,29 @@ async function recalcSellInSku() {
   return { table: 'sell_in_sku', count: upsertRows.length };
 }
 
-// Recalc sellout_sku from sellout_detalle
+// Recalc sellout_sku from sellout_detalle.
+// monto_pesos = Σ (subtotal − descuento) = venta SIN IVA, misma base para todos los clientes
+// (Digitalife reporta con IVA en `total`; Dicotech ya viene sin IVA en `subtotal`).
+// Decisión 2026-09-12: todo el sell-out del dashboard va sin IVA.
 async function recalcSelloutSku() {
-  const rows = await fetchAll('sellout_detalle?select=cliente,fecha,no_parte,cantidad,total');
+  const rows = await fetchAll('sellout_detalle?select=cliente,fecha,no_parte,cantidad,subtotal,descuento,total');
 
   const agg = {};
   for (const row of rows) {
     const cliente = row.cliente || 'digitalife';
-    let fecha = row.fecha;
-    if (typeof fecha === 'string') fecha = new Date(fecha);
-    if (!fecha || isNaN(new Date(fecha))) continue;
-
-    const d = new Date(fecha);
-    const anio = d.getFullYear();
-    const mes = d.getMonth() + 1;
+    // La fecha es 'YYYY-MM-DD': se parte a mano (new Date() la lee en UTC y getMonth()
+    // la devuelve en hora local, lo que movía de mes las ventas del día 1 y del último día).
+    const m = String(row.fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) continue;
+    const anio = Number(m[1]), mes = Number(m[2]);
     const sku = String(row.no_parte || '').trim();
     if (!sku) continue;
 
+    const neto = (row.subtotal != null ? Number(row.subtotal) : Number(row.total) || 0) - (Number(row.descuento) || 0);
     const key = `${cliente}|${sku}|${anio}|${mes}`;
     if (!agg[key]) agg[key] = { cliente, sku, anio, mes, piezas: 0, monto_pesos: 0 };
     agg[key].piezas += Number(row.cantidad) || 0;
-    agg[key].monto_pesos += Number(row.total) || 0;
+    agg[key].monto_pesos += Number.isFinite(neto) ? neto : 0;
   }
 
   const upsertRows = Object.values(agg);

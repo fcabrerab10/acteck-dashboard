@@ -56,11 +56,12 @@ export const TIPO_ALMACEN = {
 };
 export const tipoDe = (n) => TIPO_ALMACEN[n] || 'No comercial';
 
-// Fuente única de comerciales = tabla almacenes_config (comercial=true).
-// Lista actual: 1,2,3 (General), 6,19 (DECME), 9 (ML), 12 (Refacciones),
-// 14,16,17 (Retail), 15 (Stock rotation), 25,71 (E-commerce),
-// 44,64 (Empaque dañado).
-// Editar la tabla en Supabase para agregar/quitar; luego actualizar este Set.
+// ⚠ 2026-09-12 · Este Set YA NO decide qué entra en el inventario comercial.
+// La regla oficial es la medida [Inv Actual] del director y viene resuelta
+// renglón a renglón en `v_inventario_almacen_medida.en_inv_actual`
+// (almacén no exclusivo de Inventario · Rama PRODUCTO · CostoInventario ≠ 0).
+// El Set se conserva sólo para etiquetas y para el grid SKU × almacén.
+// Ver docs/MEDIDAS_DIRECTOR.md.
 export const ALM_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
 export const esComercial = (n) => ALM_COMERCIALES.has(Number(n));
 
@@ -85,7 +86,10 @@ export const CEDIS_DE_ALMACEN = {
 const SHORT = { 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 19: 'DECME GDL', 9: 'ML', 16: 'RETAIL GDL', 17: 'RETAIL MEX', 14: 'RETAIL 14', 25: 'PROPIO', 44: 'EMP DAÑ GDL', 64: 'EMP DAÑ MEX', 71: 'ECOM TULT', 12: 'REFACC', 15: 'STOCK ROT' };
 export const shortAlmacen = (n) => SHORT[n] || `Alm ${n}`;
 
-// Umbrales de cobertura (días a ritmo de demanda ERP de 3 meses cerrados)
+// Umbrales de cobertura POR SKU (días a ritmo de piezas ERP de 3 meses cerrados).
+// Ojo: la cobertura por SKU es en PIEZAS (no hay costo de venta por SKU); la
+// cifra del hero es [Dias de Inv] del director, en pesos a costo. Se muestran
+// las dos con su etiqueta — no son la misma medida.
 export const COBERTURA_CRITICA = 30;
 export const COBERTURA_SOBRESTOCK = 90;
 

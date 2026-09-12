@@ -20,6 +20,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { useRoadmap, fetchAll, fetchAllQ, cachedQuery } from '../../lib/queries';
+import { cuotas as cuotasMedida, tooltip } from '../../lib/medidas';
 import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Cargando, toast, GraficaLineas } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import SinAcceso from '../../components/SinAcceso';
@@ -116,17 +117,14 @@ function SellInGlobal({ sensible }) {
   const { data: stock = [] } = useStockSku();
   const loading = lFact || lRoad || lCuotas;
 
-  // ── Cuotas: cuotas_canales TOTAL/12 (si existe) · si no Σ cuotas_mensuales.cuota_ideal ──
+  // ── Cuota Venta ([Cuota Venta] = Σ BP[IMPORTEDEVENTA]) ──
+  // La precedencia (cuotas_canales TOTAL/12 → Σ cuotas_mensuales.cuota_ideal)
+  // estaba reimplementada en 4 pantallas; ahora vive en lib/medidas.js → cuotas().
   const cuotas = useMemo(() => {
-    const porMes = new Map();
-    for (const c of cuotasData?.mensual || []) porMes.set(Number(c.mes), { min: N(c.cuota_min), ideal: N(c.cuota_ideal) });
-    const total = (cuotasData?.canales || []).find((c) => /total/i.test(c.dimension_tipo || '') || /total/i.test(c.dimension_valor || ''));
+    const c = cuotasMedida(cuotasData?.canales || [], cuotasData?.mensual || []);
     const porCanal = new Map();
-    for (const c of cuotasData?.canales || []) if (/canal/i.test(c.dimension_tipo || '') && c.dimension_valor) porCanal.set(String(c.dimension_valor).toUpperCase(), N(c.meta_facturacion) / 12);
-    const mes = (m) => (total ? N(total.meta_facturacion) / 12 : porMes.get(m)?.ideal || 0);
-    const ytd = Array.from({ length: mesActual }, (_, i) => mes(i + 1)).reduce((a, b) => a + b, 0);
-    const anual = Array.from({ length: 12 }, (_, i) => mes(i + 1)).reduce((a, b) => a + b, 0);
-    return { mes, ytd, anual, porCanal, fuente: total ? 'cuotas_canales' : 'cuotas_mensuales' };
+    for (const x of cuotasData?.canales || []) if (/canal/i.test(x.dimension_tipo || '') && x.dimension_valor) porCanal.set(String(x.dimension_valor).toUpperCase(), N(x.meta_facturacion) / 12);
+    return { mes: (m) => c.mes(m) || 0, ytd: c.hasta(mesActual) || 0, anual: c.hasta(12) || 0, porCanal, fuente: c.fuente };
   }, [cuotasData, mesActual]);
 
   // ── Catálogo ──
@@ -359,9 +357,9 @@ function SellInGlobal({ sensible }) {
       <Hero eyebrow={`Dirección Comercial · Sell In consolidado · ${mesLargo} ${anio}`} titulo={frase}
         sub={`Facturación de todos los clientes y canales (ERP) · cuota ${cuotas.fuente === 'cuotas_canales' ? 'anual TOTAL / 12' : 'Σ cuota ideal de los clientes'} · ${fmtInt(global.skusAnio)} SKUs con venta en ${anio}`}
         stats={[
-          { k: `${MESES[mesActual - 1]} MTD`, v: fmtMoneyShort(mtd), sub: cuotaMes ? `${pctMTD.toFixed(0)} % de ${fmtMoneyShort(cuotaMes)}` : `${fmtInt(mtdPz)} pz`, color: pctMTD == null ? undefined : pctMTD >= 100 ? green : pctMTD < 60 ? orange : undefined },
-          { k: `YTD ${anio}`, v: fmtMoneyShort(ytd), sub: yoyYtd != null ? `${yoyYtd >= 0 ? '↑' : '↓'} ${Math.abs(yoyYtd).toFixed(1)} % vs ${anioPrev}` : `${fmtInt(ytdPz)} pz`, color: yoyYtd == null ? undefined : yoyYtd >= 0 ? green : red },
-          { k: 'Cuota del mes', v: cuotaMes ? fmtMoneyShort(cuotaMes) : '—', sub: cuotaMes ? `faltan ${fmtMoneyShort(Math.max(0, cuotaMes - mtd))}` : 'sin cuota cargada' },
+          { k: `${MESES[mesActual - 1]} MTD`, medida: tooltip('fact_neta', 'MTD'), v: fmtMoneyShort(mtd), sub: cuotaMes ? `${pctMTD.toFixed(0)} % de ${fmtMoneyShort(cuotaMes)}` : `${fmtInt(mtdPz)} pz`, color: pctMTD == null ? undefined : pctMTD >= 100 ? green : pctMTD < 60 ? orange : undefined },
+          { k: `YTD ${anio}`, medida: tooltip('fact_neta', `YTD ${anio}`), v: fmtMoneyShort(ytd), sub: yoyYtd != null ? `${yoyYtd >= 0 ? '↑' : '↓'} ${Math.abs(yoyYtd).toFixed(1)} % vs ${anioPrev}` : `${fmtInt(ytdPz)} pz`, color: yoyYtd == null ? undefined : yoyYtd >= 0 ? green : red },
+          { k: 'Cuota del mes', medida: tooltip('cuota_venta'), v: cuotaMes ? fmtMoneyShort(cuotaMes) : '—', sub: cuotaMes ? `faltan ${fmtMoneyShort(Math.max(0, cuotaMes - mtd))}` : 'sin cuota cargada' },
         ]}>
         <div style={{ marginTop: 10, maxWidth: 460 }}>
           <div style={{ position: 'relative', height: 5, borderRadius: 999, background: theme.mode === 'dark' ? 'rgba(29,29,31,0.16)' : 'rgba(245,245,247,0.18)', overflow: 'hidden' }}>
@@ -378,8 +376,8 @@ function SellInGlobal({ sensible }) {
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
-        <KpiCard eyebrow={`${mesLargo} MTD`} badge={{ l: pctMTD != null ? `${pctMTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctMTD) }} big={fmtMoneyShort(mtd)} bigSmall={cuotaMes ? `/ ${fmtMoneyShort(cuotaMes)}` : undefined} sub={`${fmtInt(mtdPz)} piezas`} progress={pctMTD ?? undefined} />
-        <KpiCard eyebrow={`YTD ${anio} · ene–${MESES[mesActual - 1]}`} badge={{ l: pctYTD != null ? `${pctYTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctYTD) }} big={fmtMoneyShort(ytd)} bigSmall={cuotas.ytd ? `/ ${fmtMoneyShort(cuotas.ytd)}` : undefined} sub={`${fmtInt(ytdPz)} piezas · ${fmtInt(global.skusAnio)} SKUs`} progress={pctYTD ?? undefined} />
+        <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`${mesLargo} MTD`} badge={{ l: pctMTD != null ? `${pctMTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctMTD) }} big={fmtMoneyShort(mtd)} bigSmall={cuotaMes ? `/ ${fmtMoneyShort(cuotaMes)}` : undefined} sub={`${fmtInt(mtdPz)} piezas`} progress={pctMTD ?? undefined} />
+        <KpiCard medida={tooltip('pct_alcance_venta', 'YTD')} eyebrow={`YTD ${anio} · ene–${MESES[mesActual - 1]}`} badge={{ l: pctYTD != null ? `${pctYTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctYTD) }} big={fmtMoneyShort(ytd)} bigSmall={cuotas.ytd ? `/ ${fmtMoneyShort(cuotas.ytd)}` : undefined} sub={`${fmtInt(ytdPz)} piezas · ${fmtInt(global.skusAnio)} SKUs`} progress={pctYTD ?? undefined} />
         <KpiCard eyebrow={`${mesLargo} vs ${anioPrev} · YoY`} badge={yoyMes != null ? { l: `${yoyMes >= 0 ? '↑' : '↓'} ${Math.abs(yoyMes).toFixed(1)} %`, tone: yoyMes >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(mtd)} bigSmall={`vs ${fmtMoneyShort(mtdPrev)}`} bigColor={yoyMes == null ? undefined : yoyMes >= 0 ? green : red} sub={mtdPzPrev ? `${mtdPz >= mtdPzPrev ? '↑' : '↓'} ${fmtInt(Math.abs(mtdPz - mtdPzPrev))} pz vs ${MESES[mesActual - 1]} ${anioPrev}` : `${fmtInt(mtdPz)} pz`} />
         <KpiCard eyebrow={`vs ${momLabel} · MoM`} badge={mom != null ? { l: `${mom >= 0 ? '↑' : '↓'} ${Math.abs(mom).toFixed(1)} %`, tone: mom >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(mtd)} bigSmall={`vs ${fmtMoneyShort(momPrev)}`} bigColor={mom == null ? undefined : mom >= 0 ? green : red} sub={momPzPrev ? `${mtdPz >= momPzPrev ? '↑' : '↓'} ${fmtInt(Math.abs(mtdPz - momPzPrev))} pz · mes completo vs parcial` : `${fmtInt(mtdPz)} pz`} />
       </div>

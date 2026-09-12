@@ -14,6 +14,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { Hero, KpiCard, Pill, Segmented, TablaCompacta, HeatCell, Panel, Boton, SkeletonPantalla, toast, elevation } from '../../components/kit';
 import { EASE, DUR } from '../../lib/motion';
+import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import useInventarioDatos from './inventario/useInventarioDatos';
 import SkuDrillDown from './inventario/SkuDrillDown';
 import ResumenSecundario from './inventario/ResumenSecundario';
@@ -85,7 +86,12 @@ function agregarSkus(filas, { descripciones, transito, leadTime, demanda }) {
 function InventarioGlobalPantalla({ sensible }) {
   const { theme } = useTheme();
   const rootRef = useRef(null); // raíz para exportar PDF
-  const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, mesesRef } = useInventarioDatos();
+  const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, medidas, mesesRef } = useInventarioDatos();
+  // Medidas oficiales del director: Inv Actual, Dias de Inv, Inv Total, Costo Promedio.
+  // Mandan en el hero; el resto de la pantalla (facetas por CEDIS/almacén, cobertura
+  // por SKU en piezas) sigue calculándose sobre el detalle, ya filtrado con la MISMA
+  // regla (`en_inv_actual`), así que la suma cuadra al peso.
+  const med = useMemo(() => inventarioDesdeVista(medidas), [medidas]);
 
   // Alcance
   const [soloComerciales, setSoloComerciales] = useState(true);
@@ -103,7 +109,10 @@ function InventarioGlobalPantalla({ sensible }) {
   const f = useMemo(() => ({ ...filtros, tokens: tokensBusqueda(busqueda) }), [filtros, busqueda]);
 
   // ── Filas efectivas según alcance ──
-  const filasAlcance = useMemo(() => filas.filter((r) => r.cedis && (!soloComerciales || esComercial(Number(r.no_almacen)))), [filas, soloComerciales]);
+  // `en_inv_actual` = regla de [Inv Actual] resuelta en Postgres. Antes esto era
+  // un Set de 15 almacenes mantenido a mano en constantes.js que se desincronizaba
+  // de almacenes_config y no aplicaba el filtro de Rama = PRODUCTO.
+  const filasAlcance = useMemo(() => filas.filter((r) => r.cedis && (!soloComerciales || r.en_inv_actual === true)), [filas, soloComerciales]);
   const filasEfectivas = useMemo(() => (cedisFiltro === 'TODOS' ? filasAlcance : filasAlcance.filter((r) => r.cedis === cedisFiltro)), [filasAlcance, cedisFiltro]);
 
   const kpis = useMemo(() => {
@@ -403,10 +412,12 @@ function InventarioGlobalPantalla({ sensible }) {
       <Hero eyebrow={`Inventario Acteck · ${alcanceLabel}`} titulo={hero.titulo} sub={hero.sub}
         stats={[
           sensible
-            ? { k: 'Valor comercial', v: fmtCompact(resumen.valor), sub: subHistorico || `${fmtInt(resumen.piezas)} pz a costo` }
-            : { k: 'Piezas', v: fmtInt(resumen.piezas), sub: subHistorico || `${fmtInt(resumen.disponible)} disponibles` },
+            ? { k: 'Inv Actual', medida: tooltip('inv_actual'), v: fmtCompact(resumen.valor), sub: subHistorico || `${fmtInt(resumen.piezas)} pz a costo` }
+            : { k: 'Piezas', medida: tooltip('inv_actual', 'piezas'), v: fmtInt(resumen.piezas), sub: subHistorico || `${fmtInt(resumen.disponible)} disponibles` },
           { k: 'SKUs con stock', v: fmtInt(resumen.conStock), sub: `de ${fmtInt(resumen.nSkus)} SKUs` },
-          { k: 'Cobertura', v: resumen.cobertura != null ? `${fmtInt(resumen.cobertura)} d` : enriqueciendo ? '…' : '—', sub: 'ritmo ERP · 3 meses', color: resumen.cobertura != null ? colorTono[tonoCob] : undefined },
+          soloComerciales && cedisFiltro === 'TODOS' && med?.dias_inv != null
+            ? { k: 'Días de Inv', medida: tooltip('dias_inv'), v: `${fmtInt(Math.round(med.dias_inv))} d`, sub: `Inv Actual / CV 3 meses × 90`, color: med.dias_inv > 120 ? theme.orange : med.dias_inv < 30 ? theme.red : theme.green }
+            : { k: 'Cobertura SKU', medida: 'Cobertura por SKU · piezas / (demanda ERP 3 meses cerrados / 30). NO es la medida Dias de Inv del director (esa es en pesos a costo).', v: resumen.cobertura != null ? `${fmtInt(resumen.cobertura)} d` : enriqueciendo ? '…' : '—', sub: 'ritmo ERP · 3 meses · piezas', color: resumen.cobertura != null ? colorTono[tonoCob] : undefined },
         ]}>
         <div style={{ marginTop: 8 }}><FrescuraPill pantalla="inventarioGlobal" inverso /></div>
       </Hero>

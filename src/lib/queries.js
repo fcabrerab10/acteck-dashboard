@@ -323,3 +323,20 @@ export function useInventarioCliente(clienteKey) {
 // Helper: exportar el fetchAll para módulos que quieran migrar
 // query fns puntuales sin escribir un hook dedicado.
 export { fetchAll };
+
+// ─── Medidas del director · inventario (2026-09-12) ───
+// UNA sola fila con Inv Actual, Inv Total, Dias de Inv, Costo Promedio, Vueltas…
+// Es la fuente ÚNICA de inventario para Inicio, Visión General, Inventario
+// global, S&OP, Estrategia de Precios y el móvil. Ver docs/MEDIDAS_DIRECTOR.md.
+// No envolver en cachedQuery: la vista ya es de milisegundos y el inventario
+// cambia cada hora (puente SQL).
+export function useMedidasInventario() {
+  return useQuery({
+    queryKey: ['v_medidas_inventario'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('v_medidas_inventario').select('*').maybeSingle();
+      if (error) throw error;
+      return data || null;
+    },
+  });
+}

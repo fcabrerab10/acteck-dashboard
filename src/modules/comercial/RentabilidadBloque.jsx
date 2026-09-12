@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
+import { tooltip } from '../../lib/medidas';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerSensible } from '../../lib/permisos';
@@ -96,23 +97,23 @@ export default function RentabilidadBloque({ anio, mesMax, clienteKey = null, ti
 
   const base = Math.max(ytd.fact_bruta, 1);
   const cascada = [
-    { k: 'Fact. Bruta', v: ytd.fact_bruta, col: blue, bold: false },
-    { k: 'Devoluciones', v: ytd.devoluciones, col: red },
-    { k: "RMA's", v: ytd.rmas, col: red, faint: true },
-    { k: 'Fact. Neta', v: ytd.fact_neta, col: blue, bold: true, prev: ytdPrev.fact_neta },
-    { k: 'Bonificaciones', v: ytd.bonificaciones, col: orange },
-    { k: 'Venta Neta', v: ytd.venta_neta, col: blue, bold: true, prev: ytdPrev.venta_neta },
-    { k: 'Costo de venta', v: -ytd.costo_venta_neta, col: theme.textSubtle || '#86868B' },
-    { k: 'Utilidad Comercial', v: ytd.utilidad_comercial, col: green, bold: true, prev: ytdPrev.utilidad_comercial },
+    { k: 'Fact Bruta', m: 'fact_bruta', v: ytd.fact_bruta, col: blue, bold: false },
+    { k: 'Devoluciones', m: 'devoluciones', v: ytd.devoluciones, col: red },
+    { k: "RMA's", m: 'rmas', v: ytd.rmas, col: red, faint: true },
+    { k: 'Fact Neta', m: 'fact_neta', v: ytd.fact_neta, col: blue, bold: true, prev: ytdPrev.fact_neta },
+    { k: 'Bonificaciones', m: 'bonificaciones', v: ytd.bonificaciones, col: orange },
+    { k: 'Venta Neta', m: 'venta_neta', v: ytd.venta_neta, col: blue, bold: true, prev: ytdPrev.venta_neta },
+    { k: 'Costo Venta Neta', m: 'costo_venta_neta', v: -ytd.costo_venta_neta, col: theme.textSubtle || '#86868B' },
+    { k: 'Utilidad Comercial', m: 'utilidad_comercial', v: ytd.utilidad_comercial, col: green, bold: true, prev: ytdPrev.utilidad_comercial },
   ];
 
   const tiles = [
-    { k: 'Contribución', big: money(ytd.contribucion), sub: `MC ${pct(ytd.mc)}`, delta: ytd.mc != null && ytdPrev.mc != null ? ytd.mc - ytdPrev.mc : null, col: blue },
-    { k: 'Utilidad Comercial', big: money(ytd.utilidad_comercial), sub: `MUC ${pct(ytd.muc)}`, delta: ytd.muc != null && ytdPrev.muc != null ? ytd.muc - ytdPrev.muc : null, col: green },
-    { k: 'Lost Profit', big: money(ytd.lost), sub: `${pct(ytd.lostPct)} de la bruta`, delta: null, col: red,
+    { k: 'Contribucion', m: 'pct_mc', big: money(ytd.contribucion), sub: `MC ${pct(ytd.mc)}`, delta: ytd.mc != null && ytdPrev.mc != null ? ytd.mc - ytdPrev.mc : null, col: blue },
+    { k: 'Utilidad Comercial', m: 'pct_muc', big: money(ytd.utilidad_comercial), sub: `MUC ${pct(ytd.muc)}`, delta: ytd.muc != null && ytdPrev.muc != null ? ytd.muc - ytdPrev.muc : null, col: green },
+    { k: 'Lost Profit', m: 'pct_lost_profit_bonif', big: money(ytd.lost), sub: `${pct(ytd.lostPct)} de la bruta`, delta: null, col: red,
       deltaTxt: ytd.lostPct != null && ytdPrev.lostPct != null ? pp(ytd.lostPct - ytdPrev.lostPct) : null,
       deltaOk: ytd.lostPct != null && ytdPrev.lostPct != null ? ytd.lostPct <= ytdPrev.lostPct : true },
-    { k: 'Ticket promedio', big: ytd.ticket != null ? `$${Math.round(ytd.ticket).toLocaleString('es-MX')}` : '—', sub: `${Math.round(ytd.piezas).toLocaleString('es-MX')} pzs netas`, delta: null, col: theme.textMuted, deltaTxt: ytd.ticket && ytdPrev.ticket ? `${ytd.ticket >= ytdPrev.ticket ? '↑' : '↓'} ${Math.abs(((ytd.ticket - ytdPrev.ticket) / ytdPrev.ticket) * 100).toFixed(1)}%` : null, deltaOk: ytd.ticket >= ytdPrev.ticket },
+    { k: 'Ticket Promedio', m: 'ticket_promedio', big: ytd.ticket != null ? `$${Math.round(ytd.ticket).toLocaleString('es-MX')}` : '—', sub: `${Math.round(ytd.piezas).toLocaleString('es-MX')} pzs netas`, delta: null, col: theme.textMuted, deltaTxt: ytd.ticket && ytdPrev.ticket ? `${ytd.ticket >= ytdPrev.ticket ? '↑' : '↓'} ${Math.abs(((ytd.ticket - ytdPrev.ticket) / ytdPrev.ticket) * 100).toFixed(1)}%` : null, deltaOk: ytd.ticket >= ytdPrev.ticket },
   ];
 
   return (
@@ -146,7 +147,7 @@ export default function RentabilidadBloque({ anio, mesMax, clienteKey = null, ti
               const share = (r.v / base) * 100;
               const yoy = r.prev ? ((r.v - r.prev) / Math.abs(r.prev)) * 100 : null;
               return (
-                <div key={r.k} style={{ display: 'grid', gridTemplateColumns: '108px minmax(0,1fr) 66px 46px', gap: 8, alignItems: 'center', padding: r.bold ? '4px 0' : '2px 0', borderTop: r.bold ? `1px solid ${theme.border}` : 'none' }}>
+                <div key={r.k} title={tooltip(r.m)} style={{ display: 'grid', gridTemplateColumns: '108px minmax(0,1fr) 66px 46px', gap: 8, alignItems: 'center', padding: r.bold ? '4px 0' : '2px 0', borderTop: r.bold ? `1px solid ${theme.border}` : 'none' }}>
                   <span style={{ fontSize: 11, fontWeight: r.bold ? 600 : 500, color: r.bold ? theme.text : theme.textMuted, fontFamily: TYPO.fontDisplay, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.k}</span>
                   <div style={{ height: r.bold ? 8 : 6, borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', overflow: 'hidden' }}>
                     <div style={{ width: `${w}%`, height: '100%', borderRadius: 999, background: r.col, opacity: r.faint ? 0.45 : r.bold ? 1 : 0.8, transition: 'width 400ms' }} />
@@ -167,7 +168,7 @@ export default function RentabilidadBloque({ anio, mesMax, clienteKey = null, ti
                 const dTxt = t.deltaTxt ?? pp(t.delta);
                 const ok = t.deltaTxt ? t.deltaOk : (t.delta ?? 0) >= 0;
                 return (
-                  <div key={t.k} style={{ border, borderRadius: 12, padding: '8px 10px', minWidth: 0 }}>
+                  <div key={t.k} title={tooltip(t.m)} style={{ border, borderRadius: 12, padding: '8px 10px', minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.07em', color: theme.textMuted, fontWeight: 600, fontFamily: TYPO.fontDisplay, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.k}</p>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
                       <span style={{ ...mono, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1, color: t.col === theme.textMuted ? theme.text : t.col }}>{t.big}</span>

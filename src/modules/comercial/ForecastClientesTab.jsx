@@ -26,6 +26,8 @@ import { compartirArchivo } from '../../lib/compartirArchivo';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
 import { Hero, KpiCard, Panel, Boton, Pill, Cargando, Segmented, toast } from '../../components/kit';
+import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
+import { useMedidasInventario } from '../../lib/queries';
 import { HojaLateral } from '../../components/perfil/comun';
 import Buscador from './sellin/Buscador';
 import { MESES_LARGO } from './sellin/textos';
@@ -113,6 +115,12 @@ function ForecastPantalla({ perfil, sensible }) {
     return arr;
   }, [rowsFiltrados, sortCol, sortDir]);
   const onSort = (c) => { if (sortCol === c) setSortDir(sortDir === 'desc' ? 'asc' : 'desc'); else { setSortCol(c); setSortDir('desc'); } };
+
+  // Medida oficial [Dias de Inv] del director (global, en pesos a costo). El motor
+  // de S&OP necesita su propia cobertura POR SKU en piezas (no hay costo de venta
+  // por SKU), así que se muestran LAS DOS, cada una con su etiqueta.
+  const { data: medInvRow } = useMedidasInventario();
+  const medInv = useMemo(() => inventarioDesdeVista(medInvRow), [medInvRow]);
 
   // ── KPIs (sobre el universo completo, como el hero original) ──
   const kpis = useMemo(() => {
@@ -391,9 +399,9 @@ function ForecastPantalla({ perfil, sensible }) {
         )}
         stats={[
           { k: 'SKUs c/ brecha', v: fmtInt(kpis.conBrecha), sub: sensible ? `USD ${fmtInt(kpis.valorSugeridoUsd)} sugeridos` : `${fmtInt(kpis.sugeridoPz)} pz sugeridas`, color: theme.red || '#FF6961' },
-          { k: 'Sobre-stock', v: fmtInt(kpis.sobrestock), sub: '> 90 días cobertura', color: theme.green || '#34D158' },
+          { k: 'Sobre-stock', medida: 'Cobertura por SKU · piezas / (demanda ERP de 3 meses CERRADOS / 30). No es [Dias de Inv] del director.', v: fmtInt(kpis.sobrestock), sub: '> 90 d de cobertura por SKU', color: theme.green || '#34D158' },
+          { k: 'Días de Inv', medida: tooltip('dias_inv'), v: medInv?.dias_inv != null ? `${Math.round(medInv.dias_inv)} d` : '—', sub: 'medida del director · global a costo' },
           { k: 'Export activo', v: sensible ? `USD ${fmtInt(totalBorradorUsd)}` : `${fmtInt(totalBorradorPz)} pz`, sub: `${lineasBorrador.length} SKUs${sensible ? ` · ${fmtInt(totalBorradorPz)} pz` : ` · ${fmtInt(totalBorradorCnt)} cnt`}` },
-          { k: 'LT promedio', v: `${Math.round(kpis.ltPromedio)} d`, sub: 'lead time' },
         ]}
       />
 
