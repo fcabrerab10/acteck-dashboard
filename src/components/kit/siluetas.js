@@ -26,6 +26,10 @@ export const SILUETAS = {
   sellInGlobal: [hero(3), kpis(4), panel(5, { alto: 180 }), grid('1.5fr 1fr', [chart(200), panel(6)]), fila(4, 34), fila(6, 26), tabla(16, 10)],
   sellInDrill: [fila(3, 30), kpis(3), grid('minmax(0,1.4fr) minmax(0,1fr)', [tabla(6, 8), panel(6)]), tabla(3, 13, { alto: 110 })],
   sellOut: [hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(0,1fr)', [chart(240), panel(6)]), panel(3, { alto: 160 }), tabla(14, 8)],
+  // Sell Out consolidado (global): selector + segmented · hero 3 stats · 4 KPIs · gráfica + composición · buscador · pills · tabla · mapa plegable
+  sellOutGlobal: [fila(3, 30), hero(3), kpis(4), grid('minmax(0,1.5fr) minmax(0,1fr)', [chart(230), panel(8, { alto: 280 })]), fila(3, 30), fila(4, 26), tabla(16, 14), panel(1, { alto: 44 })],
+  // Drill de la cuenta en Sell Out: barra de pestañas · bento de 4 cajas · gráfica 12 m · 2 tablas
+  selloutDrill: [fila(4, 30), kpis(4), chart(190), grid('1fr 1fr', [tabla(8, 4, { alto: 210 }), panel(6, { alto: 210 })])],
   sellOutDicotech: [hero(4), kpis(5), grid('minmax(0,1.35fr) minmax(0,1fr)', [chart(240), panel(6)]), grid('minmax(0,0.55fr) minmax(0,1.45fr)', [panel(5), tabla(8, 4)]), grid('1fr 1fr', [tabla(6, 3), tabla(6, 3)]), tabla(8, 8, { alto: 320 }), tabla(12, 8)],
 
   inventarioGlobal: [fila(2, 32), hero(3), kpis(4), fila(3, 30), fila(6, 24), fila(8, 24), tabla(16, 11), panel(4, { alto: 200 }), grid('1fr 1fr', [chart(150), chart(150)]), panel(1, { alto: 44 })],

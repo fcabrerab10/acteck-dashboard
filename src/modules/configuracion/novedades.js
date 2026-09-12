@@ -3,6 +3,16 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.23.0', fecha: '2026-09-12', titulo: 'Sell Out consolidado · la empresa como equipo',
+    items: [
+      'Pestaña Sell Out nueva: todo lo que desplazan las 16 cuentas (12 mayoristas del puente + Digitalife, PCEL, Dicotech + mostrador y e-commerce) en una sola tabla, con sell in del ERP al lado y el mes comparado contra el año pasado al mismo día.',
+      'Al hacer clic en un cliente se abre su ficha con pestañas: Resumen, SKUs, Inventario, Sucursales y vendedores, Clientes finales y Mapa. Sólo aparecen las pestañas cuya fuente trae el dato.',
+      'Mapa de México por estado (sell out, crecimiento, clientes o vendedores) con "Sin estado" aparte; clic en un estado filtra la tabla.',
+      'Botones para compartir el resumen del mes y el estatus de una cuenta, sin información sensible.',
+      'Análisis por Cliente estrena un bloque de sell out arriba de cada cliente con fuente.',
+    ],
+  },
+  {
     version: '3.22.0', fecha: '2026-09-12', titulo: 'Datos de clientes corregidos',
     items: [
       'Dicotech: una sola fuente (carga manual), sin duplicados, agosto y septiembre con monto, semanas 19 y 20 reconstruidas; ya no se cuenta doble en Visión General.',

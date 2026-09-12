@@ -26,6 +26,8 @@ export const FUENTES_AUTOMATICAS = ['facturacion_clientes', 'erp_ventas', 'inven
 export const FUENTES_POR_PANTALLA = {
   sellIn:            ['facturacion_clientes'],
   sellOut:           ['sellout_*'],
+  // Sell Out consolidado: el puente (mayoristas) + las tres fuentes propias.
+  sellOutGlobal:     ['sellout_general', 'sellout_detalle', 'sellout_pcel', 'inventario_cliente'],
   inventarioGlobal:  ['inventario_acteck', 'embarques_compras'],
   pagos:             ['facturacion_clientes', 'sellout_*'],
   propuestas:        ['precios_sku', 'inventario_acteck', 'inventario_cliente'],

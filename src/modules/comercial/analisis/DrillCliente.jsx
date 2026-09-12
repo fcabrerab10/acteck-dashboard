@@ -1,5 +1,6 @@
 // Drill-down por cliente (fila expandida de la tabla de Análisis por Cliente).
-// Tendencia 12 meses (+ año anterior, + contribución si sensible) · 3 KPIs · top 10 SKUs del
+// Bloque "Sell out" arriba (sólo si el cliente tiene fuente de sell out) ·
+// tendencia 12 meses (+ año anterior, + contribución si sensible) · 3 KPIs · top 10 SKUs del
 // periodo con HeatCell SKU × últimos 6 meses · composición por categoría (roadmap_sku) ·
 // alertas activas si el cliente es propio. Detalle SKU: mv_analisis_cliente_sku_mes por código ERP.
 import React, { useMemo } from 'react';
@@ -9,6 +10,8 @@ import { useRoadmap } from '../../../lib/queries';
 import { SEV_LABEL } from '../../../lib/alertas';
 import { Cargando, KpiCard, HeatCell, Pill, Panel, GraficaLineas } from '../../../components/kit';
 import { useDetalleCliente } from './useAnalisisData';
+import ResumenSellOut from '../sellout/ResumenSellOut';
+import { CUENTA_POR_ERP } from '../sellout/datos';
 import { MESES, N, idxMes, enPeriodo, serie12, pctDe } from './calc';
 import { money, moneyFull, int, pct } from './formato';
 
@@ -65,8 +68,16 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
   const td = { padding: '3px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 11, color: theme.text, whiteSpace: 'nowrap' };
   const tip = { fontSize: 11, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' };
 
+  // Sell out: sólo los clientes con fuente (los 12 mayoristas del puente + los 3 propios).
+  const cuentaSellOut = CUENTA_POR_ERP[cliente.cliente] || null;
+
   return (
     <div data-stagger style={{ padding: 12, background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', display: 'grid', gap: 10, fontFamily: TYPO.fontText }}>
+      {cuentaSellOut && (
+        <Panel titulo="Sell out" meta={`${MESES[mesMax - 1]} ${anio} · lo que este cliente desplaza y lo que tiene en su almacén · sin IVA`} padding="10px 12px">
+          <ResumenSellOut cuenta={cuentaSellOut} anio={anio} mes={mesMax} compacto />
+        </Panel>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 }}>
         <KpiCard eyebrow="Mejor mes · últimos 12" big={kpis.mejor ? money(kpis.mejor.fact_neta) : '—'} bigSmall={kpis.mejor ? `${MESES[kpis.mejor.mes - 1]} ${kpis.mejor.anio}` : ''} sub="fact. neta" />
         <KpiCard eyebrow="Promedio mensual" big={money(kpis.prom)} bigSmall={`${kpis.mesesConCompra} de 12 meses con compra`} sub={cliente.ocasional ? 'compra ocasional' : 'cliente recurrente'} />

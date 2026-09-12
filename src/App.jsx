@@ -27,6 +27,7 @@ const EstrategiaProducto     = lazy(() => import('./modules/comercial/Estrategia
 const MarketingCliente       = lazy(() => import('./modules/comercial/MarketingCliente'));
 const AnalisisCliente        = lazy(() => import('./modules/comercial/AnalisisCliente'));
 const AnalisisClientesGlobal = lazy(() => import('./modules/comercial/AnalisisClientesGlobal'));
+const SellOutGlobal          = lazy(() => import('./modules/comercial/SellOutGlobal')); // Sell Out consolidado (V3 · 2026-09-12)
 const InventarioGlobal       = lazy(() => import('./modules/comercial/InventarioGlobal'));
 const EstrategiaPrecios      = lazy(() => import('./modules/comercial/EstrategiaPrecios'));
 const ForecastCliente        = lazy(() => import('./modules/comercial/ForecastCliente'));
@@ -654,13 +655,7 @@ export default function App() {
             puedeVerPestanaGlobal(perfil, "sell_out")
               ? (mobile
                   ? <MobileSellOutGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : (
-                    <div className="p-12 text-center">
-                      <ShoppingBag className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                      <h2 className="text-xl font-semibold text-gray-700 mb-2">Sell Out</h2>
-                      <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                    </div>
-                  ))
+                  : <SellOutGlobal />)
               : <SinAcceso motivo="No tienes acceso a Sell Out." />
           )}
           {paginaActiva === "inventarioGlobal" && (

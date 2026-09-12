@@ -32,7 +32,9 @@ const CORTA = {
   sellout_pcel: 'Sell Out PCEL', inventario_cliente: 'Inv. cliente', embarques_compras: 'Embarques', cuotas_mensuales: 'Cuotas',
   programacion_arribos: 'Arribos', compras_oc: 'OC compras', guias_erp: 'Guías', roadmap_sku: 'Roadmap', estados_resultados: 'P&L',
 };
-const cortaDe = (r) => CORTA[r.fuente] || etiquetaCorta(r);
+// `etiquetas` (prop) permite renombrar una fuente sólo en una pantalla
+// (p. ej. en Sell Out consolidado sellout_general se llama "Puente").
+const cortaDe = (r, etiquetas) => (etiquetas && etiquetas[r.fuente]) || CORTA[r.fuente] || etiquetaCorta(r);
 
 // Hora si fue hoy, "ayer · 19:29" si fue ayer, si no "8 sep · 11:45".
 const TZ = 'America/Mexico_City';
@@ -47,7 +49,7 @@ function cuando(ts) {
   return formatFrescura(ts);
 }
 
-export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = false, onClick, style, detallado = false }) {
+export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = false, onClick, style, detallado = false, etiquetas = null }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const slugs = fuentesDe(pantalla, clienteKey, fuentes);
@@ -93,7 +95,7 @@ export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = 
           const r = porFuente[sl];
           if (!r) return null;
           const t = r.estado === 'atrasada' ? 'orange' : r.estado === 'ok' ? 'green' : 'gray';
-          return <Pill key={sl} tone={t} dot size="xs" onClick={click} style={{ fontVariantNumeric: 'tabular-nums', ...(inverso ? (theme.mode === 'dark' ? null : INVERSO[t]) : null) }}>{cortaDe(r)} {cuando(r.ultima_carga)}</Pill>;
+          return <Pill key={sl} tone={t} dot size="xs" onClick={click} style={{ fontVariantNumeric: 'tabular-nums', ...(inverso ? (theme.mode === 'dark' ? null : INVERSO[t]) : null) }}>{cortaDe(r, etiquetas)} {cuando(r.ultima_carga)}</Pill>;
         })}
       </span>
     );
