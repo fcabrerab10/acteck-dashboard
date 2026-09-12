@@ -1027,6 +1027,30 @@ async function reglaAgendaAsignado(hoy) {
   return out;
 }
 // Resumen del día por persona (task agenda-hoy). Devuelve las alertas agenda_hoy y manda correo.
+// ── Tipo de cambio oficial (FIX Banxico publicado en el DOF, serie SF43718) → tabla tipo_cambio ──
+// Corre dentro de generar-alertas (diario 07:00 CDMX) y también con ?task=tipo-cambio. Trae los últimos
+// 10 días y hace upsert por fecha; sin BANXICO_TOKEN no falla: avisa y deja el último valor cargado.
+async function taskTipoCambio() {
+  const tok = process.env.BANXICO_TOKEN;
+  if (!tok) return { ok: false, motivo: 'BANXICO_TOKEN no configurado' };
+  const hoy = new Date(); const desde = new Date(hoy.getTime() - 10 * 86400000);
+  const f = (d) => d.toISOString().slice(0, 10);
+  const r = await fetch(`https://www.banxico.org.mx/SieAPIRest/service/v1/series/SF43718/datos/${f(desde)}/${f(hoy)}`, { headers: { 'Bmx-Token': tok } });
+  if (!r.ok) return { ok: false, motivo: `Banxico HTTP ${r.status}` };
+  const j = await r.json();
+  const datos = (j?.bmx?.series?.[0]?.datos || []).filter((d) => /^\d/.test(String(d.dato))).map((d) => {
+    const [dd, mm, yy] = String(d.fecha).split('/');
+    return { fecha: `${yy}-${mm}-${dd}`, valor: Number(d.dato), fuente: 'banxico_fix_dof' };
+  });
+  if (!datos.length) return { ok: true, filas: 0 };
+  const up = await fetch(`${SB_URL}/rest/v1/tipo_cambio?on_conflict=fecha`, {
+    method: 'POST', headers: { apikey: SRK, Authorization: `Bearer ${SRK}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(datos),
+  });
+  if (!up.ok) return { ok: false, motivo: `upsert ${up.status}: ${(await up.text()).slice(0, 200)}` };
+  return { ok: true, filas: datos.length, ultimo: datos[datos.length - 1] };
+}
+
 async function taskAgendaHoy({ dryRun = esDryRun() } = {}) {
   const hoy = hoyCDMX();
   _agenda = null;
@@ -1472,7 +1496,11 @@ export default async function handler(req, res) {
     } else if (task === 'forecast-avisos') {
       result = await taskForecastAvisos();
     } else if (task === 'generar-alertas') {
-      result = await taskGenerarAlertas({ notificarCriticas: true });
+      let tipoCambio = null;
+      try { tipoCambio = await taskTipoCambio(); } catch (e) { tipoCambio = { ok: false, motivo: String(e.message || e) }; }
+      result = { ...(await taskGenerarAlertas({ notificarCriticas: true })), tipoCambio };
+    } else if (task === 'tipo-cambio') {
+      result = await taskTipoCambio();
     } else if (task === 'resumen-programado') {
       const q = req.query || {};
       const dryRun = esDryRun() || q.dryRun === '1';
@@ -1484,7 +1512,7 @@ export default async function handler(req, res) {
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1]',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | tipo-cambio | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1]',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);
