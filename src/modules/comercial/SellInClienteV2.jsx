@@ -14,7 +14,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
 import { ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 import RentabilidadBloque from './RentabilidadBloque';
@@ -475,7 +475,7 @@ export default function SellInClienteV2({ clienteKey }) {
       <RentabilidadBloque anio={anio} mesMax={mesActual} clienteKey={clienteKey} titulo="Qué deja este cliente, del bruto a la utilidad." />
 
       {/* Comparador de periodos · A vs B (presets + libre) */}
-      <ComparadorPeriodos clienteKey={clienteKey} />
+      <ComparadorPeriodos clienteKey={clienteKey} ocultarSensible={!puedeVerSensible(perfil)} />
 
       {/* Fila: Timeline lineal + Composición familia */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10 }}>

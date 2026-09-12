@@ -350,7 +350,7 @@ function ForecastPantalla({ perfil, sensible }) {
       <ExportPreviewModal abierto={previewExportOpen} activo={borradorActivo} lineas={lineasBorrador} totalPz={totalBorradorPz} totalUsd={totalBorradorUsd}
         onEditarLinea={onEditarLineaWrapped} onEliminarLinea={onEliminarLineaWrapped} onExportar={ejecutarExportacion} onCerrar={() => setPreviewExportOpen(false)} sensible={sensible} />
 
-      {skuParaAgregar && <AgregarLineaModal row={skuParaAgregar} onClose={() => setSkuParaAgregar(null)} onConfirm={confirmarAgregarLinea} />}
+      {skuParaAgregar && <AgregarLineaModal sensible={sensible} row={skuParaAgregar} onClose={() => setSkuParaAgregar(null)} onConfirm={confirmarAgregarLinea} />}
     </>
   );
 

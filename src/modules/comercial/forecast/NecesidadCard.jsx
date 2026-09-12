@@ -9,6 +9,8 @@
 import React, { useMemo, useState } from 'react';
 import { Target, ChevronDown, ChevronUp } from 'lucide-react';
 import { PCEL_REAL } from '../../../lib/constants';
+import { usePerfil } from '../../../lib/perfilContext';
+import { puedeVerSensible } from '../../../lib/permisos';
 
 const FMT_N    = (n) => Math.round(n || 0).toLocaleString('es-MX');
 const FMT_MXN  = (n) => `$${Math.round(n || 0).toLocaleString('es-MX')}`;
@@ -19,6 +21,9 @@ const CLIENTES = [
 ];
 
 export default function NecesidadCard({ rows, cuotas, metaBySku }) {
+  // Información sensible: todos los MXN de esta tarjeta están valuados a costo
+  // (costo_promedio_mxn). Sin el permiso se lee en piezas.
+  const sensible = puedeVerSensible(usePerfil());
   const [clienteAbierto, setClienteAbierto] = useState(null);
 
   const calc = useMemo(() => {
@@ -55,7 +60,9 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
       porCliente[c.key] = {
         cuota: cuotaPorCliente[c.key] || 0,
         sellInProyectadoMxn: 0,
+        sellInProyectadoPz: 0,
         brechaMxn: 0,
+        brechaPz: 0,
         skusFaltantes: [],
       };
     });
@@ -72,6 +79,7 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
         const piezas3m = (r.demMes?.[c.key] || 0) * 3;
         const valor3m = piezas3m * valorUnitario;
         porCliente[c.key].sellInProyectadoMxn += valor3m;
+        porCliente[c.key].sellInProyectadoPz += piezas3m;
 
         // Calcular brecha de piezas por cliente (prorrateando inv compartido)
         if (r.demandaMesTotal > 0) {
@@ -81,6 +89,7 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
           const brechaPiezasCliente = Math.max(0, piezas3m - stockProporcionalCliente);
           if (brechaPiezasCliente > 0 && valorUnitario > 0) {
             porCliente[c.key].brechaMxn += brechaPiezasCliente * valorUnitario;
+            porCliente[c.key].brechaPz += brechaPiezasCliente;
             porCliente[c.key].skusFaltantes.push({
               sku: r.sku,
               descripcion: r.descripcion,
@@ -107,7 +116,7 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
         <Target className="w-4 h-4 text-emerald-600" />
         <h3 className="font-semibold text-gray-800 text-sm">Necesidad por cliente · próximos 90 días</h3>
-        <span className="ml-auto text-[10px] text-gray-400">vs cuota mínima · valuado a costo</span>
+        <span className="ml-auto text-[10px] text-gray-400">vs cuota mínima{sensible ? ' · valuado a costo' : ''}</span>
       </div>
 
       <div className="divide-y divide-gray-100">
@@ -135,7 +144,7 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
                   <div>
                     <div className="text-[10px] uppercase text-gray-500 tracking-wide">Proyectado</div>
                     <div className="font-semibold tabular-nums" style={{ color: c.color }}>
-                      {FMT_MXN(p.sellInProyectadoMxn)}
+                      {sensible ? FMT_MXN(p.sellInProyectadoMxn) : `${FMT_N(p.sellInProyectadoPz)} pz`}
                     </div>
                     {cumplimiento != null && (
                       <div className="text-[10px] text-gray-500">{cumplimiento.toFixed(0)}% cuota</div>
@@ -144,7 +153,7 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
                   <div>
                     <div className="text-[10px] uppercase text-gray-500 tracking-wide">Brecha a comprar</div>
                     <div className="font-bold tabular-nums" style={{ color: p.brechaMxn > 0 ? '#dc2626' : '#10B981' }}>
-                      {p.brechaMxn > 0 ? FMT_MXN(p.brechaMxn) : '✓ cubierto'}
+                      {p.brechaMxn > 0 ? (sensible ? FMT_MXN(p.brechaMxn) : `${FMT_N(Math.round(p.brechaPz))} pz`) : '✓ cubierto'}
                     </div>
                     {p.skusFaltantes.length > 0 && (
                       <div className="text-[10px] text-gray-500">
@@ -156,7 +165,7 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
               </button>
 
               {abierto && (
-                <SkusFaltantes cliente={c} skus={p.skusFaltantes} />
+                <SkusFaltantes cliente={c} skus={p.skusFaltantes} sensible={sensible} />
               )}
             </div>
           );
@@ -166,7 +175,7 @@ export default function NecesidadCard({ rows, cuotas, metaBySku }) {
   );
 }
 
-function SkusFaltantes({ cliente, skus }) {
+function SkusFaltantes({ cliente, skus, sensible = false }) {
   if (skus.length === 0) {
     return (
       <div className="px-4 pb-4 pt-1 text-xs text-emerald-700 italic">
@@ -178,7 +187,7 @@ function SkusFaltantes({ cliente, skus }) {
   return (
     <div className="px-4 pb-4 pt-1 bg-gray-50/40">
       <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-2">
-        SKUs que más hacen falta · ordenados por valor unitario (mayor → menor)
+        SKUs que más hacen falta{sensible ? ' · ordenados por valor unitario (mayor → menor)' : ''}
       </div>
       <div className="overflow-y-auto max-h-72 rounded border border-gray-200 bg-white">
         <table className="w-full text-xs">
@@ -187,8 +196,8 @@ function SkusFaltantes({ cliente, skus }) {
               <th className="text-left px-2 py-1.5">SKU</th>
               <th className="text-left px-2 py-1.5">Descripción</th>
               <th className="text-right px-2 py-1.5">Faltan</th>
-              <th className="text-right px-2 py-1.5">$ / pza</th>
-              <th className="text-right px-2 py-1.5">Total MXN</th>
+              {sensible && <th className="text-right px-2 py-1.5">$ / pza</th>}
+              {sensible && <th className="text-right px-2 py-1.5">Total MXN</th>}
             </tr>
           </thead>
           <tbody>
@@ -199,12 +208,16 @@ function SkusFaltantes({ cliente, skus }) {
                   {s.descripcion || '—'}
                 </td>
                 <td className="px-2 py-1 text-right tabular-nums">{FMT_N(s.piezas)}</td>
-                <td className="px-2 py-1 text-right tabular-nums font-semibold" style={{ color: cliente.color }}>
-                  {FMT_MXN(s.valorUnitario)}
-                </td>
-                <td className="px-2 py-1 text-right tabular-nums font-bold text-emerald-700">
-                  {FMT_MXN(s.valorTotal)}
-                </td>
+                {sensible && (
+                  <td className="px-2 py-1 text-right tabular-nums font-semibold" style={{ color: cliente.color }}>
+                    {FMT_MXN(s.valorUnitario)}
+                  </td>
+                )}
+                {sensible && (
+                  <td className="px-2 py-1 text-right tabular-nums font-bold text-emerald-700">
+                    {FMT_MXN(s.valorTotal)}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

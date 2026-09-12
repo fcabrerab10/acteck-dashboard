@@ -127,14 +127,16 @@ export default function TarjetaCliente({ cliente, resumen: r, margen, verSensibl
 
         {/* KPIs */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <KpiCard eyebrow={r.selloutACosto ? 'Sell Out · costo' : 'Sell Out'} big={fmtCompact(r.soMes)} badge={yoyBadge(r.soYoY)}
+          <KpiCard eyebrow={r.selloutACosto && verSensible ? 'Sell Out · costo' : 'Sell Out'} big={fmtCompact(r.soMes)} badge={yoyBadge(r.soYoY)}
             sub={r.soMes > 0 && r.siMes > 0 ? `${fmtPct((r.soMes / r.siMes) * 100)} del sell in` : 'Sin sell out del mes'} />
           <KpiCard eyebrow="Cartera" big={fmtCompact(r.saldoActual)} bigColor={r.pctVencido > 15 ? red : theme.text}
             badge={r.saldoVencido > 0 ? { l: `${fmtCompact(r.saldoVencido)} venc.`, tone: r.pctVencido > 15 ? 'red' : 'orange' } : (r.corteFecha ? { l: 'al día', tone: 'green' } : null)}
             sub={r.dsoReal != null ? <>DSO <span style={{ color: dsoCol, fontWeight: 600 }}>{r.dsoReal}d</span> · plazo {r.dsoPlazo}d{r.facturasAbiertas > 0 && <> · {fmtInt(r.facturasAbiertas)} fact.</>}</> : (r.corteFecha ? `corte ${r.corteFecha}` : 'sin corte en el periodo')} />
           <KpiCard eyebrow="Cobertura" big={r.coberturaDias != null ? `${r.coberturaDias}d` : '—'}
             bigColor={r.coberturaDias == null ? theme.text : r.coberturaDias < 30 ? red : r.coberturaDias < 60 ? orange : theme.text}
-            sub={r.inventarioValor > 0 ? `Inv. ${fmtCompact(r.inventarioValor)} · ${fmtInt(r.inventarioPiezas)} pz` : 'Sin inventario al corte'} />
+            sub={r.inventarioPiezas > 0 || r.inventarioValor > 0
+              ? (verSensible ? `Inv. ${fmtCompact(r.inventarioValor)} · ${fmtInt(r.inventarioPiezas)} pz` : `Inv. ${fmtInt(r.inventarioPiezas)} pz`)
+              : 'Sin inventario al corte'} />
           {verSensible ? (
             <KpiCard eyebrow="MC %" big={margen ? fmtPct(margen.mcMes, 1) : '…'}
               bigColor={margen?.mcMes == null ? theme.text : margen.mcMes >= 25 ? green : margen.mcMes >= 18 ? theme.text : orange}

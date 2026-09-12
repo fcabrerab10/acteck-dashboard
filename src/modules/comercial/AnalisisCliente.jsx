@@ -4,7 +4,7 @@ import { clientes } from '../../lib/constants';
 import { Target } from 'lucide-react';
 import { fetchSelloutSku, fetchSelloutSkuRango, fetchInventarioCliente } from '../../lib/pcelAdapter';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import { fetchAllQ } from '../../lib/queries';
 import { GraficaLineas } from '../../components/kit';
@@ -14,6 +14,8 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'analisis')) {
     return React.createElement(SinAcceso, { motivo: `No tienes acceso a Análisis de ${clienteKey || 'este cliente'}.` });
   }
+  // Información sensible: valor del inventario a costo (el resto se lee en piezas y $ de venta).
+  var sensible = puedeVerSensible(perfil);
   var el = React.createElement;
   var MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   var MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -312,10 +314,10 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
         var mesesCob = (diasCob / 30).toFixed(1);
         lista.push({
           tipo: 'alerta', icono: '📦', titulo: 'Sobreinventario (' + diasCob + ' días ≈ ' + mesesCob + ' meses)',
-          descripcion: 'Inventario de ' + fmtMoney(invValorTotal) + ' con rotación actual cubre demasiado tiempo.',
+          descripcion: (sensible ? 'Inventario de ' + fmtMoney(invValorTotal) : 'El inventario') + ' con rotación actual cubre demasiado tiempo.',
           accion: 'Acelerar desplazamiento de estos SKUs lentos con promoción/marketing:',
           sublist: topLentos.map(function(s) {
-            return { sku: s.sku, desc: s.desc, detail: fmtNum(s.invStock) + ' pzs · ' + fmtMoney(s.invValor) + ' · ' + (s.diasSinVenta||0).toFixed(0) + 'd sin vender' };
+            return { sku: s.sku, desc: s.desc, detail: fmtNum(s.invStock) + ' pzs · ' + (sensible ? fmtMoney(s.invValor) + ' · ' : '') + (s.diasSinVenta||0).toFixed(0) + 'd sin vender' };
           })
         });
       }
@@ -525,8 +527,13 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var diasColor = (diasInv >= 80 && diasInv <= 120) ? "#10b981" : (diasInv >= 60 && diasInv <= 140) ? "#f59e0b" : "#ef4444";
     var diasDetalle = diasInv < 70 ? "⚠ Riesgo de desabasto" : diasInv > 130 ? "⚠ Sobreinventario" : diasInv >= 90 && diasInv <= 110 ? "✓ Saludable (90-110d)" : "Cercano a rango ideal";
     items.push({ label: "D\u00edas de Inventario", value: diasInv + " d\u00edas", color: diasColor, detail: diasDetalle });
-    // 3. Valor del inventario (stock × costo_convenio)
-    items.push({ label: "Valor del Inventario", value: fmtMoney(invValorTotal), color: "#3B82F6", detail: "Stock \u00d7 Costo Convenio" });
+    // 3. Valor del inventario (stock × costo_convenio) — sensible; sin permiso, piezas en piso.
+    if (sensible) {
+      items.push({ label: "Valor del Inventario", value: fmtMoney(invValorTotal), color: "#3B82F6", detail: "Stock \u00d7 Costo Convenio" });
+    } else {
+      var invPzTotal = _invLatest.reduce(function(s, r) { return s + (Number(r.stock) || 0); }, 0);
+      items.push({ label: "Inventario en piso", value: fmtNum(invPzTotal) + " pzs", color: "#3B82F6", detail: "Piezas del \u00faltimo corte" });
+    }
     // 4. Rotación Mensual: % del inventario que se vende al mes (ideal ~33% = 3 meses de stock)
     var rotMensual = invValorTotal > 0 && ytd.avgSO > 0 ? (ytd.avgSO / invValorTotal * 100) : 0;
     var rotColor = (rotMensual >= 28 && rotMensual <= 38) ? "#10b981" : (rotMensual >= 20 && rotMensual <= 45) ? "#f59e0b" : "#ef4444";
@@ -947,7 +954,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-Out pzs"),
                 !esPcel && el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-Out $"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv pzs"),
-                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv $")
+                sensible && el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv $")
               )
             ),
             el("tbody", null,
@@ -960,7 +967,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.soPiezas.toLocaleString("es-MX")),
                   !esPcel && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.soMonto)),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.invPiezas.toLocaleString("es-MX")),
-                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.invValor))
+                  sensible && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.invValor))
                 );
               })
             )
@@ -981,7 +988,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
             el("thead", null,
               el("tr", { style: { borderBottom: "1px solid #e2e8f0" } },
                 el("th", { style: { textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Categoría"),
-                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Valor Inventario"),
+                sensible && el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Valor Inventario"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, esPcel ? "Sell-Out pzs" : "Sell-Out $"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "% SO"),
                 el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "SKUs c/Inv")
@@ -994,7 +1001,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
                 var soDisplay = esPcel ? c.soPiezas.toLocaleString("es-MX") : fmtMoney(c.soMonto);
                 return el("tr", { key: cat, style: { borderBottom: "1px solid #f1f5f9" } },
                   el("td", { style: { padding: "10px 12px", color: "#1e293b", fontWeight: 600 } }, cat),
-                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(c.invValor)),
+                  sensible && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(c.invValor)),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, soDisplay),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, pctTxt),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0")

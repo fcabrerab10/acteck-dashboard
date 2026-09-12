@@ -107,7 +107,7 @@ export default function ResumenClientesTab({ onDrillDown }) {
           sub={consolidado.siMes > 0 && consolidado.soMes > 0 ? <><strong style={{ color: theme.text }}>{fmtPct((consolidado.soMes / consolidado.siMes) * 100)}</strong> del sell in mensual</> : 'Sin sell out registrado aún'} />
         <KpiCard eyebrow="Cobertura" big={consolidado.coberturaProm != null ? `${consolidado.coberturaProm}d` : '—'}
           bigColor={consolidado.coberturaProm == null ? theme.text : consolidado.coberturaProm < 30 ? red : theme.text}
-          sub={<>Promedio de <strong style={{ color: theme.text }}>{consolidado.coberturaN} clientes</strong> · inventario {fmtCompact(consolidado.inventarioValor)}</>} />
+          sub={<>Promedio de <strong style={{ color: theme.text }}>{consolidado.coberturaN} clientes</strong>{verSensible ? <> · inventario {fmtCompact(consolidado.inventarioValor)}</> : null}</>} />
       </div>
 
       {/* Alertas de la central */}

@@ -225,7 +225,7 @@ function FichaUsuario({ u, usuarios, actualizar, refetch, soyYo, ts }) {
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.005em' }}>Márgenes, utilidad, contribución y costos</span>
             <span style={{ display: 'block', fontSize: 10.5, color: theme.textSubtle || theme.textMuted }}>
-              {esSuper ? 'Super admin: siempre visible.' : 'Sin esto ve ventas, cuotas, mix e inventario, pero no MC %, contribución, utilidad ni costos (Visión General; se irá aplicando pestaña por pestaña).'}
+              {esSuper ? 'Super admin: siempre visible.' : 'Sin esto ve ventas, cuotas, mix e inventario en piezas, pero no MC %, contribución, utilidad, costos ni el valor del inventario a costo, en ninguna pantalla (web y móvil).'}
             </span>
           </span>
           <Interruptor theme={theme} on={esSuper || permisos.sensible === true} onChange={esSuper ? undefined : setSensible} title={esSuper ? 'Super admin: acceso total por código' : 'Mostrar u ocultar información sensible'} />

@@ -89,10 +89,10 @@ function selloutCerrado(rows, anio, mesActual) {
 }
 
 // ── Agenda de los próximos 7 días (pagos, arribos, marketing, eventos) ordenada por fecha
-function agenda(d, inv) {
+function agenda(d, inv, sensible) {
   const items = [];
   d.pagos.forEach((p) => items.push({ id: `p${p.id}`, fecha: p.fecha_compromiso, tipo: 'Pago', tone: 'orange', titulo: p.concepto || p.categoria || 'Pago', sub: p.cliente, monto: N(p.monto), clienteKey: p.cliente, pagina: 'pagos' }));
-  inv.arribos.forEach((a) => items.push({ id: `a${a.po}`, fecha: a.eta, tipo: 'Arribo', tone: 'blue', titulo: `PO ${a.po}`, sub: `${Math.round(a.piezas).toLocaleString('es-MX')} pzs · ${a.skus} SKUs${a.cedis ? ` · ${a.cedis}` : ''}`, monto: a.valor, pagina: 'inventarioGlobal' }));
+  inv.arribos.forEach((a) => items.push({ id: `a${a.po}`, fecha: a.eta, tipo: 'Arribo', tone: 'blue', titulo: `PO ${a.po}`, sub: `${Math.round(a.piezas).toLocaleString('es-MX')} pzs · ${a.skus} SKUs${a.cedis ? ` · ${a.cedis}` : ''}`, monto: sensible ? a.valor : null, pagina: 'inventarioGlobal' }));  // valuado a costo promedio
   d.marketing.forEach((m) => items.push({ id: `m${m.id}`, fecha: m.fecha, tipo: 'Marketing', tone: 'purple', titulo: m.nombre, sub: [m.cliente, m.tipo].filter(Boolean).join(' · '), monto: N(m.inversion) || null, clienteKey: m.cliente, pagina: 'marketing' }));
   d.eventosEquipo.forEach((e) => items.push({ id: `e${e.id}`, fecha: e.fecha_ini, tipo: 'Evento', tone: 'gray', titulo: e.titulo, sub: e.tipo, monto: null }));
   d.eventosCliente.forEach((e) => items.push({ id: `c${e.id}`, fecha: e.fecha, tipo: 'Evento', tone: 'gray', titulo: e.descripcion || 'Evento con cliente', sub: [e.cliente, e.lugar].filter(Boolean).join(' · '), monto: null, clienteKey: e.cliente, pagina: 'home' }));
@@ -193,6 +193,6 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
   return {
     modo, otroModo, anio, mesActual, mesL, cur, prev, otro, otroPrev, cuota: q, cuotaPeriodo, cuotaOtro, pctCuota, pctOtro, pctAnual, yoy, yoyOtro, yoyUtilidad, yoyLabel, dMc,
     runRate, runRateYoy, mesRow, mesPrev, cartera: cart, inv, alertas: activas, decision, clientes, canales, totalCanales, serie, titulo, sub,
-    agenda: agenda(d, inv), auditoria: d.auditoria, hayDatos: d.medidas.length > 0, sensible,
+    agenda: agenda(d, inv, sensible), auditoria: d.auditoria, hayDatos: d.medidas.length > 0, sensible,
   };
 }

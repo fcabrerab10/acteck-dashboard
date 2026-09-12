@@ -99,7 +99,7 @@ export default function Inicio({ onNavegar }) {
               sub={`${lostTxt} · dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
               onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />
           : <KpiCard eyebrow={`Deducciones · ${labelPeriodo}`} badge={c.lostPct != null ? { l: `${pct(c.lostPct)} de la bruta`, tone: c.lostPct > 8 ? 'orange' : 'gray' } : undefined}
-              big={$c(c.lost)} bigSmall="lost profit"
+              big={$c(c.lost)} bigSmall="dev + RMA + bonif"
               sub={`dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
               onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
         {ve.cobranza && <KpiCard eyebrow={cart.corte ? `Cartera · corte ${fecha(cart.corte)}` : 'Cartera'} badge={cart.vencido > 0 ? { l: `${$c(cart.vencido)} vencido`, tone: cart.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al corriente', tone: 'green' }}

@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
 import { Cargando, GraficaLineas } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
@@ -172,6 +172,8 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'estrategia')) {
     return <SinAcceso motivo={`No tienes acceso a Sell Out de ${clienteKey || 'este cliente'}.`} />;
   }
+  // Información sensible: valor del inventario a costo y análisis de margen/costo.
+  const sensible = puedeVerSensible(perfil);
   const meta = CLIENTES_META[clienteKey] || CLIENTES_META.dicotech;
   const ACCENT = meta.accent;
   const rootRef = useRef(null); // raíz para exportar PDF
@@ -612,16 +614,19 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     // xlsx-js-style (~850 KB) sólo se descarga al exportar, no en el bundle inicial.
     const xlsxMod = await import('xlsx-js-style');
     const XLSX = xlsxMod.default || xlsxMod;
-    const HEADERS = ['Marca', 'SKU', 'Descripción', 'Familia', 'Roadmap', ...MESES, 'Promedio', 'Total', `Inv. ${meta.nombre} (pz)`, `Inv. ${meta.nombre} ($)`];
+    // Sin permiso de información sensible el libro sale sin la columna de inventario a costo.
+    const HEADERS = ['Marca', 'SKU', 'Descripción', 'Familia', 'Roadmap', ...MESES, 'Promedio', 'Total', `Inv. ${meta.nombre} (pz)`,
+      ...(sensible ? [`Inv. ${meta.nombre} ($)`] : [])];
     const rows = filas.map((r) => [
       r.marca || '', r.sku || '', r.descripcion || '', r.familiaCap || '', r.rdmp || '',
       ...r.piezas.map((v) => v || null),
       Math.round(r.promedio) || null,
       r.total,
       r.invStock || null,
-      r.invValor || null,
+      ...(sensible ? [r.invValor || null] : []),
     ]);
-    const totalRow = ['TOTAL', `${filas.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Math.round(totalesFila.promedio) || null, totalesFila.total, invTotales.stock, invTotales.valor];
+    const totalRow = ['TOTAL', `${filas.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Math.round(totalesFila.promedio) || null, totalesFila.total, invTotales.stock,
+      ...(sensible ? [invTotales.valor] : [])];
     const titulo = `Sell Out ${meta.nombre} · ${anioActual}`;
     const aoa = [[titulo, ...Array(HEADERS.length - 1).fill('')], HEADERS, ...rows, totalRow];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -636,7 +641,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     }
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: HEADERS.length - 1 } }];
     ws['!rows'] = [{ hpt: 26 }, { hpt: 24 }];
-    ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 50 }, { wch: 18 }, { wch: 9 }, ...MESES.map(() => ({ wch: 8 })), { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 50 }, { wch: 18 }, { wch: 9 }, ...MESES.map(() => ({ wch: 8 })), { wch: 10 }, { wch: 10 }, { wch: 12 }, ...(sensible ? [{ wch: 14 }] : [])];
     ws['!freeze'] = { xSplit: 5, ySplit: 2 };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sell Out');
@@ -663,7 +668,9 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
             {meta.tablaSellOut === 'sellout_general'
               ? `Ventas de ${meta.nombre} a sus clientes finales · Fuente Sellout General`
               : meta.valorACosto
-                ? `Sellout semanal PCEL · Fuente venta-marca-ACTECK · Monto estimado a costo (piezas × costo promedio)`
+                ? (sensible
+                    ? `Sellout semanal PCEL · Fuente venta-marca-ACTECK · Monto estimado a costo (piezas × costo promedio)`
+                    : `Sellout semanal PCEL · Fuente venta-marca-ACTECK · Monto estimado`)
                 : `Ventas de ${meta.nombre} desde su tienda física y online · Fuente Histórico Sellout ${meta.nombre}`}
             {invSemanaMax.semana ? ` · Inventario snapshot semana ${invSemanaMax.semana} ${invSemanaMax.anio}` : ''}
           </p>
@@ -835,7 +842,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
                         {r.invStock > 0 ? (
                           <>
                             <div className="text-[11px] font-semibold text-indigo-800 tabular-nums">{fmtInt(r.invStock)} pz</div>
-                            <div className="text-[10px] text-indigo-500 tabular-nums">{formatMXN(r.invValor)}</div>
+                            {sensible && <div className="text-[10px] text-indigo-500 tabular-nums">{formatMXN(r.invValor)}</div>}
                           </>
                         ) : (
                           <span className="text-gray-400 text-[10px]">—</span>
@@ -867,7 +874,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
                 <td className="py-1.5 px-1.5 text-right tabular-nums">{fmtInt(totalesFila.total)}</td>
                 <td className="py-1.5 px-1.5 text-right whitespace-nowrap" style={{ background: '#E0E7FF' }}>
                   <div className="text-[11px] font-semibold text-indigo-800 tabular-nums">{fmtInt(invTotales.stock)} pz</div>
-                  <div className="text-[10px] text-indigo-600 tabular-nums">{formatMXN(invTotales.valor)}</div>
+                  {sensible && <div className="text-[10px] text-indigo-600 tabular-nums">{formatMXN(invTotales.valor)}</div>}
                 </td>
               </tr>
             </tbody>
@@ -877,7 +884,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
 
       {/* Ventas por sucursal — sólo si el cliente tiene datos de sucursal */}
       {meta.drillSucursales && sucursalesYTD.length > 0 && (
-        <BloqueSucursales sucursales={sucursalesYTD} matriz={sucursalesMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev}
+        <BloqueSucursales sensible={sensible} sucursales={sucursalesYTD} matriz={sucursalesMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev}
           inventarioSucursales={inventarioSucursalTotales} meta={meta} />
       )}
 
@@ -1008,7 +1015,7 @@ function BloqueMarca({ marcas, matriz, mesActual, anioActual, anioPrev, meta }) 
   );
 }
 
-function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev, inventarioSucursales = [], meta }) {
+function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev, inventarioSucursales = [], meta, sensible = true }) {
   const [metrica, setMetrica] = useState('monto'); // 'monto' | 'piezas' | 'tx' | 'inventario'
   const [selKey, setSelKey] = useState(null);
 
@@ -1051,11 +1058,11 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
     if (metrica === 'monto') return it.monto;
     if (metrica === 'piezas') return it.piezas;
     if (metrica === 'tx') return it.tx;
-    if (metrica === 'inventario') return it.invValor;
+    if (metrica === 'inventario') return sensible ? it.invValor : it.invStock;
     return 0;
   };
   const fmtMetrica = (v) => {
-    if (metrica === 'monto' || metrica === 'inventario') return formatMXN(v);
+    if (metrica === 'monto' || (metrica === 'inventario' && sensible)) return formatMXN(v);
     return fmtInt(v);
   };
 
@@ -1091,7 +1098,7 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
             { k: 'monto', l: 'Venta $' },
             { k: 'piezas', l: 'Piezas' },
             { k: 'tx', l: 'Tickets' },
-            { k: 'inventario', l: 'Inventario $' },
+            { k: 'inventario', l: sensible ? 'Inventario $' : 'Inventario pz' },
           ].map((m) => (
             <button key={m.k} onClick={() => setMetrica(m.k)}
               className={`px-2.5 py-1 text-[11.5px] rounded-md font-medium transition ${metrica === m.k ? 'bg-white text-gray-800 shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -1106,7 +1113,7 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
         fisicas={fisicas} virtuales={virtuales}
         matriz={matriz} mesActual={mesActual}
         metrica={metrica} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
-        totalVis={totalVis} selKey={selKey} setSelKey={setSelKey} />
+        totalVis={totalVis} selKey={selKey} setSelKey={setSelKey} sensible={sensible} />
 
 
       {/* Detalle sucursal seleccionada */}
@@ -1139,8 +1146,8 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
               <div className="text-[9.5px] uppercase tracking-widest text-sky-600 font-bold">Inventario actual</div>
               <div className="text-[15px] font-bold tabular-nums">{fmtInt(seleccionada.invStock)} pz</div>
               <div className="text-[10px] text-gray-500 tabular-nums">
-                {formatMXN(seleccionada.invValor)}
-                {seleccionada.monto > 0 && seleccionada.invValor > 0 && mesActual > 0 && (
+                {sensible ? formatMXN(seleccionada.invValor) : `${fmtInt(seleccionada.invStock)} pz en piso`}
+                {sensible && seleccionada.monto > 0 && seleccionada.invValor > 0 && mesActual > 0 && (
                   <span> · rota ~{(seleccionada.monto / mesActual / seleccionada.invValor).toFixed(1)}x/mes</span>
                 )}
               </div>
@@ -1218,7 +1225,7 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
           <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-bold">Inventario total físico</div>
           <div className="text-[16px] font-bold tabular-nums">{fmtInt(totalPzFisicas)} pz</div>
           <div className="text-[10.5px] text-gray-500 tabular-nums">
-            {formatMXN(totalValFisicas)} · {fisicas.filter((x) => x.invStock > 0).length} sucursales
+            {sensible ? `${formatMXN(totalValFisicas)} · ` : ''}{fisicas.filter((x) => x.invStock > 0).length} sucursales
           </div>
         </div>
       </div>
@@ -1361,7 +1368,7 @@ function SucursalDrillDown({ sucursal, sucursalLabel, color, meta, anioActual, a
 }
 
 // ── Bento asimétrico: hero (top sucursal) + satélites + strip virtuales ──
-function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valorMetrica, fmtMetrica, totalVis, selKey, setSelKey }) {
+function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valorMetrica, fmtMetrica, totalVis, selKey, setSelKey, sensible = true }) {
   if (fisicas.length === 0 && virtuales.length === 0) {
     return <div className="p-6 text-center text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">Sin datos de sucursales en el periodo.</div>;
   }
@@ -1490,7 +1497,7 @@ function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valor
         })()}
         {s.invStock > 0 && (
           <div className="text-[10px] text-indigo-800 bg-indigo-50 px-1.5 py-0.5 rounded font-semibold tabular-nums self-start">
-            📦 {fmtInt(s.invStock)} pz · {formatMXN(s.invValor)}
+            📦 {fmtInt(s.invStock)} pz{sensible ? ` · ${formatMXN(s.invValor)}` : ''}
           </div>
         )}
       </button>
@@ -1552,6 +1559,8 @@ function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valor
 // ── Análisis de margen: costo (sell-in Acteck→cliente) × precio venta (sellout)
 //    × piezas vendidas, mes a mes. Deriva margen unitario y absoluto por mes.
 function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent, precioReal, precioLista, yieldPct, siPzYTD, clienteNombre, listaPrecio }) {
+  // Información sensible: todo este bloque es costo y margen — sin el permiso no se renderiza.
+  const perfilSens = usePerfil();
   const [hoverIdx, setHoverIdx] = useState(null);
   const svgRef = React.useRef(null);
   const data = useMemo(() => {
@@ -1613,6 +1622,7 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
     return { totalPz, totalVenta, totalCosto, totalMargen, costoProm, precioProm, margenProm, margenPctProm };
   }, [data]);
 
+  if (!puedeVerSensible(perfilSens)) return null; // márgenes y costos
   if (kpis.totalPz === 0 && kpis.totalCosto === 0) return null;
 
   const maxPz = Math.max(1, ...data.map((d) => d.piezasVend));
@@ -1877,6 +1887,9 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
 //    - Foco en: rotación, Weeks of Supply, inventario, tránsito, reposición
 //    - Chart mensual arriba + minimap semanal comprimido abajo
 function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent, siPzYTD, clienteNombre }) {
+  // Información sensible: costo unitario, costo promedio y valor a costo (el resto —
+  // rotación, inventario y piezas— se sigue viendo sin el permiso).
+  const sensible = puedeVerSensible(usePerfil());
   const [semanal, setSemanal] = useState([]);
   const [proximoArribo, setProximoArribo] = useState(null);
   const [ultimoArribo, setUltimoArribo] = useState(null);
@@ -2061,10 +2074,10 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
     <div className="border-t border-gray-200 pt-4 mt-4">
       <div className="flex items-baseline justify-between mb-3">
         <span className="text-[10.5px] uppercase tracking-widest font-bold text-gray-700">
-          Rotación mensual · Inventario · Costo
+          {sensible ? 'Rotación mensual · Inventario · Costo' : 'Rotación mensual · Inventario'}
         </span>
         <span className="text-[10.5px] text-gray-500 tabular-nums">
-          YTD {anioActual}: {fmtInt(kpis.piezasVendYTD)} pz vendidas · valor {formatMXN(kpis.valorMovidoYTD)}
+          YTD {anioActual}: {fmtInt(kpis.piezasVendYTD)} pz vendidas{sensible ? ` · valor ${formatMXN(kpis.valorMovidoYTD)}` : ''}
         </span>
       </div>
 
@@ -2083,8 +2096,8 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                   <th className="text-left py-1.5 px-1.5 font-semibold">Mes</th>
                   <th className="text-right py-1.5 px-1.5 font-semibold">Comp</th>
                   <th className="text-right py-1.5 px-1.5 font-semibold">Vend</th>
-                  <th className="text-right py-1.5 px-1.5 font-semibold">Costo</th>
-                  <th className="text-right py-1.5 px-1.5 font-semibold">Valor</th>
+                  {sensible && <th className="text-right py-1.5 px-1.5 font-semibold">Costo</th>}
+                  {sensible && <th className="text-right py-1.5 px-1.5 font-semibold">Valor</th>}
                   <th className="text-right py-1.5 px-1.5 font-semibold">Inv fin</th>
                 </tr>
               </thead>
@@ -2094,11 +2107,13 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                     <td className="py-1 px-1.5 font-semibold text-gray-800">{d.mes}</td>
                     <td className="py-1 px-1.5 text-right text-gray-600">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</td>
                     <td className="py-1 px-1.5 text-right text-emerald-700 font-semibold">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</td>
+                    {sensible && (
                     <td className="py-1 px-1.5 text-right text-amber-700">
                       {d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}
                       {d.costoFallback ? <span className="text-amber-500">*</span> : null}
                     </td>
-                    <td className="py-1 px-1.5 text-right text-gray-800">{d.valorMovido != null ? formatMXN(d.valorMovido) : '—'}</td>
+                    )}
+                    {sensible && <td className="py-1 px-1.5 text-right text-gray-800">{d.valorMovido != null ? formatMXN(d.valorMovido) : '—'}</td>}
                     <td className="py-1 px-1.5 text-right" style={{ color: accent }}>{d.invFin != null ? fmtInt(d.invFin) : '—'}</td>
                   </tr>
                 ))}
@@ -2108,14 +2123,14 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                   <td className="py-1.5 px-1.5">Total</td>
                   <td className="py-1.5 px-1.5 text-right">{fmtInt(data.reduce((s, d) => s + d.piezasComp, 0))}</td>
                   <td className="py-1.5 px-1.5 text-right text-emerald-700">{fmtInt(kpis.piezasVendYTD)}</td>
-                  <td className="py-1.5 px-1.5 text-right text-amber-700">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</td>
-                  <td className="py-1.5 px-1.5 text-right">{formatMXN(kpis.valorMovidoYTD)}</td>
+                  {sensible && <td className="py-1.5 px-1.5 text-right text-amber-700">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</td>}
+                  {sensible && <td className="py-1.5 px-1.5 text-right">{formatMXN(kpis.valorMovidoYTD)}</td>}
                   <td className="py-1.5 px-1.5 text-right" style={{ color: accent }}>—</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          {data.some((d) => d.costoFallback) && (
+          {sensible && data.some((d) => d.costoFallback) && (
             <div className="text-[9.5px] text-amber-600 mt-2">* Mes sin compra: se usa costo promedio YTD como fallback</div>
           )}
         </div>
@@ -2136,9 +2151,9 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                 <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-gray-600">
                   <span>Comp</span><span className="text-right text-gray-800">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</span>
                   <span>Vend</span><span className="text-right text-emerald-700 font-semibold">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</span>
-                  <span style={{ color: '#B45309' }}>Costo unit</span>
+                  {sensible && <><span style={{ color: '#B45309' }}>Costo unit</span>
                   <span className="text-right" style={{ color: '#92400E' }}>{d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}</span>
-                  <span>Valor</span><span className="text-right text-gray-800">{d.valorMovido != null ? formatMXN(d.valorMovido) : '—'}</span>
+                  <span>Valor</span><span className="text-right text-gray-800">{d.valorMovido != null ? formatMXN(d.valorMovido) : '—'}</span></>}
                   <span style={{ color: accent }}>Inv fin mes</span>
                   <span className="text-right" style={{ color: accent, filter: 'brightness(0.7)' }}>{d.invFin != null ? fmtInt(d.invFin) + ' pz' : '—'}</span>
                 </div>
@@ -2221,8 +2236,8 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                       <span>Antigüedad</span><span className="text-right text-gray-800">{fmtInt(Number(s.antiguedad))} d</span>
                       <span>Tránsito</span><span className="text-right text-gray-800">{Number(s.transito) > 0 ? fmtInt(Number(s.transito)) : '—'}</span>
                       <span>Backorder</span><span className="text-right text-gray-800">{Number(s.backorder) > 0 ? fmtInt(Number(s.backorder)) : '—'}</span>
-                      <span style={{ color: '#B45309' }}>Costo</span>
-                      <span className="text-right" style={{ color: '#92400E' }}>{formatMXN(Number(s.costo))}</span>
+                      {sensible && <><span style={{ color: '#B45309' }}>Costo</span>
+                      <span className="text-right" style={{ color: '#92400E' }}>{formatMXN(Number(s.costo))}</span></>}
                     </div>
                   </div>
                 );
@@ -2315,7 +2330,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
             <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
               <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en PCEL</div>
               <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.stock)} pz</div>
-              <div className="text-[10px] text-gray-500 tabular-nums">{formatMXN(kpis.stock * kpis.costoActual)} a costo</div>
+              {sensible && <div className="text-[10px] text-gray-500 tabular-nums">{formatMXN(kpis.stock * kpis.costoActual)} a costo</div>}
             </div>
 
             {/* Inventario en Acteck */}

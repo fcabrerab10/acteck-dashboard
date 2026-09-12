@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED, fetchAllPagesREST } from '../../lib/supabase';
 import { formatMXN, loadSheetJS } from '../../lib/utils';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditarPestanaCliente } from '../../lib/permisos';
+import { puedeEditarPestanaCliente, puedeVerSensible } from '../../lib/permisos';
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 import { PCEL_REAL } from '../../lib/constants';
 
@@ -16,6 +16,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Permiso granular por (clienteKey, 'estrategia'). Si está en 'ver', canEdit=false
   // y toda la UI queda solo-lectura (inputs bloqueados, botones ocultos).
   const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'estrategia');
+  // Información sensible: valor del inventario a costo. Sin el permiso la pantalla se lee en piezas.
+  const sensible = puedeVerSensible(perfil);
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [datos, setDatos] = React.useState(null);
@@ -3093,7 +3095,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       }).slice(0, 5);
 
       const tarjetas = [
-        { id: 'valor', icono: '💰', titulo: 'Valor de Inventario', color: '#3B82F6', valor: fmtMXN(valorInvTotal), sub: formatMXN(valorInvTotal) },
+        ...(sensible ? [{ id: 'valor', icono: '💰', titulo: 'Valor de Inventario', color: '#3B82F6', valor: fmtMXN(valorInvTotal), sub: formatMXN(valorInvTotal) }] : []),
         { id: 'piezas', icono: '📦', titulo: 'Inventario en Piezas', color: '#10B981', valor: piezasInvTotal.toLocaleString('es-MX'), sub: skusActivos + ' SKUs con stock' },
         { id: 'cat', icono: '🏷️', titulo: 'Categorías', color: '#8B5CF6', valor: todasCategorias.length.toString(), sub: 'Click para ver desglose' },
         { id: 'propuesta', icono: '📤', titulo: 'Última Propuesta', color: '#F59E0B', valor: ultProp ? fmtMXN(Number(ultProp.monto_total) || 0) : '—', sub: ultProp ? fechaLabel + ' · ' + (ultProp.skus_count || 0) + ' SKUs' : 'Sin propuestas' },
@@ -3139,7 +3141,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             }, 'Cerrar ▲'),
           ),
           // Contenido por tarjeta
-          kpiAbierto === 'valor' && React.createElement('div', null,
+          sensible && kpiAbierto === 'valor' && React.createElement('div', null,
             React.createElement('p', { style: { fontSize: 11, color: '#64748B', marginBottom: 8 } }, 'Top 10 SKUs por valor en inventario'),
             React.createElement('table', { style: { width: '100%', fontSize: 12, borderCollapse: 'collapse' } },
               React.createElement('thead', null,
@@ -3168,7 +3170,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement('th', { style: { textAlign: 'left', padding: '6px 8px', color: '#94A3B8', fontWeight: 600, fontSize: 10, textTransform: 'uppercase' } }, 'SKU'),
                   React.createElement('th', { style: { textAlign: 'left', padding: '6px 8px', color: '#94A3B8', fontWeight: 600, fontSize: 10, textTransform: 'uppercase' } }, 'Descripción'),
                   React.createElement('th', { style: { textAlign: 'right', padding: '6px 8px', color: '#94A3B8', fontWeight: 600, fontSize: 10, textTransform: 'uppercase' } }, 'Piezas'),
-                  React.createElement('th', { style: { textAlign: 'right', padding: '6px 8px', color: '#94A3B8', fontWeight: 600, fontSize: 10, textTransform: 'uppercase' } }, 'Valor'),
+                  sensible && React.createElement('th', { style: { textAlign: 'right', padding: '6px 8px', color: '#94A3B8', fontWeight: 600, fontSize: 10, textTransform: 'uppercase' } }, 'Valor'),
                 )
               ),
               React.createElement('tbody', null,
@@ -3176,7 +3178,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement('td', { style: { padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: 11 } }, r.sku),
                   React.createElement('td', { style: { padding: '6px 8px', color: '#475569', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, r.descripcion || '—'),
                   React.createElement('td', { style: { padding: '6px 8px', textAlign: 'right', color: '#10B981', fontWeight: 700 } }, (Number(r.stock) || 0).toLocaleString('es-MX')),
-                  React.createElement('td', { style: { padding: '6px 8px', textAlign: 'right', color: '#475569' } }, formatMXN(Number(r.valorInv) || 0)),
+                  sensible && React.createElement('td', { style: { padding: '6px 8px', textAlign: 'right', color: '#475569' } }, formatMXN(Number(r.valorInv) || 0)),
                 ))
               )
             )
@@ -3187,7 +3189,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               ...todasCategorias.map(c => React.createElement('div', { key: c.cat, style: { display: 'flex', flexDirection: 'column', gap: 3 } },
                 React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12 } },
                   React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, c.cat),
-                  React.createElement('span', { style: { fontWeight: 700, color: '#7C3AED' } }, fmtMXN(c.valor) + ' · ' + c.pct.toFixed(1) + '% · ' + c.skus + ' SKUs · ' + c.piezas.toLocaleString('es-MX') + ' pzs'),
+                  React.createElement('span', { style: { fontWeight: 700, color: '#7C3AED' } }, (sensible ? fmtMXN(c.valor) + ' · ' + c.pct.toFixed(1) + '% · ' : '') + c.skus + ' SKUs · ' + c.piezas.toLocaleString('es-MX') + ' pzs'),
                 ),
                 React.createElement('div', { style: { height: 6, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' } },
                   React.createElement('div', { style: { height: '100%', width: c.pct + '%', background: '#8B5CF6', borderRadius: 3 } })
@@ -3379,7 +3381,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                   return React.createElement("th", { key: "h"+m, style: { textAlign: "right", padding: "8px 4px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][m-1]);
                 }),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", color: sortCol === "stock" ? "#1D4ED8" : "#475569" }, onClick: () => handleSort("stock") }, "Inv Cliente" + sortArrow("stock")),
-                thSort("Valor Inv", "valorInv"),
+                sensible && thSort("Valor Inv", "valorInv"),
                 thSort("Prom 90d", "promedio90d"),
                 thSort("Inv Acteck", "invActeck"),
                 thSort("Tr\u00e1nsito", "invTransito"),
@@ -3461,7 +3463,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                     return React.createElement("td", { key: "m"+m, title: titleAttr, style: { textAlign: "right", padding: "6px 4px", color: pzas > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11 } }, pzas > 0 ? pzas : "-");
                   }),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", fontWeight: 500, color: "#1E293B", fontSize: 11 } }, (s.stock || 0).toLocaleString("es-MX")),
-                  React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, s.valorInv > 0 ? "$" + Math.round(s.valorInv).toLocaleString("es-MX") : "-"),
+                  sensible && React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, s.valorInv > 0 ? "$" + Math.round(s.valorInv).toLocaleString("es-MX") : "-"),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, (s.promedio90d || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invActeck > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11, fontWeight: s.invActeck > 0 ? 500 : 400 } }, (s.invActeck || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invTransito > 0 ? "#7C3AED" : "#CBD5E1", fontSize: 11 } }, s.invTransito > 0 ? s.invTransito.toLocaleString("es-MX") : "-"),

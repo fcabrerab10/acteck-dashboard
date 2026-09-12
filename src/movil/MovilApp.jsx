@@ -56,7 +56,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const { theme } = useTheme();
   const { menu } = usePreferencias();
   const modo = menu.modoMovil === 'barra' ? 'barra' : 'cajon';
-  const arbol = useMemo(() => { try { return construirArbol(perfil); } catch { return []; } }, [perfil]);
+  const arbol = useMemo(() => { try { return construirArbol(perfil, { movil: true }); } catch { return []; } }, [perfil]);
 
   const [tab, setTab] = useState('inicio');
   const [visitadas, setVisitadas] = useState(() => new Set(['inicio']));

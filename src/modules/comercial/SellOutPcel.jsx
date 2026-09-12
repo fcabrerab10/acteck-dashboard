@@ -20,7 +20,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronRight } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
@@ -95,6 +95,8 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'estrategia')) {
     return <SinAcceso motivo={`No tienes acceso a Sell Out de ${clienteKey || 'este cliente'}.`} />;
   }
+  // Información sensible: sin el permiso no se muestra el valor del inventario a costo.
+  const sensible = puedeVerSensible(perfil);
   const { theme } = useTheme();
   const P = paletteFromTheme(theme);
   const isDark = theme.mode === 'dark';
@@ -505,7 +507,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
           eyebrow="Inv. PCEL"
           title="stock disponible"
           big={fmt.int(invTotales.stock)}
-          bigSmall={`pz · ${fmt.money(invTotales.valor)}`}
+          bigSmall={sensible ? `pz · ${fmt.money(invTotales.valor)}` : 'pz'}
           sub={<>{invTotales.skus} SKUs con stock · {familiasInvYTD.length} familias</>}
         />
       </div>
@@ -515,7 +517,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
         <TimelineLineal mesesRango={mesesRango} theme={theme} P={P}
           data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango}
           anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
-        <InvFamiliaCard theme={theme} P={P}
+        <InvFamiliaCard theme={theme} P={P} sensible={sensible}
           familias={familiasInvYTD} totalStock={familiasInvTot.stock} totalValor={familiasInvTot.valor}
           selected={familiaFilter} onSelect={setFamiliaFilter} />
       </div>
@@ -525,7 +527,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
         selected={marcaFilter} onSelect={setMarcaFilter} />
 
       {/* Tabla SKU */}
-      <TablaSKU theme={theme} P={P} isDark={isDark}
+      <TablaSKU theme={theme} P={P} isDark={isDark} sensible={sensible}
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
@@ -621,7 +623,7 @@ function SumStat({ theme, k, v, vColor }) {
   );
 }
 
-function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, onSelect }) {
+function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, onSelect, sensible = true }) {
   const [expanded, setExpanded] = useState(false);
   const TOP_N = 7; // familias visibles antes del "Ver más"
   // Usa VALOR ($) para proporciones — con fallback stock × costo_promedio
@@ -684,14 +686,14 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
                   <>
                     <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, textAlign: 'center', padding: '0 6px' }}>{selected}</div>
                     <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</div>
-                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{f ? fmt.money(f.valor) : '—'}</div>
+                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{f ? (sensible ? fmt.money(f.valor) : `${fmt.int(f.stock)} pz`) : '—'}</div>
                   </>
                 );
               })() : (
                 <>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Costo total</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(totalValor)}</div>
-                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{fmt.int(totalStock)} pz · {familias.length}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{sensible ? 'Costo total' : 'Inventario'}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{sensible ? fmt.money(totalValor) : fmt.int(totalStock)}</div>
+                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{sensible ? `${fmt.int(totalStock)} pz` : 'pz'} · {familias.length}</div>
                 </>
               )}
             </div>
@@ -717,7 +719,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
                   <span style={{ width: 12, height: 12, borderRadius: 4, background: f.color }} />
                   <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
                   <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 60, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.valor)}</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 60, fontVariantNumeric: 'tabular-nums' }}>{sensible ? fmt.money(f.valor) : `${fmt.int(f.stock)} pz`}</span>
                 </div>
               );
             })}
@@ -820,7 +822,7 @@ function MarcaCard({ theme, P, marcas, totalYTD, selected, onSelect }) {
 }
 
 // ═══════════════ Tabla SKU ═══════════════
-function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
+function TablaSKU({ theme, P, isDark, sensible = true, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
   // Heat pill · idéntico a SI V2 (4 niveles Apple iOS blue)
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
@@ -931,7 +933,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                 {isOpen && (
                   <tr>
                     <td colSpan={5 + MESES.length + 3} style={{ padding: 0, border: 0 }}>
-                      <SkuDrillInline theme={theme} P={P} isDark={isDark}
+                      <SkuDrillInline theme={theme} P={P} isDark={isDark} sensible={sensible}
                         skuRow={r}
                         anio={anio} anioPrev={anioPrev}
                         skuMesRaw={skuMesRaw}
@@ -981,7 +983,7 @@ function cellStyle(theme, align) {
 
 // ═══════════════ Drill-down inline por SKU ═══════════════
 // Muestra: hero mini con marca/desc/roadmap + KPI strip + evolución mensual + inventario por sucursal
-function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, inventarioSucursalMap, onClose }) {
+function SkuDrillInline({ theme, P, isDark, sensible = true, skuRow, anio, anioPrev, skuMesRaw, inventarioSucursalMap, onClose }) {
   const sku = skuRow.sku;
 
   // Derivados del SKU
@@ -1110,7 +1112,7 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, i
                       }}>
                         <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, fontWeight: 600 }}>{label}</div>
                         <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 700, color: theme.text, marginTop: 1, letterSpacing: '-0.01em' }}>{fmt.int(s.stock)}</div>
-                        <div style={{ fontSize: 8.5, color: theme.textSubtle || theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>{s.valor > 0 ? fmt.money(s.valor) : ''}</div>
+                        <div style={{ fontSize: 8.5, color: theme.textSubtle || theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>{sensible && s.valor > 0 ? fmt.money(s.valor) : ''}</div>
                       </div>
                     );
                   })}
@@ -1121,7 +1123,7 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, i
                   fontSize: 10, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace',
                 }}>
                   <span>{invSuc.length} con stock</span>
-                  <span>Total <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.int(invTotal.stock)} pz</strong>{invTotal.valor > 0 ? <> · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(invTotal.valor)}</strong></> : null}</span>
+                  <span>Total <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.int(invTotal.stock)} pz</strong>{sensible && invTotal.valor > 0 ? <> · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(invTotal.valor)}</strong></> : null}</span>
                 </div>
               </>
             )}

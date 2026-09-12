@@ -29,7 +29,7 @@ export default function Buscar() {
     const erp = Object.entries(NOMBRE_CLIENTE).filter(([k]) => !CLIENTES_NAV[k]).map(([k, label]) => ({ key: k, label, sub: 'Canal del ERP', tipo: 'otro' }));
     return [...propios, ...erp];
   }, []);
-  const pestanas = useMemo(() => { try { return nodosPlanos(construirArbol(nav.perfil)).filter((n) => n.tipo !== 'enlace'); } catch { return []; } }, [nav.perfil]);
+  const pestanas = useMemo(() => { try { return nodosPlanos(construirArbol(nav.perfil, { movil: true })).filter((n) => n.tipo !== 'enlace'); } catch { return []; } }, [nav.perfil]);
 
   const res = useMemo(() => {
     if (!nq) return null;

@@ -385,7 +385,7 @@ function SellInGlobal({ sensible }) {
       </div>
 
       {/* Comparador de periodos */}
-      <ComparadorPeriodos clienteKey={null} />
+      <ComparadorPeriodos clienteKey={null} ocultarSensible={!sensible} />
 
       {/* Evolución mensual + composición por familia */}
       <Panel titulo="Evolución mensual" meta={`${anio} vs ${anioPrev} · monto facturado${familiaSel ? ` · familia ${familiaSel}` : ''}`}

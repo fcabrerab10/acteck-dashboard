@@ -46,7 +46,7 @@ const GRUPOS_BASE = [
   {
     id: 'direccionGeneral', label: 'Dirección General', icon: Landmark, color: '#5856D6',
     nodos: [
-      { pagina: 'estadoResultados', label: 'Estado de Resultados', icon: Calculator },
+      { pagina: 'estadoResultados', label: 'Estado de Resultados', icon: Calculator, soloWeb: true }, // Fernando: no relevante en el celular
     ],
   },
   {
@@ -93,11 +93,12 @@ const GRUPOS_BASE = [
 export const idNodo = (clienteKey, pagina) => (clienteKey ? `${clienteKey}:${pagina}` : pagina);
 
 /** Árbol filtrado por permisos. */
-export function construirArbol(perfil) {
+export function construirArbol(perfil, { movil = false } = {}) {
   if (!perfil) return [];
   const grupos = [];
   for (const g of GRUPOS_BASE) {
     const nodos = g.nodos
+      .filter((n) => !(movil && n.soloWeb))
       .filter((n) => (n.tipo === 'enlace' ? !!perfil.es_super_admin : puedeVerPaginaGlobal(perfil, n.pagina)))
       .map((n) => ({ ...n, id: n.pagina, tipo: n.tipo || 'global', clienteKey: null, grupo: g.id, grupoLabel: g.label, color: g.color }));
     let clientes = [];

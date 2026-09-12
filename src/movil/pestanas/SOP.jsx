@@ -14,7 +14,7 @@ import { Search, Ship, Plus, Trash2, ClipboardList, Package, AlertTriangle, Lock
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { fetchAll } from '../../lib/queries';
-import { puedeVerPestanaGlobal, puedeEditarPestanaGlobal } from '../../lib/permisos';
+import { puedeVerPestanaGlobal, puedeEditarPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { calcularForecast } from '../../modules/comercial/forecast/calculo';
 import { useSolicitudes } from '../../modules/comercial/forecast/useSolicitudes';
 import { tonoCobertura, etiquetaCobertura, CEDIS_CORTO } from '../../modules/comercial/inventario/constantes';
@@ -75,6 +75,8 @@ export default function SOP() {
   const nav = useNav();
   const perfil = nav.perfil;
   const puedeVer = puedeVerPestanaGlobal(perfil, 'forecast_clientes');
+  // Información sensible: costo USD (último costo) y todo lo valuado con él.
+  const sensible = puedeVerSensible(perfil);
   const puedeEditar = puedeEditarPestanaGlobal(perfil, 'forecast_solicitudes');
   const { data, isLoading, error } = useSOPDatos(puedeVer);
   const sol = useSolicitudes(perfil);
@@ -92,13 +94,14 @@ export default function SOP() {
     if (!rows.length) return null;
     const conBrecha = rows.filter((r) => r.brecha > 0);
     const valorSugerido = rows.reduce((s, r) => s + N(r.sugerido) * costoDe(r), 0);
+    const sugeridoPz = rows.reduce((s, r) => s + N(r.sugerido), 0);
     const traPz = rows.reduce((s, r) => s + N(r.traCant), 0);
     const traUsd = rows.reduce((s, r) => s + N(r.traCant) * costoDe(r), 0);
     const lts = rows.filter((r) => r.ltDias).map((r) => r.ltDias);
     const ltProm = lts.length ? lts.reduce((a, b) => a + b, 0) / lts.length : null;
     const proximo = (data?.arribos || []).find((a) => a.eta && a.eta >= hoy) || null;
     const atrasados = (data?.arribos || []).filter((a) => a.eta && a.eta < hoy).length;
-    return { conBrecha: conBrecha.length, valorSugerido, traPz, traUsd, ltProm, proximo, atrasados };
+    return { conBrecha: conBrecha.length, valorSugerido, sugeridoPz, traPz, traUsd, ltProm, proximo, atrasados };
   }, [rows, data, hoy]);
 
   const borrador = sol.borradores[0] || null;                 // mismo criterio que escritorio: el más reciente
@@ -151,7 +154,7 @@ export default function SOP() {
   return (
     <>
       <Cabecera onVolver={nav.pop} derecha={botonExport} />
-      <TituloGrande titulo="S&OP" sub={kpis ? `${rows.length} SKUs${data?.universoReporte ? ' del Reporte' : ''} · sugerido ${usd(kpis.valorSugerido)} USD` : 'Planeación de compras'} />
+      <TituloGrande titulo="S&OP" sub={kpis ? `${rows.length} SKUs${data?.universoReporte ? ' del Reporte' : ''} · sugerido ${sensible ? `${usd(kpis.valorSugerido)} USD` : `${int(kpis.sugeridoPz)} pz`}` : 'Planeación de compras'} />
 
       {error && <Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudo calcular el S&OP" sub={error.message} />}
       {isLoading && (
@@ -165,8 +168,8 @@ export default function SOP() {
           frase={kpis.conBrecha > 0 ? `${kpis.conBrecha} SKU${kpis.conBrecha === 1 ? '' : 's'} con brecha inmediata.` : 'Sin brechas de inventario a 3 meses.'}
           sub={`${int(kpis.traPz)} pz en camino${kpis.atrasados ? ` · ${kpis.atrasados} PO${kpis.atrasados === 1 ? '' : 's'} con ETA vencida` : ''}${kpis.proximo ? ` · próximo PO ${kpis.proximo.po}` : ''}`}
           stats={[
-            { k: 'Con brecha', v: int(kpis.conBrecha), sub: `${usd(kpis.valorSugerido)} sug.`, color: kpis.conBrecha > 0 ? theme.red : undefined },
-            { k: 'En tránsito', v: usd(kpis.traUsd), sub: 'USD últ. costo' },
+            { k: 'Con brecha', v: int(kpis.conBrecha), sub: sensible ? `${usd(kpis.valorSugerido)} sug.` : `${int(kpis.sugeridoPz)} pz sug.`, color: kpis.conBrecha > 0 ? theme.red : undefined },
+            { k: 'En tránsito', v: sensible ? usd(kpis.traUsd) : int(kpis.traPz), sub: sensible ? 'USD últ. costo' : 'piezas en camino' },
             { k: 'Próx. arribo', v: kpis.proximo ? fechaCorta(kpis.proximo.eta) : '—', sub: kpis.proximo ? `${int(kpis.proximo.piezas)} pz` : 'sin ETA' },
             { k: 'LT prom.', v: kpis.ltProm != null ? `${Math.round(kpis.ltProm)} d` : '—', sub: 'lead time' },
           ]} />
@@ -189,7 +192,7 @@ export default function SOP() {
           {skus.map((sku) => {
             const r = bySku.get(sku);
             return r
-              ? <TarjetaSop key={sku} r={r} theme={theme} hoy={hoy} linea={enExport.get(sku)} puedeEditar={puedeEditar} onQuitar={() => quitarSku(sku)} onAgregar={(n) => agregarAlExport(r, n)} />
+              ? <TarjetaSop key={sku} r={r} theme={theme} hoy={hoy} linea={enExport.get(sku)} puedeEditar={puedeEditar} sensible={sensible} onQuitar={() => quitarSku(sku)} onAgregar={(n) => agregarAlExport(r, n)} />
               : <div key={sku} style={{ margin: '0 16px 10px', padding: '12px 14px', borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface, fontSize: 12.5, color: theme.textMuted, display: 'flex', justifyContent: 'space-between', gap: 10 }}><span><b style={{ color: theme.text, fontFamily: TYPO.fontDisplay }}>{sku}</b> no está en el universo del S&OP (Reporte de Resumen Clientes).</span><button type="button" onClick={() => quitarSku(sku)} style={{ border: 0, background: 'transparent', color: theme.red, fontFamily: TYPO.fontText, fontSize: 13, padding: 0, cursor: 'pointer' }}>Quitar</button></div>;
           })}
 
@@ -219,13 +222,13 @@ export default function SOP() {
         )}
       </HojaM>
 
-      <SOPExport abierto={exportAbierto} onClose={() => setExportAbierto(false)} sol={sol} borrador={borrador} lineas={lineas} rows={rows} puedeEditar={puedeEditar} />
+      <SOPExport sensible={sensible} abierto={exportAbierto} onClose={() => setExportAbierto(false)} sol={sol} borrador={borrador} lineas={lineas} rows={rows} puedeEditar={puedeEditar} />
     </>
   );
 }
 
 // ── Tarjeta por SKU · cobertura, venta mensual, tránsito + próximo arribo, sugerido y agregar al export ──
-function TarjetaSop({ r, theme, hoy, linea, puedeEditar, onQuitar, onAgregar }) {
+function TarjetaSop({ r, theme, hoy, linea, puedeEditar, sensible = false, onQuitar, onAgregar }) {
   const ppc = N(r.piezasPorContenedor);
   const tieneCnt = ppc > 0 && !r.esConsolidado;
   const porDefecto = N(linea?.cantidad) || N(r.sugerido) || (tieneCnt ? ppc : Math.round(N(r.necesidadNeta))) || 0;
@@ -274,7 +277,7 @@ function TarjetaSop({ r, theme, hoy, linea, puedeEditar, onQuitar, onAgregar }) 
               {ocupado ? 'Guardando…' : linea ? 'Actualizar export' : 'Agregar al export'}
             </BotonGrande>
           </div>
-          {linea && <div style={{ marginTop: 8, fontSize: 11.5, color: theme.green, display: 'flex', alignItems: 'center', gap: 6 }}><ClipboardList size={13} />En el export con {int(linea.cantidad)} pz{costoDe(r) ? ` · $${int(N(linea.cantidad) * costoDe(r))} USD` : ''}</div>}
+          {linea && <div style={{ marginTop: 8, fontSize: 11.5, color: theme.green, display: 'flex', alignItems: 'center', gap: 6 }}><ClipboardList size={13} />En el export con {int(linea.cantidad)} pz{sensible && costoDe(r) ? ` · $${int(N(linea.cantidad) * costoDe(r))} USD` : ''}</div>}
         </div>
     </div>
   );

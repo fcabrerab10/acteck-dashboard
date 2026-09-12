@@ -27,7 +27,8 @@ function fmtFechaC(iso) {
   return `${d} ${MES_CORTO[m - 1]} ${String(y).slice(2)}`;
 }
 
-export default function AgregarLineaModal({ row, onConfirm, onClose }) {
+// `sensible` = permiso de información sensible: sin él no se muestra el costo USD.
+export default function AgregarLineaModal({ row, onConfirm, onClose, sensible = false }) {
   const { theme, isDark } = useTheme();
   const semGreen = '#1C7A34';
 
@@ -123,7 +124,7 @@ export default function AgregarLineaModal({ row, onConfirm, onClose }) {
             }}>
               {row.supplier || 'Sin proveedor'}
               {tieneCnt && ` · 1 cnt = ${FMT_N(piezasPorCnt)} pz`}
-              {ultUsd > 0 && <> · <span style={{ color: '#30D158', fontWeight: 600 }}>${ultUsd.toFixed(2)} USD</span></>}
+              {sensible && ultUsd > 0 && <> · <span style={{ color: '#30D158', fontWeight: 600 }}>${ultUsd.toFixed(2)} USD</span></>}
             </div>
           </div>
           <button
@@ -323,7 +324,7 @@ export default function AgregarLineaModal({ row, onConfirm, onClose }) {
                 {FMT_N(cantidadFinal)}<span style={{ fontSize: 12, marginLeft: 4, fontWeight: 500 }}>pz</span>
               </span>
             </div>
-            {valorEstUsd > 0 && (
+            {sensible && valorEstUsd > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11.5, color: semGreen, letterSpacing: '-0.005em' }}>
                 <span>Costo estimado</span>
                 <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{FMT_USD(valorEstUsd)} USD</span>

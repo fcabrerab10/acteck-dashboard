@@ -56,7 +56,8 @@ function refrescarLineas(lineas, rows) {
   });
 }
 
-export default function SOPExport({ abierto, onClose, sol, borrador, lineas, rows, puedeEditar }) {
+export default function SOPExport({ abierto, onClose, sol, borrador, lineas, rows, puedeEditar, sensible = false }) {
+  // `sensible` = permiso de información sensible. Sin él no se muestra ni se exporta el costo USD.
   const { theme } = useTheme();
   const [ocupado, setOcupado] = useState(false);
   const xlsxListo = useRef(false);
@@ -82,7 +83,7 @@ export default function SOPExport({ abierto, onClose, sol, borrador, lineas, row
     if (!borrador || !lineas.length || ocupado) return;
     setOcupado(true);
     try {
-      const { blob, filename } = await solicitudExcelBlob(borrador, refrescarLineas(lineas, rows));
+      const { blob, filename } = await solicitudExcelBlob(borrador, refrescarLineas(lineas, rows), { sinCostos: !sensible });
       const r = await compartirArchivo(blob, filename, { titulo: filename, texto: `S&OP · ${lineas.length} SKUs · ${int(totalPz)} pz` });
       if (!r) { toast.info('Se canceló el envío'); return; }
       if (cerrar) {
@@ -108,9 +109,9 @@ export default function SOPExport({ abierto, onClose, sol, borrador, lineas, row
         <Vacio icon={ClipboardList} color={theme.textMuted} titulo="El export está vacío" sub="Busca un SKU arriba y toca “Agregar al export”. Las líneas se guardan en la nube: también las verás en la computadora." />
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '0 16px 12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: sensible ? '1fr 1fr' : '1fr', gap: 10, padding: '0 16px 12px' }}>
             <Dato theme={theme} k="Piezas" v={int(totalPz)} sub={`${n} SKU${n === 1 ? '' : 's'}`} />
-            <Dato theme={theme} k="Total estimado" v={USD(totalUsd)} sub="USD · último costo" />
+            {sensible && <Dato theme={theme} k="Total estimado" v={USD(totalUsd)} sub="USD · último costo" />}
           </div>
           <ListaAgrupada pie="Desliza una línea a la izquierda para quitarla. La cantidad se guarda al soltar el campo.">
             {lineas.map((l) => (
@@ -120,7 +121,7 @@ export default function SOPExport({ abierto, onClose, sol, borrador, lineas, row
                     <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.sku}</div>
                     <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.descripcion || 'Sin descripción'}</div>
                     <div style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-                      {l.proveedor || 'Sin proveedor'}{l.ultimo_costo_usd ? ` · $${Number(l.ultimo_costo_usd).toFixed(2)} USD` : ''}{l.es_consolidado || l.grupo_contenedor ? ' · consolidado' : l.contenedores ? ` · ${l.contenedores} cnt` : ''}
+                      {l.proveedor || 'Sin proveedor'}{sensible && l.ultimo_costo_usd ? ` · $${Number(l.ultimo_costo_usd).toFixed(2)} USD` : ''}{l.es_consolidado || l.grupo_contenedor ? ' · consolidado' : l.contenedores ? ` · ${l.contenedores} cnt` : ''}
                     </div>
                   </div>
                   {puedeEditar ? <CampoCantidad value={Number(l.cantidad || 0)} onChange={(v) => cambiarCantidad(l, v)} paso={l.piezas_por_contenedor > 0 && !l.es_consolidado ? Number(l.piezas_por_contenedor) : 100} />

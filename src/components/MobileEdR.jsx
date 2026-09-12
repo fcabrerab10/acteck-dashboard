@@ -18,6 +18,9 @@ import { ChevronLeft, ChevronRight, ChevronDown, TrendingUp, TrendingDown, Dolla
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
+import { usePerfil } from '../lib/perfilContext';
+import { puedeVerSensible } from '../lib/permisos';
+import SinAcceso from './SinAcceso';
 
 const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MES_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -65,6 +68,9 @@ const fmtCompact = (n) => {
 const fmtPct = (n) => (n == null || !isFinite(n)) ? '—' : `${n.toFixed(1)}%`;
 
 export default function MobileEdR({ onBack, onNavegar }) {
+  // Toda la pantalla es información sensible (costos, utilidad, márgenes): mismo gate
+  // que EstadoResultados en escritorio.
+  const sensible = puedeVerSensible(usePerfil());
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
   const [anio, setAnio] = useState(new Date().getFullYear());
@@ -155,6 +161,8 @@ export default function MobileEdR({ onBack, onNavegar }) {
     const ut = getMes(rows, CUENTA.UTILIDAD_FIN, mesActual);
     return { venta, costo, gastos, financ, ut };
   }, [rows, mesActual]);
+
+  if (!sensible) return <SinAcceso motivo="Esta pestaña contiene información sensible." />;
 
   return (
     <div style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100vh' }}>
