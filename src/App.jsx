@@ -22,7 +22,8 @@ import {
 const HomeClienteV3          = lazy(() => import('./modules/comercial/HomeClienteV3')); // V3: un solo Resumen por cliente (config en home/config.js)
 const CreditoCobranza        = lazy(() => import('./modules/comercial/CreditoCobranza'));
 const CreditoCobranzaV2      = lazy(() => import('./modules/comercial/CreditoCobranzaV2'));
-const PagosCliente           = lazy(() => import('./modules/comercial/PagosCliente'));
+// Pagos V3: una sola pantalla para los tres clientes (global y por cliente). PagosCliente queda como respaldo sin uso.
+const PagosUnificados        = lazy(() => import('./modules/comercial/PagosUnificados'));
 const EstrategiaProducto     = lazy(() => import('./modules/comercial/EstrategiaProducto'));
 const MarketingCliente       = lazy(() => import('./modules/comercial/MarketingCliente'));
 const AnalisisCliente        = lazy(() => import('./modules/comercial/AnalisisCliente'));
@@ -613,6 +614,7 @@ export default function App() {
                   : <InventarioGlobal />)
               : <SinAcceso motivo="No tienes acceso a Inventario." />
           )}
+          {paginaActiva === "pagos" && !clienteActivo && <PagosUnificados clienteKey={null} />}
           {paginaActiva === "cobranzaGlobal" && (
             puedeVerPestanaGlobal(perfil, "cobranza_global")
               ? (mobile
@@ -713,7 +715,7 @@ export default function App() {
               ? <CreditoCobranzaV2 cliente={c?.nombre || clienteActivo} clienteKey={clienteActivo} />
               : <CreditoCobranza cliente={c} clienteKey={clienteActivo} />
         )}
-        {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
+        {paginaActiva === "pagos"   && <PagosUnificados clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && (
               mobile

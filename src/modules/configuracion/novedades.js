@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.26.0', fecha: '2026-09-12', titulo: 'Pagos unificados',
+    items: [
+      'Una sola pestaña de Pagos para Digitalife, PCEL y Dicotech (desde el menú de cada cliente se abre filtrada): calendario del mes, flujo Calculado → Solicitado → Autorizado → Folio → Pagado, cálculo y evidencia por pago.',
+      'Motor automático: rebates mensuales y trimestrales (día 2), SPIFFs por sell in y por sell out vs cuota, dinámica de vendedores de Dicotech, marketing a fondo o pagado por la empresa, fijos. Reglas por cliente con candado.',
+      '"Copiar correo" con los formatos reales; pago vía nota de crédito con lectura del PDF (folio, factura aplicada, importe). Fondos por cliente con estado de cuenta. Versión móvil: bandeja por acción, detalle, copiar correo y registrar pago.',
+    ],
+  },
+  {
     version: '3.25.0', fecha: '2026-09-12', titulo: 'Pasada de rendimiento',
     items: [
       'Arranque web 25 % más ligero (232 → 173 KB) y primera visita en el celular 87 % más ligera (5 MB → 650 KB): el service worker ya sólo precarga el cascarón.',

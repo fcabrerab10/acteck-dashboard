@@ -65,6 +65,9 @@ const GRUPOS_BASE = [
     id: 'clientesPropios', label: 'Clientes propios', icon: Users, color: '#34C759',
     nodos: [
       { pagina: 'resumenClientes',   label: 'Resumen de Clientes',   icon: BarChart3 },
+      // Pagos V3 · una sola pantalla para los tres clientes; se ve si el perfil ve `pagos` de al menos un cliente.
+      { pagina: 'pagos',             label: 'Pagos',                 icon: Wallet,
+        ver: (perfil) => CLIENTES_ORDEN.some((k) => puedeVerPestanaCliente(perfil, k, 'pagos')) },
       { pagina: 'propuestas',        label: 'Propuestas',            icon: ClipboardList },
       { pagina: 'estrategiaPrecios', label: 'Estrategia de Precios', icon: TrendingUp },
       { pagina: 'forecastReservas',  label: 'Forecast',              icon: Target },
@@ -99,7 +102,9 @@ export function construirArbol(perfil, { movil = false } = {}) {
   for (const g of GRUPOS_BASE) {
     const nodos = g.nodos
       .filter((n) => !(movil && n.soloWeb))
-      .filter((n) => (n.tipo === 'enlace' ? !!perfil.es_super_admin : puedeVerPaginaGlobal(perfil, n.pagina)))
+      .filter((n) => (typeof n.ver === 'function'
+        ? n.ver(perfil)
+        : (n.tipo === 'enlace' ? !!perfil.es_super_admin : puedeVerPaginaGlobal(perfil, n.pagina))))
       .map((n) => ({ ...n, id: n.pagina, tipo: n.tipo || 'global', clienteKey: null, grupo: g.id, grupoLabel: g.label, color: g.color }));
     let clientes = [];
     if (g.clientes) {

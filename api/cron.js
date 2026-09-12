@@ -35,6 +35,8 @@ const SHEET_NAME = process.env.MASTER_EMBARQUES_SHEET_NAME || String(new Date().
 import { parseCSV, transformEmbarques, HOJAS_HISTORICAS, anioDeHoja } from './_embarques.js';
 // Tracking Pedidos V3: la misma lógica pura que usa la pantalla (etapas derivadas, backorder, facturas sin OC).
 import { calcularTodo, backorderPorSku, facturasSinOC } from '../src/modules/comercial/tracking/calculo.js';
+// Pagos V3 · el mismo motor puro que usa la pantalla (no duplicar fórmulas aquí).
+import { taskPagosCalcular as _taskPagosCalcular, reglasAlertasPagos } from './_pagos.js';
 import { ETAPA_LABEL as ETAPA_LABEL_TRACKING, DIAS_DETENIDA } from '../src/modules/comercial/tracking/textos.js';
 
 async function upsertChunks(rows) {
@@ -1194,6 +1196,8 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['agenda_vencida',         () => reglaAgendaVencida(hoy)],
     ['agenda_asignado',        () => reglaAgendaAsignado(hoy)],
     ['equipo_inactivo',        () => reglaEquipoInactivo(hoy)],   // Actividad del equipo (bloque al final de las reglas)
+    // Pagos V3 · pago_por_solicitar · pago_sin_autorizar_5d · pago_sin_folio · pago_vence_7d · fondo_negativo
+    ['pagos_v3',               () => reglasAlertasPagos({ sbGetAll, hoy })],
   ];
   _datosTracking = null;
   _agenda = null;   // datos frescos por corrida (la instancia serverless puede reutilizarse)
@@ -1306,6 +1310,21 @@ const SEV_ORDEN_N = { critica: 0, alta: 1, media: 2, info: 3 };
 const SEV_COLOR = { critica: '#FF3B30', alta: '#FF9500', media: '#FFCC00', info: '#007AFF' };
 const APP_URL = process.env.APP_URL || 'https://acteck-dashboard.vercel.app';
 const esDryRun = () => process.env.RESUMEN_DRY_RUN === '1';
+
+// Pagos V3 · día 2 de cada mes, 08:00 CDMX: calcula el mes cerrado y crea los pagos faltantes
+// (idempotente por clave_calculo: volver a correrlo no duplica nada).
+async function taskPagosCalcular({ dryRun = esDryRun() } = {}) {
+  const sbPost = async (tabla, filas) => {
+    const r = await fetch(`${SB_URL}/rest/v1/${tabla}`, {
+      method: 'POST',
+      headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(normalizarFilasAlertas(filas)),
+    });
+    if (!r.ok) throw new Error(`${tabla} → HTTP ${r.status} ${(await r.text()).slice(0, 300)}`);
+  };
+  return _taskPagosCalcular({ sbGetAll, sbPost, hoy: hoyCDMX(), dryRun });
+}
+
 
 function prefsNotif(perfil) {
   const n = perfil?.preferencias?.notif || {};
@@ -1519,13 +1538,15 @@ export default async function handler(req, res) {
       const dryRun = esDryRun() || q.dryRun === '1';
       const hora = q.hora != null && q.hora !== '' ? Number(q.hora) : null;
       result = await taskResumenProgramado({ dryRun, hora: Number.isFinite(hora) ? hora : null });
+    } else if (task === 'pagos-calcular') {
+      result = await taskPagosCalcular({ dryRun: esDryRun() || req.query?.dryRun === '1' });
     } else if (task === 'agenda-hoy') {
       // Agenda (V3): resumen diario por persona a las 08:30 CDMX (vercel.json: 30 14 * * 1-6 UTC)
       result = await taskAgendaHoy({ dryRun: esDryRun() || req.query?.dryRun === '1' });
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | tipo-cambio | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1]',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | tipo-cambio | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1] | pagos-calcular[&dryRun=1]',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

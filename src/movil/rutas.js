@@ -28,6 +28,7 @@ const Equipo           = lazy(() => import('./pestanas/equipo/Equipo'));
 const Admin            = lazy(() => import('./pestanas/admin/Admin'));
 const Tracking         = lazy(() => import('./pestanas/tracking/Tracking'));
 const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
+const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Ninguna aparece como nodo salvo `inicio`. */
 export const TABS_RAIZ = ['inicio', 'clientes', 'alertas', 'buscar'];
@@ -37,6 +38,8 @@ const ficha = () => ({ tipo: 'push', key: 'ficha', el: h(FichaProducto) });
 
 // Páginas globales (nodo.clienteKey == null) → pantalla móvil.
 const GLOBALES = {
+  // Pagos V3 · Hoy (por solicitar · autorizar · sin folio · vence), calendario y fondos.
+  pagos:             () => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil) }),
   inicio:            () => tab('inicio'),
   resumenClientes:   () => tab('clientes'),           // "Resumen de Clientes" = pestaña Clientes (propios · canales ERP)
   alertas:           () => tab('alertas'),            // no son nodos del árbol: los usan la barra superior y Buscar
@@ -67,6 +70,7 @@ const GLOBALES = {
 // Pestañas de cliente propio (nodo.clienteKey = digitalife | pcel | dicotech).
 const CLIENTE = {
   home:   (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(FichaCliente, { clienteKey: ck }) }),
+  pagos:  (ck) => ({ tipo: 'push', key: `pagos-${ck}`, el: h(PagosMovil, { clienteKey: ck }) }),
   sellIn: (ck) => ({ tipo: 'push', key: `sellin-${ck}`, el: h(SellInCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
   estrategia: (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
   sellOut:    (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),

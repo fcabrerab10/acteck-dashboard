@@ -36,7 +36,10 @@ export const SILUETAS = {
   inventarioDrill: [fila(5, 22), grid('minmax(0,1.2fr) minmax(0,1fr)', [tabla(8, 4, { alto: 220 }), panel(5, { alto: 220 })])],
   cobranza: [hero(3), kpis(4), grid('repeat(2, minmax(0,1fr))', [chart(150), panel(6)]), fila(3, 28), tabla(12, 7), panel(1, { alto: 44 })],
   cobranzaGlobal: [hero(3), kpis(4), tabla(10, 6)],
-  pagos: [hero(3), kpis(4), fila(5, 32), fila(4, 26), tabla(10, 8), panel(1, { alto: 44 }), panel(1, { alto: 44 })],
+  // Pagos V3 · hero 4 stats · 4 KPIs · flujo de 5 etapas · calendario · filtros · tabla · cálculo · fondos · plegables
+  pagos: [hero(4), kpis(4), fila(5, 54), panel(6, { alto: 300 }), fila(4, 28), fila(8, 24), tabla(12, 8), grid('repeat(2, minmax(0,1fr))', [panel(6, { alto: 220 }), panel(6, { alto: 220 })]), panel(5, { alto: 170 }), panel(1, { alto: 44 }), panel(1, { alto: 44 })],
+  pagosDrill: [fila(5, 44), panel(5, { alto: 160 }), panel(4, { alto: 130 }), fila(4, 30)],
+  movilPagos: [fila(2, 26), kpis(2, 'repeat(2, minmax(0,1fr))'), panel(6, { alto: 240 }), panel(4, { alto: 160 })],
   marketing: [hero(3), kpis(4), fila(6, 34), fila(8, 28), grid('minmax(0,0.9fr) minmax(0,1.4fr)', [panel(8, { alto: 320 }), [panel(7, { alto: 300 }), panel(1, { alto: 44 })]])],
   home: [hero(3), kpis(4), chart(280), tabla(6, 5, { alto: 240 }), tabla(6, 5, { alto: 220 }), panel(4, { alto: 180 }), panel(5, { alto: 200 }), panel(4, { alto: 220 }), panel(4, { alto: 180 }), panel(1, { alto: 44 })],
   analisis: [fila(2, 40), panel(4, { alto: 120 }), panel(9, { alto: 500 }), panel(8, { alto: 450 }), panel(6, { alto: 400 }), panel(5, { alto: 250 })],
