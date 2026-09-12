@@ -19,6 +19,13 @@
 //   CRON_SECRET                  (opcional, si está valida header)
 //   RESUMEN_DRY_RUN=1            (no enviar correos en resumen-programado / críticas)
 
+// PostgREST exige que todas las filas de un POST masivo traigan las MISMAS llaves.
+function normalizarFilasAlertas(rows) {
+  const llaves = new Set(); rows.forEach((r) => Object.keys(r).forEach((k) => llaves.add(k)));
+  const ks = [...llaves];
+  return rows.map((r) => Object.fromEntries(ks.map((k) => [k, r[k] === undefined ? null : r[k]])));
+}
+
 const SB_URL = process.env.VITE_SUPABASE_URL || 'https://hrhccvuhnedahznewgaj.supabase.co';
 const SRK    = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SHEET_ID   = process.env.MASTER_EMBARQUES_SHEET_ID;
@@ -1083,7 +1090,7 @@ async function taskAgendaHoy({ dryRun = esDryRun() } = {}) {
   }
   let upsert = null;
   if (alertas.length && !dryRun) {
-    const r = await fetch(`${SB_URL}/rest/v1/alertas?on_conflict=clave`, { method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(alertas) });
+    const r = await fetch(`${SB_URL}/rest/v1/alertas?on_conflict=clave`, { method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(normalizarFilasAlertas(alertas)) });
     upsert = r.ok ? 'ok' : `HTTP ${r.status} ${(await r.text()).slice(0, 200)}`;
   }
   return { ok: !upsert || upsert === 'ok', dryRun, hoy: hoy.iso, alertas: alertas.length, upsert, correos, omitidos };
@@ -1229,7 +1236,10 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     upserts.push(base); cnt(c.tipo, 'actualizadas');
   }
 
-  const postUpsert = async (rows) => {
+  // PostgREST exige que todas las filas de un mismo POST traigan las MISMAS llaves: las reglas nuevas
+  // (agenda, tracking, equipo) agregan campos (para_usuario, meta…) que las viejas no traen. Se normaliza.
+  const postUpsert = async (rowsSinNormalizar) => {
+    const rows = normalizarFilasAlertas(rowsSinNormalizar);
     for (let i = 0; i < rows.length; i += 200) {
       const r = await fetch(`${SB_URL}/rest/v1/alertas?on_conflict=clave`, {
         method: 'POST',
