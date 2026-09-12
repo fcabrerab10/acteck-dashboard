@@ -1995,7 +1995,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           // Crecimiento (ratio últimos 3m / 3m anteriores)
           let crecimiento = 0;
           if (soSinMesActual.length >= 6) {
-            const sumUlt = ultimos3.reduce((s, r) => s + (r.piezas || 0), 0);
+            // `ultimos3` no existe en este alcance (ReferenceError latente): los 3 meses cerrados son los últimos de soSinMesActual.
+            const sumUlt = soSinMesActual.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0);
             const anteriores3 = soSinMesActual.slice(-6, -3);
             const sumAnt = anteriores3.reduce((s, r) => s + (r.piezas || 0), 0);
             if (sumAnt > 0) crecimiento = (sumUlt / sumAnt) - 1;

@@ -100,27 +100,28 @@ export default function AnalisisClientesGlobal() {
   const sel = { height: 30, padding: '0 10px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, cursor: 'pointer' };
   const sensibleTip = 'Sólo visible con permiso de información sensible';
 
+  // Columnas compactas (regla de ancho): el Nº de cliente va dentro del nombre, no hay columna vacía de sell-out
+  // (para eso está la pestaña Sell Out) y las cabeceras son cortas para que la tabla quepa en la tarjeta.
   const columnas = [
-    { key: 'cliente', label: 'Nº cliente', align: 'left', width: 78, mono: true, sort: true, render: (r) => <span style={{ color: r.esGrupo ? theme.textMuted : theme.text, fontSize: 10.5 }}>{r.esGrupo ? '—' : r.cliente}</span> },
-    { key: 'nombre', label: 'Cliente', align: 'left', maxWidth: 240, sort: true, render: (r) => (
+    { key: 'nombre', label: 'Cliente', align: 'left', maxWidth: 220, sort: true, render: (r) => (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: r.esGrupo || r.propio ? 600 : 500 }}>{r.nombre}</span>
+        {!r.esGrupo && r.cliente && <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{r.cliente}</span>}
         {r.propio && <Pill tone="inverse" size="xs">propio</Pill>}
       </span>
     ) },
-    { key: 'canal', label: 'Canal', align: 'left', width: 92, sort: true, render: (r) => (r.esGrupo ? <span style={{ color: theme.textMuted, fontSize: 10.5 }}>varios</span> : <Pill tone={toneCanal(r.canal)} size="xs">{labelCanal(r.canal)}</Pill>) },
-    { key: 'fact_bruta', fmt: moneyFull, label: 'Fact. bruta', sort: true, sum: true, render: (r) => moneyFull(r.fact_bruta) },
-    { key: 'devoluciones', fmt: moneyFull, label: 'Devoluciones', sort: true, sum: true, render: (r) => <span style={{ color: r.devoluciones < 0 ? theme.red : theme.textMuted }}>{moneyFull(r.devoluciones)}</span> },
-    { key: 'rmas', fmt: moneyFull, label: 'Notas crédito', sort: true, sum: true, render: (r) => <span style={{ color: r.rmas < 0 ? theme.red : theme.textMuted }}>{moneyFull(r.rmas)}</span> },
+    { key: 'canal', label: 'Canal', align: 'left', width: 84, sort: true, render: (r) => (r.esGrupo ? <span style={{ color: theme.textMuted, fontSize: 10.5 }}>varios</span> : <Pill tone={toneCanal(r.canal)} size="xs">{labelCanal(r.canal)}</Pill>) },
+    { key: 'fact_bruta', fmt: moneyFull, label: 'Bruta', sort: true, sum: true, render: (r) => moneyFull(r.fact_bruta) },
+    { key: 'devoluciones', fmt: moneyFull, label: 'Devol.', sort: true, sum: true, render: (r) => <span style={{ color: r.devoluciones < 0 ? theme.red : theme.textMuted }}>{moneyFull(r.devoluciones)}</span> },
+    { key: 'rmas', fmt: moneyFull, label: 'NC', sort: true, sum: true, render: (r) => <span style={{ color: r.rmas < 0 ? theme.red : theme.textMuted }}>{moneyFull(r.rmas)}</span> },
     { key: 'bonificaciones', fmt: moneyFull, label: 'Bonif.', sort: true, sum: true, render: (r) => <span style={{ color: r.bonificaciones < 0 ? theme.orange : theme.textMuted }}>{moneyFull(r.bonificaciones)}</span> },
     { key: 'fact_neta', fmt: moneyFull, label: 'Fact. neta', sort: true, sum: true, bold: true, render: (r) => moneyFull(r.fact_neta) },
     { key: 'venta_neta', fmt: moneyFull, label: 'Venta neta', sort: true, sum: true, render: (r) => moneyFull(r.venta_neta) },
-    { key: 'piezas', fmt: int, label: 'Piezas', sort: true, sum: true, render: (r) => int(r.piezas) },
-    { key: 'yoy', label: 'Δ YoY', width: 78, sort: true, render: (r) => <DeltaPill value={r.yoy} />, renderTotal: (v) => <DeltaPill value={v} /> },
-    ...(verSensible ? [{ key: 'mc', label: 'MC %', width: 62, sort: true, render: (r) => <span style={{ color: r.mc == null ? theme.textMuted : r.mc < 0 ? theme.red : theme.text }}>{pct(r.mc)}</span>, renderTotal: (v) => pct(v) }] : []),
-    { key: 'sellout', label: 'Sell-out', width: 64, render: () => <span title="Próximamente" style={{ color: theme.textSubtle || theme.textMuted }}>—</span> },
+    { key: 'piezas', fmt: int, label: 'Pz', sort: true, sum: true, render: (r) => int(r.piezas) },
+    { key: 'yoy', label: 'YoY', width: 64, sort: true, render: (r) => <DeltaPill value={r.yoy} />, renderTotal: (v) => <DeltaPill value={v} /> },
+    ...(verSensible ? [{ key: 'mc', label: 'MC %', width: 56, sort: true, render: (r) => <span style={{ color: r.mc == null ? theme.textMuted : r.mc < 0 ? theme.red : theme.text }}>{pct(r.mc)}</span>, renderTotal: (v) => pct(v) }] : []),
   ];
-  const totalesFila = { ...totales, mc: totales.mc, yoy: totales.yoy, sellout: '' };
+  const totalesFila = { ...totales, mc: totales.mc, yoy: totales.yoy };
 
   const excelClientes = () => {
     const todos = [...agg.clientes].filter((c) => (origen === 'propios' ? c.propio : origen === 'erp' ? !c.propio : true)).filter((c) => canalFiltro === 'TODOS' || c.canal === canalFiltro).map(aplanar).sort((a, b) => b.fact_neta - a.fact_neta);
