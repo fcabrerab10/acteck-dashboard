@@ -3,7 +3,7 @@
 // filas: objetos · onRowClick · orden {col, dir} + onSort · totales (fila final calculada de sum:true o pasada).
 // grupos (opcional): fila superior de cabecera [{ label, colSpan, color }] — p. ej. un bloque por año en tablas multi-año.
 // rowStyle (opcional): (row) → estilo extra de la fila (p. ej. fondo de fila seleccionada); el hover lo respeta.
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -13,6 +13,20 @@ const GRUPO_H = 24;
 export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id ?? i, onRowClick, orden, onSort, totales, maxHeight, vacio = 'Sin datos.', dense = false, renderExpandido, expandidoKey, grupos, rowStyle }) {
   const { theme } = useTheme();
   const hair = `1px solid ${theme.divider || theme.border}`;
+  // Ancho visible del contenedor: el drill de una fila (renderExpandido) se pinta sticky a ese ancho,
+  // para que nunca haya que desplazarse horizontalmente para verlo aunque la tabla sea más ancha.
+  const scrollRef = useRef(null);
+  const [anchoVisible, setAnchoVisible] = useState(0);
+  useEffect(() => {
+    if (!renderExpandido) return undefined;
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const medir = () => setAnchoVisible(el.clientWidth);
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [renderExpandido]);
   const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, background: theme.surface, zIndex: 1, whiteSpace: 'nowrap' };
   const td = { padding: dense ? '3px 6px' : '5px 8px', borderBottom: `1px solid ${theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
   const alignOf = (c) => c.align || 'right';
@@ -20,7 +34,7 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
     ? Object.fromEntries(columnas.filter((c) => c.sum).map((c) => [c.key, filas.reduce((s, r) => s + (Number(r[c.key]) || 0), 0)]))
     : totales;
   return (
-    <div style={{ overflow: 'auto', maxHeight, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface }}>
+    <div ref={scrollRef} style={{ overflow: 'auto', maxHeight, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
           {grupos && (
@@ -65,7 +79,11 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
                     </td>
                   ))}
                 </tr>
-                {abierto && <tr><td colSpan={columnas.length} style={{ padding: 0, borderBottom: `1px solid ${theme.border}` }}>{renderExpandido(r)}</td></tr>}
+                {abierto && (
+                  <tr><td colSpan={columnas.length} style={{ padding: 0, borderBottom: `1px solid ${theme.border}` }}>
+                    <div style={{ position: 'sticky', left: 0, width: anchoVisible ? anchoVisible - 2 : 'auto', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0, overflow: 'hidden' }}>{renderExpandido(r)}</div>
+                  </td></tr>
+                )}
               </React.Fragment>
             );
           })}

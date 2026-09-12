@@ -165,40 +165,50 @@ export default function SellOutGlobal() {
   const sel = { height: 30, padding: '0 10px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, cursor: 'pointer' };
   const maxTend = Math.max(1, ...filas.flatMap((f) => f.tendencia));
 
+  // Columnas compactas: el Nº de cliente va dentro de la celda del nombre y sucursales · clientes finales · vendedores
+  // se resumen en una sola columna "Red" (el detalle vive en el drill). Regla: nada de desplazarse a lo ancho.
+  const red = (f) => {
+    const partes = [];
+    if (f.sucursales != null) partes.push(`${fmtInt(f.sucursales)} suc`);
+    if (f.clientesFinales != null) partes.push(`${fmtInt(f.clientesFinales)} cf`);
+    if (f.vendedores != null) partes.push(`${fmtInt(f.vendedores)} vend`);
+    return partes.length ? partes.join(' · ') : null;
+  };
   const columnas = [
-    { key: 'erp', label: 'Nº cliente', align: 'left', width: 74, mono: true, sort: true, render: (f) => <span style={{ color: f.erp ? theme.text : theme.textMuted, fontSize: 10.5 }}>{f.erp || '—'}</span> },
-    { key: 'nombre', label: 'Cliente', align: 'left', maxWidth: 230, sort: true, render: (f) => (
+    { key: 'nombre', label: 'Cliente', align: 'left', maxWidth: 210, sort: true, render: (f) => (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: f.propio ? 600 : 500 }}>{f.nombre}</span>
+        {f.erp && <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{f.erp}</span>}
         {f.propio && <Pill tone="inverse" size="xs">propio</Pill>}
       </span>
     ) },
-    { key: 'canal', label: 'Canal', align: 'left', width: 92, sort: true, render: (f) => <Pill tone={canalTone(f.canal)} size="xs">{canalLabel(f.canal)}</Pill> },
+    { key: 'canal', label: 'Canal', align: 'left', width: 84, sort: true, render: (f) => <Pill tone={canalTone(f.canal)} size="xs">{canalLabel(f.canal)}</Pill> },
     // `sinFuente` = el cliente existe en el ERP y factura, pero nadie reporta su sell out
     // (Ingram retail representados, 04126). Se pinta "—", nunca $0.
-    { key: 'importe', label: `Sell out ${mesLbl}`, sort: true, bold: true, fmt: money, render: (f) => (f.sinFuente ? <span style={{ color: theme.textMuted }} title="Este cliente no reporta sell out a nadie">—</span> : money(f.importe)) },
-    { key: 'yoy', label: 'Δ YoY', width: 76, sort: true, render: (f) => (f.sinFuente ? '—' : <DeltaPill value={f.yoy} />), renderTotal: (v) => <DeltaPill value={v} /> },
+    { key: 'importe', label: `SO ${mesLbl}`, sort: true, bold: true, fmt: money, render: (f) => (f.sinFuente ? <span style={{ color: theme.textMuted }} title="Este cliente no reporta sell out a nadie">—</span> : money(f.importe)) },
+    { key: 'yoy', label: 'YoY', width: 64, sort: true, render: (f) => (f.sinFuente ? '—' : <DeltaPill value={f.yoy} />), renderTotal: (v) => <DeltaPill value={v} /> },
     { key: 'ytd', label: 'YTD', sort: true, fmt: fmtMoney, render: (f) => (f.sinFuente ? '—' : fmtMoney(f.ytd)) },
-    { key: 'sellIn', label: `Sell in ${mesLbl}`, sort: true, fmt: money, render: (f) => (f.cuenta === 'directo' ? <span style={{ color: theme.textMuted }}>=</span> : money(f.sellIn)) },
-    { key: 'soSi', label: 'SO / SI', width: 66, sort: true, render: (f) => (f.soSi == null ? '—' : <span title={f.soSi > 999 ? `${Math.round(f.soSi).toLocaleString('es-MX')} % — el sell in del mes apenas empieza` : undefined} style={{ color: f.soSi < 60 ? theme.orange : f.soSi > 999 ? theme.textMuted : theme.text }}>{f.soSi > 999 ? '> 999 %' : fmtPct(f.soSi)}</span>), renderTotal: (v) => fmtPct(v) },
+    { key: 'sellIn', label: `SI ${mesLbl}`, sort: true, fmt: money, render: (f) => (f.cuenta === 'directo' ? <span style={{ color: theme.textMuted }}>=</span> : money(f.sellIn)) },
+    { key: 'soSi', label: 'SO/SI', width: 60, sort: true, render: (f) => (f.soSi == null ? '—' : <span title={f.soSi > 999 ? `${Math.round(f.soSi).toLocaleString('es-MX')} % — el sell in del mes apenas empieza` : undefined} style={{ color: f.soSi < 60 ? theme.orange : f.soSi > 999 ? theme.textMuted : theme.text }}>{f.soSi > 999 ? '> 999 %' : fmtPct(f.soSi)}</span>), renderTotal: (v) => fmtPct(v) },
     { key: 'invValor', label: 'Inv. cliente', sort: true, fmt: fmtMoney, render: (f) => (f.invValor == null ? <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span> : fmtMoney(f.invValor)) },
-    { key: 'invSemanas', label: 'Sem. inv.', width: 64, sort: true, render: (f) => (f.invSemanas == null ? '—' : <span style={{ color: f.invSemanas > 12 ? theme.orange : theme.text }}>{f.invSemanas.toFixed(1)}</span>) },
-    { key: 'sucursales', label: 'Sucursales', width: 74, sort: true, render: (f) => (f.sucursales == null ? '—' : fmtInt(f.sucursales)) },
-    { key: 'clientesFinales', label: 'Clientes finales', width: 92, sort: true, render: (f) => (f.clientesFinales == null ? '—' : fmtInt(f.clientesFinales)) },
-    { key: 'vendedores', label: 'Vendedores', width: 78, sort: true, render: (f) => (f.vendedores == null ? '—' : fmtInt(f.vendedores)) },
-    { key: 'tendencia', label: '6 m', align: 'left', width: 168, render: (f) => (
+    { key: 'invSemanas', label: 'Sem.', width: 48, sort: true, render: (f) => (f.invSemanas == null ? '—' : <span style={{ color: f.invSemanas > 12 ? theme.orange : theme.text }}>{f.invSemanas.toFixed(1)}</span>) },
+    { key: 'clientesFinales', label: 'Red', align: 'left', width: 150, sort: true, render: (f) => {
+      const t = red(f);
+      return t ? <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{t}</span> : <span style={{ color: theme.textMuted }}>—</span>;
+    } },
+    { key: 'tendencia', label: '6 m', align: 'left', width: 150, render: (f) => (
       f.sinFuente ? <span style={{ color: theme.textMuted, fontSize: 10.5 }}>—</span> : (
-        <span style={{ display: 'inline-flex', gap: 2 }}>
+        <span style={{ display: 'inline-flex', gap: 1 }}>
           {f.tendencia.map((v, i) => <HeatCell key={i} v={v} max={maxTend} fmt={(n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}K`)} />)}
         </span>
       )
     ) },
   ];
   const totalesFila = {
-    erp: null, nombre: `${filas.length} cuentas`, canal: '',
+    nombre: `${filas.length} cuentas`, canal: '',
     importe: totales.importe, yoy: totales.yoy, ytd: totales.ytd, sellIn: totales.sellIn, soSi: totales.soSi,
-    invValor: totales.invValor, invSemanas: '', sucursales: totales.sucursales,
-    clientesFinales: totales.clientesFinales, vendedores: totales.vendedores, tendencia: '',
+    invValor: totales.invValor, invSemanas: '', tendencia: '',
+    clientesFinales: [totales.sucursales != null ? `${fmtInt(totales.sucursales)} suc` : null, totales.clientesFinales != null ? `${fmtInt(totales.clientesFinales)} cf` : null, totales.vendedores != null ? `${fmtInt(totales.vendedores)} vend` : null].filter(Boolean).join(' · '),
   };
 
   const excel = () => ({
