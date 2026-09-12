@@ -8,6 +8,7 @@ import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const LIMITE_FUNCIONES = 12;
+const AVISO_FUNCIONES = 9; // desde aquí avisa para no llegar al límite sin darse cuenta
 const LIMITE_CRONS = 20;
 const raiz = process.cwd();
 const errores = [];
@@ -48,4 +49,5 @@ if (errores.length) {
   for (const e of errores) console.error(`• ${e}\n`);
   process.exit(1);
 }
+if (fns.length >= AVISO_FUNCIONES) console.warn(`⚠ api/ ya tiene ${fns.length} funciones de ${LIMITE_FUNCIONES}: la próxima va dentro de api/admin.js u otra existente.`);
 console.log(`✓ Deploy verificado: ${fns.length}/${LIMITE_FUNCIONES} funciones, vercel.json OK, imports OK.`);
