@@ -141,10 +141,19 @@ const padId = (v) => { const s = String(v ?? '').trim(); return /^\d+$/.test(s) 
 
 /**
  * Agrega las filas de BP a una por (cliente, año, mes).
- * ctx.cols = [idcliente, nombrecliente, fecha, cuota_minima, cuota_vendor] (nombres reales de la vista).
+ * ctx.cols = [idcliente, nombrecliente, fecha, cuota_minima, cuota_vendor, cuota_piezas, cuota_costo]
+ *            (nombres reales de la vista; las dos últimas son opcionales).
+ *
+ * Medidas del director que salen de aquí (docs/MEDIDAS_DIRECTOR.md §2):
+ *   Cuota Minima  = SUM(BP[CUOTAMINIMA])    → cuota_min
+ *   Cuota Venta   = SUM(BP[IMPORTEDEVENTA]) → cuota_ideal
+ *   Cuota Piezas  = SUM(BP[UNIDADES])       → cuota_piezas   (null si la columna no viene)
+ *   Cuota Costo   = SUM(BP[COSTODEVENTA])   → cuota_costo    (null si la columna no viene)
+ * Regla: si la columna no está configurada en CUOTAS_COLS, el campo va **null**, nunca 0
+ * (en pantalla sale "—" en vez de una meta inventada).
  */
 export function cuotasDesdeBP(rows, ctx) {
-  const [cId, cNom, cFecha, cMin, cVendor] = ctx.cols;
+  const [cId, cNom, cFecha, cMin, cVendor, cPiezas, cCosto] = ctx.cols;
   const acc = new Map();
   for (const row of rows) {
     const g = rowAccessor(row);
@@ -155,8 +164,10 @@ export function cuotasDesdeBP(rows, ctx) {
     if (Number.isNaN(d.getTime())) continue;
     const anio = d.getUTCFullYear(), mes = d.getUTCMonth() + 1;
     const key = `${id}|${anio}|${mes}`;
-    const cur = acc.get(key) || { id, nombre: g(cNom), anio, mes, min: 0, vendor: 0 };
+    const cur = acc.get(key) || { id, nombre: g(cNom), anio, mes, min: 0, vendor: 0, piezas: null, costo: null };
     cur.min += Math.max(min, 0); cur.vendor += Math.max(vendor, 0); if (g(cNom)) cur.nombre = g(cNom);
+    if (cPiezas) { const v = num(g(cPiezas)); if (v != null) cur.piezas = (cur.piezas ?? 0) + Math.max(v, 0); }
+    if (cCosto)  { const v = num(g(cCosto));  if (v != null) cur.costo  = (cur.costo  ?? 0) + Math.max(v, 0); }
     acc.set(key, cur);
   }
   const out = [];
@@ -166,7 +177,8 @@ export function cuotasDesdeBP(rows, ctx) {
     // Sólo cliente-mes con cuota mínima: en BP hay IMPORTEDEVENTA sin CUOTAMINIMA (2019-2022,
     // canal MOSTRADOR…) que no son cuotas. Sin cuota vendor la meta cae a la mínima, como antes.
     if (c.min <= 0) continue;
-    out.push({ cliente, anio: c.anio, mes: c.mes, cuota_min: c.min, cuota_ideal: c.vendor > 0 ? c.vendor : c.min });
+    out.push({ cliente, anio: c.anio, mes: c.mes, cuota_min: c.min, cuota_ideal: c.vendor > 0 ? c.vendor : c.min,
+               cuota_piezas: c.piezas, cuota_costo: c.costo });
   }
   return out;
 }

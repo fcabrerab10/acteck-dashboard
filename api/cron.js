@@ -4,7 +4,7 @@
 //
 // Tareas:
 //   ?task=sync-master-embarques  → descarga Google Sheet y upserta a embarques_compras
-//   ?task=actualizar-fill-rates  → cruza OCs activas con ventas_erp
+//   ?task=actualizar-fill-rates  → cruza OCs activas con erp_ventas
 //   ?task=generar-alertas        → bandeja "qué atender hoy" (tabla alertas). Al final
 //                                  manda por correo las críticas nuevas (salvo dryRun).
 //   ?task=resumen-programado     → correo-resumen por usuario (perfiles.preferencias.notif)
@@ -759,7 +759,10 @@ async function reglaRebatePorGenerar(hoy) {
 // captura la propia app (sellout_sku, inventario_cliente, cuotas_mensuales,
 // roadmap_sku) no aplican al mensaje "sube el archivo".
 const FUENTES_UPLOAD = [
-  'facturacion_clientes', 'erp_ventas', 'inventario_acteck', 'sellout_general', 'sellout_detalle',
+  'facturacion_clientes', 'erp_ventas', 'inventario_acteck', 'sellout_general',
+  // sellout_detalle se alerta por cliente (cada uno sube su archivo por su lado); la fila
+  // agregada 'sellout_detalle' se queda fuera para no duplicar la alerta.
+  'sellout_detalle_digitalife', 'sellout_detalle_dicotech',
   'sellout_pcel', 'precios_sku', 'compras_oc', 'embarques_compras', 'estados_cuenta', 'guias_erp',
   'programacion_arribos',
 ];

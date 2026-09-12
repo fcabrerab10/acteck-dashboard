@@ -196,6 +196,55 @@ cd ~/acteck/acteck-dashboard && git pull --rebase && cd bridge && npm ci
 ```
 No hay que reinstalar los agentes salvo que cambien los plists (`./launchd/install.sh`). **2026-09-11: sí hay que reinstalar** para que aparezca `com.acteck.sync.solicitudes` (latido + "Pedir corrida").
 
+### 2026-09-12 · Cuota Piezas y Cuota Costo (acción requerida en la Mac mini)
+
+El puente traía de `RevkoBi.dbo.BP` sólo `CUOTAMINIMA` (→ `cuotas_mensuales.cuota_min`) e
+`IMPORTEDEVENTA` (→ `cuota_ideal`). Ahora también mapea **`UNIDADES` → `cuota_piezas`** y
+**`COSTODEVENTA` → `cuota_costo`** (`bridge/lib/mappers.mjs` → `cuotasDesdeBP`,
+`bridge/sync.mjs` → fuente `cuotas`). Con eso se encienden las medidas del director
+[Cuota Piezas], [Cuota Costo], [Cuota Contribucion], [Cuota % Contribucion],
+[% Alcance Piezas], [+/- Piezas] y [Deficit Contribucion]
+(`supabase/migrations/20260912_cuotas_piezas_costo.sql`, ya aplicada en producción).
+Mientras el puente no corra con las columnas nuevas, todas esas medidas salen **NULL**
+(en pantalla "—"), nunca 0.
+
+**Pasos exactos en la Mac mini** (sin esto no se llenan las columnas: `credenciales.env`
+vive fuera de git y su `CUOTAS_COLS` de 5 columnas gana sobre el default del código):
+
+```bash
+cd ~/acteck/acteck-dashboard && git pull --rebase && cd bridge && npm ci
+
+# 1 · Confirmar los nombres REALES de las columnas en dbo.BP
+npm run test-conn            # imprime las columnas de cada vista configurada
+
+# 2 · Dejar CUOTAS_COLS con 7 columnas, en este orden
+#     idcliente,nombrecliente,fecha,cuota_minima,cuota_vendor,cuota_piezas,cuota_costo
+sed -i '' 's/^CUOTAS_COLS=.*/CUOTAS_COLS=IDCLIENTE,NOMBRECLIENTE,FECHA,CUOTAMINIMA,IMPORTEDEVENTA,UNIDADES,COSTODEVENTA/' credenciales.env
+grep CUOTAS_COLS credenciales.env
+
+# 3 · Probar sin escribir. El log debe decir "con cuota_piezas N/N · con cuota_costo N/N"
+node sync.mjs cuotas --dry-run --top 5000
+
+# 4 · Corrida real (reemplaza los años presentes en BP)
+node sync.mjs cuotas
+```
+
+Si el paso 3 imprime `⚠ … ninguna fila trajo valor`, el nombre de la columna en BP no es
+`UNIDADES`/`COSTODEVENTA`: corregirlo en `CUOTAS_COLS` con el nombre que salió en
+`npm run test-conn`. Si se quitan las dos últimas columnas de `CUOTAS_COLS`, el puente
+vuelve a escribir `NULL` en `cuota_piezas`/`cuota_costo` — nunca 0.
+No hay que reinstalar los plists (los agentes ya corren `cuotas` a las 06:30).
+
+**Carga manual:** el respaldo `uploads.html?fuente=cuotas-anuales` lee el Excel pivot
+"Cuotas &lt;AÑO&gt;.xlsx", que trae **un solo importe** por cliente-mes (`cuota_min = cuota_ideal`).
+Ese archivo no tiene unidades ni costo, así que no hay nada que replicar ahí: Cuota Piezas
+y Cuota Costo sólo pueden venir del puente.
+
+**`cuotas_canales`:** sigue sin tocarse. Es la meta **anual** por dimensión
+(`dimension_tipo` TOTAL/canal/marca) que se captura a mano, ya tiene `meta_piezas` y hoy
+está vacía; `BP` no expone una dimensión canal en las columnas que lee el puente, así que
+no se derivó nada desde ahí.
+
 **2026-09-11 · histórico diario de inventario.** Tras cada carga de `inventario` el puente llama al RPC `snapshot_inventario_diario()` (migración `20260911_inventario_historico.sql`), que guarda la foto del día CDMX en `inventario_historico` (la corrida de las 19:00 deja el cierre). Requiere `git pull` en la Mac mini y modo DIRECTO (service role key); no cambian los plists. pg_cron no está habilitado en Supabase; si algún día se habilita, la migración trae el `cron.schedule` equivalente.
 
 ## Problemas comunes

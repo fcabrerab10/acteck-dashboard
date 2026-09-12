@@ -56,10 +56,16 @@ async function fetchAll(path) {
   return rows;
 }
 
-// Helpers para leer ambas variantes de columna en ventas_erp
-// (snake_case original vs sin underscores que mete el upload nuevo).
+// 2026-09-12: la fuente es `erp_ventas` (la carga el puente SQL cada hora).
+// Antes era `ventas_erp`, congelada desde el 2026-07-06. Mapeo de columnas:
+//   cliente_nombre → cliente_nombre · articulo → articulo · anio/mes → anio/mes
+//   movimiento_venta → movimiento_venta · precio_unidad_pesos → precio_unidad_pesos
+//   piezas → COALESCE(unidades, piezas)  (el ERP trae `Unidades` vacía desde el 2026-09-10;
+//   ver supabase/migrations/20260911_piezas_coalesce_unidades.sql)
+// Los helpers siguen aceptando las variantes sin underscore por si se recarga un
+// respaldo viejo; `erp_ventas` sólo trae la forma snake_case.
 function getCliente(row)        { return String(row.cliente_nombre || row.clientenombre || '').trim(); }
-function getPiezas(row)         { return Number(row.piezas || row.cantidad) || 0; }
+function getPiezas(row)         { return Number(row.unidades ?? row.piezas ?? row.cantidad) || 0; }
 function getPrecioUnidad(row)   { return Number(row.precio_unidad_pesos ?? row.precioporunidadpesos) || 0; }
 function getMovimiento(row)     { return String(row.movimiento_venta || row.movimientoventa || '').trim(); }
 function montoFacturado(row) {
@@ -69,9 +75,9 @@ function montoFacturado(row) {
   return getPiezas(row) * getPrecioUnidad(row);
 }
 
-// Recalc ventas_mensuales from ventas_erp
+// Recalc ventas_mensuales from erp_ventas
 async function recalcVentasMensuales() {
-  const rows = await fetchAll('ventas_erp?select=cliente_nombre,clientenombre,anio,mes,piezas,cantidad,precio_unidad_pesos,precioporunidadpesos,movimiento_venta,movimientoventa');
+  const rows = await fetchAll('erp_ventas?select=cliente_nombre,anio,mes,unidades,piezas,precio_unidad_pesos,movimiento_venta');
 
   // Aggregate by (cliente, anio, mes)
   const agg = {};
@@ -122,9 +128,9 @@ async function recalcVentasMensuales() {
   return { table: 'ventas_mensuales', count: upsertRows.length };
 }
 
-// Recalc sell_in_sku from ventas_erp
+// Recalc sell_in_sku from erp_ventas
 async function recalcSellInSku() {
-  const rows = await fetchAll('ventas_erp?select=cliente_nombre,clientenombre,anio,mes,articulo,piezas,cantidad,precio_unidad_pesos,precioporunidadpesos,movimiento_venta,movimientoventa');
+  const rows = await fetchAll('erp_ventas?select=cliente_nombre,anio,mes,articulo,unidades,piezas,precio_unidad_pesos,movimiento_venta');
 
   const agg = {};
   for (const row of rows) {
@@ -243,7 +249,7 @@ async function recalcSelloutSku() {
 const RECALC_MAP = {
   ventas_mensuales: recalcVentasMensuales,
   // sell_in_sku desactivado (2026-05-14): ahora es una VISTA sobre
-  // facturacion_clientes — no se recalcula desde ventas_erp.
+  // facturacion_clientes — no se recalcula aquí: la reconstruye refresh_facturacion_clientes(anios) desde erp_ventas.
   // sell_in_sku: recalcSellInSku,
   sellout_sku: recalcSelloutSku,
 };

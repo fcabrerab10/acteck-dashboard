@@ -1357,7 +1357,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const esPcel = clienteKey === "pcel";
     // Índices pre-agregados (evita O(N*M) re-filtrando en cada iter).
     // Sell In vive en `sell_in_sku`. Para Digitalife viene con sku "AC-XXXXXX"
-    // (articulo de ventas_erp). Para PCEL también es articulo Acteck, pero
+    // (articulo de erp_ventas). Para PCEL también es articulo Acteck, pero
     // catalogo_sku_pcel.modelo es "XXXXXX" (sin AC-). Por eso normalizamos
     // ambos lados con normModelo() para que las claves cuadren.
     const siByKey = {}, siMontoByKey = {}, soByKey = {}, soMontoByKey = {};
@@ -1883,7 +1883,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // backOrder y transito vienen de sellout_pcel (usa SKU numérico = p.sku)
         const backOrder    = (datos.backOrderBySkuPcel && datos.backOrderBySkuPcel[p.sku]) || 0;
         const transPcel    = (datos.transitoPcelBySku  && datos.transitoPcelBySku[p.sku])  || 0;
-        // histPcel viene de ventas_erp por articulo (= modelo Acteck)
+        // histPcel viene de erp_ventas por articulo (= modelo Acteck)
         const histPcelSku  = (datos.histPcel && (datos.histPcel[skuExterno] || datos.histPcel[p.sku])) || null;
         // Prom Compra:
         //   PCEL — promedio del histórico ERP (ya calculado en histPcelSku)
@@ -1912,7 +1912,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         //       Acteck o tránsito).
         //   (B) Está en el roadmap actual (si salió del catálogo, se quita).
         const tieneActividad =
-          facturasHist > 0 ||        // compra histórica en ventas_erp
+          facturasHist > 0 ||        // compra histórica en erp_ventas
           promedio90d > 0 ||         // sellout reciente
           stock > 0 ||               // inventario en PCEL
           invActeck > 0 ||           // inventario Acteck

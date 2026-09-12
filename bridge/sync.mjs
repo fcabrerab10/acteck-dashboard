@@ -109,13 +109,18 @@ const FUENTES = {
   cuotas: {
     src_id: 'cuotas-anuales', status_key: 'cuotas_mensuales', enabled: () => env('CUOTAS_SQL_HOST') && env('CUOTAS_VIEW'),
     run: async () => {
-      const cols = env('CUOTAS_COLS', 'IDCLIENTE,NOMBRECLIENTE,FECHA,CUOTAMINIMA,IMPORTEDEVENTA').split(',').map((s) => s.trim());
-      if (cols.length < 4) throw new Error('CUOTAS_COLS debe ser: idcliente,nombrecliente,fecha,cuota_minima[,cuota_vendor]');
+      const cols = env('CUOTAS_COLS', 'IDCLIENTE,NOMBRECLIENTE,FECHA,CUOTAMINIMA,IMPORTEDEVENTA,UNIDADES,COSTODEVENTA').split(',').map((s) => s.trim());
+      if (cols.length < 4) throw new Error('CUOTAS_COLS debe ser: idcliente,nombrecliente,fecha,cuota_minima[,cuota_vendor][,cuota_piezas][,cuota_costo]');
       const { rows: crudas, leidas } = await readView('CUOTAS', env('CUOTAS_VIEW'), { top, mapRow: (r) => r });
       const rows = M.cuotasDesdeBP(crudas, { cols });
       const anios = [...new Set(rows.map((r) => r.anio))].sort();
       const clientes = [...new Set(rows.map((r) => r.cliente))].sort();
+      const conPiezas = rows.filter((r) => r.cuota_piezas != null).length;
+      const conCosto  = rows.filter((r) => r.cuota_costo  != null).length;
       log(`  cuotas: ${leidas} leídas → ${rows.length} cliente-mes · años ${anios.join(',')} · ${clientes.length} clientes: ${clientes.join(', ')}`);
+      log(`  cuotas: con cuota_piezas ${conPiezas}/${rows.length} · con cuota_costo ${conCosto}/${rows.length}`);
+      if (cols.length >= 6 && conPiezas === 0) log('  ⚠ cuotas: UNIDADES está en CUOTAS_COLS pero ninguna fila trajo valor — revisa el nombre real de la columna en BP.');
+      if (cols.length >= 7 && conCosto === 0)  log('  ⚠ cuotas: COSTODEVENTA está en CUOTAS_COLS pero ninguna fila trajo valor — revisa el nombre real de la columna en BP.');
       await upsertRows('cuotas_mensuales', 'cliente,mes,anio', rows, { deleteAnios: anios, dryRun });
       return { filas: rows.length, detalles: { anios, leidas } };
     },

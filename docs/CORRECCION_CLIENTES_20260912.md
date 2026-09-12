@@ -200,11 +200,25 @@ drop table _respaldo_sellout_detalle_20260912, _respaldo_sellout_sku_20260912,
 - **`sellout_general` de DICOTECH sigue con las dos fuentes mezcladas en la tabla**
   (may–ago 2026). Se resuelve en vista, no en datos: borrar las filas `id < 0` de esos
   meses requiere autorización aparte.
-- **Fechas corridas un día en el histórico de Dicotech** anterior a 2026-05-01 y en todo
-  `sellout_detalle` de Digitalife: se cargaron con el `raw:false` que quitaba un día. El
-  parser ya está corregido, pero los datos viejos no se re-fecharon (movería ~1 día de
-  venta en cada frontera de mes). Recargar el histórico de Digitalife con el archivo
-  `~/Desktop/Actualización Dashboard/Historico Sellout Digitalife.xlsx` lo arreglaría.
+- ~~**Fechas corridas un día en el histórico de Dicotech** anterior a 2026-05-01 y en todo
+  `sellout_detalle` de Digitalife~~ — **verificado el 2026-09-12: el desfase NO existe.
+  No se tocó ningún dato.**
+
+  | Comprobación | Resultado |
+  |---|---|
+  | Digitalife: `~/Desktop/Actualización Dashboard/Historico Sellout Digitalife.xlsx` parseado con el mismo `XLSX.read(cellDates:true)` + `toISODate()` + `row_hash` de `src/lib/parsers/digitalife.js`, contra las 18,299 filas de la carga del 2026-04-16 | **549/549 días cuadran con desfase 0** y diferencia de piezas **0** (20,809 pz en ambos lados). Con −1 día cuadran 9/549; con +1, 9/549 |
+  | Dicotech &lt; 2026-05-01 (34,801 filas, carga del 2026-05-26) contra `v_sellout_general_dicotech` (puente SQL, pipeline independiente) | **477 días, diferencia de piezas 0**. Con ±1 día la diferencia salta a 41,891 / 41,988 pz |
+  | Control: Dicotech 2026-05-18 → 08-31, ya recargado con el parser corregido (`raw:true`), contra `v_sellout_general_dicotech` | desfase 0 también es el mejor (2,395 pz de ruido por el doble origen de `sellout_general`, vs 8,309 / 10,987 pz con ±1 día) |
+  | 20 filas de muestra (Dicotech 2025-03-01, SKU a SKU) contra `sellout_general` | mismas cantidades en la **misma** fecha |
+
+  Motivo: `toISODate()` de `src/lib/parsers/_util.js` es seguro en ambas ramas — el serial
+  de Excel se convierte en UTC y el `Date` que produce `cellDates:true` es medianoche
+  **local**, que en UTC−6 cae a las 06:00Z del mismo día. El `raw:false` del parser de
+  Dicotech afectó al CSV nuevo de Revko (texto reformateado), no a estos dos históricos.
+
+  De haberse aplicado el `fecha + 1`, habrían cambiado de mes **2,004 filas / 3,882 piezas**
+  (Dicotech 1,126 filas / 2,824 pz · Digitalife 878 filas / 1,058 pz): el "arreglo" habría
+  sido el error.
 - **EdC PCEL ~semana 28/2025** (`~/Downloads/Clientes/PCEL/Antigüedad … PCEL.xlsx`,
   8-jul-2025): no se cargó porque el archivo no trae fecha al pie y la semana resultante
   no es verificable. Hay que confirmar con crédito la fecha del corte.

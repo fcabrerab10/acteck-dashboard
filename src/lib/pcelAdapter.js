@@ -110,9 +110,15 @@ export async function fetchSelloutSku(clienteKey, anio) {
 }
 
 /**
- * Trae historial de ventas de PCEL desde ventas_erp (cliente_nombre='PC ONLINE')
- * de los últimos `mesesAtras` meses. Agrupa por SKU y calcula:
+ * Trae historial de ventas de PCEL desde erp_ventas (cliente_key='pcel',
+ * = cliente_nombre 'PC ONLINE') de los últimos `mesesAtras` meses.
+ * Agrupa por SKU y calcula:
  *   - piezas_total, facturas_total, promedio_por_compra
+ *
+ * 2026-09-12: antes leía `ventas_erp`, congelada desde el 2026-07-06.
+ * Mapeo de columnas: articulo → articulo · periodo → periodo · folio → folio ·
+ * piezas → COALESCE(unidades, piezas) (la carga del ERP trae `Unidades` vacía
+ * desde el 2026-09-10; ver 20260911_piezas_coalesce_unidades.sql).
  *
  * Returns: { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
  */
@@ -123,9 +129,9 @@ export async function fetchHistoricoComprasPcel(mesesAtras = 6) {
 
   const rows = await fetchAllPages(() =>
     supabase
-      .from("ventas_erp")
-      .select("articulo, piezas, periodo, folio")
-      .eq("cliente_nombre", "PC ONLINE")
+      .from("erp_ventas")
+      .select("articulo, unidades, piezas, periodo, folio")
+      .eq("cliente_key", "pcel")
       .gte("periodo", desdeStr)
   );
 
@@ -133,7 +139,7 @@ export async function fetchHistoricoComprasPcel(mesesAtras = 6) {
   for (const r of rows) {
     const sku = (r.articulo || "").toString();
     if (!sku) continue;
-    const p = Number(r.piezas) || 0;
+    const p = Number(r.unidades ?? r.piezas) || 0;
     const folio = r.folio || "";
     if (!porSku[sku]) {
       porSku[sku] = {
