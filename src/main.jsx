@@ -22,15 +22,46 @@ const updateSW = registerSW({
   },
 })
 
+// ── Versión vieja en el navegador ──
+// Vercel no conserva los assets de deploys anteriores: si alguien tiene la app abierta con la versión
+// vieja y entra a una pestaña que aún no había cargado, el chunk da 404 y React tira "Se rompió algo".
+// Aquí se detecta ese caso (vite:preloadError o error de import dinámico) y, en vez del error, se
+// activa el SW nuevo y se recarga. Guardia de 60 s en sessionStorage para no entrar en bucle.
+const esErrorDeVersion = (err) => /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|error loading dynamically|Failed to fetch/i.test(String(err?.message || err || ''));
+let recuperando = false;
+async function recuperarVersion() {
+  if (recuperando) return;
+  recuperando = true;
+  const k = 'acteck_recarga_version';
+  let ultimo = 0;
+  try { ultimo = Number(sessionStorage.getItem(k) || 0); } catch { /* sin storage */ }
+  if (Date.now() - ultimo < 60_000) { recuperando = false; return; } // ya lo intentamos hace nada: que se vea el error
+  try { sessionStorage.setItem(k, String(Date.now())); } catch { /* sin storage */ }
+  try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch { /* sin SW */ }
+  try { await updateSW(true); } catch { /* sin SW nuevo esperando */ }
+  setTimeout(() => window.location.reload(), 1200);
+}
+window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); recuperarVersion(); });
+
 // ErrorBoundary temporal para diagnosticar crashes en producción
 class ErrorBoundary extends Component {
-  constructor(props) { super(props); this.state = { err: null, info: null }; }
-  static getDerivedStateFromError(err) { return { err }; }
+  constructor(props) { super(props); this.state = { err: null, info: null, actualizando: false }; }
+  static getDerivedStateFromError(err) { return { err, actualizando: esErrorDeVersion(err) }; }
   componentDidCatch(err, info) {
     this.setState({ info });
     console.error('[App crash]', err, info);
+    if (esErrorDeVersion(err)) recuperarVersion();
   }
   render() {
+    if (this.state.err && this.state.actualizando) {
+      return (
+        <div style={{ padding: 40, fontFamily: '-apple-system, sans-serif', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#6E6E73' }}>
+          <div style={{ fontSize: 17, fontWeight: 600, color: '#1D1D1F' }}>Actualizando el dashboard…</div>
+          <div style={{ fontSize: 13 }}>Hay una versión nueva. Se recarga sola en un momento.</div>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 10, padding: '8px 18px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 999, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Recargar ahora</button>
+        </div>
+      );
+    }
     if (this.state.err) {
       return (
         <div style={{ padding: 40, fontFamily: '-apple-system, sans-serif', background: '#FFF5F5', minHeight: '100vh' }}>
