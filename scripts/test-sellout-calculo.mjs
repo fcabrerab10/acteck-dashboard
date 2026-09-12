@@ -157,6 +157,30 @@ test('las fuentes mensuales comparan contra la misma fracción del mes anterior'
   assert.equal(filas.find((f) => f.cuenta === 'ct').importePrev, 150);
 });
 
+test('una cuenta sin fuente de sell out sale con sinFuente y su sell in va aparte', () => {
+  // Ingram retail representados (04126): factura, pero nadie reporta su sell out.
+  const cuentas = [...CUENTAS, {
+    cuenta: 'ingram_retail', fuente: null, nombre: 'INGRAM MICRO (RETAIL REPRESENTADOS)',
+    canal_sellout: 'mayoreo', erp_cliente: '04126', propio: false, granularidad: 'mes', tiene_sellout: false,
+  }];
+  const mensual = [...MENSUAL, { cuenta: 'ingram_retail', anio: 2026, mes: 9, importe: 0, cantidad: 0, sell_in: 2500, sell_in_piezas: 1800 }];
+  const filas = construirFilas({ cuentas, mensual, dias: DIAS, anio: 2026, mes: 9, corteDia: 30 });
+  const ir = filas.find((f) => f.cuenta === 'ingram_retail');
+  assert.equal(ir.sinFuente, true);
+  assert.equal(ir.importe, 0);
+  assert.equal(ir.yoy, null, 'sin sell out no hay YoY que enseñar');
+  assert.equal(ir.soSi, null, 'sin sell out no hay sell out / sell in');
+  assert.equal(ir.sellIn, 2500, 'su sell in sí se conserva');
+
+  const tot = totalesDeFilas(filas);
+  assert.equal(tot.sinFuente, 1);
+  assert.equal(tot.sellInSinFuente, 2500);
+  // El sell in de la cuenta sin fuente NO entra en el denominador del SO/SI del equipo.
+  assert.equal(tot.sellIn, totalesDeFilas(filas.filter((f) => !f.sinFuente)).sellIn);
+  // Las cuentas con fuente no cambian.
+  assert.equal(filas.find((f) => f.cuenta === 'ct').sinFuente, false);
+});
+
 test('totalesDeFilas sólo cuenta inventario de quien lo reporta y "sin estado" del mayoreo', () => {
   const filas = construirFilas({ cuentas: CUENTAS, mensual: MENSUAL, dias: DIAS, anio: 2026, mes: 9, corteDia: 10 });
   const t = totalesDeFilas(filas);

@@ -10,9 +10,12 @@ const STALE_MS = 5 * 60 * 1000;
 
 // Fuente de sell-out según el cliente. El token 'sellout_*' en el mapa de abajo
 // se expande con esto (sin clienteKey → mayoristas).
+// Digitalife y Dicotech comparten la tabla sellout_detalle pero suben su archivo por
+// separado: v_fuentes_frescura trae una fila por cliente (sellout_detalle_<cliente>) para
+// que la pill no tape al que lleva días sin cargar (migración 20260912_frescura_sellout_detalle_cliente).
 export const SELLOUT_POR_CLIENTE = {
-  digitalife: ['sellout_detalle'],
-  dicotech:   ['sellout_general', 'sellout_sku'],
+  digitalife: ['sellout_detalle_digitalife'],
+  dicotech:   ['sellout_detalle_dicotech', 'sellout_sku'],
   pcel:       ['sellout_pcel'],
 };
 const SELLOUT_DEFAULT = ['sellout_general'];
@@ -27,7 +30,7 @@ export const FUENTES_POR_PANTALLA = {
   sellIn:            ['facturacion_clientes'],
   sellOut:           ['sellout_*'],
   // Sell Out consolidado: el puente (mayoristas) + las tres fuentes propias.
-  sellOutGlobal:     ['sellout_general', 'sellout_detalle', 'sellout_pcel', 'inventario_cliente'],
+  sellOutGlobal:     ['sellout_general', 'sellout_detalle_digitalife', 'sellout_detalle_dicotech', 'sellout_pcel', 'inventario_cliente'],
   inventarioGlobal:  ['inventario_acteck', 'embarques_compras'],
   pagos:             ['facturacion_clientes', 'sellout_*'],
   propuestas:        ['precios_sku', 'inventario_acteck', 'inventario_cliente'],

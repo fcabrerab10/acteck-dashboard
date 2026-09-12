@@ -29,6 +29,7 @@ const INVERSO = {
 const CORTA = {
   erp_ventas: 'ERP', facturacion_clientes: 'Sell In', inventario_acteck: 'Inventario', precios_sku: 'Precios',
   estados_cuenta: 'Edo. cuenta', sellout_general: 'Sell Out', sellout_detalle: 'Sell Out', sellout_sku: 'Sell Out',
+  sellout_detalle_digitalife: 'Digitalife', sellout_detalle_dicotech: 'Dicotech',
   sellout_pcel: 'Sell Out PCEL', inventario_cliente: 'Inv. cliente', embarques_compras: 'Embarques', cuotas_mensuales: 'Cuotas',
   programacion_arribos: 'Arribos', compras_oc: 'OC compras', guias_erp: 'Guías', roadmap_sku: 'Roadmap', estados_resultados: 'P&L',
 };

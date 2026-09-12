@@ -158,7 +158,7 @@ Pendientes conocidos de rendimiento: agregar en Postgres (vistas/RPC) lo que hoy
 - **Agenda (2026-09-11)**: pestaña `agenda` debajo de Inicio (permiso global `agenda`, migrado de `admin_interna`; `adminInterna` redirige). Modelo `agenda_items` (tareas y puntos de reunión; etiquetas `cliente_key` #cliente y `responsables` @persona; estados abierta·hecha·cancelada·arrastrada) + `agenda_reuniones` (reuniones con minuta y eventos `tipo='evento'`) + `agenda_google` (refresh_token sólo service role). Migraciones `20260911_agenda_modelo.sql` (tablas, RLS `agenda_puede_ver/editar`, auditoría, `alertas.para_usuario`, copia idempotente de `pendientes_equipo`/`pendientes`/`minutas`/`minuta_acuerdos`/`eventos_equipo` con `migrado_de`; RPCs `agenda_cerrar_reunion` y `agenda_arrastrar_pendientes`) y `20260911_agenda_google.sql`. Código en `src/modules/agenda/` (Agenda.jsx orquesta A Bandeja / C Tablero según pref `agenda.modo`; lógica pura `calculo.js`/`etiquetas.js`/`textos.js` con tests `scripts/test-agenda-*.mjs`; datos en `datos.js` con `useBandejaHoy` que también alimenta el bloque "Hoy" de Inicio). Cron: reglas `agenda_vencida`/`agenda_asignado` en `generar-alertas` (la app deja `notificar_a` en el ítem) y task `agenda-hoy` 08:30 CDMX; las alertas de agenda van dirigidas (`para_usuario`). Google Calendar: `api/google-calendar.js` (OAuth propio, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, redirect `/api/google-calendar?action=callback`). Las tablas viejas no se borran. Pantallas legacy borradas: `AdministracionInterna`, `MinutasPanel`, `RecurrentesPanel`; `PendientesCalendarioV2` en `src/_archivo/agenda-v2/`.
 - Pendientes V3: archivar `src/components/Mobile*.jsx`, app móvil (usa la navegación iPhone), pantallas restantes al kit (Configuración, Análisis, Estrategia, Forecast, S&OP, Propuestas), colocar `FrescuraPill` en cada pantalla, borrar `UserMenu`/`Sidebar.jsx` legacy, migrar helpers de formato a `src/lib/format.js`.
 
-### Sell Out consolidado (3.23.0 · 2026-09-12)
+### Sell Out consolidado (3.24.0 · 2026-09-12)
 
 Pantalla global `sellOut` (`src/modules/comercial/SellOutGlobal.jsx` + `sellout/`), permiso `sell_out`,
 siluetas `sellOutGlobal` y `selloutDrill`. Hero "la empresa como equipo" + 4 KPIs + evolución 12 meses +
@@ -166,9 +166,23 @@ composición del mes + tabla por cuenta con **drill en línea por pestañas** (R
 Sucursales y vendedores · Clientes finales · Mapa; sólo se muestran las que la fuente alimenta) y panel
 de mapa plegable. Montos siempre **sin IVA**.
 
-- **16 cuentas** = 12 mayoristas de `sellout_general` + Dicotech (monto de `sellout_detalle`, dimensiones de
-  `v_sellout_general_dicotech`) + Digitalife + PCEL + una fila "Mostrador + e-commerce (directo)".
-  El mapeo mayorista ↔ código de cliente del ERP vive en la vista `v_sellout_cuentas`.
+- **17 cuentas** = 12 mayoristas de `sellout_general` + Dicotech (monto de `sellout_detalle`, dimensiones de
+  `v_sellout_general_dicotech`) + Digitalife + PCEL + una fila "Mostrador + e-commerce (directo)"
+  + **Ingram retail representados** (ver abajo). El mapeo mayorista ↔ código de cliente del ERP vive en
+  la vista `v_sellout_cuentas`.
+- **Ingram son dos clientes** (2026-09-12, migración `20260912_sellout_ingram_dos_clientes.sql`): en el ERP hay
+  dos códigos con el MISMO `cliente_nombre` ("INGRAM MICRO MEXICO") — `00226` mayoreo, que es el que reporta
+  sell out por el puente (`sellout_general.mayorista = 'INGRAM MICRO'`), y `04126` retail representados, que
+  **sólo tiene sell in**. Salen como dos filas: `ingram` y `ingram_retail`. `v_sellout_cuentas.tiene_sellout`
+  (= `fuente is not null`) marca las cuentas sin fuente; `calculo.js` las devuelve con `sinFuente: true`
+  (sell out, YoY, YTD y SO/SI en `null`/0) y la pantalla pinta **"—", nunca $0**, no abre su drill y deja su
+  sell in fuera del denominador del SO/SI del equipo (`totalesDeFilas().sellInSinFuente`). `v_sellout_cuenta_mes`
+  ya no exige sell out: las cuentas sin fuente entran por los meses en que tienen sell in.
+  Lo que ya estaba bien y no se tocó: `mv_analisis_cliente_mes` / `mv_analisis_cliente_sku_mes` agrupan por
+  `COALESCE(cliente, cliente_nombre)` (código) y `v_sellin_global_sku_*` son por artículo, sin cliente.
+  Lo que sí estaba mal: `refresh_facturacion_clientes()` decidía el canal por `cliente_nombre`, así que los
+  ~14 M de retail representados de Ingram se contaban como mayoreo en `facturacion_clientes` (y por tanto en
+  Sell In consolidado). Ahora agrupa por código; **el dato cambia con la siguiente carga del ERP**, no antes.
 - **Agregación en Postgres** (`supabase/migrations/20260912_sellout_global_base.sql` y `…_vistas.sql`):
   `mv_sellout_cuenta_dia` (MTD/YTD a mismo día), `mv_sellout_cuenta_sku_mes`, `mv_sellout_dim_cuenta_mes`,
   `mv_sellout_estado_mes`, `mv_sellout_cliente_final_mes`, `mv_sellout_vendedor_mes`, `mv_sellout_sucursal_mes`,
@@ -186,8 +200,24 @@ de mapa plegable. Montos siempre **sin IVA**.
   Nombres en MAYÚSCULAS SIN ACENTOS, iguales a los que devuelve `normalizar_estado_mx()` en Postgres.
 - **Reutilizable**: `sellout/ResumenSellOut.jsx` (Bento del resumen) se monta también arriba del drill de
   Análisis por Cliente para los clientes con fuente de sell out.
-- Lógica pura en `sellout/calculo.js` y hooks en `sellout/datos.js`, sin dependencias de layout, listos para
-  la pantalla móvil (que queda pendiente). Textos nuevos en `sellout/textos.js` (`src/lib/whatsapp.js` no se tocó).
+- **Frescura por cliente** (migración `20260912_frescura_sellout_detalle_cliente.sql`): `sellout_detalle`
+  guarda Digitalife y Dicotech en la misma tabla y la única fila de `v_fuentes_frescura` tapaba al que llevaba
+  días sin cargar. Ahora hay `sellout_detalle_digitalife` y `sellout_detalle_dicotech` (max `updated_at` y
+  `fecha` por cliente, índice `(cliente, updated_at)`); `FrescuraPill` las etiqueta "Digitalife" y "Dicotech",
+  `SELLOUT_POR_CLIENTE` y `FUENTES_POR_PANTALLA.sellOutGlobal` (src/lib/frescura.js) apuntan a ellas y
+  `FUENTES_UPLOAD` de `api/cron.js` alerta por cliente. La fila agregada `sellout_detalle` se queda para
+  compatibilidad ("Sell Out detalle (Digitalife + Dicotech)").
+- **Celular** (`src/movil/pestanas/selloutGlobal/`): `SellOutGlobal.jsx` (hero del mes con selector, filtro de
+  canal, `FrescuraPill detallado` y "Compartir resumen del mes" con el texto de la web · 4 KPIs · evolución
+  12 m con `GraficaLineas compacto` · composición canal/marca/categoría · cuentas agrupadas por canal con
+  mini trazo de 6 m) y `Cuenta.jsx` (push, pestañas Resumen · SKUs · Inventario · Sucursales · Clientes finales
+  · Estados, sólo las que la fuente alimenta; buscador de SKU y ficha por cuenta; "Compartir estatus" e
+  "Ir a <cliente> › Sell Out"). Nodo global `sellOut` en `src/movil/rutas.js`, silueta `movilSellOutGlobal`.
+  **El mapa NO se importa en el celular**: los estados van como lista con su % (chunk móvil 29 KB / 9.6 KB gz).
+  `agregarDimension()` y `clientesFinalesDelMes()` se movieron de `DrillCuenta.jsx` a `sellout/calculo.js` para
+  que web y móvil compartan la agregación.
+- Lógica pura en `sellout/calculo.js` y hooks en `sellout/datos.js`, sin dependencias de layout.
+  Textos en `sellout/textos.js` (`src/lib/whatsapp.js` no se tocó).
 
 ## Convenciones de código
 

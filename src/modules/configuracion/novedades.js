@@ -3,8 +3,10 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
-    version: '3.24.0', fecha: '2026-09-12', titulo: 'Tracking Pedidos en el celular',
+    version: '3.24.0', fecha: '2026-09-12', titulo: 'Tracking y Sell Out consolidado en el celular',
     items: [
+      'Sell Out consolidado en el móvil: hero, KPIs, evolución, cuentas por canal y ficha por cuenta con Resumen · SKUs · Inventario · Sucursales · Clientes finales · Estados.',
+      'Ingram separado en dos clientes (mayoreo 00226 y retail representados 04126) en Sell Out y Sell In; pills de frescura por cliente para Digitalife y Dicotech.',
       'OCs por etapa (Abiertas · Detenidas · Surtir hoy · Backorder · Entregadas) con deslizar para registrar envío o compartir estatus.',
       'Ficha de la OC con timeline, facturas del ERP con sus partidas, envíos con desfase, folios y "Ir al cliente"; registrar OC, pegar correo y cotización desde el "+".',
       'Las alertas de Tracking abren la OC directamente. Cuotas de piezas y costo listas en el puente; margen por canal y fill rates sobre las ventas nuevas.',

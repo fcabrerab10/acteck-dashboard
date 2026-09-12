@@ -1,7 +1,7 @@
 // Sell Out consolidado (web, V3) · "la empresa como equipo".
 //
 // Hero narrativo + 4 KPIs · evolución de 12 meses y composición del mes ·
-// tabla por cuenta (12 mayoristas + Digitalife + PCEL + Dicotech + mostrador/e-commerce)
+// tabla por cuenta (13 cuentas de mayoreo + Digitalife + PCEL + Dicotech + mostrador/e-commerce)
 // con drill en línea por pestañas · mapa de México plegable.
 //
 // Los datos ya vienen agregados de Postgres (supabase/migrations/20260912_sellout_global_*.sql):
@@ -134,6 +134,8 @@ export default function SellOutGlobal() {
   const estados = useMemo(() => porEstado(estadoMes, anio, mes), [estadoMes, anio, mes]);
 
   const activas = filasBase.filter((f) => f.importe > 0).length;
+  // Las cuentas sin fuente de sell out no cuentan en "X de Y cuentas activas".
+  const conFuente = filasBase.filter((f) => !f.sinFuente).length;
   const caen = filasBase.filter((f) => f.yoy != null && f.yoy < 0).length;
   const conInvNombres = filasBase.filter((f) => f.invValor != null).map((f) => f.nombre.split(' (')[0].split(' ')[0]);
 
@@ -149,7 +151,7 @@ export default function SellOutGlobal() {
     const txt = textoResumenMes({
       anio, mes, tot: totalesGlobal, canales,
       top: [...filasBase].sort((a, b) => b.importe - a.importe),
-      corteDia: corteDia < 28 ? corteDia : null, cuentasActivas: activas, cuentasTotal: filasBase.length,
+      corteDia: corteDia < 28 ? corteDia : null, cuentasActivas: activas, cuentasTotal: conFuente,
     });
     try { await navigator.clipboard.writeText(txt); toast.ok('Resumen copiado'); }
     catch { toast.error('No se pudo copiar el resumen'); }
@@ -172,9 +174,11 @@ export default function SellOutGlobal() {
       </span>
     ) },
     { key: 'canal', label: 'Canal', align: 'left', width: 92, sort: true, render: (f) => <Pill tone={canalTone(f.canal)} size="xs">{canalLabel(f.canal)}</Pill> },
-    { key: 'importe', label: `Sell out ${mesLbl}`, sort: true, bold: true, fmt: money, render: (f) => money(f.importe) },
-    { key: 'yoy', label: 'Δ YoY', width: 76, sort: true, render: (f) => <DeltaPill value={f.yoy} />, renderTotal: (v) => <DeltaPill value={v} /> },
-    { key: 'ytd', label: 'YTD', sort: true, fmt: fmtMoney, render: (f) => fmtMoney(f.ytd) },
+    // `sinFuente` = el cliente existe en el ERP y factura, pero nadie reporta su sell out
+    // (Ingram retail representados, 04126). Se pinta "—", nunca $0.
+    { key: 'importe', label: `Sell out ${mesLbl}`, sort: true, bold: true, fmt: money, render: (f) => (f.sinFuente ? <span style={{ color: theme.textMuted }} title="Este cliente no reporta sell out a nadie">—</span> : money(f.importe)) },
+    { key: 'yoy', label: 'Δ YoY', width: 76, sort: true, render: (f) => (f.sinFuente ? '—' : <DeltaPill value={f.yoy} />), renderTotal: (v) => <DeltaPill value={v} /> },
+    { key: 'ytd', label: 'YTD', sort: true, fmt: fmtMoney, render: (f) => (f.sinFuente ? '—' : fmtMoney(f.ytd)) },
     { key: 'sellIn', label: `Sell in ${mesLbl}`, sort: true, fmt: money, render: (f) => (f.cuenta === 'directo' ? <span style={{ color: theme.textMuted }}>=</span> : money(f.sellIn)) },
     { key: 'soSi', label: 'SO / SI', width: 66, sort: true, render: (f) => (f.soSi == null ? '—' : <span title={f.soSi > 999 ? `${Math.round(f.soSi).toLocaleString('es-MX')} % — el sell in del mes apenas empieza` : undefined} style={{ color: f.soSi < 60 ? theme.orange : f.soSi > 999 ? theme.textMuted : theme.text }}>{f.soSi > 999 ? '> 999 %' : fmtPct(f.soSi)}</span>), renderTotal: (v) => fmtPct(v) },
     { key: 'invValor', label: 'Inv. cliente', sort: true, fmt: fmtMoney, render: (f) => (f.invValor == null ? <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span> : fmtMoney(f.invValor)) },
@@ -183,9 +187,11 @@ export default function SellOutGlobal() {
     { key: 'clientesFinales', label: 'Clientes finales', width: 92, sort: true, render: (f) => (f.clientesFinales == null ? '—' : fmtInt(f.clientesFinales)) },
     { key: 'vendedores', label: 'Vendedores', width: 78, sort: true, render: (f) => (f.vendedores == null ? '—' : fmtInt(f.vendedores)) },
     { key: 'tendencia', label: '6 m', align: 'left', width: 168, render: (f) => (
-      <span style={{ display: 'inline-flex', gap: 2 }}>
-        {f.tendencia.map((v, i) => <HeatCell key={i} v={v} max={maxTend} fmt={(n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}K`)} />)}
-      </span>
+      f.sinFuente ? <span style={{ color: theme.textMuted, fontSize: 10.5 }}>—</span> : (
+        <span style={{ display: 'inline-flex', gap: 2 }}>
+          {f.tendencia.map((v, i) => <HeatCell key={i} v={v} max={maxTend} fmt={(n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}K`)} />)}
+        </span>
+      )
     ) },
   ];
   const totalesFila = {
@@ -240,8 +246,8 @@ export default function SellOutGlobal() {
       </div>
 
       <Hero eyebrow={`Dirección Comercial · Sell Out · ${periodoLbl}`} dot={false}
-        titulo={fraseHero(totalesGlobal, anio, mes, activas, filasBase.length)}
-        sub={subHero(canales, totalesGlobal, activas, filasBase.length, caen, conInvNombres)}
+        titulo={fraseHero(totalesGlobal, anio, mes, activas, conFuente)}
+        sub={subHero(canales, totalesGlobal, activas, conFuente, caen, conInvNombres)}
         stats={[
           { k: `Sell out ${mesLbl}`, v: fmtMoney(totalesGlobal.importe), sub: `${totalesGlobal.yoy == null ? 'sin comparativo' : `${fmtSigno(totalesGlobal.yoy)} vs ${anio - 1}`} · ${fmtInt(totalesGlobal.cantidad)} pz` },
           { k: `YTD ${anio}`, v: fmtMoney(totalesGlobal.ytd), sub: totalesGlobal.yoyYtd == null ? `sin ${anio - 1}` : `${fmtSigno(totalesGlobal.yoyYtd)} vs ${anio - 1}` },
@@ -249,7 +255,7 @@ export default function SellOutGlobal() {
         ]}>
         <div style={{ marginTop: 8 }}>
           <FrescuraPill pantalla="sellOutGlobal" detallado inverso
-            etiquetas={{ sellout_general: 'Puente', sellout_detalle: 'Digitalife + Dicotech', sellout_pcel: 'PCEL', inventario_cliente: 'Inv. clientes' }} />
+            etiquetas={{ sellout_general: 'Puente', sellout_pcel: 'PCEL', inventario_cliente: 'Inv. clientes' }} />
         </div>
       </Hero>
 
@@ -345,7 +351,7 @@ export default function SellOutGlobal() {
 
       <TablaCompacta columnas={columnas} filas={filas} rowKey={(f) => f.cuenta} orden={orden} onSort={onSort}
         totales={totalesFila} maxHeight={620} vacio="Ninguna cuenta coincide con el filtro."
-        onRowClick={(f) => setAbierto((k) => (k === f.cuenta ? null : f.cuenta))}
+        onRowClick={(f) => { if (f.sinFuente) return; setAbierto((k) => (k === f.cuenta ? null : f.cuenta)); }}
         expandidoKey={abierto}
         renderExpandido={(f) => <DrillCuenta fila={f} anio={anio} mes={mes} corteDia={corteDia} estadoSel={estadoSel} onEstado={setEstadoSel} />} />
 

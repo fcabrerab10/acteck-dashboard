@@ -14,7 +14,7 @@ import {
   useDrillSkus, useDrillInventario, useDrillInventarioMes, useDrillSucursales,
   useDrillVendedores, useDrillClientesFinales, useDrillEstados, CUENTA_POR_CLIENTE,
 } from './datos';
-import { skusDeCuenta, alertasDeCuenta, porEstado, MESES, ultimosMeses, idxMes, yoy, N } from './calculo';
+import { skusDeCuenta, alertasDeCuenta, porEstado, agregarDimension as agregarDim, clientesFinalesDelMes as clientesFinales, MESES, ultimosMeses, idxMes, yoy, N } from './calculo';
 import { fmtMoney, fmtInt, fmtPct, fmtSigno, capitalizarEstado, textoEstatusCuenta } from './textos';
 
 const CLIENTE_POR_CUENTA = Object.fromEntries(Object.entries(CUENTA_POR_CLIENTE).map(([k, v]) => [v, k]));
@@ -196,57 +196,4 @@ export default function DrillCuenta({ fila, anio, mes, corteDia, estadoSel, onEs
       )}
     </div>
   );
-}
-
-// ── helpers de agregación del drill (puros, viven aquí porque sólo los usa esta vista) ──
-
-/** Agrega mv_sellout_{sucursal|vendedor}_mes al mes elegido, con YoY y tendencia de 6 meses. */
-function agregarDim(filas, campo, anio, mes) {
-  const meses6 = ultimosMeses(anio, mes, 6).map((m) => idxMes(m.anio, m.mes));
-  const m = new Map();
-  for (const r of filas) {
-    const k = r[campo];
-    if (!k) continue;
-    let f = m.get(k);
-    if (!f) { f = { clave: k, importe: 0, importePrev: 0, vendedores: 0, clientes: 0, skus: 0, top_vendedor: null, tendencia: Array(6).fill(0) }; m.set(k, f); }
-    const a = N(r.anio), mm = N(r.mes);
-    if (a === anio && mm === mes) {
-      f.importe += N(r.importe); f.vendedores = Math.max(f.vendedores, N(r.vendedores));
-      f.clientes = Math.max(f.clientes, N(r.clientes)); f.skus = Math.max(f.skus, N(r.skus));
-      f.top_vendedor = r.top_vendedor || f.top_vendedor;
-    }
-    if (a === anio - 1 && mm === mes) f.importePrev += N(r.importe);
-    const i = meses6.indexOf(idxMes(a, mm));
-    if (i >= 0) f.tendencia[i] += N(r.importe);
-  }
-  return [...m.values()].map((f) => ({ ...f, sucursal: f.clave, yoy: yoy(f.importe, f.importePrev) }))
-    .filter((f) => f.importe > 0 || f.importePrev > 0)
-    .sort((a, b) => b.importe - a.importe);
-}
-
-/** Clientes finales del mes marcando nuevos y perdidos contra el mes anterior. */
-function clientesFinales(filas, anio, mes) {
-  const idxAct = idxMes(anio, mes), idxPrev = idxAct - 1;
-  const act = new Map(), prev = new Map();
-  for (const r of filas) {
-    const i = idxMes(N(r.anio), N(r.mes));
-    if (i === idxAct) act.set(r.cliente_final, r);
-    else if (i === idxPrev) prev.set(r.cliente_final, r);
-  }
-  const out = [];
-  for (const [k, r] of act) {
-    out.push({ ...r, nuevo: !prev.has(k), perdido: false, ticket: N(r.facturas) ? N(r.importe) / N(r.facturas) : null });
-  }
-  let perdidos = 0;
-  for (const [k, r] of prev) {
-    if (act.has(k)) continue;
-    perdidos += 1;
-    out.push({ ...r, importe: 0, facturas: 0, nuevo: false, perdido: true, ticket: null });
-  }
-  return {
-    filas: out.sort((a, b) => N(b.importe) - N(a.importe)).slice(0, 300),
-    activos: act.size,
-    nuevos: out.filter((r) => r.nuevo).length,
-    perdidos,
-  };
 }

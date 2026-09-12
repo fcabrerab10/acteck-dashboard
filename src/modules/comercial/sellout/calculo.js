@@ -196,6 +196,10 @@ export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, me
     // En el YTD sólo se recorta el mes en curso; los meses cerrados van completos.
     const yp = escala === 1 ? ypBruto
       : { importe: ypBruto.importe - pBruto.importe * (1 - escala), cantidad: ypBruto.cantidad - pBruto.cantidad * (1 - escala) };
+    // `tiene_sellout = false` (Ingram retail representados, 04126): el cliente existe en el ERP
+    // y tiene sell in, pero NO reporta sell out a nadie. Sus cifras de sell out no son "cero":
+    // son "sin fuente", y la pantalla las pinta como "—".
+    const sinFuente = c.tiene_sellout === false;
     const sellIn = fila.sell_in == null ? null : N(fila.sell_in);
     const invPiezas = fila.inv_piezas == null ? null : N(fila.inv_piezas);
     const reportaInv = fila.inv_valor != null || invPiezas != null;
@@ -207,17 +211,18 @@ export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, me
       canal: c.canal_sellout,
       propio: !!c.propio,
       granularidad: c.granularidad,
+      sinFuente,
       importe: a.importe,
       cantidad: a.cantidad,
       importePrev: p.importe,
-      yoy: yoy(a.importe, p.importe),
+      yoy: sinFuente ? null : yoy(a.importe, p.importe),
       ytd: ya.importe,
       ytdPrev: yp.importe,
-      yoyYtd: yoy(ya.importe, yp.importe),
+      yoyYtd: sinFuente ? null : yoy(ya.importe, yp.importe),
       sellIn,
       // Un sell in de cero o negativo (mes recién abierto, puras devoluciones) daría un
       // porcentaje absurdo: mejor no mostrarlo.
-      soSi: c.cuenta === 'directo' ? 100 : (sellIn == null || sellIn <= 0 ? null : ratio(a.importe, sellIn)),
+      soSi: sinFuente ? null : c.cuenta === 'directo' ? 100 : (sellIn == null || sellIn <= 0 ? null : ratio(a.importe, sellIn)),
       invValor: reportaInv ? N(fila.inv_valor) : null,
       invPiezas: reportaInv ? invPiezas : null,
       invSkus: reportaInv ? N(fila.inv_skus) : null,
@@ -254,13 +259,16 @@ export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, me
 export function totalesDeFilas(filas = []) {
   const t = {
     nombre: `${filas.length} cuentas`, importe: 0, cantidad: 0, importePrev: 0, ytd: 0, ytdPrev: 0,
-    sellIn: 0, invValor: 0, invPiezas: 0, sucursales: 0, clientesFinales: 0, vendedores: 0,
+    sellIn: 0, sellInSinFuente: 0, sinFuente: 0, invValor: 0, invPiezas: 0, sucursales: 0, clientesFinales: 0, vendedores: 0,
     sinEstado: 0, mayoreoImporte: 0, conInventario: 0,
   };
   for (const f of filas) {
     t.importe += f.importe; t.cantidad += f.cantidad; t.importePrev += f.importePrev;
     t.ytd += f.ytd; t.ytdPrev += f.ytdPrev;
-    t.sellIn += N(f.sellIn);
+    // El sell in de una cuenta sin fuente de sell out se cuenta aparte: meterlo en el
+    // denominador hundiría el "sell out / sell in" del equipo con una venta que nadie reporta.
+    if (f.sinFuente) { t.sellInSinFuente += N(f.sellIn); t.sinFuente += 1; }
+    else t.sellIn += N(f.sellIn);
     if (f.invValor != null) { t.invValor += f.invValor; t.invPiezas += N(f.invPiezas); t.conInventario += 1; }
     t.sucursales += N(f.sucursales); t.clientesFinales += N(f.clientesFinales); t.vendedores += N(f.vendedores);
     if (f.canal === 'mayoreo') { t.mayoreoImporte += f.importe; t.sinEstado += N(f.sinEstado); }
@@ -405,9 +413,65 @@ export function ritmoProyectado(importeMtd, corteDia, anio, mes) {
   return (importeMtd / Math.min(corteDia, diasMes)) * diasMes;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sucursales / vendedores / clientes finales del mes (los usan el drill de la web
+// y la pantalla de cuenta del celular)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Agrega mv_sellout_{sucursal|vendedor}_mes al mes elegido, con YoY y tendencia de 6 meses. */
+export function agregarDimension(filas, campo, anio, mes) {
+  const meses6 = ultimosMeses(anio, mes, 6).map((m) => idxMes(m.anio, m.mes));
+  const m = new Map();
+  for (const r of filas) {
+    const k = r[campo];
+    if (!k) continue;
+    let f = m.get(k);
+    if (!f) { f = { clave: k, importe: 0, importePrev: 0, vendedores: 0, clientes: 0, skus: 0, top_vendedor: null, tendencia: Array(6).fill(0) }; m.set(k, f); }
+    const a = N(r.anio), mm = N(r.mes);
+    if (a === anio && mm === mes) {
+      f.importe += N(r.importe); f.vendedores = Math.max(f.vendedores, N(r.vendedores));
+      f.clientes = Math.max(f.clientes, N(r.clientes)); f.skus = Math.max(f.skus, N(r.skus));
+      f.top_vendedor = r.top_vendedor || f.top_vendedor;
+    }
+    if (a === anio - 1 && mm === mes) f.importePrev += N(r.importe);
+    const i = meses6.indexOf(idxMes(a, mm));
+    if (i >= 0) f.tendencia[i] += N(r.importe);
+  }
+  return [...m.values()].map((f) => ({ ...f, sucursal: f.clave, yoy: yoy(f.importe, f.importePrev) }))
+    .filter((f) => f.importe > 0 || f.importePrev > 0)
+    .sort((a, b) => b.importe - a.importe);
+}
+
+/** Clientes finales del mes marcando nuevos y perdidos contra el mes anterior. */
+export function clientesFinalesDelMes(filas, anio, mes) {
+  const idxAct = idxMes(anio, mes), idxPrev = idxAct - 1;
+  const act = new Map(), prev = new Map();
+  for (const r of filas) {
+    const i = idxMes(N(r.anio), N(r.mes));
+    if (i === idxAct) act.set(r.cliente_final, r);
+    else if (i === idxPrev) prev.set(r.cliente_final, r);
+  }
+  const out = [];
+  for (const [k, r] of act) {
+    out.push({ ...r, nuevo: !prev.has(k), perdido: false, ticket: N(r.facturas) ? N(r.importe) / N(r.facturas) : null });
+  }
+  let perdidos = 0;
+  for (const [k, r] of prev) {
+    if (act.has(k)) continue;
+    perdidos += 1;
+    out.push({ ...r, importe: 0, facturas: 0, nuevo: false, perdido: true, ticket: null });
+  }
+  return {
+    filas: out.sort((a, b) => N(b.importe) - N(a.importe)).slice(0, 300),
+    activos: act.size,
+    nuevos: out.filter((r) => r.nuevo).length,
+    perdidos,
+  };
+}
+
 export default {
   MESES, MESES_LARGO, CANALES, canalLabel, canalTone, N, idxMes, deIdx, yoy, ratio, ultimosMeses,
   mtdPorCuenta, ytdPorCuenta, totalDe, ultimoDiaConVenta, ultimoMesConVenta, semanasInventario,
   sumaUltimosMeses, construirFilas, totalesDeFilas, porCanal, composicion, serie12, porEstado,
-  skusDeCuenta, alertasDeCuenta, ritmoProyectado,
+  skusDeCuenta, alertasDeCuenta, ritmoProyectado, agregarDimension, clientesFinalesDelMes,
 };

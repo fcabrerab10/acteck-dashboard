@@ -3,7 +3,7 @@
 // la app móvil puede usar exactamente estos hooks.
 //
 // Lo que carga la pantalla al abrir (todo pequeño, ~9 K filas en total):
-//   v_sellout_cuentas            16
+//   v_sellout_cuentas            17
 //   mv_sellout_cuenta_dia     ~5.6 K   (MTD y YTD a mismo día)
 //   v_sellout_cuenta_mes        264    (tabla: sell in, dimensiones, inventario)
 //   mv_sellout_cuenta_sku_mes   ~3 K   (sólo el mes elegido y el del año anterior, para la composición)
@@ -17,7 +17,7 @@ import { cachedQuery, fetchAllQ } from '../../../lib/queries';
 const STALE = 5 * 60 * 1000;
 const q = (key, fn, extra = {}) => ({ queryKey: key, queryFn: fn, staleTime: STALE, ...extra });
 
-/** Catálogo de las 16 cuentas + su código de cliente en el ERP. */
+/** Catálogo de las 17 cuentas + su código de cliente en el ERP (incluye las que no reportan sell out). */
 export function useCuentas() {
   return useQuery(q(['sellout_global', 'cuentas'], async () => {
     const { data, error } = await cachedQuery(supabase.from('v_sellout_cuentas').select('*'));
@@ -163,7 +163,7 @@ export function useResumenCuenta(cuenta, anio, enabled = true) {
 export const CUENTA_POR_CLIENTE = { digitalife: 'digitalife', pcel: 'pcel', dicotech: 'dicotech' };
 /** Código de cliente del ERP → cuenta de sell out. Mismo mapeo que v_sellout_cuentas. */
 export const CUENTA_POR_ERP = {
-  '00183': 'ct', '00417': 'cva', '00335': 'guc', '00226': 'ingram', '01145': 'arroba', '00514': 'techsmart',
+  '00183': 'ct', '00417': 'cva', '00335': 'guc', '00226': 'ingram', '04126': 'ingram_retail', '01145': 'arroba', '00514': 'techsmart',
   '00676': 'exel', '00106': 'dcmayorista', '00748': 'nsstore', '00662': 'loma', '00683': 'pch', '07424': 'kabik',
   '00708': 'dicotech', '00764': 'digitalife', '00473': 'pcel',
 };
