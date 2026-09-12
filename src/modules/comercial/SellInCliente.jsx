@@ -34,14 +34,30 @@ import { MESES, MESES_LARGO, normalizar, tokens, coincide, capitalizar, canalLab
 // ─── Datos ───
 function useFacturacionGlobal(anios) {
   return useQuery({
-    queryKey: ['sellin_global', 'sku_canal_mes', anios],
+    queryKey: ['sellin_global', 'sku_canal_anio', anios],
     queryFn: async () => {
-      // 1 petición por año (≈16K filas/año; PostgREST devuelve máx. 10K por página) → 2 páginas por año, en paralelo.
+      // v_sellin_global_sku_canal_anio (MV, migración 20260912_perf_sellin_global):
+      // 1 fila por sku × canal × es_clave × AÑO con los 12 meses en arrays. Antes esto
+      // era la vista viva por MES: ~16K filas/año → 2 páginas de 10K por año + el count
+      // exact de cada una, reagregando facturacion_clientes en caliente (≈185 ms por
+      // página, ≈3 s en total). Ahora son ~3.8K filas/año (1 página) y 6 ms en Postgres.
+      // Los arrays se expanden aquí a la MISMA forma fila-por-mes que ya consumían los
+      // agregados de la pantalla, así que abajo no cambia nada.
       const partes = await Promise.all(anios.map((y) => fetchAllQ(
-        () => supabase.from('v_sellin_global_sku_canal_mes').select('sku,canal,es_clave,anio,mes,piezas,monto').eq('anio', y),
-        { pageSize: 10000, orderCol: 'sku', label: `v_sellin_global_sku_canal_mes·${y}` },
+        () => supabase.from('v_sellin_global_sku_canal_anio').select('sku,canal,es_clave,anio,piezas,monto').eq('anio', y),
+        { pageSize: 10000, orderCol: 'sku', label: `v_sellin_global_sku_canal_anio·${y}` },
       )));
-      return partes.flat();
+      const filas = [];
+      for (const r of partes.flat()) {
+        const pz = r.piezas || [], mo = r.monto || [];
+        for (let i = 0; i < 12; i++) {
+          // null = ese mes NO tenía fila en facturacion_clientes (el FILTER del pivot
+          // devuelve NULL): así se reproduce EXACTAMENTE el juego de filas de la vista vieja.
+          if (pz[i] == null && mo[i] == null) continue;
+          filas.push({ sku: r.sku, canal: r.canal, es_clave: r.es_clave, anio: r.anio, mes: i + 1, piezas: Number(pz[i]) || 0, monto: Number(mo[i]) || 0 });
+        }
+      }
+      return filas;
     },
   });
 }

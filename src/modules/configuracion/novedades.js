@@ -3,6 +3,13 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.25.0', fecha: '2026-09-12', titulo: 'Pasada de rendimiento',
+    items: [
+      'Arranque web 25 % más ligero (232 → 173 KB) y primera visita en el celular 87 % más ligera (5 MB → 650 KB): el service worker ya sólo precarga el cascarón.',
+      'Las gráficas cargan después de pintar; Sell In consolidado baja de 2.5 s a 1 s; Inicio pasa de 18 a 7 peticiones.',
+    ],
+  },
+  {
     version: '3.24.0', fecha: '2026-09-12', titulo: 'Tracking y Sell Out consolidado en el celular',
     items: [
       'Sell Out consolidado en el móvil: hero, KPIs, evolución, cuentas por canal y ficha por cuenta con Resumen · SKUs · Inventario · Sucursales · Clientes finales · Estados.',

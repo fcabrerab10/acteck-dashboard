@@ -11,7 +11,7 @@
 //   · 'acteck:abrir-avatar' { detail: { tab } } (tarjeta de perfil del sidebar) → abre en la pestaña pedida.
 //
 //   <PanelAvatar perfil onNavegar onCerrarSesion modoPresent onToggleModoPresent oscuro? size? />
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -21,12 +21,35 @@ import { puedeActualizarDatos } from '../../lib/permisos';
 import { versionLabel } from '../../lib/version';
 import { AvatarImg, usePerfilVivo } from '../../lib/avatar';
 import { Segmented } from '../kit';
-import { CuerpoNotificaciones, PreferenciasNotificaciones, useContadorNotificaciones } from '../notificaciones';
+import useContadorNotificaciones from '../notificaciones/useContadorNotificaciones';
 import { vidrio, hoverBg, hairline, cargoDe } from './comun';
-import CambiarFoto from './CambiarFoto';
-import PreferenciasHoja from './PreferenciasHoja';
-import PestanaYo from './PestanaYo';
-import PestanaDatos from './PestanaDatos';
+import { abrirDiferido } from '../../lib/montajeDiferido';
+
+// ── Cuerpo del panel: perezoso (2026-09-12) ─────────────────────────────────
+// El botón del avatar y su contador están SIEMPRE en pantalla, así que viajaban en
+// el chunk de arranque junto con todo lo que cuelga de ellos: CambiarFoto (cámara +
+// recorte), PreferenciasHoja, las dos pestañas y el centro de notificaciones — ~70 KB
+// de fuente que sólo se ven al hacer clic. Ahora bajan al abrir; y como `prefetchPanel()`
+// los pide al pasar el ratón por el avatar (y en el ralentí tras entrar), en la práctica
+// ya están en memoria cuando se hace clic: nunca se ve el hueco.
+const CuerpoNotificaciones      = lazy(() => import('../notificaciones/CuerpoNotificaciones'));
+const PreferenciasNotificaciones = lazy(() => import('../notificaciones/PreferenciasNotificaciones'));
+const CambiarFoto               = lazy(() => import('./CambiarFoto'));
+const PreferenciasHoja          = lazy(() => import('./PreferenciasHoja'));
+const PestanaYo                 = lazy(() => import('./PestanaYo'));
+const PestanaDatos              = lazy(() => import('./PestanaDatos'));
+
+let panelPedido = false;
+/** Precarga el cuerpo del panel (hover del avatar · ralentí tras entrar). Idempotente. */
+export function prefetchPanelAvatar() {
+  if (panelPedido || typeof window === 'undefined') return;
+  panelPedido = true;
+  Promise.all([
+    import('../notificaciones/CuerpoNotificaciones'),
+    import('./PestanaYo'),
+    import('./PestanaDatos'),
+  ]).catch(() => { panelPedido = false; });
+}
 
 export const EVENTO_AVATAR = 'acteck:abrir-avatar';
 export const EVENTO_NOTIFICACIONES = 'acteck:abrir-notificaciones';
@@ -52,6 +75,8 @@ export default function PanelAvatar({ perfil: perfilProp, onNavegar, onCerrarSes
   const [foto, setFoto] = useState(false);
   const [hoja, setHoja] = useState(null);      // null | sección de PreferenciasHoja
   const [hoverAvatar, setHoverAvatar] = useState(false);
+  const [montado, setMontado] = useState({ foto: false, hoja: false });
+  const montadoRef = useRef(montado);
   const [down, setDown] = useState(false);
   const raiz = useRef(null);
   const cuerpo = useRef(null);
@@ -59,6 +84,7 @@ export default function PanelAvatar({ perfil: perfilProp, onNavegar, onCerrarSes
   const puedeDatos = puedeActualizarDatos(perfil);
 
   const abrir = useCallback((t) => {
+    prefetchPanelAvatar();
     setTab((cur) => t || (abierto ? cur : (hayNovedades ? 'avisos' : 'yo')));
     setVista('panel');
     setAbierto(true);
@@ -99,13 +125,33 @@ export default function PanelAvatar({ perfil: perfilProp, onNavegar, onCerrarSes
     { id: 'yo', label: 'Yo' },
   ];
   const tabActiva = pestanas.some((p) => p.id === tab) ? tab : 'yo';
-  const abrirPrefs = (seccion) => { cerrar(); setHoja(seccion || 'cuenta'); };
+  // Se montan cerrados un frame antes de abrirse (lib/montajeDiferido) para no perder
+  // el fundido del velo ni el deslizamiento de la hoja la primera vez.
+  const abrirFoto = () => {
+    cerrar();
+    abrirDiferido({
+      cargar: () => import('./CambiarFoto'),
+      yaMontado: montadoRef.current.foto,
+      montar: () => { montadoRef.current = { ...montadoRef.current, foto: true }; setMontado(montadoRef.current); },
+      abrir: () => setFoto(true),
+    });
+  };
+  const abrirPrefs = (seccion) => {
+    cerrar();
+    abrirDiferido({
+      cargar: () => import('./PreferenciasHoja'),
+      yaMontado: montadoRef.current.hoja,
+      montar: () => { montadoRef.current = { ...montadoRef.current, hoja: true }; setMontado(montadoRef.current); },
+      abrir: () => setHoja(seccion || 'cuenta'),
+    });
+  };
 
   return (
     <div ref={raiz} style={{ position: 'relative', display: 'inline-block', fontFamily: TYPO.fontText }}>
       {/* Botón avatar + contador */}
       <button type="button" onClick={() => (abierto ? cerrar() : abrir())} aria-haspopup="dialog" aria-expanded={abierto} title={badgeN ? `${nombre} · ${badgeN} con novedades` : nombre}
         onMouseDown={() => setDown(true)} onMouseUp={() => setDown(false)} onMouseLeave={() => setDown(false)}
+        onMouseEnter={prefetchPanelAvatar} onFocus={prefetchPanelAvatar}
         style={{ position: 'relative', border: 0, padding: 2, background: 'transparent', borderRadius: 999, cursor: 'pointer', display: 'inline-flex',
           boxShadow: abierto ? `0 0 0 2px ${theme.accent}` : modoPresent ? `0 0 0 2px ${theme.green || '#34C759'}` : 'none', transform: down ? 'scale(0.96)' : 'scale(1)',
           transition: `box-shadow ${DUR.state}ms ${EASE}, transform ${DUR.tap}ms ${EASE}` }}>
@@ -126,12 +172,14 @@ export default function PanelAvatar({ perfil: perfilProp, onNavegar, onCerrarSes
           transition: reduceMotion() ? 'none' : `opacity ${DUR.state}ms ${EASE}, transform ${DUR.state}ms ${EASE}`,
         }}>
           {vista === 'prefsNotif' ? (
-            <div style={{ margin: -8, maxHeight: '72vh', overflowY: 'auto' }}><PreferenciasNotificaciones onVolver={() => setVista('panel')} /></div>
+            <div style={{ margin: -8, maxHeight: '72vh', overflowY: 'auto' }}>
+              <Suspense fallback={<div style={{ height: 320 }} />}><PreferenciasNotificaciones onVolver={() => setVista('panel')} /></Suspense>
+            </div>
           ) : (
             <>
               {/* Cabecera */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 4px 10px' }}>
-                <button type="button" onClick={() => { cerrar(); setFoto(true); }} title="Cambiar foto"
+                <button type="button" onClick={abrirFoto} title="Cambiar foto"
                   onMouseEnter={() => setHoverAvatar(true)} onMouseLeave={() => setHoverAvatar(false)}
                   style={{ position: 'relative', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: 999, flexShrink: 0 }}>
                   <AvatarImg perfil={perfil} size={40} />
@@ -159,24 +207,40 @@ export default function PanelAvatar({ perfil: perfilProp, onNavegar, onCerrarSes
               {/* Cuerpo por pestaña */}
               {tabActiva === 'avisos' && (
                 <div style={{ margin: '10px -8px -8px' }}>
-                  <CuerpoNotificaciones ref={cuerpo} onNavegar={onNavegar} onCerrar={cerrar} activo={abierto} maxAlto="52vh" />
+                  <Suspense fallback={<div style={{ height: 220 }} />}>
+                    <CuerpoNotificaciones ref={cuerpo} onNavegar={onNavegar} onCerrar={cerrar} activo={abierto} maxAlto="52vh" />
+                  </Suspense>
                   <FilaPrefs theme={theme} hora={horaResumen} onClick={() => setVista('prefsNotif')} />
                 </div>
               )}
               {tabActiva === 'datos' && puedeDatos && (
-                <PestanaDatos activo={abierto} onNavegar={onNavegar} onCerrar={cerrar} />
+                <Suspense fallback={<div style={{ height: 220 }} />}>
+                  <PestanaDatos activo={abierto} onNavegar={onNavegar} onCerrar={cerrar} />
+                </Suspense>
               )}
               {tabActiva === 'yo' && (
-                <PestanaYo perfil={perfil} onNavegar={onNavegar} onCerrarSesion={onCerrarSesion} modoPresent={modoPresent} onToggleModoPresent={onToggleModoPresent}
-                  onAbrirPrefs={abrirPrefs} onCerrar={cerrar} />
+                <Suspense fallback={<div style={{ height: 220 }} />}>
+                  <PestanaYo perfil={perfil} onNavegar={onNavegar} onCerrarSesion={onCerrarSesion} modoPresent={modoPresent} onToggleModoPresent={onToggleModoPresent}
+                    onAbrirPrefs={abrirPrefs} onCerrar={cerrar} />
+                </Suspense>
               )}
             </>
           )}
         </div>
       )}
 
-      <CambiarFoto abierto={foto} onClose={() => setFoto(false)} perfil={perfil} />
-      <PreferenciasHoja abierto={!!hoja} seccionInicial={hoja || 'cuenta'} onClose={() => setHoja(null)} perfil={perfil} onNavegar={onNavegar} onCerrarSesion={onCerrarSesion} />
+      {/* Se montan al abrirse por primera vez y ya no se desmontan: así conservan su
+          animación de salida cuando `abierto` vuelve a false (igual que antes). */}
+      {montado.foto && (
+        <Suspense fallback={null}>
+          <CambiarFoto abierto={foto} onClose={() => setFoto(false)} perfil={perfil} />
+        </Suspense>
+      )}
+      {montado.hoja && (
+        <Suspense fallback={null}>
+          <PreferenciasHoja abierto={!!hoja} seccionInicial={hoja || 'cuenta'} onClose={() => setHoja(null)} perfil={perfil} onNavegar={onNavegar} onCerrarSesion={onCerrarSesion} />
+        </Suspense>
+      )}
     </div>
   );
 }

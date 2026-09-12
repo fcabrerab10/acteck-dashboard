@@ -20,7 +20,7 @@ import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
 import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Cargando, toast } from '../../components/kit';
 import { moneyCompact } from '../../lib/format';
-import GraficaLineas from '../../components/kit/GraficaLineas';
+import { GraficaLineas } from '../../components/kit';
 import Buscador from './sellin/Buscador';
 import Filtros from './sellin/Filtros';
 import DrillCuenta from './sellout/DrillCuenta';

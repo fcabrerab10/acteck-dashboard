@@ -9,7 +9,10 @@ import { Search } from 'lucide-react';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 import { elevation } from '../lib/elevation';
-import { PanelAvatar } from './perfil';
+// Import directo, NO por el barrel './perfil': ese arrastra CambiarFoto y
+// PreferenciasHoja (31 KB) al chunk de arranque aunque PanelAvatar ya los cargue
+// en perezoso (rollup no poda los re-exports de módulos locales).
+import PanelAvatar from './perfil/PanelAvatar';
 
 // ═════════ Chrome derecho (reutilizable) ═════════
 export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPresent, onToggleModoPresent, oscuro = false, onAbrirPaleta, mostrarBuscar = false }) {

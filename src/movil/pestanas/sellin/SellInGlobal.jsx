@@ -287,7 +287,7 @@ export default function SellInGlobal() {
 
           <TituloSeccionM style={{ marginTop: 18, padding: '0 28px 6px' }}>Fuente</TituloSeccionM>
           <div style={{ padding: '0 28px', fontSize: 11, color: theme.textSubtle || theme.textMuted, lineHeight: 1.45, fontFamily: TYPO.fontText }}>
-            Facturación del ERP por SKU y canal (<span style={{ fontFamily: MONO }}>v_sellin_global_sku_canal_mes</span>), año en curso y anterior · cuota de{' '}
+            Facturación del ERP por SKU y canal (<span style={{ fontFamily: MONO }}>v_sellin_global_sku_canal_anio</span>), año en curso y anterior · cuota de{' '}
             <span style={{ fontFamily: MONO }}>{cuotas.fuente}</span>.
           </div>
 

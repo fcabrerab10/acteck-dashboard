@@ -4,7 +4,7 @@ import { apiFetch } from './lib/apiFetch';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { useTelemetry, telemetria } from './lib/telemetry';
-import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, OfflineBadge } from './components';
+import OfflineBadge from './components/OfflineBadge'; // directo: el barrel './components' arrastra Sidebar y las 8 tarjetas legacy
 // Navegación V3: NavShell elige el modo (barra · sidebar · iphone) según perfiles.preferencias.
 import NavShell from './components/nav/NavShell';
 import { CLIENTES_NAV as SIDEBAR_CLIENTES, construirArbol, nodosPlanos } from './components/nav/arbol';
@@ -56,7 +56,7 @@ const ActualizacionDatos     = lazy(() => import('./modules/settings/Actualizaci
 const Agenda                 = lazy(() => import('./modules/agenda/Agenda')); // Agenda (V3 · 2026-09-11): sustituye a Pendientes & Calendario (adminInterna → agenda)
 // Auth y shell: estáticos (se necesitan antes de cualquier pantalla).
 import LoginPage from './modules/auth/LoginPage';
-import SetPasswordPage from './modules/auth/SetPasswordPage';
+const SetPasswordPage = lazy(() => import('./modules/auth/SetPasswordPage')); // sólo en #/set-password
 import SinAcceso from './components/SinAcceso';
 import {
   puedeConfigurar,
@@ -71,12 +71,14 @@ import {
 import { PerfilContext } from './lib/perfilContext';
 import { ThemeProvider } from './lib/themeContext';
 import { PageTransition } from './components/apple/AppleLoader';
-import { Cargando } from './components/kit';
+import { Cargando, prefetchGraficas } from './components/kit';
+import { precargarEnCola, siguientesPantallas } from './lib/prefetch';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
-import MobileNav from './components/MobileNav';
-import MobileShell from './components/MobileShell'; // legacy: sustituido por MovilApp (V3); se retira en la siguiente limpieza
+// MobileNav y MobileShell (legacy) ya no se montan: los sustituyó MovilApp (V3).
 const MovilApp = lazy(() => import('./movil/MovilApp'));
-import BandejaAlertas from './components/BandejaAlertas';
+// BandejaAlertas sólo sale en Resumen (super admin) y en el Home de cliente: perezosa,
+// para que no viaje en el chunk de arranque junto con lib/alertas.
+const BandejaAlertas = lazy(() => import('./components/BandejaAlertas'));
 import { ToastHost } from './components/kit';
 // Pantallas mobile: lazy (sólo se descargan en iPhone/iPad, y sólo la que se abre).
 const MobileHome              = lazy(() => import('./components/MobileHome'));
@@ -404,68 +406,14 @@ export default function App() {
       } catch {}
     }, [vistaActual]);
 
-  // ── Prefetch de pantallas vecinas en idle ──────────────────────────
-  // Con React.lazy cada pestaña baja su chunk al hacer clic (~100-300 ms de
-  // loader). Cuando el navegador está libre, precargamos los chunks de las
-  // pestañas del cliente activo (o de las globales más usadas) para que el
-  // siguiente clic sea instantáneo. Rollup dedupe estos import() con los de
-  // lazy(): es el mismo módulo, no se descarga dos veces. Se respeta
-  // "ahorro de datos" y se hace de uno en uno para no competir con la
-  // carga de la pantalla actual.
+  // ── Prefetch de pantallas vecinas en idle (src/lib/prefetch.js) ──────
+  // Sólo las 2-3 pantallas más probables desde la pestaña actual, de una en una,
+  // en requestIdleCallback y nunca con "ahorro de datos" ni en 2G/3G.
   React.useEffect(() => {
-    if (!authUser) return;
-    if (typeof navigator !== 'undefined' && navigator.connection?.saveData) return;
-    const porCliente = {
-      digitalife: [
-        () => import('./modules/comercial/HomeClienteV3'), () => import('./modules/comercial/SellInClienteV2'),
-        () => import('./modules/comercial/SellOutClienteV2'), () => import('./modules/comercial/PagosCliente'),
-        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
-        () => import('./modules/comercial/AnalisisCliente'),
-      ],
-      dicotech: [
-        () => import('./modules/comercial/HomeClienteV3'), () => import('./modules/comercial/SellInDicotech'),
-        () => import('./modules/comercial/SellOutDicotech'), () => import('./modules/comercial/PagosCliente'),
-        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
-        () => import('./modules/comercial/AnalisisCliente'),
-      ],
-      pcel: [
-        () => import('./modules/comercial/HomeClienteV3'), () => import('./modules/comercial/SellInPcel'),
-        () => import('./modules/comercial/SellOutPcel'), () => import('./modules/comercial/PagosCliente'),
-        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
-        () => import('./modules/comercial/AnalisisCliente'),
-      ],
-    };
-    const globales = [
-      () => import('./modules/comercial/ResumenClientesTab'), () => import('./modules/comercial/VisionGeneral'),
-      () => import('./modules/comercial/ForecastClientesTab'), () => import('./modules/comercial/PropuestasTab'),
-      () => import('./modules/comercial/EstrategiaPrecios'), () => import('./modules/comercial/InventarioGlobal'),
-      () => import('./modules/comercial/TrackingPedidos'), () => import('./modules/comercial/ForecastReservas'),
-      () => import('./modules/agenda/Agenda'),
-    ];
-    const moviles = [
-      () => import('./components/MobileHome'),
-      () => import('./components/MobileHomeCliente'), () => import('./components/MobileSellIn'),
-      () => import('./components/MobileSellOut'), () => import('./components/MobileCartera'),
-    ];
-    const cola = mobile
-      ? moviles
-      : [...(clienteActivo ? (porCliente[clienteActivo] || []) : []), ...globales];
-
-    let cancelado = false;
-    const ric = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
-    const cic = window.cancelIdleCallback || clearTimeout;
-    let handle = null;
-    const paso = (i) => {
-      if (cancelado || i >= cola.length) return;
-      handle = ric(() => {
-        if (cancelado) return;
-        Promise.resolve(cola[i]()).catch(() => {}).finally(() => paso(i + 1));
-      }, { timeout: 4000 });
-    };
-    // Empezar tras un respiro para no competir con la pantalla que se está abriendo.
-    const t = setTimeout(() => paso(0), 1200);
-    return () => { cancelado = true; clearTimeout(t); if (handle != null) cic(handle); };
-  }, [authUser, clienteActivo, mobile]);
+    if (!authUser) return undefined;
+    prefetchGraficas(); // recharts en el ralentí: la primera gráfica ya lo encuentra en memoria
+    return precargarEnCola(siguientesPantallas({ pagina: paginaActiva, clienteActivo, movil: mobile }));
+  }, [authUser, paginaActiva, clienteActivo, mobile]);
 
   const [modoPresent, setModoPresent] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -558,7 +506,7 @@ export default function App() {
   // sesión de invite, o si no tiene perfil aún)
   const isSetPasswordRoute = typeof window !== 'undefined'
     && (window.location.hash || '').startsWith('#/set-password');
-  if (isSetPasswordRoute) return <SetPasswordPage />;
+  if (isSetPasswordRoute) return <Suspense fallback={<Cargando fullscreen label="Cargando…" />}><SetPasswordPage /></Suspense>;
 
   if (authLoading) return <Cargando fullscreen label="Cargando…" sub="Iniciando el dashboard" />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
@@ -593,7 +541,7 @@ export default function App() {
             perfil?.es_super_admin
               ? <>
                   <div style={{ marginBottom: 16 }}>
-                    <BandejaAlertas clienteKey={null} onNavegar={handleNavegar} />
+                    <Suspense fallback={null}><BandejaAlertas clienteKey={null} onNavegar={handleNavegar} /></Suspense>
                   </div>
                   <ResumenCuentas />
                 </>
@@ -742,7 +690,7 @@ export default function App() {
             ? <MobileHomeCliente clienteKey={clienteActivo} onBack={() => { setClienteActivo(null); setPaginaActiva('resumenClientes'); }} onNavegar={handleNavegar} />
             : <>
                 <div style={{ marginBottom: 16 }}>
-                  <BandejaAlertas clienteKey={clienteActivo} compacto onNavegar={handleNavegar} />
+                  <Suspense fallback={null}><BandejaAlertas clienteKey={clienteActivo} compacto onNavegar={handleNavegar} /></Suspense>
                 </div>
                 <HomeClienteV3 cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} onNavegar={handleNavegar} />
               </>

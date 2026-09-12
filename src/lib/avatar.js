@@ -155,7 +155,9 @@ export function AvatarImg({ perfil, size = 32, title, style, onClick, src }) {
   };
   if (final && !roto) {
     return h('span', { title, onClick, style: { ...base, background: theme.surface } },
-      h('img', { src: final, alt: title || iniciales, width: s, height: s, onError: () => setRoto(true),
+      // width/height fijos + lazy/async: la foto nunca empuja el layout ni bloquea el
+      // primer pintado (listas de equipo, notificaciones y menús de la app móvil).
+      h('img', { src: final, alt: title || iniciales, width: s, height: s, loading: 'lazy', decoding: 'async', onError: () => setRoto(true),
         style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }));
   }
   return h('span', {

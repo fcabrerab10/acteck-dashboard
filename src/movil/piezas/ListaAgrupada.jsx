@@ -27,12 +27,19 @@ export function TituloSeccionM({ children, meta, accion, style }) {
 export default function ListaAgrupada({ titulo, meta, accion, pie, children, style }) {
   const { theme } = useTheme();
   const items = React.Children.toArray(children).filter(Boolean);
+  // Listas largas (SKUs, clientes, movimientos): `content-visibility: auto` deja que
+  // el navegador se salte el layout y el pintado de las filas fuera de pantalla. El
+  // `contain-intrinsic-size: auto 52px` es el alto real de Fila, así que la barra de
+  // scroll sale bien desde el primer frame y no hay salto al desplazarse. Por debajo
+  // de 50 filas no compensa (y se evita cualquier efecto raro en listas cortas).
+  const virtualizar = items.length > 50;
+  const saltar = virtualizar ? { contentVisibility: 'auto', containIntrinsicSize: 'auto 52px' } : null;
   return (
     <section style={{ padding: '0 16px', ...style }}>
       {titulo && <TituloSeccionM meta={meta} accion={accion}>{titulo}</TituloSeccionM>}
       <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
         {items.map((ch, i) => (
-          <div key={ch.key ?? i} style={{ borderTop: i === 0 ? 0 : `1px solid ${theme.border}` }}>{ch}</div>
+          <div key={ch.key ?? i} style={{ borderTop: i === 0 ? 0 : `1px solid ${theme.border}`, ...saltar }}>{ch}</div>
         ))}
       </div>
       {pie && <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 12px 0', lineHeight: 1.4 }}>{pie}</div>}

@@ -28,6 +28,41 @@ async function opcional(p, vacio = []) {
   try { const r = await p; return r?.error ? vacio : (r?.data ?? vacio); } catch { return vacio; }
 }
 
+// ── Camino rápido: 7 peticiones en vez de 18 ───────────────────────────────
+// rpc inicio_datos(p_anio, p_dias, p_pesados) (migración 20260912_perf_inicio_datos)
+// devuelve 14 de las 18 lecturas en un solo JSON. SECURITY INVOKER → respeta RLS
+// igual que las consultas sueltas, y las 5 opcionales (pagos, marketing, eventos,
+// auditoría) vuelven [] si el perfil no tiene permiso, como hacía `opcional()`.
+//
+// Las cuatro vistas vivas caras (sellout mensual de los 3 clientes + v_medidas_inventario,
+// ~900 ms sumadas) se piden APARTE y en paralelo con la RPC: dentro de la función irían
+// en serie y el JSON tardaría más que las 18 peticiones sueltas. Igual con el inventario
+// comercial y el tránsito: son rápidos de leer pero son el 90 % de los bytes y
+// serializarlos a jsonb retrasaba todo lo demás. Así el reloj lo marca la consulta más
+// lenta, no la suma. Si algo falla se cae al camino de siempre, intacto justo debajo.
+async function porRpc(anio, anios) {
+  const [rpc, soDl, soPcel, soDico, medInv, inv, transito] = await Promise.all([
+    supabase.rpc('inicio_datos', { p_anio: anio, p_dias: DIAS_AGENDA, p_pesados: false }),
+    cachedQuery(supabase.from('v_sellout_digitalife_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
+    cachedQuery(supabase.from('v_sellout_pcel_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
+    cachedQuery(supabase.from('v_sellout_dicotech_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
+    cachedQuery(supabase.from('v_medidas_inventario').select('*')),
+    fetchAll('v_inventario_comercial', 'sku,inventario,costo_promedio'),
+    fetchAll('v_transito_sku', 'sku,cantidad,eta_mas_cercana,embarques_detalle'),
+  ]);
+  const data = rpc.data;
+  if (rpc.error || !data) throw rpc.error || new Error('inicio_datos sin datos');
+  return {
+    medidas: data.medidas || [], medidasCli: data.medidasCli || [], medidasCanal: data.medidasCanal || [],
+    cuotasCanales: data.cuotasCanales || [], cuotasMensuales: data.cuotasMensuales || [], factCli: data.factCli || [],
+    sellout: { digitalife: soDl.data || [], pcel: soPcel.data || [], dicotech: soDico.data || [] },
+    estados: data.estados || [], medInv: (medInv.data || [])[0] || null,
+    inv, transito,
+    pagos: data.pagos || [], marketing: data.marketing || [], eventosEquipo: data.eventosEquipo || [],
+    eventosCliente: data.eventosCliente || [], auditoria: data.auditoria || [],
+  };
+}
+
 export function useInicioData(anio) {
   const [st, setSt] = useState({ loading: true, error: null, data: null });
 
@@ -39,6 +74,14 @@ export function useInicioData(anio) {
     const limiteISO = iso(new Date(hoy.getTime() + DIAS_AGENDA * 86400000));
     (async () => {
       try {
+        try {
+          const rapido = await porRpc(anio, anios);
+          if (cancel) return;
+          setSt({ loading: false, error: null, data: rapido });
+          return;
+        } catch (e) {
+          console.warn('[Inicio] camino rápido no disponible, uso las 18 consultas:', e?.message || e);
+        }
         const [
           medidas, medidasCli, medidasCanal, cuotasCanales, cuotasMensuales, factCli,
           soDl, soPcel, soDico, estados, medInv, inv, transito,

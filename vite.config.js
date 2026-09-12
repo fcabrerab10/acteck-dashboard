@@ -32,15 +32,30 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
           if (id.includes('@tanstack') || id.includes('idb-keyval')) return 'vendor-query';
-          if (id.includes('@supabase')) return 'vendor-supabase';
+          // iceberg-js y tslib son dependencias de @supabase/* (storage-js / auth-js):
+          // sin esta línea caían en 'vendor-base' y viajaban en el arranque.
+          if (id.includes('@supabase') || id.includes('/iceberg-js/') || id.includes('/tslib/')) return 'vendor-supabase';
           if (id.includes('xlsx')) return 'vendor-xlsx';
-          if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor')) return 'vendor-recharts';
+          // Recharts 3 arrastra redux + immer + reselect + es-toolkit + decimal.js-light…
+          // (~90 KB · 30 KB gz). Antes caían en 'vendor', que el entry importa por
+          // workbox-window, así que TODA la maquinaria de las gráficas se descargaba
+          // en el arranque aunque no hubiera ninguna gráfica en pantalla.
+          if (
+            id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor') ||
+            id.includes('@reduxjs/') || id.includes('/react-redux/') || id.includes('/redux/') ||
+            id.includes('/redux-thunk/') || id.includes('/reselect/') || id.includes('/immer/') ||
+            id.includes('/decimal.js-light/') || id.includes('/es-toolkit/') ||
+            id.includes('/eventemitter3/') || id.includes('/internmap/') ||
+            id.includes('/tiny-invariant/') || id.includes('/clsx/') ||
+            id.includes('@standard-schema/') || id.includes('/use-sync-external-store/')
+          ) return 'vendor-recharts';
           if (id.includes('lucide-react')) return 'vendor-icons';
           if (
             id.includes('/react/') || id.includes('/react-dom/') ||
             id.includes('/scheduler/') || id.includes('/react-is/')
           ) return 'vendor-react';
-          return 'vendor';
+          // Resto (workbox-window). Nombre explícito para poder precachearlo por glob.
+          return 'vendor-base';
         },
       },
     },
@@ -85,10 +100,30 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Excluir chunks pesados, devtools de React Query y uploads.html del
-        // precache. uploads.html DEBE venir siempre de red porque contiene los
-        // parsers Excel que se actualizan seguido; si el SW lo cachea se rompe
-        // silenciosamente la carga del ERP.
+        // ── Precache = SÓLO el cascarón (2026-09-12) ────────────────────────────
+        // Antes el precache eran 155 entradas / 4.9 MB: la app entera (las ~130
+        // pantallas lazy, recharts, xlsx, el mapa de México, uploads.html…) se
+        // descargaba en la PRIMERA visita antes de que el usuario tocara nada.
+        // Ahora se precachea el cascarón que pinta la primera pantalla y el resto
+        // entra por runtimeCaching (CacheFirst con hash en el nombre → seguro).
+        globPatterns: [
+          'index.html',
+          'manifest.webmanifest',
+          'favicon.svg',
+          'apple-touch-icon.png',
+          'pwa/*.png',
+          'assets/index-*.css',
+          'assets/index-*.js',
+          'assets/vendor-react-*.js',
+          'assets/vendor-supabase-*.js',
+          'assets/vendor-query-*.js',
+          'assets/vendor-icons-*.js',
+          'assets/vendor-base-*.js',
+        ],
+        // uploads.html DEBE venir siempre de red porque contiene los parsers Excel
+        // que se actualizan seguido; si el SW lo cachea se rompe silenciosamente la
+        // carga del ERP. Ya no entra por globPatterns, pero se deja el ignore por si
+        // alguien amplía los patrones.
         globIgnores: ['**/react-query-devtools*', '**/node_modules/**', '**/uploads.html'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\.html$/],
@@ -121,19 +156,41 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          // Fuentes/assets estáticos → CacheFirst (los hashes son únicos
-          // por build, así que si el HTML se actualiza vía NetworkFirst,
-          // apunta a los hashes nuevos automáticamente).
+          // /assets/*.js|css (chunks por pantalla, recharts, xlsx, el mapa…) →
+          // CacheFirst. El nombre lleva hash de contenido, así que un archivo nunca
+          // cambia bajo el mismo nombre: la primera vez cuesta red, las siguientes
+          // salen del disco igual que si estuvieran precacheadas. cleanupOutdatedCaches
+          // no toca este cache, por eso la expiración (60 días / 250 entradas) lo poda.
           {
-            urlPattern: ({ request }) =>
-              request.destination === 'style' ||
-              request.destination === 'script' ||
-              request.destination === 'font' ||
-              request.destination === 'image',
+            urlPattern: /\/assets\/[^/]+\.(?:js|css)$/,
             handler: 'CacheFirst',
             options: {
+              cacheName: 'acteck-chunks',
+              expiration: { maxEntries: 250, maxAgeSeconds: 60 * 60 * 24 * 60, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Fuentes (SF Pro) → CacheFirst largo: no cambian nunca.
+          {
+            urlPattern: ({ request }) => request.destination === 'font',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'acteck-fonts',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Resto de estáticos (imágenes, svg de fondos de avatar, css sueltos) →
+          // StaleWhileRevalidate: pinta al instante y se refresca por detrás.
+          {
+            urlPattern: ({ request, url }) =>
+              url.origin === self.location.origin &&
+              (request.destination === 'style' || request.destination === 'script' || request.destination === 'image'),
+            handler: 'StaleWhileRevalidate',
+            options: {
               cacheName: 'acteck-assets',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
           // Supabase REST → NetworkFirst con fallback a cache
