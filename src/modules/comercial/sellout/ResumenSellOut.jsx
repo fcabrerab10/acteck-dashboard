@@ -97,12 +97,16 @@ export default function ResumenSellOut({ cuenta, anio, mes, corteDia, compacto =
         )}
       </Caja>
 
-      {hayInv ? (
-        <Caja titulo="Inventario del cliente">
+      {/* El valor del inventario del cliente es dato clave para Fernando: la caja siempre está;
+          si la fuente no lo reporta, lo dice en vez de desaparecer. */}
+      <Caja titulo="Inventario del cliente">
+        {hayInv ? (
           <Cifra v={fmtMoney(fila.invValor)}
             sub={`${fmtInt(fila.invPiezas)} pz · ${fmtInt(fila.invSkus)} SKUs con stock${fila.invSemanas != null ? ` · ${fila.invSemanas.toFixed(1)} semanas` : ''}`} />
-        </Caja>
-      ) : null}
+        ) : (
+          <Cifra v="—" sub="esta fuente no reporta inventario" color={theme.textMuted} />
+        )}
+      </Caja>
 
       <Caja titulo="Sell out vs sell in">
         <Cifra v={fila.soSi == null ? '—' : fmtPct(fila.soSi)}
