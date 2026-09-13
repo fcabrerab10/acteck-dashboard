@@ -5,11 +5,11 @@ import { Search, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 
-export default function Buscador({ value, onChange, resultados, placeholder = 'Buscar: mouse inalámbrico negro, AC-93, teclado balam…', width = 340, autoFocus = false }) {
+export default function Buscador({ value, onChange, resultados, placeholder = 'Buscar: mouse inalámbrico negro, AC-93, teclado balam…', width = 340, autoFocus = false, title }) {
   const { theme } = useTheme();
   const [focus, setFocus] = React.useState(false);
   return (
-    <div style={{
+    <div title={title} style={{
       display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 8px 0 10px', borderRadius: 9, width, maxWidth: '100%',
       background: theme.surface, border: `1px solid ${focus ? (theme.accent || '#007AFF') : theme.border}`,
       boxShadow: focus ? `0 0 0 3px ${theme.accent || '#007AFF'}22` : 'none', transition: 'border-color 160ms, box-shadow 160ms', fontFamily: TYPO.fontText,

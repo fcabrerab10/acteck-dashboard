@@ -459,11 +459,9 @@ function SellInGlobal({ sensible }) {
           </div>
         )}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Buscador value={busqueda} onChange={setBusqueda} resultados={`${filas.length} SKU${filas.length === 1 ? '' : 's'}`} />
-            <span style={{ fontSize: 10.5, color: theme.textMuted }}>Cualquier palabra, cualquier orden, sin acentos · descripción, marca, categoría, familia, roadmap o parte del SKU</span>
-          </div>
-          <Filtros grupos={grupos} toggles={togglesFiltro} onToggle={onToggleSel} onToggleFlag={(id) => setFlags((f) => ({ ...f, [id]: !f[id] }))} onLimpiar={limpiar} activos={activos} />
+          <Filtros grupos={grupos} toggles={togglesFiltro} onToggle={onToggleSel} onToggleFlag={(id) => setFlags((f) => ({ ...f, [id]: !f[id] }))} onLimpiar={limpiar} activos={activos}
+            resumen={`${fmtInt(filas.length)} de ${fmtInt(candidatos.length)} SKUs`}
+            buscador={<Buscador value={busqueda} onChange={setBusqueda} resultados={`${filas.length} SKU${filas.length === 1 ? '' : 's'}`} title="Cualquier palabra, cualquier orden, sin acentos · descripción, marca, categoría, familia, roadmap o parte del SKU" />} />
           <TablaCompacta columnas={columnas} grupos={grupos2} filas={filas} rowKey={(r) => r.sku} totales={totales} maxHeight="72vh" dense
             orden={orden || undefined} onSort={onSort} onRowClick={(r) => setSkuAbierto((s) => (s === r.sku ? null : r.sku))} expandidoKey={skuAbierto}
             vacio={busqueda || activos ? 'Ningún SKU coincide con la búsqueda y los filtros.' : 'Sin SKUs en el roadmap.'}

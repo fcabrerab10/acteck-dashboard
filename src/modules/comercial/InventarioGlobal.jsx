@@ -16,22 +16,21 @@ import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
-import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, SkeletonPantalla, toast, elevation } from '../../components/kit';
+import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, Filtros, SkeletonPantalla, toast, elevation } from '../../components/kit';
 import { EASE, DUR } from '../../lib/motion';
 import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import useInventarioDatos from './inventario/useInventarioDatos';
 import SkuDrillDown from './inventario/SkuDrillDown';
 import ResumenSecundario from './inventario/ResumenSecundario';
-import FiltrosHoja from './inventario/FiltrosHoja';
 import ExcelClienteHoja from './inventario/ExcelClienteHoja';
 import ProximosArribos from './inventario/ProximosArribos';
 import HistoricoPanel, { fotoHace } from './inventario/HistoricoPanel';
 import CompartirHoja from './inventario/CompartirHoja';
 import ApartadoPanel from './inventario/ApartadoPanel';
 import FueraDeVenta from './inventario/FueraDeVenta';
-import { FILTROS_VACIOS, estadoDe, pasaTodos, facetas as calcularFacetas, nActivos as contarActivos } from './inventario/filtros';
+import { FILTROS_VACIOS, ESTADOS, estadoDe, pasaTodos, facetas as calcularFacetas, nActivos as contarActivos } from './inventario/filtros';
 import {
-  CEDIS_CORTO, ALMACENES_GRID, shortAlmacen, tipoDe,
+  CEDIS_CORTO, CEDIS_LISTA, ALMACENES_GRID, shortAlmacen, tipoDe,
   COBERTURA_CRITICA, COBERTURA_SOBRESTOCK, N,
   fmtCompact, fmtInt, fmtDias, fmtFechaCorta, diasHasta, tonoCobertura, normalizar, tokensBusqueda,
 } from './inventario/constantes';
@@ -243,6 +242,17 @@ function InventarioGlobalPantalla({ sensible }) {
     t.coberturaDias = demDia > 0 ? pzCob / demDia : null;
     return t;
   }, [filasTabla]);
+
+  // Grupos del componente de filtros del kit (un botón por grupo). CEDIS es de valor único
+  // ('TODOS' = ninguno) y acota TODA la pantalla, no sólo la tabla.
+  const gruposFiltro = useMemo(() => [
+    { id: 'estado', label: 'Estado', seleccion: filtros.estado, opciones: ESTADOS.map((e) => ({ id: e.id, label: e.label, tone: e.tone, title: e.title, n: facetas.estado.get(e.id)?.n || 0 })) },
+    { id: 'cedis', label: 'CEDIS', multiple: false, seleccion: cedisFiltro === 'TODOS' ? null : cedisFiltro, opciones: CEDIS_LISTA.map((c) => ({ id: c, label: CEDIS_CORTO[c] || c, n: cedisConteo.get(c) || 0, title: 'Acota toda la pantalla (hero, KPIs y tabla) a ese CEDIS' })) },
+    { id: 'marca', label: 'Marca', seleccion: filtros.marca, opciones: facetas.marca },
+    { id: 'familia', label: 'Familia', seleccion: filtros.familia, opciones: facetas.familia },
+    { id: 'roadmap', label: 'Roadmap', seleccion: filtros.roadmap, opciones: facetas.roadmap },
+  ], [filtros, facetas, cedisFiltro, cedisConteo]);
+  const onToggleGrupo = (grupo, id) => (grupo === 'cedis' ? setCedisFiltro((c) => (c === id ? 'TODOS' : id)) : toggleFiltro(grupo, id));
 
   const nFiltrosActivos = contarActivos(filtros) + (cedisFiltro !== 'TODOS' ? 1 : 0);
   const limpiarFiltros = () => { setFiltros(FILTROS_VACIOS()); setCedisFiltro('TODOS'); setBusqueda(''); };
@@ -467,22 +477,27 @@ function InventarioGlobalPantalla({ sensible }) {
       <Panel titulo="SKUs por almacén" meta={`${fmtInt(filasTabla.length)} SKUs · click en una fila abre el desglose por almacén`}
         padding={0}
         acciones={<ExportMenu titulo="Inventario" subtitulo={`${fmtInt(filasTabla.length)} SKUs · ${ALMACENES_GRID.length} almacenes`} excel={handleExport} pdf={{ ref: rootRef }} deshabilitado={exportando || filasTabla.length === 0} size="md" />}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${busqueda ? theme.accent : theme.border}`, borderRadius: 999, height: 30, flex: 1, minWidth: 220, maxWidth: 360 }}>
-            <Search size={12} style={{ color: theme.textMuted, flexShrink: 0 }} />
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar: palabras en cualquier orden, sin acentos (mouse inalambrico negro, parte del SKU…)"
-              style={{ border: 0, outline: 0, background: 'transparent', fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, flex: 1, minWidth: 0 }} />
-            {busqueda && <X size={12} style={{ color: theme.textMuted, cursor: 'pointer', flexShrink: 0 }} onClick={() => setBusqueda('')} />}
-          </div>
-          <FiltrosHoja f={f} facetas={facetas} cedis={cedisFiltro} cedisConteo={cedisConteo} onCedis={setCedisFiltro}
-            onToggle={toggleFiltro}
-            onSoloStock={(v) => setFiltros((p) => ({ ...p, soloStock: v }))}
-            onSoloTransito={(v) => setFiltros((p) => ({ ...p, soloTransito: v }))}
-            nActivos={nFiltrosActivos} onLimpiar={limpiarFiltros} />
-          <Boton icon={FileSpreadsheet} onClick={() => setExcelCliente('tabla')} title="Excel de disponibilidad para mandar a un cliente, con los filtros de ahora">Excel para cliente</Boton>
-          <span style={{ fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-            {fmtInt(filasTabla.length)} de {fmtInt(skuRows.length)} SKUs
-          </span>
+        <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}` }}>
+          <Filtros
+            grupos={gruposFiltro}
+            toggles={[
+              { id: 'soloStock', label: 'Sólo con stock', on: filtros.soloStock, n: facetas.stock },
+              { id: 'soloTransito', label: 'Sólo con tránsito', on: filtros.soloTransito, n: facetas.transito },
+            ]}
+            onToggle={onToggleGrupo}
+            onToggleFlag={(id) => setFiltros((p) => ({ ...p, [id]: !p[id] }))}
+            onLimpiar={limpiarFiltros}
+            activos={nFiltrosActivos}
+            resumen={`${fmtInt(filasTabla.length)} de ${fmtInt(skuRows.length)} SKUs`}
+            acciones={<Boton icon={FileSpreadsheet} onClick={() => setExcelCliente('tabla')} title="Excel de disponibilidad para mandar a un cliente, con los filtros de ahora">Excel para cliente</Boton>}
+            buscador={(
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${busqueda ? theme.accent : theme.border}`, borderRadius: 999, height: 28, flex: 1, minWidth: 200, maxWidth: 340 }}>
+                <Search size={12} style={{ color: theme.textMuted, flexShrink: 0 }} />
+                <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar: palabras en cualquier orden, sin acentos (mouse inalambrico negro, parte del SKU…)"
+                  style={{ border: 0, outline: 0, background: 'transparent', fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, flex: 1, minWidth: 0 }} />
+                {busqueda && <X size={12} style={{ color: theme.textMuted, cursor: 'pointer', flexShrink: 0 }} onClick={() => setBusqueda('')} />}
+              </div>
+            )} />
         </div>
 
         <TablaCompacta

@@ -439,19 +439,15 @@ function ForecastPantalla({ perfil, sensible }) {
 
       {/* Buscador + filtros + acciones */}
       <Panel padding="8px 12px">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-          <Buscador value={busqueda} onChange={setBusqueda} resultados={busqueda ? `${fmtInt(rowsFiltrados.length)} SKUs` : null} placeholder="Buscar: mouse inalámbrico negro, AC-93, proveedor, familia, roadmap…" width={380} />
-          <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-            <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtInt(rowsOrdenados.length)}</strong> de {fmtInt(rowsAll.length)} SKUs
-          </span>
-          {puedeEditarSol && (
-            <Boton primario icon={Plus} onClick={agregarTodosSugeridos} disabled={nSugeridos === 0 || agregandoTodos} style={{ marginLeft: 'auto' }}
+        <FiltrosSOP f={f} facetas={facetas} onToggle={onToggle} onSoloSugerido={(v) => setF((p) => ({ ...p, soloSugerido: v }))} nActivos={nActivos} onLimpiar={limpiar}
+          buscador={<Buscador value={busqueda} onChange={setBusqueda} resultados={busqueda ? `${fmtInt(rowsFiltrados.length)} SKUs` : null} placeholder="Buscar: mouse inalámbrico negro, AC-93, proveedor, familia, roadmap…" width={320} />}
+          resumen={<><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtInt(rowsOrdenados.length)}</strong> de {fmtInt(rowsAll.length)} SKUs</>}
+          acciones={puedeEditarSol ? (
+            <Boton primario icon={Plus} onClick={agregarTodosSugeridos} disabled={nSugeridos === 0 || agregandoTodos}
               title={nSugeridos === 0 ? 'No hay SKUs con sugerido' : `Agregar ${nSugeridos} SKUs sugeridos al export activo`}>
               {agregandoTodos ? 'Agregando…' : `Agregar todos al export (${nSugeridos})`}
             </Boton>
-          )}
-        </div>
-        <FiltrosSOP f={f} facetas={facetas} onToggle={onToggle} onSoloSugerido={(v) => setF((p) => ({ ...p, soloSugerido: v }))} nActivos={nActivos} onLimpiar={limpiar} />
+          ) : null} />
       </Panel>
 
       <Panel titulo="Detalle por SKU" meta={`${fmtInt(rowsOrdenados.length)} SKUs · click en la fila para el drill · píldora verde = en export${sortCol ? '' : ' · orden del Reporte'}`}

@@ -6,6 +6,7 @@ export { default as Segmented } from './Segmented';
 export { default as TablaCompacta } from './TablaCompacta';
 export { default as HeatCell, nivel } from './HeatCell';
 export { default as Panel } from './Panel';
+export { default as Filtros, ordenarOpciones, filtrarOpciones, normaliza, estaSel, cuentaSel, idsSel, etiquetaDe } from './Filtros';
 export { default as Boton } from './Boton';
 export { default as Skeleton, SkeletonPantalla } from './Skeleton';
 export { default as Cargando } from './Cargando';

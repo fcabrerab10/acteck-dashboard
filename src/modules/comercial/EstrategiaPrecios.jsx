@@ -120,11 +120,11 @@ function Pantalla({ sensible }) {
 
       <Panel titulo="Buscar y filtrar" meta={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs · ${listas.length} de ${listasTodas.length} listas en la tabla${listasTodas.length > listas.length ? ' (usa el filtro "Listas" para ver las demás; el drill y el Excel las llevan todas)' : ''}${orden ? ' · ordenado por columna' : ''}`}
         acciones={<ExportMenu titulo="Lista de Precios" subtitulo={`${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} />}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Buscador value={f.q} onChange={(q) => setF((p) => conBusqueda(p, q))} resultados={f.q ? `${fmtInt(filas.length)} SKUs` : null} width={420}
-            placeholder="Buscar: mouse inalámbrico negro, AC-93, teclado balam, RMI…" />
-          <Filtros grupos={grupos} toggles={toggles} activos={activos} onToggle={toggleSet} onToggleFlag={toggleFlag} onLimpiar={() => setF((p) => ({ ...FILTROS_VACIOS(), q: p.q, tokens: p.tokens }))} />
-        </div>
+        <Filtros grupos={grupos} toggles={toggles} activos={activos} onToggle={toggleSet} onToggleFlag={toggleFlag}
+          onLimpiar={() => setF((p) => ({ ...FILTROS_VACIOS(), q: p.q, tokens: p.tokens }))}
+          resumen={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs`}
+          buscador={<Buscador value={f.q} onChange={(q) => setF((p) => conBusqueda(p, q))} resultados={f.q ? `${fmtInt(filas.length)} SKUs` : null} width={340}
+            placeholder="Buscar: mouse inalámbrico negro, AC-93, teclado balam, RMI…" />} />
       </Panel>
 
       <TablaPrecios filas={filas} listas={listas} sensible={sensible} orden={orden} onSort={onSort} skuAbierto={skuAbierto} onToggle={setSkuAbierto} periodo={periodo} />

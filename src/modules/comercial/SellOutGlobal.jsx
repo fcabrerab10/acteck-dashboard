@@ -331,16 +331,11 @@ export default function SellOutGlobal() {
         </Panel>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Buscador value={busqueda} onChange={setBusqueda} resultados={busqueda ? `${filas.length}` : null}
-          placeholder="Buscar por nombre o Nº de cliente…" width={320} />
-        <Segmented options={ORIGENES} value={origen} onChange={setOrigen} />
-        <span style={{ fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          {filas.length} cuentas · {fmtInt(totales.clientesFinales)} clientes finales
-        </span>
-      </div>
-
       <Filtros
+        buscador={<Buscador value={busqueda} onChange={setBusqueda} resultados={busqueda ? `${filas.length}` : null}
+          placeholder="Buscar por nombre o Nº de cliente…" width={280} />}
+        resumen={`${filas.length} cuentas · ${fmtInt(totales.clientesFinales)} clientes finales`}
+        acciones={<Segmented options={ORIGENES} value={origen} onChange={setOrigen} />}
         grupos={[{
           id: 'canal', label: 'Canal', sel: new Set(canalSel === 'todos' ? [] : [canalSel]),
           opciones: CANALES.map((c) => ({ id: c.id, label: c.label, tone: c.tone, n: filasBase.filter((f) => f.canal === c.id && f.importe > 0).length })),
