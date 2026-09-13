@@ -25,13 +25,13 @@ import {
 } from '../../piezas';
 import { moneyCompact, int, deltaPct, tonoDelta, MESES, MESES_LARGO, MONO, N } from '../../util';
 import { SelectorMes } from '../SellInCliente';
-import { useCuentas, useDias, useMensual, useSkuMes, useCuotas } from '../../../modules/comercial/sellout/datos';
+import { useCuentas, useDias, useMensual, useSkuMes, useCuotas, useEstadoMes } from '../../../modules/comercial/sellout/datos';
 import {
   CANALES, canalLabel, construirFilas, totalesDeFilas, porCanal, composicion, serie12,
-  ultimoDiaConVenta, ultimoMesConVenta,
+  ultimoDiaConVenta, ultimoMesConVenta, porEstado,
 } from '../../../modules/comercial/sellout/calculo';
 import { fraseHero, textoResumenMes, fmtMoney, fmtInt, fmtPct } from '../../../modules/comercial/sellout/textos';
-import { PillHero, Composicion, Fuente, PillSinFuente } from './piezas';
+import { PillHero, Composicion, Fuente, PillSinFuente, ListaEstados } from './piezas';
 import Cuenta from './Cuenta';
 
 const CANAL_OPC = [{ id: 'todos', label: 'Todos' }, ...CANALES.map((c) => ({ id: c.id, label: c.label }))];
@@ -54,6 +54,7 @@ export default function SellOutGlobal() {
   const { data: mensual = [], isLoading: lMes } = useMensual(sel.anio);
   const { data: skuMes = [] } = useSkuMes(sel.anio, sel.mes);
   const { data: cuotas = [] } = useCuotas(sel.anio);
+  const { data: estadoMes = [] } = useEstadoMes(sel.anio, sel.mes);
 
   // Mes por defecto = el último con venta (casi siempre el mes en curso, pero el puente
   // puede ir un día atrás y entonces el mes en curso arrancaría vacío).
@@ -97,12 +98,16 @@ export default function SellOutGlobal() {
     const disponibles = new Set();
     for (const d of dias) if (N(d.importe) > 0) disponibles.add(`${N(d.anio)}-${N(d.mes)}`);
 
+    // Estados del mes (mv_sellout_estado_mes). En el celular van como lista tocable: sin mapa.
+    const estados = porEstado(estadoMes, anio, mes, cuentasSel).filter((e) => e.estado !== 'SIN ESTADO' && e.importe > 0);
+    const nombrePorCuenta = Object.fromEntries(filasBase.map((f) => [f.cuenta, f.nombre.split(' (')[0]]));
+
     return {
-      anio, mes, corteDia, filasBase, filas, tot, totGlobal, canales, serie, comp, grupos,
+      anio, mes, corteDia, filasBase, filas, tot, totGlobal, canales, serie, comp, grupos, estados, nombrePorCuenta,
       activas, conFuente, conInv, disponibles,
       enCurso: anio === anioActual && mes === mesActual,
     };
-  }, [cuentas, mensual, dias, skuMes, cuotas, sel, canalSel, dimension, anioActual, mesActual]);
+  }, [cuentas, mensual, dias, skuMes, cuotas, estadoMes, sel, canalSel, dimension, anioActual, mesActual]);
 
   const textoCompartir = useMemo(() => (r ? textoResumenMes({
     anio: r.anio, mes: r.mes, tot: r.totGlobal, canales: r.canales,
@@ -180,6 +185,10 @@ export default function SellOutGlobal() {
             pie={dimension === 'canal'
               ? 'Reparto del sell out del mes por canal (montos sin IVA).'
               : `${dimension === 'marca' ? 'Marca' : 'Categoría'} del catálogo · % del sell out del mes; las que no caben van en "Otros".`} />
+
+          <ListaEstados estados={r.estados} titulo={`Dónde se vende · ${MESES[r.mes - 1]}`}
+            nombreCuenta={(c) => r.nombrePorCuenta[c] || c}
+            pie="Estado del cliente final, sólo de las fuentes que lo mandan (CVA, GUC, TechSmart y PCH). Toca un estado para su ficha; el mapa sólo está en la computadora." />
 
           {r.grupos.map((g) => (
             <ListaAgrupada key={g.id} titulo={g.label} meta={`${g.filas.length}`} style={{ marginTop: 18 }}

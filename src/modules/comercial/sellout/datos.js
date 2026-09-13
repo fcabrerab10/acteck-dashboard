@@ -91,6 +91,20 @@ export function useEstadoMes(anio, mes) {
   ), { enabled: !!anio && !!mes }));
 }
 
+/**
+ * Historia por estado de TODAS las cuentas (panel del mapa: modos Cuentas y Tiempo).
+ * mv_sellout_estado_mes completa son 1,635 filas (13 cuentas × 32 estados × 20 meses, y sólo
+ * 4 cuentas mandan estado de verdad), así que con tres años cabe en UNA consulta.
+ * Se pide sólo cuando se abre el panel (`enabled`).
+ */
+export function useEstadosHistoria(anio, enabled = true) {
+  return useQuery(q(['sellout_global', 'estado_historia', anio], () => fetchAllQ(
+    () => supabase.from('mv_sellout_estado_mes').select('cuenta,anio,mes,estado,importe,cantidad,clientes_finales,vendedores,facturas')
+      .gte('anio', anio - 2),
+    { pageSize: 1000, orderCol: 'cuenta', label: 'mv_sellout_estado_mes_historia' },
+  ), { enabled: enabled && !!anio }));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Drill · una cuenta a la vez, bajo demanda
 // ─────────────────────────────────────────────────────────────────────────────

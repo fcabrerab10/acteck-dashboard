@@ -31,7 +31,7 @@ import {
 import {
   fmtMoney, fmtInt, fmtPct, capitalizarEstado, textoEstatusCuenta,
 } from '../../../modules/comercial/sellout/textos';
-import { TabsScroll, CajaDatos, Dato, Fuente } from './piezas';
+import { TabsScroll, CajaDatos, Dato, Fuente, ListaEstados } from './piezas';
 
 const CLIENTE_POR_CUENTA = Object.fromEntries(Object.entries(CUENTA_POR_CLIENTE).map(([k, v]) => [v, k]));
 const norm = (s) => String(s || '').toUpperCase();
@@ -404,27 +404,10 @@ function TabClientes({ filas, fila, anio, mes }) {
   );
 }
 
-// ── Estados (sin mapa en el celular) ──────────────────────────────────────────
+// ── Estados (sin mapa en el celular; tocar uno abre su ficha) ─────────────────
 function TabEstados({ estados, mes }) {
-  const { theme } = useTheme();
-  const max = Math.max(0, ...estados.map((e) => Nc(e.importe)));
   return (
-    <ListaAgrupada titulo={`Dónde vende · ${MESES[mes - 1]}`} meta={`${estados.length}`}
-      pie="Reparto del sell out del mes por estado del cliente final. En el celular va como lista: el mapa sólo está en la computadora.">
-      {estados.length === 0 && <Vacio icon={null} titulo="Esta fuente no manda estado" style={{ padding: 18 }} />}
-      {estados.map((e) => (
-        <div key={e.estado} style={{ padding: '9px 12px', fontFamily: TYPO.fontText }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{capitalizarEstado(e.estado)}</span>
-            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: theme.text }}>
-              {fmtPct(e.pct)}<span style={{ fontWeight: 500, color: theme.textMuted, marginLeft: 6, fontSize: 12, fontFamily: TYPO.fontText }}>{moneyCompact(e.importe)}</span>
-            </span>
-          </div>
-          <div style={{ marginTop: 6, height: 4, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
-            <div style={{ height: 4, width: `${max > 0 ? (Nc(e.importe) / max) * 100 : 0}%`, background: theme.accent, borderRadius: 999 }} />
-          </div>
-        </div>
-      ))}
-    </ListaAgrupada>
+    <ListaEstados estados={estados} titulo={`Dónde vende · ${MESES[mes - 1]}`} style={{ marginTop: 0 }}
+      pie="Reparto del sell out del mes por estado del cliente final. Toca un estado para ver su ficha; el mapa sólo está en la computadora." />
   );
 }

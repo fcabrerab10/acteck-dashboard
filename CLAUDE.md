@@ -224,6 +224,12 @@ de mapa plegable. Montos siempre **sin IVA**.
 - **Mapa**: `sellout/MapaMexico.jsx` + `sellout/mexico-estados.json` (32 estados, geometría real simplificada,
   82 KB, ya proyectada a un viewBox de 1000). Se carga con `React.lazy` para no pesar en el arranque.
   Nombres en MAYÚSCULAS SIN ACENTOS, iguales a los que devuelve `normalizar_estado_mx()` en Postgres.
+- **Panel del mapa (2026-09-13)**: `sellout/PanelMapa.jsx` (lazy) = un panel con Segmented **Medir · Cuentas ·
+  Tiempo**, modo recordado en `preferencias` (`sellOut.mapaModo`). Comunes: ficha al cursor (Δ, clientes finales,
+  top 3 cuentas), clic que fija `estadoSel` y ranking lateral sincronizado. Datos: `useEstadosHistoria` (toda
+  `mv_sellout_estado_mes`, 1.6 K filas) + `serieEstados`/`estadosPorCuenta`/`huecos`/`dependencia`/`alertasGeograficas`
+  en `calculo.js`. Esa MV no trae SKU ni marca: no hay top SKU por estado ni small multiples por marca.
+  Celular: `ListaEstados`/`HojaEstado` en `selloutGlobal/piezas.jsx` — lista tocable con ficha en `HojaM`, sin mapa.
 - **Reutilizable**: `sellout/ResumenSellOut.jsx` (Bento del resumen) se monta también arriba del drill de
   Análisis por Cliente para los clientes con fuente de sell out.
 - **Frescura por cliente** (migración `20260912_frescura_sellout_detalle_cliente.sql`): `sellout_detalle`

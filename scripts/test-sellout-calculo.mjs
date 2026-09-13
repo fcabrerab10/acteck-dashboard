@@ -7,6 +7,7 @@ import {
   ultimoMesConVenta, semanasInventario, sumaUltimosMeses, construirFilas, totalesDeFilas, porCanal,
   composicion, serie12, porEstado, skusDeCuenta, alertasDeCuenta, ritmoProyectado,
   indiceCuotas, alcanceCuota, toneCuota,
+  serieEstados, estadosPorCuenta, huecos, dependencia, alertasGeograficas,
 } from '../src/modules/comercial/sellout/calculo.js';
 import { textoResumenMes, textoEstatusCuenta, capitalizarEstado, fraseHero } from '../src/modules/comercial/sellout/textos.js';
 
@@ -248,6 +249,84 @@ const ESTADOS = [
   { cuenta: 'ct', anio: 2025, mes: 9, estado: 'JALISCO', importe: 300, cantidad: 30, clientes_finales: 20, vendedores: 6 },
   { cuenta: 'ct', anio: 2026, mes: 8, estado: 'JALISCO', importe: 999, cantidad: 99, clientes_finales: 1, vendedores: 1 },
 ];
+
+// ── Panel del mapa: Medir / Cuentas / Tiempo ─────────────────────────────────
+// Tres cuentas con estado: "ct" manda Jalisco y NL, "cva" Jalisco y Puebla, "guc" sólo NL.
+const MAPA = [
+  { cuenta: 'ct',  anio: 2026, mes: 9, estado: 'JALISCO',    importe: 600, cantidad: 60, clientes_finales: 30, vendedores: 8 },
+  { cuenta: 'ct',  anio: 2026, mes: 9, estado: 'NUEVO LEON', importe: 100, cantidad: 10, clientes_finales: 5,  vendedores: 2 },
+  { cuenta: 'ct',  anio: 2026, mes: 9, estado: 'SIN ESTADO', importe: 400, cantidad: 40, clientes_finales: 0,  vendedores: 1 },
+  { cuenta: 'cva', anio: 2026, mes: 9, estado: 'JALISCO',    importe: 200, cantidad: 20, clientes_finales: 10, vendedores: 3 },
+  { cuenta: 'cva', anio: 2026, mes: 9, estado: 'PUEBLA',     importe:  50, cantidad: 5,  clientes_finales: 2,  vendedores: 1 },
+  { cuenta: 'guc', anio: 2026, mes: 9, estado: 'NUEVO LEON', importe:  10, cantidad: 1,  clientes_finales: 1,  vendedores: 1 },
+  // Historia: Puebla es estreno (nada antes), Jalisco cae fuerte y Sonora dejó de comprar en agosto.
+  { cuenta: 'ct',  anio: 2025, mes: 9, estado: 'JALISCO',    importe: 2000, cantidad: 200, clientes_finales: 40, vendedores: 9 },
+  { cuenta: 'ct',  anio: 2026, mes: 8, estado: 'SONORA',     importe: 700, cantidad: 70, clientes_finales: 7, vendedores: 2 },
+  { cuenta: 'ct',  anio: 2026, mes: 8, estado: 'JALISCO',    importe: 900, cantidad: 90, clientes_finales: 9, vendedores: 3 },
+];
+const TODOS_LOS_ESTADOS = ['JALISCO', 'NUEVO LEON', 'PUEBLA', 'SONORA', 'YUCATAN'];
+
+test('porEstado desglosa el estado por cuenta y calcula el ticket por cliente final', () => {
+  const jal = porEstado(MAPA, 2026, 9).find((e) => e.estado === 'JALISCO');
+  assert.equal(jal.importe, 800);
+  assert.equal(jal.cuentasActivas, 2);
+  assert.equal(jal.cuentas[0].cuenta, 'ct');
+  assert.equal(Math.round(jal.cuentas[0].pct), 75);
+  assert.equal(jal.clientes, 40);
+  assert.equal(jal.ticketCf, 20);                       // 800 / 40 clientes finales
+  // El % se recalcula al agregar: nunca se suma el de cada cuenta.
+  assert.equal(Math.round(jal.cuentas[0].pct + jal.cuentas[1].pct), 100);
+});
+
+test('estadosPorCuenta deja fuera "SIN ESTADO" y ordena de mayor a menor', () => {
+  const l = estadosPorCuenta(MAPA, 2026, 9);
+  assert.deepEqual(l.map((x) => x.cuenta), ['ct', 'cva', 'guc']);
+  assert.equal(l[0].total, 700);                        // 600 + 100, sin los 400 sin estado
+  assert.equal(l[0].sinEstado, 400);
+  assert.equal(l[0].nEstados, 2);
+  assert.ok(!l[0].estados.some((e) => e.estado === 'SIN ESTADO'));
+  // Con lista explícita respeta el orden pedido (los 4 mini mapas).
+  assert.deepEqual(estadosPorCuenta(MAPA, 2026, 9, ['guc', 'ct']).map((x) => x.cuenta), ['guc', 'ct']);
+});
+
+test('huecos: estados donde el grupo elegido no vende, diciendo quién sí', () => {
+  const h = huecos(MAPA, 2026, 9, ['cva'], TODOS_LOS_ESTADOS);
+  const nl = h.find((x) => x.estado === 'NUEVO LEON');
+  assert.ok(nl, 'Nuevo León es hueco de CVA');
+  assert.deepEqual(nl.otras.sort(), ['ct', 'guc']);
+  const yuc = h.find((x) => x.estado === 'YUCATAN');
+  assert.deepEqual(yuc.otras, []);                      // ahí no vende nadie
+  assert.ok(!h.some((x) => x.estado === 'JALISCO'));    // CVA sí vende en Jalisco
+});
+
+test('dependencia: estados donde una sola cuenta pasa del 80 %', () => {
+  const d = dependencia(MAPA, 2026, 9, 80);
+  assert.deepEqual(d.map((x) => x.estado), ['NUEVO LEON', 'PUEBLA']);
+  assert.equal(d.find((x) => x.estado === 'PUEBLA').cuenta, 'cva');
+  assert.equal(d.find((x) => x.estado === 'PUEBLA').pct, 100);
+  assert.ok(!d.some((x) => x.estado === 'JALISCO'));    // 75 % no llega al umbral
+});
+
+test('serieEstados devuelve un reparto por cada uno de los últimos 12 meses', () => {
+  const s = serieEstados(MAPA, 2026, 9, 12);
+  assert.equal(s.length, 12);
+  assert.equal(s[11].mes, 9);
+  assert.equal(s[11].estados.find((e) => e.estado === 'JALISCO').importe, 800);
+  assert.equal(s[10].estados.find((e) => e.estado === 'SONORA').importe, 700);
+});
+
+test('alertasGeograficas: caen, estrenan y dejaron de comprar', () => {
+  const a = alertasGeograficas(MAPA, 2026, 9);
+  assert.deepEqual(a.caen.map((x) => x.estado), ['JALISCO']);   // 800 vs 2000 = −60 %
+  assert.equal(Math.round(a.caen[0].yoy), -60);
+  assert.ok(a.nuevos.some((x) => x.estado === 'PUEBLA'));
+  assert.ok(a.nuevos.some((x) => x.estado === 'NUEVO LEON'));
+  assert.ok(!a.nuevos.some((x) => x.estado === 'JALISCO'));     // Jalisco ya vendía
+  assert.deepEqual(a.perdidos.map((x) => x.estado), ['SONORA']); // vendió en agosto, nada en septiembre
+  assert.equal(a.perdidos[0].importePrev, 700);
+  // "SIN ESTADO" nunca entra en las alertas del mapa.
+  assert.ok(![...a.caen, ...a.nuevos, ...a.perdidos].some((x) => x.estado === 'SIN ESTADO'));
+});
 
 test('porEstado compara contra el mismo mes del año anterior', () => {
   const e = porEstado(ESTADOS, 2026, 9);

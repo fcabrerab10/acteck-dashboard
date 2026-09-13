@@ -379,7 +379,12 @@ export function serie12(mensual = [], anio, mes, cuentas = null) {
   return meses.map((m) => base.get(idxMes(m.anio, m.mes)));
 }
 
-/** Reparto por estado de mv_sellout_estado_mes para un mes (y su YoY). */
+/**
+ * Reparto por estado de mv_sellout_estado_mes para un mes (y su YoY).
+ * Además del total del estado devuelve el desglose por cuenta (`cuentas`, ordenado de mayor a
+ * menor con su %), las cuentas activas y el ticket por cliente final: es la ficha del mapa.
+ * OJO: mv_sellout_estado_mes NO trae SKU ni marca — no hay forma de dar "top SKU del estado".
+ */
 export function porEstado(estadoMes = [], anio, mes, cuentas = null) {
   const m = new Map();
   for (const r of estadoMes) {
@@ -388,14 +393,136 @@ export function porEstado(estadoMes = [], anio, mes, cuentas = null) {
     const a = N(r.anio);
     if (a !== anio && a !== anio - 1) continue;
     const k = r.estado || 'SIN ESTADO';
-    const acc = m.get(k) || { estado: k, importe: 0, importePrev: 0, cantidad: 0, clientes: 0, vendedores: 0 };
-    if (a === anio) { acc.importe += N(r.importe); acc.cantidad += N(r.cantidad); acc.clientes += N(r.clientes_finales); acc.vendedores += N(r.vendedores); }
-    else acc.importePrev += N(r.importe);
+    const acc = m.get(k) || { estado: k, importe: 0, importePrev: 0, cantidad: 0, clientes: 0, vendedores: 0, facturas: 0, _c: new Map() };
+    if (a === anio) {
+      acc.importe += N(r.importe); acc.cantidad += N(r.cantidad);
+      acc.clientes += N(r.clientes_finales); acc.vendedores += N(r.vendedores); acc.facturas += N(r.facturas);
+      if (N(r.importe) > 0) acc._c.set(r.cuenta, (acc._c.get(r.cuenta) || 0) + N(r.importe));
+    } else acc.importePrev += N(r.importe);
     m.set(k, acc);
   }
-  const lista = [...m.values()].map((x) => ({ ...x, yoy: yoy(x.importe, x.importePrev) }));
+  const lista = [...m.values()].map(({ _c, ...x }) => {
+    const cta = [...(_c || new Map())].map(([cuenta, importe]) => ({ cuenta, importe, pct: ratio(importe, x.importe) }))
+      .sort((a, b) => b.importe - a.importe);
+    return { ...x, yoy: yoy(x.importe, x.importePrev), cuentas: cta, cuentasActivas: cta.length, ticketCf: x.clientes ? x.importe / x.clientes : null };
+  });
   const total = lista.reduce((s, x) => s + x.importe, 0);
   return lista.map((x) => ({ ...x, pct: ratio(x.importe, total) })).sort((a, b) => b.importe - a.importe);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel del mapa · modos Medir / Cuentas / Tiempo
+// Todo sale de mv_sellout_estado_mes (cuenta, anio, mes, estado, importe, cantidad,
+// clientes_finales, vendedores, facturas). No hay sku ni marca en esa MV.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Un porEstado() por cada uno de los últimos `n` meses (modo Tiempo). */
+export function serieEstados(estadoMes = [], anio, mes, n = 12, cuentas = null) {
+  return ultimosMeses(anio, mes, n).map((m) => ({ ...m, estados: porEstado(estadoMes, m.anio, m.mes, cuentas) }));
+}
+
+/**
+ * Un reparto por estado para CADA cuenta pedida (modo Cuentas · small multiples).
+ * `listaCuentas` = ids en el orden en que se quieren pintar; si se omite, todas las que
+ * reportan algún estado distinto de "SIN ESTADO" ese mes, de mayor a menor.
+ */
+export function estadosPorCuenta(estadoMes = [], anio, mes, listaCuentas = null) {
+  const porCta = new Map();
+  for (const r of estadoMes) {
+    if (N(r.anio) !== anio || N(r.mes) !== mes) continue;
+    const c = r.cuenta;
+    if (listaCuentas && !listaCuentas.includes(c)) continue;
+    if (!porCta.has(c)) porCta.set(c, []);
+    porCta.get(c).push(r);
+  }
+  const salida = [...porCta.entries()].map(([cuenta, filas]) => {
+    const estados = porEstado(filas, anio, mes);
+    const conEstado = estados.filter((e) => e.estado !== 'SIN ESTADO');
+    return {
+      cuenta,
+      estados: conEstado,
+      total: conEstado.reduce((s, e) => s + e.importe, 0),
+      sinEstado: estados.find((e) => e.estado === 'SIN ESTADO')?.importe || 0,
+      nEstados: conEstado.filter((e) => e.importe > 0).length,
+    };
+  }).filter((x) => x.nEstados > 0);
+  if (listaCuentas) return salida.sort((a, b) => listaCuentas.indexOf(a.cuenta) - listaCuentas.indexOf(b.cuenta));
+  return salida.sort((a, b) => b.total - a.total);
+}
+
+/**
+ * Huecos: estados donde NINGUNA de las cuentas elegidas vende este mes, diciendo qué otras
+ * cuentas SÍ venden ahí. `todosLosEstados` se pasa de fuera (los 32 nombres del mapa) para
+ * no meter la geometría en el cálculo puro.
+ */
+export function huecos(estadoMes = [], anio, mes, cuentasSel = null, todosLosEstados = []) {
+  const conVenta = new Map(); // estado → Set(cuenta)
+  for (const r of estadoMes) {
+    if (N(r.anio) !== anio || N(r.mes) !== mes) continue;
+    if (!(N(r.importe) > 0)) continue;
+    const e = r.estado || 'SIN ESTADO';
+    if (e === 'SIN ESTADO') continue;
+    if (!conVenta.has(e)) conVenta.set(e, new Set());
+    conVenta.get(e).add(r.cuenta);
+  }
+  const sel = cuentasSel ? new Set(cuentasSel) : null;
+  return todosLosEstados
+    .map((estado) => {
+      const quienes = conVenta.get(estado) || new Set();
+      const propias = sel ? [...quienes].filter((c) => sel.has(c)) : [...quienes];
+      const otras = sel ? [...quienes].filter((c) => !sel.has(c)) : [];
+      return { estado, vacio: propias.length === 0, otras };
+    })
+    .filter((x) => x.vacio)
+    .sort((a, b) => b.otras.length - a.otras.length || a.estado.localeCompare(b.estado));
+}
+
+/** Estados donde una sola cuenta concentra más del umbral (% del sell out del estado). */
+export function dependencia(estadoMes = [], anio, mes, umbral = 80, cuentas = null) {
+  return porEstado(estadoMes, anio, mes, cuentas)
+    .filter((e) => e.estado !== 'SIN ESTADO' && e.importe > 0 && e.cuentas.length)
+    .map((e) => ({ estado: e.estado, importe: e.importe, cuenta: e.cuentas[0].cuenta, pct: e.cuentas[0].pct, cuentasActivas: e.cuentasActivas }))
+    .filter((e) => e.pct != null && e.pct > umbral)
+    .sort((a, b) => b.importe - a.importe);
+}
+
+/**
+ * Alertas geográficas del mes elegido:
+ *   caen    — estado con venta este mes y el año pasado, cayendo más de `caida` % (por defecto −20).
+ *   nuevos  — estado con venta este mes y CERO en los `ventana` meses anteriores.
+ *   perdidos— estado con venta el mes pasado y cero este mes.
+ * @param estadoMes filas crudas de mv_sellout_estado_mes (hacen falta ≥ 13 meses de historia)
+ */
+export function alertasGeograficas(estadoMes = [], anio, mes, { caida = -20, ventana = 12, cuentas = null } = {}) {
+  const idxAct = idxMes(anio, mes);
+  const serie = new Map(); // estado → Map(idx → importe)
+  for (const r of estadoMes) {
+    if (cuentas && !cuentas.has(r.cuenta)) continue;
+    const e = r.estado || 'SIN ESTADO';
+    if (e === 'SIN ESTADO') continue;
+    const i = idxMes(N(r.anio), N(r.mes));
+    if (!serie.has(e)) serie.set(e, new Map());
+    const m = serie.get(e);
+    m.set(i, (m.get(i) || 0) + N(r.importe));
+  }
+  const caen = [], nuevos = [], perdidos = [];
+  for (const [estado, m] of serie) {
+    const act = m.get(idxAct) || 0;
+    const prevMes = m.get(idxAct - 1) || 0;
+    const prevAnio = m.get(idxAct - 12) || 0;
+    if (act > 0 && prevAnio > 0) {
+      const d = yoy(act, prevAnio);
+      if (d != null && d < caida) caen.push({ estado, importe: act, importePrev: prevAnio, yoy: d });
+    }
+    if (act > 0) {
+      let historia = 0;
+      for (let k = 1; k <= ventana; k += 1) historia += m.get(idxAct - k) || 0;
+      if (historia === 0) nuevos.push({ estado, importe: act });
+    }
+    if (act === 0 && prevMes > 0) perdidos.push({ estado, importe: 0, importePrev: prevMes });
+  }
+  const porImporte = (a, b) => (b.importe || b.importePrev || 0) - (a.importe || a.importePrev || 0);
+  return { caen: caen.sort((a, b) => a.yoy - b.yoy), nuevos: nuevos.sort(porImporte), perdidos: perdidos.sort((a, b) => b.importePrev - a.importePrev) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -519,5 +646,6 @@ export default {
   MESES, MESES_LARGO, CANALES, canalLabel, canalTone, N, idxMes, deIdx, yoy, ratio, ultimosMeses,
   mtdPorCuenta, ytdPorCuenta, totalDe, ultimoDiaConVenta, ultimoMesConVenta, semanasInventario,
   sumaUltimosMeses, indiceCuotas, alcanceCuota, toneCuota, construirFilas, totalesDeFilas, porCanal, composicion, serie12, porEstado,
+  serieEstados, estadosPorCuenta, huecos, dependencia, alertasGeograficas,
   skusDeCuenta, alertasDeCuenta, ritmoProyectado, agregarDimension, clientesFinalesDelMes,
 };

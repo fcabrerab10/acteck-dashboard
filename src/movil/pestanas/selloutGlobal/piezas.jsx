@@ -4,8 +4,9 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { ListaAgrupada, Pill } from '../../piezas';
-import { moneyCompact, N } from '../../util';
+import { ListaAgrupada, Fila, HojaM, Pill } from '../../piezas';
+import { moneyCompact, int, deltaPct, N } from '../../util';
+import { capitalizarEstado, fmtPct } from '../../../modules/comercial/sellout/textos';
 
 /** Pastilla tocable sobre el hero inverso (misma que en sellin/SellInGlobal: vive sobre fondo negro/marfil). */
 export function PillHero({ on = false, onClick, children, theme, style }) {
@@ -98,6 +99,71 @@ export function Fuente({ children, style }) {
     <div style={{ padding: '16px 28px 0', fontSize: 11, color: theme.textSubtle || theme.textMuted, lineHeight: 1.45, fontFamily: TYPO.fontText, ...style }}>
       {children}
     </div>
+  );
+}
+
+/**
+ * Lista de estados tocable (el mapa no se monta en el celular) + la hoja con su ficha.
+ * `estados` = salida de porEstado(): trae el desglose por cuenta, los clientes finales y el YoY.
+ * mv_sellout_estado_mes no tiene SKU ni marca: por eso la ficha no da "top SKU del estado".
+ */
+export function ListaEstados({ estados = [], titulo, meta, pie, nombreCuenta = (c) => c, style }) {
+  const { theme } = useTheme();
+  const [ficha, setFicha] = useState(null);
+  const max = Math.max(0, ...estados.map((e) => N(e.importe)));
+  return (
+    <>
+      <ListaAgrupada titulo={titulo} meta={meta ?? `${estados.length}`} pie={pie} style={{ marginTop: 18, ...style }}>
+        {estados.length === 0 && <div style={{ padding: 18, fontSize: 12.5, color: theme.textMuted, textAlign: 'center' }}>Esta fuente no manda estado.</div>}
+        {estados.map((e) => (
+          <button key={e.estado} type="button" onClick={() => setFicha(e)}
+            style={{ display: 'block', width: '100%', padding: '9px 12px', background: 'transparent', border: 0,
+              textAlign: 'left', color: theme.text, font: 'inherit', fontFamily: TYPO.fontText, cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{capitalizarEstado(e.estado)}</span>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                {fmtPct(e.pct)}
+                <span style={{ fontWeight: 500, color: theme.textMuted, marginLeft: 6, fontSize: 12, fontFamily: TYPO.fontText }}>{moneyCompact(e.importe)}</span>
+              </span>
+            </div>
+            <div style={{ marginTop: 6, height: 4, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ height: 4, width: `${max > 0 ? (N(e.importe) / max) * 100 : 0}%`, background: theme.accent, borderRadius: 999 }} />
+            </div>
+          </button>
+        ))}
+      </ListaAgrupada>
+      <HojaEstado estado={ficha} onClose={() => setFicha(null)} nombreCuenta={nombreCuenta} />
+    </>
+  );
+}
+
+/** Ficha de un estado (la misma que la web enseña al pasar el cursor sobre el mapa). */
+export function HojaEstado({ estado, onClose, nombreCuenta = (c) => c }) {
+  const { theme } = useTheme();
+  const e = estado;
+  return (
+    <HojaM abierto={!!e} onClose={onClose} titulo={e ? capitalizarEstado(e.estado) : ''} sub="Sell out del mes · sin IVA" alto="62vh">
+      {e && (
+        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px',
+            display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 }}>
+            <Dato k="Sell out" v={moneyCompact(e.importe)} sub={`${fmtPct(e.pct)} del mes`} />
+            <Dato k="vs año pasado" v={e.yoy == null ? '—' : deltaPct(e.yoy)} sub={e.importePrev ? moneyCompact(e.importePrev) : 'sin comparativo'}
+              color={e.yoy == null ? undefined : e.yoy >= 0 ? theme.green : theme.red} />
+            <Dato k="Clientes finales" v={e.clientes ? int(e.clientes) : '—'} sub={e.ticketCf ? `${moneyCompact(e.ticketCf)} por cliente` : 'la fuente no los manda'} />
+            <Dato k="Piezas" v={e.cantidad ? int(e.cantidad) : '—'} sub={e.vendedores ? `${int(e.vendedores)} vendedores` : undefined} />
+          </div>
+          <ListaAgrupada titulo="Quién vende ahí" meta={`${e.cuentas?.length || 0}`} style={{ margin: 0 }}
+            pie="Reparto del estado por cuenta. La fuente no trae SKU por estado: por eso no hay top de productos.">
+            {(e.cuentas || []).slice(0, 3).map((c) => (
+              <Fila key={c.cuenta} titulo={nombreCuenta(c.cuenta)} valor={moneyCompact(c.importe)}
+                pill={{ tone: 'gray', label: fmtPct(c.pct) }} />
+            ))}
+            {!e.cuentas?.length && <div style={{ padding: 14, fontSize: 12.5, color: theme.textMuted, textAlign: 'center' }}>Sin venta este mes.</div>}
+          </ListaAgrupada>
+        </div>
+      )}
+    </HojaM>
   );
 }
 

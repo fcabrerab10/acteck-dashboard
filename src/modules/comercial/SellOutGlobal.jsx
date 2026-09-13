@@ -24,12 +24,12 @@ import { GraficaLineas } from '../../components/kit';
 import Buscador from './sellin/Buscador';
 import Filtros from './sellin/Filtros';
 import DrillCuenta from './sellout/DrillCuenta';
-// El mapa trae 82 KB de geometría: se carga sólo cuando se abre el panel.
-const MapaMexico = lazy(() => import('./sellout/MapaMexico'));
+// El mapa trae 82 KB de geometría: el panel entero (mapa + los tres modos) se carga sólo al abrirlo.
+const PanelMapa = lazy(() => import('./sellout/PanelMapa'));
 import { useCuentas, useAnios, useDias, useMensual, useSkuMes, useEstadoMes, useCuotas } from './sellout/datos';
 import {
   MESES, CANALES, canalLabel, canalTone, construirFilas, totalesDeFilas, porCanal, composicion,
-  serie12, porEstado, ultimoDiaConVenta, ultimoMesConVenta, ultimosMeses, toneCuota, N,
+  serie12, ultimoDiaConVenta, ultimoMesConVenta, ultimosMeses, toneCuota, N,
 } from './sellout/calculo';
 import { fmtMoney, fmtInt, fmtPct, fmtSigno, fraseHero, subHero, textoResumenMes, capitalizarEstado, etiquetaMes } from './sellout/textos';
 
@@ -132,7 +132,8 @@ export default function SellOutGlobal() {
     if (dimension === 'canal') return canales.map((c) => ({ id: c.id, label: c.label, importe: c.importe, pct: c.pct }));
     return composicion(skuMes.filter((r) => N(r.anio) === anio && N(r.mes) === mes), dimension, null, 8);
   }, [dimension, canales, skuMes, anio, mes]);
-  const estados = useMemo(() => porEstado(estadoMes, anio, mes), [estadoMes, anio, mes]);
+  // cuenta → nombre corto, para la ficha y los chips del panel del mapa.
+  const nombresCuenta = useMemo(() => Object.fromEntries(filasBase.map((f) => [f.cuenta, f.nombre])), [filasBase]);
 
   const activas = filasBase.filter((f) => f.importe > 0).length;
   // Las cuentas sin fuente de sell out no cuentan en "X de Y cuentas activas".
@@ -362,10 +363,10 @@ export default function SellOutGlobal() {
         expandidoKey={abierto}
         renderExpandido={(f) => <DrillCuenta fila={f} anio={anio} mes={mes} corteDia={corteDia} estadoSel={estadoSel} onEstado={setEstadoSel} />} />
 
-      <Panel titulo="Mapa · dónde se vende" meta={`${MESES[mes - 1]} ${anio} · sólo las fuentes que traen estado del cliente final`} plegable abiertoInicial={false} onToggle={setMapaAbierto}>
+      <Panel titulo="Mapa · dónde se vende" meta={`${MESES[mes - 1]} ${anio} · Medir · Cuentas · Tiempo · sólo las fuentes que traen estado del cliente final`} plegable abiertoInicial={false} onToggle={setMapaAbierto}>
         {(mapaAbierto || estadoSel) && (
           <Suspense fallback={<Cargando silueta={[{ tipo: 'panel', chart: 420 }]} minHeight={420} />}>
-            <MapaMexico datos={estados} seleccion={estadoSel} onSelect={setEstadoSel} alto={420} />
+            <PanelMapa anio={anio} mes={mes} estadoMes={estadoMes} estadoSel={estadoSel} onEstado={setEstadoSel} nombres={nombresCuenta} />
           </Suspense>
         )}
       </Panel>
