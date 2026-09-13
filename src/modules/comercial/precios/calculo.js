@@ -126,20 +126,20 @@ export function construirFilas({ roadmap, precios, bajos, promos, costos, cambio
 }
 
 /** KPIs de la pantalla sobre las filas visibles. */
-export function resumen(filas, { anio, mes } = {}) {
+export function resumen(filas, { anio, mes, listaMargen = 'Mayoreo AAA' } = {}) {
   let conPrecio = 0, nBajo = 0, dejado = 0, subieron = 0, bajaron = 0, sinPrecio = 0, promos = 0, mSum = 0, mN = 0;
   for (const r of filas) {
     if (r.conPrecio) conPrecio += 1;
     if (r.sinPrecio) sinPrecio += 1;
     if (r.promo) promos += 1;
     if (r.bajo) { nBajo += 1; dejado += r.bajo.dejado; }
-    if (r.margen['Mayoreo AAA'] != null) { mSum += r.margen['Mayoreo AAA']; mN += 1; }
+    if (r.margen[listaMargen] != null) { mSum += r.margen[listaMargen]; mN += 1; }
     for (const c of Object.values(r.cambios)) {
       if (anio && (c.anio !== anio || c.mes !== mes)) continue;
       if (c.tipo === 'subio') subieron += 1; else if (c.tipo === 'bajo') bajaron += 1;
     }
   }
-  return { conPrecio, sinPrecio, promos, nBajo, dejado, subieron, bajaron, margenAAA: mN ? mSum / mN : null, margenN: mN };
+  return { conPrecio, sinPrecio, promos, nBajo, dejado, subieron, bajaron, margenAAA: mN ? mSum / mN : null, margenN: mN, listaMargen };
 }
 
 /** Filas del panel "Precio bajo accionable". */
@@ -149,10 +149,10 @@ export const filasPrecioBajo = (filas) => filas.filter((r) => r.bajo).map((r) =>
 }));
 
 /** Orden por columna (null → orden del roadmap). */
-export function ordenar(filas, orden) {
+export function ordenar(filas, orden, { listaMargen = 'Mayoreo AAA', miPrecio = {} } = {}) {
   if (!orden?.col) return filas;
   const { col, dir } = orden;
-  const val = (r) => (col.startsWith('p:') ? r.precios[col.slice(2)] : col === 'bajo' ? r.bajo?.real : col === 'margenAAA' ? r.margen['Mayoreo AAA'] : r[col]);
+  const val = (r) => (col.startsWith('p:') ? r.precios[col.slice(2)] : col === 'bajo' ? r.bajo?.real : col === 'margenAAA' ? r.margen[listaMargen] : col === 'miPrecio' ? margenDe(miPrecio[r.sku], r.costo) : r[col]);
   const s = dir === 'asc' ? 1 : -1;
   return [...filas].sort((a, b) => {
     const va = val(a), vb = val(b);
@@ -238,4 +238,20 @@ export function factPorSku(filas) {
 /** Precio bajo por cliente del SKU abierto (misma regla que PanelPrecioBajo: real < lista − 0.5 %), año en curso. */
 export function precioBajoSku(fact, precios, promo, anio) {
   return _precioBajoPorCliente(fact, { listaDe: listaDeCliente, precioDeLista: (l) => precioEfectivo(precios, promo, l), anio, tol: TOL_BAJO });
+}
+
+/** Margen % de un precio dado contra el costo promedio (null si falta cualquiera). */
+export function margenDe(precio, costo) {
+  const p = Number(precio), c = Number(costo);
+  if (!(p > 0) || !(c > 0)) return null;
+  return ((p - c) / p) * 100;
+}
+
+/** "Mi precio" por SKU (simulación personal) se guarda en el navegador: nunca es un precio oficial. */
+export const MI_PRECIO_KEY = 'precios.miPrecio';
+export function leerMiPrecio() {
+  try { const v = JSON.parse(localStorage.getItem(MI_PRECIO_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+}
+export function guardarMiPrecio(mapa) {
+  try { localStorage.setItem(MI_PRECIO_KEY, JSON.stringify(mapa)); } catch { /* sin storage */ }
 }

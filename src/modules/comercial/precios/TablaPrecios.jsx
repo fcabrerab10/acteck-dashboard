@@ -7,10 +7,10 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { TablaCompacta, Pill } from '../../../components/kit';
 import DrillSku from './DrillSku';
-import { precioEfectivo } from './calculo';
+import { precioEfectivo, margenDe } from './calculo';
 import { fmtMoney, fmtInt, fmtPct, fmtPctDelta, listaLbl, roadmapTone, periodoLbl } from './textos';
 
-export default function TablaPrecios({ filas, listas, sensible, orden, onSort, skuAbierto, onToggle, periodo }) {
+export default function TablaPrecios({ filas, listas, sensible, orden, onSort, skuAbierto, onToggle, periodo, listaMargen = 'Mayoreo AAA', miPrecio = {}, onMiPrecio }) {
   const { theme } = useTheme();
   const green = theme.green || '#34C759', red = theme.red || '#FF3B30', orange = theme.orange || '#FF9500', purple = theme.purple || '#AF52DE';
   const tonoMargen = (m) => (m == null ? theme.textMuted : m < 10 ? red : m < 20 ? orange : theme.text);
@@ -48,9 +48,23 @@ export default function TablaPrecios({ filas, listas, sensible, orden, onSort, s
         );
       },
     })),
-    ...(sensible ? [{ key: 'margenAAA', label: 'Margen AAA', align: 'right', sort: true, width: 84, render: (r) => {
-      const m = r.margen['Mayoreo AAA'];
-      return m == null ? <span style={{ color: theme.textSubtle }}>—</span> : <span title={`costo promedio ${fmtMoney(r.costo)}`} style={{ color: tonoMargen(m), fontWeight: 600 }}>{fmtPct(m, 1)}</span>;
+    // Margen contra la lista elegida arriba del panel (Fernando, 2026-09-13) y "Mi precio": un precio que el usuario
+    // teclea por SKU para ver el margen que quedaría; se guarda sólo en su navegador, nunca es precio oficial.
+    ...(sensible ? [{ key: 'margenAAA', label: `Margen ${listaLbl(listaMargen)}`, align: 'right', sort: true, width: 90, render: (r) => {
+      const m = r.margen[listaMargen];
+      return m == null ? <span style={{ color: theme.textSubtle }} title={r.costo > 0 ? `sin precio en ${listaLbl(listaMargen)}` : 'sin costo promedio'}>—</span> : <span title={`costo promedio ${fmtMoney(r.costo)}`} style={{ color: tonoMargen(m), fontWeight: 600 }}>{fmtPct(m, 1)}</span>;
+    } }, { key: 'miPrecio', label: 'Mi precio · margen', align: 'right', sort: true, width: 150, render: (r) => {
+      const v = miPrecio[r.sku];
+      const m = margenDe(v, r.costo);
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+          <input type="number" inputMode="decimal" min="0" step="0.01" value={v ?? ''} placeholder="$"
+            onChange={(e) => onMiPrecio?.(r.sku, e.target.value)}
+            title={r.costo > 0 ? `costo promedio ${fmtMoney(r.costo)} · escribe un precio sin IVA` : 'sin costo promedio: no se puede calcular margen'}
+            style={{ width: 74, height: 22, borderRadius: 6, border: `1px solid ${v ? (theme.accent || '#007AFF') : theme.border}`, background: theme.bg, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 11, fontVariantNumeric: 'tabular-nums', textAlign: 'right', padding: '0 6px', outline: 'none' }} />
+          <span style={{ minWidth: 44, textAlign: 'right', color: m == null ? theme.textSubtle : tonoMargen(m), fontWeight: 600 }}>{m == null ? '—' : fmtPct(m, 1)}</span>
+        </span>
+      );
     } }] : []),
   ];
 

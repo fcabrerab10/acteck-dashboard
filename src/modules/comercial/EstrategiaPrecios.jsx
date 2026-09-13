@@ -8,7 +8,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Panel, Cargando } from '../../components/kit';
+import { Hero, KpiCard, Panel, Cargando, Segmented } from '../../components/kit';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { fecha as fmtFecha } from '../../lib/format';
@@ -17,7 +17,8 @@ import Filtros from './sellin/Filtros';
 import TablaPrecios from './precios/TablaPrecios';
 import PanelPrecioBajo from './precios/PanelPrecioBajo';
 import { useDatosPrecios } from './precios/datos';
-import { FILTROS_VACIOS, conBusqueda, nActivos, listasVisibles, listasDeDatos, pasaTodos, facetas as calcFacetas, construirFilas, resumen, filasPrecioBajo, ordenar, precioEfectivo } from './precios/calculo';
+import { FILTROS_VACIOS, conBusqueda, nActivos, listasVisibles, listasDeDatos, pasaTodos, facetas as calcFacetas, construirFilas, resumen, filasPrecioBajo, ordenar, precioEfectivo, leerMiPrecio, guardarMiPrecio } from './precios/calculo';
+import { usePreferencias, setPreferencia } from '../../lib/preferencias';
 import { listaLbl, roadmapTone, fmtInt, fmtPct, fmtMoneyShort, MESES_LARGO } from './precios/textos';
 
 export default function EstrategiaPrecios() {
@@ -33,16 +34,22 @@ function Pantalla({ sensible }) {
   const [f, setF] = useState(FILTROS_VACIOS);
   const [orden, setOrden] = useState(null);
   const [skuAbierto, setSkuAbierto] = useState(null);
-  const [bajoAbrir, setBajoAbrir] = useState(0); // contador: cada clic en el KPI vuelve a abrir el panel (aunque el usuario lo haya plegado)
+  const [bajoAbrir, setBajoAbrir] = useState(0);
+  // Lista contra la que se calcula el margen de la tabla y el KPI (preferencia del usuario) y "Mi precio" por SKU (local).
+  const { prefs } = usePreferencias();
+  const prefLista = prefs?.precios?.listaMargen;
+  const [miPrecio, setMiPrecio] = useState(() => leerMiPrecio());
+  const onMiPrecio = (sku, valor) => setMiPrecio((m) => { const n = { ...m }; if (valor === '' || valor == null) delete n[sku]; else n[sku] = valor; guardarMiPrecio(n); return n; }); // contador: cada clic en el KPI vuelve a abrir el panel (aunque el usuario lo haya plegado)
   const hoy = new Date();
   const periodo = { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 };
 
   // Las listas salen de los datos: si el puente carga una lista nueva aparece sola (filtro, drill y Excel).
   const listasTodas = useMemo(() => listasDeDatos(datos?.precios), [datos]);
+  const listaMargen = prefLista && listasTodas.includes(prefLista) ? prefLista : (listasTodas.includes('Mayoreo AAA') ? 'Mayoreo AAA' : listasTodas[0] || 'Mayoreo AAA');
   const todas = useMemo(() => (datos ? construirFilas({ roadmap, ...datos, listas: listasTodas }) : []), [roadmap, datos, listasTodas]);
-  const filas = useMemo(() => ordenar(todas.filter((r) => pasaTodos(r, f, null)), orden), [todas, f, orden]);
+  const filas = useMemo(() => ordenar(todas.filter((r) => pasaTodos(r, f, null)), orden, { listaMargen, miPrecio }), [todas, f, orden, listaMargen, miPrecio]);
   const facetas = useMemo(() => calcFacetas(todas, f, listasTodas), [todas, f, listasTodas]);
-  const kpi = useMemo(() => resumen(filas, periodo), [filas, periodo.anio, periodo.mes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kpi = useMemo(() => resumen(filas, { ...periodo, listaMargen }), [filas, periodo.anio, periodo.mes, listaMargen]); // eslint-disable-line react-hooks/exhaustive-deps
   const bajas = useMemo(() => filasPrecioBajo(filas), [filas]);
   const listas = listasVisibles(f, listasTodas);
   const activos = nActivos(f);
@@ -107,9 +114,9 @@ function Pantalla({ sensible }) {
           big={fmtInt(kpi.nBajo)} bigSmall="SKUs" bigColor={kpi.nBajo ? (theme.orange || '#FF9500') : undefined}
           sub={kpi.nBajo ? `${fmtMoneyShort(kpi.dejado)} dejados en la mesa · clientes debajo de su lista` : 'Nadie facturado debajo de su lista'} />
         {sensible ? (
-          <KpiCard eyebrow="Margen promedio Mayoreo AAA" big={kpi.margenAAA != null ? fmtPct(kpi.margenAAA, 1) : '—'} bigSmall={kpi.margenN ? `${fmtInt(kpi.margenN)} SKUs` : undefined}
+          <KpiCard eyebrow={`Margen promedio ${listaLbl(listaMargen)}`} big={kpi.margenAAA != null ? fmtPct(kpi.margenAAA, 1) : '—'} bigSmall={kpi.margenN ? `${fmtInt(kpi.margenN)} SKUs` : undefined}
             bigColor={kpi.margenAAA == null ? undefined : kpi.margenAAA < 10 ? (theme.red || '#FF3B30') : kpi.margenAAA < 20 ? (theme.orange || '#FF9500') : undefined}
-            sub="(precio AAA − Costo Promedio) / precio · promedio simple por SKU con costo"
+            sub={`(precio ${listaLbl(listaMargen)} − Costo Promedio) / precio · promedio simple por SKU con costo · cambia la lista arriba de la tabla`}
             medida="Medida: Costo Promedio · Promedio de costopromedio con CostoInventario ≠ 0" />
         ) : (
           <KpiCard eyebrow="Promos vigentes" big={fmtInt(kpi.promos)} bigSmall="SKUs" sub="ya aplicadas en las listas (promos_temporada)" />
@@ -127,7 +134,16 @@ function Pantalla({ sensible }) {
             placeholder="Buscar: mouse inalámbrico negro, AC-93, teclado balam, RMI…" />} />
       </Panel>
 
-      <TablaPrecios filas={filas} listas={listas} sensible={sensible} orden={orden} onSort={onSort} skuAbierto={skuAbierto} onToggle={setSkuAbierto} periodo={periodo} />
+      {sensible && listasTodas.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '0 2px' }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.textMuted }}>Margen contra</span>
+          <Segmented size="sm" value={listaMargen} onChange={(l) => setPreferencia('precios.listaMargen', l)}
+            options={listasTodas.map((l) => ({ id: l, label: listaLbl(l) }))} />
+          <span style={{ fontSize: 10.5, color: theme.textMuted }}>· en "Mi precio" teclea un precio sin IVA y ves el margen que queda (se guarda sólo en tu navegador)</span>
+        </div>
+      )}
+      <TablaPrecios filas={filas} listas={listas} sensible={sensible} orden={orden} onSort={onSort} skuAbierto={skuAbierto} onToggle={setSkuAbierto} periodo={periodo}
+        listaMargen={listaMargen} miPrecio={miPrecio} onMiPrecio={onMiPrecio} />
 
       <PanelPrecioBajo filas={bajas} abrir={bajoAbrir} />
     </div>
