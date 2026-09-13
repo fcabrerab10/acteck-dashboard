@@ -65,7 +65,9 @@ export default defineConfig({
     VitePWA({
       // 'prompt': el SW nuevo queda en waiting y src/main.jsx avisa con un toast
       // ("Hay una versión nueva · Recargar"); updateSW(true) manda SKIP_WAITING y recarga.
-      registerType: 'prompt',
+      // autoUpdate (2026-09-13): el SW nuevo se activa solo (skipWaiting + clientsClaim). Con 'prompt' la
+      // gente se quedaba días en una versión vieja si no tocaba el aviso, y al desplegar sus chunks daban 404.
+      registerType: 'autoUpdate',
       injectRegister: null,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
@@ -127,11 +129,9 @@ export default defineConfig({
         globIgnores: ['**/react-query-devtools*', '**/node_modules/**', '**/uploads.html'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\.html$/],
-        // Sin skipWaiting: con registerType 'prompt' el SW nuevo espera a que el
-        // usuario pulse "Recargar" en el toast (main.jsx → updateSW(true) manda
-        // SKIP_WAITING). clientsClaim para que, ya activado, tome todas las tabs.
-        // index.html se sirve NetworkFirst (abajo), así que nunca queda un HTML
-        // stale apuntando a chunks que ya no existen (bug del 404 de assets).
+        // skipWaiting + clientsClaim: el SW nuevo toma el control en cuanto se instala. main.jsx escucha
+        // controllerchange y recarga (si la pestaña está en segundo plano) o avisa con toast.
+        skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         runtimeCaching: [

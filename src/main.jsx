@@ -14,12 +14,28 @@ import { toast } from './components/kit/Toast'
 // y "Recargar" activa el SW nuevo y recarga. Sin esto el usuario seguiría con el
 // bundle viejo hasta cerrar todas las pestañas.
 const updateSW = registerSW({
+  immediate: true,
   onNeedRefresh() {
     toast.info('Hay una versión nueva del dashboard', { accion: 'Recargar', onAccion: () => updateSW(true), ms: 0 })
   },
   onOfflineReady() {
     toast.ok('El dashboard ya funciona sin conexión')
   },
+  onRegisteredSW(_url, reg) {
+    // Revisa si hay versión nueva cada 30 min y al volver a la pestaña (iOS deja la PWA abierta días).
+    if (!reg) return
+    setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000)
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}) })
+  },
+})
+// Con registerType 'autoUpdate' el SW nuevo se activa solo; cuando toma el control, esta pestaña sigue con
+// el código viejo. Si nadie la está mirando se recarga sola; si está en primer plano, se avisa con el toast.
+let recargaPendiente = false
+navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
+  if (recargaPendiente) return
+  recargaPendiente = true
+  if (document.hidden) { window.location.reload(); return }
+  toast.info('Ya está instalada la versión nueva del dashboard', { accion: 'Recargar', onAccion: () => window.location.reload(), ms: 0 })
 })
 
 // ── Versión vieja en el navegador ──
