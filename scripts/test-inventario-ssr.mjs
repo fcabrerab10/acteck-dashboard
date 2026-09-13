@@ -16,6 +16,8 @@ test('los módulos de la pantalla cargan', async () => {
     '/src/modules/comercial/InventarioGlobal.jsx',
     '/src/modules/comercial/inventario/SkuDrillDown.jsx',
     '/src/modules/comercial/inventario/ApartadoPanel.jsx',
+    '/src/modules/comercial/inventario/FiltrosHoja.jsx',
+    '/src/modules/comercial/inventario/ExcelClienteHoja.jsx',
     '/src/modules/comercial/inventario/FueraDeVenta.jsx',
     '/src/modules/comercial/inventario/ProximosArribos.jsx',
     '/src/modules/comercial/inventario/ResumenSecundario.jsx',

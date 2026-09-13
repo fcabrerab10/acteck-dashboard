@@ -10,8 +10,9 @@ import { ESTADOS } from './filtros';
 import { CEDIS_CORTO, CEDIS_LISTA, fmtInt } from './constantes';
 
 const MAX_VISIBLES = 8;
+export const SIN_TOPE = 999;
 
-function Grupo({ theme, titulo, opciones, seleccion, onToggle, tonoDe, titleDe }) {
+export function Grupo({ theme, titulo, opciones, seleccion, onToggle, tonoDe, titleDe }) {
   const [todas, setTodas] = useState(false);
   const activa = (id) => (seleccion instanceof Set ? seleccion.has(id) : seleccion === id);
   // Se muestran las que dejan resultados (n > 0) o están activas; el resto no aporta.

@@ -7,7 +7,8 @@
 // Datos: inventario/useInventarioDatos.js · filtros: inventario/filtros.js · compartir: inventario/compartir.js.
 // Sensible (permisos.puedeVerSensible): sin él la pantalla se lee en piezas y días; nada de $ a costo.
 import React, { useMemo, useRef, useState } from 'react';
-import { Search, ChevronRight, Share2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Search, ChevronRight, Share2, X, FileSpreadsheet, ShoppingBasket } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import SinAcceso from '../../components/SinAcceso';
@@ -21,7 +22,8 @@ import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import useInventarioDatos from './inventario/useInventarioDatos';
 import SkuDrillDown from './inventario/SkuDrillDown';
 import ResumenSecundario from './inventario/ResumenSecundario';
-import FiltrosPills from './inventario/FiltrosPills';
+import FiltrosHoja from './inventario/FiltrosHoja';
+import ExcelClienteHoja from './inventario/ExcelClienteHoja';
 import ProximosArribos from './inventario/ProximosArribos';
 import HistoricoPanel, { fotoHace } from './inventario/HistoricoPanel';
 import CompartirHoja from './inventario/CompartirHoja';
@@ -113,6 +115,7 @@ function InventarioGlobalPantalla({ sensible }) {
   // Canasta para compartir varios SKUs · compartirSkus = lista abierta en la hoja
   const [canasta, setCanasta] = useState(() => new Set());
   const [compartirSkus, setCompartirSkus] = useState(null);
+  const [excelCliente, setExcelCliente] = useState(null);   // 'canasta' | 'tabla' | null
 
   const f = useMemo(() => ({ ...filtros, tokens: tokensBusqueda(busqueda) }), [filtros, busqueda]);
 
@@ -471,16 +474,16 @@ function InventarioGlobalPantalla({ sensible }) {
               style={{ border: 0, outline: 0, background: 'transparent', fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, flex: 1, minWidth: 0 }} />
             {busqueda && <X size={12} style={{ color: theme.textMuted, cursor: 'pointer', flexShrink: 0 }} onClick={() => setBusqueda('')} />}
           </div>
+          <FiltrosHoja f={f} facetas={facetas} cedis={cedisFiltro} cedisConteo={cedisConteo} onCedis={setCedisFiltro}
+            onToggle={toggleFiltro}
+            onSoloStock={(v) => setFiltros((p) => ({ ...p, soloStock: v }))}
+            onSoloTransito={(v) => setFiltros((p) => ({ ...p, soloTransito: v }))}
+            nActivos={nFiltrosActivos} onLimpiar={limpiarFiltros} />
+          <Boton icon={FileSpreadsheet} onClick={() => setExcelCliente('tabla')} title="Excel de disponibilidad para mandar a un cliente, con los filtros de ahora">Excel para cliente</Boton>
           <span style={{ fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-            {fmtInt(filasTabla.length)} de {fmtInt(skuRows.length)} SKUs{canasta.size ? ` · ${fmtInt(canasta.size)} en la canasta` : ''}
+            {fmtInt(filasTabla.length)} de {fmtInt(skuRows.length)} SKUs
           </span>
         </div>
-
-        <FiltrosPills f={f} facetas={facetas} cedis={cedisFiltro} cedisConteo={cedisConteo} onCedis={setCedisFiltro}
-          onToggle={toggleFiltro}
-          onSoloStock={(v) => setFiltros((p) => ({ ...p, soloStock: v }))}
-          onSoloTransito={(v) => setFiltros((p) => ({ ...p, soloTransito: v }))}
-          nActivos={nFiltrosActivos} onLimpiar={limpiarFiltros} />
 
         <TablaCompacta
           columnas={columnas}
@@ -516,13 +519,21 @@ function InventarioGlobalPantalla({ sensible }) {
       {/* Secundario */}
       <ResumenSecundario porCedis={porCedis} porTipo={porTipo} kpis={kpis} insights={resumen} cedisFiltro={cedisFiltro} onCedis={setCedisFiltro} sensible={sensible} />
 
-      {/* Canasta flotante */}
-      {canasta.size > 0 && (
-        <div style={{ position: 'fixed', right: 22, bottom: 22, zIndex: 60, display: 'flex', alignItems: 'center', gap: 6, padding: 6, borderRadius: 999, background: theme.surface, border: `1px solid ${theme.border}`, boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText }}>
-          <Boton icon={Share2} primario size="md" onClick={abrirCompartirCanasta}>Compartir {fmtInt(canasta.size)} SKU{canasta.size === 1 ? '' : 's'}</Boton>
+      {/* Canasta flotante · por portal al body: dentro de la página (PageTransition usa transform) un
+          position:fixed se ancla al contenedor y la barra quedaba fuera de la vista. */}
+      {canasta.size > 0 && createPortal(
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 22, zIndex: 70, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 14px', borderRadius: 999, background: theme.surface, border: `1px solid ${theme.border}`, boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText, maxWidth: 'calc(100vw - 32px)' }}>
+          <ShoppingBasket size={14} style={{ color: theme.accent, flexShrink: 0 }} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtInt(canasta.size)} SKU{canasta.size === 1 ? '' : 's'} en la canasta</span>
+          <Boton icon={Share2} primario size="md" onClick={abrirCompartirCanasta}>Compartir</Boton>
+          <Boton icon={FileSpreadsheet} size="md" onClick={() => setExcelCliente('canasta')}>Excel para cliente</Boton>
           <Boton icon={X} size="md" onClick={() => setCanasta(new Set())} title="Vaciar la canasta">Vaciar</Boton>
-        </div>
+        </div>,
+        document.body,
       )}
+
+      <ExcelClienteHoja abierto={!!excelCliente} onClose={() => setExcelCliente(null)} origen={excelCliente || 'tabla'}
+        rows={excelCliente === 'canasta' ? [...canasta].map((k) => porSku.get(k)).filter(Boolean) : filasTabla} />
 
       {/* Hoja compartir (1 SKU desde el drill o N desde la canasta) */}
       <CompartirHoja abierto={!!compartirSkus} rows={filasCompartir} onClose={() => setCompartirSkus(null)}
