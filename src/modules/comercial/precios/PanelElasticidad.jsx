@@ -7,9 +7,9 @@ import React from 'react';
 import { useTheme } from '../../../lib/themeContext';
 import { fecha as fmtFecha } from '../../../lib/format';
 import { Panel, Pill, DeltaPill, TablaCompacta } from '../../../components/kit';
-import { LISTAS, listaLbl, fmtMoney, fmtInt, periodoLbl, fmtElast, selectPill } from './textos';
+import { LISTAS, ordenarListas, listaLbl, fmtMoney, fmtInt, periodoLbl, fmtElast, selectPill } from './textos';
 
-export default function PanelElasticidad({ elast, elastCat, elastCatLoading, categoria, lista, onLista, listasConPrecio, historicoDesde, soloUnMes }) {
+export default function PanelElasticidad({ elast, elastCat, elastCatLoading, categoria, lista, onLista, listas, listasConPrecio, historicoDesde, soloUnMes }) {
   const { theme } = useTheme();
   const cols = [
     { key: 'periodo', label: 'Cambio', align: 'left', render: (r) => periodoLbl(r.anio, r.mes) },
@@ -28,7 +28,7 @@ export default function PanelElasticidad({ elast, elastCat, elastCatLoading, cat
     <Panel titulo="Elasticidad por cambio de precio" meta={meta}
       acciones={(
         <select value={lista} onChange={(e) => onLista(e.target.value)} style={selectPill(theme)} title="Lista sobre la que se miden los cambios">
-          {LISTAS.map((l) => <option key={l} value={l} disabled={listasConPrecio && !listasConPrecio.includes(l)}>{listaLbl(l)}</option>)}
+          {ordenarListas(listas?.length ? listas : LISTAS).map((l) => <option key={l} value={l} disabled={listasConPrecio && !listasConPrecio.includes(l)}>{listaLbl(l)}</option>)}
         </select>
       )}>
       {vacio ? (

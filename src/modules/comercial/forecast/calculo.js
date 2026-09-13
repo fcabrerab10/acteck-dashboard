@@ -14,7 +14,37 @@ export const BUFFER_MESES = 1;
 
 // ────────── Cálculo del forecast ──────────
 export function calcularForecast(data, horizonteMeses) {
-  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion, progArribos, catalogoArticulos, skuConfig } = data;
+  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion, progArribos, catalogoArticulos, skuConfig, comprasPendientes } = data;
+
+  // ── Compras en camino (v_compras_pendientes_sku · tabla compras_oc del ERP) ──
+  // SOLO INFORMATIVO: `poPendiente` NO entra en la brecha ni en el sugerido. Son POs
+  // COLOCADAS al proveedor (pendiente > 0 en el ERP) que pueden no haber embarcado todavía,
+  // así que no tienen ETA confiable y no se pueden restar del objetivo como el tránsito.
+  // Sirve para que el planeador no vuelva a pedir algo que ya está pedido.
+  const poPendienteBySku = {};
+  (comprasPendientes || []).forEach((c) => {
+    const sku = String(c?.sku || '').trim();
+    if (!sku) return;
+    const piezas = Number(c.piezas_pendientes || 0);
+    if (!(piezas > 0)) return;
+    if (!poPendienteBySku[sku]) poPendienteBySku[sku] = { piezas: 0, usd: 0, pos: [] };
+    const acc = poPendienteBySku[sku];
+    acc.piezas += piezas;
+    acc.usd += Number(c.usd_pendiente || 0);
+    acc.pos.push({
+      po: c.po || null,
+      piezas,
+      usd: Number(c.usd_pendiente || 0),
+      fechaPo: c.fecha_po || null,
+      eta: c.eta || null,
+      proveedor: c.proveedor || '',
+      enMasterEmbarques: !!c.en_master_embarques,
+      diasDesdePo: c.dias_desde_po == null ? null : Number(c.dias_desde_po),
+    });
+  });
+  Object.values(poPendienteBySku).forEach((v) => {
+    v.pos.sort((a, b) => String(a.fechaPo || '').localeCompare(String(b.fechaPo || '')));
+  });
 
   // Fase 3 · lookups de enriquecimiento.
   const progByContainer = {};
@@ -558,6 +588,12 @@ export function calcularForecast(data, horizonteMeses) {
       inventarioData: invBySku[sku] || null,
       traCant, traEta, traDentroHor, traDespuesHor,
       embarques,
+      // Informativo (no toca brecha ni sugerido): PO colocada al proveedor y todavía pendiente.
+      // `sinTransito` = el SKU no aparece en v_transito_sku → la PO aún no embarca y es lo que
+      // la tabla marca con la píldora "PO n pz" en la columna Tránsito.
+      poPendiente: poPendienteBySku[sku]
+        ? { ...poPendienteBySku[sku], sinTransito: traCant <= 0 }
+        : null,
       brecha, sugerido,
       sugeridoValorUsd: sugerido * Number(meta.unit_price_usd_ultima || 0),
       piezasPorContenedor,

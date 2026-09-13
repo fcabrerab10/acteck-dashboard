@@ -6,21 +6,41 @@ import { TYPO } from '../../../lib/themeTokens';
 
 export { MESES, MESES_LARGO, normalizar, tokens, coincide, N, fmtInt, fmtPct, fmtMoneyShort, pctDelta, mesesCerrados, roadmapTone } from '../sellin/textos';
 
-// Orden aprobado: Mayoreo AAA primero y las demás a la derecha.
-export const LISTAS = ['Mayoreo AAA', 'DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'];
-export const LISTA_LBL = { 'Mayoreo AAA': 'Mayoreo AAA', DICOTECH: 'Dicotech', 'PCEL PROVISIONAL': 'PCEL', 'API PROVISIONAL': 'API', 'DECME PROVISIONAL': 'DECME' };
+// Orden de presentación. Las 5 primeras son el orden aprobado por Fernando (Mayoreo AAA
+// primero); las 5 siguientes se sumaron el 2026-09-12, cuando el puente pasó de cargar 5 a
+// cargar las 10 listas con más facturación 2026 (ver LISTAS_PRECIOS en bridge/lib/mappers.mjs).
+// IMPORTANTE: este arreglo es sólo ORDEN y ETIQUETA. Las listas que la pantalla usa salen
+// SIEMPRE de los datos (listasDeDatos en calculo.js), así que una lista que el puente
+// agregue mañana aparece sola aunque no esté aquí (se ordena al final, con su nombre crudo).
+export const LISTAS = [
+  'Mayoreo AAA', 'DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL',
+  'Mayoreo PMM', 'Ingram Retail', 'MERCADO LIBRE FULL', 'SVENSKA PROVISIONAL', 'AMAZON',
+];
+export const LISTA_LBL = {
+  'Mayoreo AAA': 'Mayoreo AAA', DICOTECH: 'Dicotech', 'PCEL PROVISIONAL': 'PCEL',
+  'API PROVISIONAL': 'API', 'DECME PROVISIONAL': 'DECME', 'Mayoreo PMM': 'Mayoreo PMM',
+  'Ingram Retail': 'Ingram Retail', 'MERCADO LIBRE FULL': 'ML Full',
+  'SVENSKA PROVISIONAL': 'Svenska', AMAZON: 'Amazon',
+};
 export const listaLbl = (l) => LISTA_LBL[l] || l;
 
+/** Columnas de lista que caben en la tabla sin scroll horizontal (regla de ancho). El resto se ve con el filtro "Listas". */
+export const MAX_COLUMNAS_LISTA = 5;
+
+/** Ordena nombres de lista: primero los del catálogo (en su orden), luego los desconocidos alfabéticamente. */
+export function ordenarListas(nombres) {
+  const idx = new Map(LISTAS.map((l, i) => [l, i]));
+  return [...new Set(nombres || [])].filter(Boolean)
+    .sort((a, b) => (idx.has(a) ? idx.get(a) : 999) - (idx.has(b) ? idx.get(b) : 999) || String(a).localeCompare(String(b), 'es'));
+}
+
 /** Color de cada lista (una línea por lista en la evolución del precio). */
+const PALETA_LISTA = ['accent', 'purple', 'orange', 'green', 'teal', 'pink', 'indigo', 'yellow', 'red', 'blue'];
+const FALLBACK_LISTA = ['#007AFF', '#AF52DE', '#FF9500', '#34C759', '#5AC8FA', '#FF2D55', '#5856D6', '#FFCC00', '#FF3B30', '#0A84FF'];
 export function listaColor(theme, lista) {
-  const m = {
-    'Mayoreo AAA': theme.accent || '#007AFF',
-    DICOTECH: theme.purple || '#AF52DE',
-    'PCEL PROVISIONAL': theme.orange || '#FF9500',
-    'API PROVISIONAL': theme.green || '#34C759',
-    'DECME PROVISIONAL': theme.teal || '#5AC8FA',
-  };
-  return m[lista] || theme.textMuted || '#8E8E93';
+  const i = LISTAS.indexOf(lista);
+  if (i < 0) return theme.textMuted || '#8E8E93';
+  return theme[PALETA_LISTA[i]] || FALLBACK_LISTA[i];
 }
 
 // Lista que le corresponde a cada cliente (regla aprobada): digitalife → API, pcel → PCEL, dicotech → DICOTECH, resto → Mayoreo AAA.

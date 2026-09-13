@@ -13,7 +13,7 @@ export default function Backorder({ filas, onSku }) {
     { key: 'sku', label: 'SKU', align: 'left', mono: true, bold: true, render: (r) => <span title={r.descripcion}>{r.sku}</span> },
     { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 180, render: (r) => <span title={r.descripcion}>{r.descripcion || '—'}</span> },
     { key: 'backorder', label: 'Backorder', sum: true, render: (r) => <span style={{ fontWeight: 600, color: theme.orange }}>{fmtInt(r.backorder)}</span> },
-    { key: 'clientes', label: 'Clientes', align: 'left', render: (r) => r.clientes.map(nombreCliente).join(', ') },
+    { key: 'clientes', label: 'Clientes', align: 'left', maxWidth: 150, render: (r) => { const t = r.clientes.map(nombreCliente).join(', '); return <span title={t} style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{t}</span>; } },
     { key: 'stock', label: 'Stock', render: (r) => <span style={{ color: r.stock >= r.backorder ? theme.green : theme.text }}>{fmtInt(r.stock)}</span> },
     { key: 'cubre', label: 'Arribo', align: 'left', render: (r) => r.stock >= r.backorder ? <Pill tone="green" size="xs">Stock hoy</Pill> : r.cubre ? <Pill tone="blue" size="xs">PO {r.cubre.po || '—'} · {fmtFecha(r.cubre.eta)}</Pill> : <Pill tone="red" size="xs">Sin PO</Pill> },
     { key: 'dias', label: 'Días', render: (r) => Math.round(r.dias) },

@@ -77,8 +77,9 @@ export default function ProximosArribos({ transito, skuRows, descripciones, onVe
     { key: 'piezas', label: 'Piezas', width: 80, render: (p) => fmtInt(p.piezas), renderTotal: (v) => fmtInt(v) },
     { key: 'nSkus', label: 'SKUs', width: 60, render: (p) => fmtInt(p.nSkus), renderTotal: (v) => fmtInt(v) },
     {
-      key: 'resuelve', label: 'Resuelve', width: 150, render: (p) => (p.resuelve > 0
-        ? <Pill tone="red" size="xs" title="SKUs agotados o críticos que trae esta PO">{fmtInt(p.resuelve)} agotado{p.resuelve === 1 ? '' : 's'}/crítico{p.resuelve === 1 ? '' : 's'}</Pill>
+      // Regla de ancho: 9 columnas y etiquetas cortas (el detalle va en el title y en el drill).
+      key: 'resuelve', label: 'Resuelve', width: 92, render: (p) => (p.resuelve > 0
+        ? <Pill tone="red" size="xs" title="SKUs agotados o críticos que trae esta PO">{fmtInt(p.resuelve)} SKU{p.resuelve === 1 ? '' : 's'}</Pill>
         : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>),
       renderTotal: (v) => fmtInt(v),
     },

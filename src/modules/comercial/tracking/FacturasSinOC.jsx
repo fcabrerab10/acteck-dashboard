@@ -29,7 +29,7 @@ export default function FacturasSinOC({ filas, todas, puedeEditar, email }) {
   const columnas = [
     { key: 'folio', label: 'Factura', align: 'left', mono: true, bold: true, render: (r) => <span title={`${r.n_partidas || (r.partidas || []).length} partidas · ${fmtMoney(r.monto)}`}>{r.folio}</span> },
     { key: 'cliente', label: 'Cliente', align: 'left', render: (r) => <ClientePill k={r.cliente_key} /> },
-    { key: 'referencia', label: 'Referencia', align: 'left', maxWidth: 140, render: (r) => <span title={r.referencia || ''}>{r.referencia || '—'}</span> },
+    { key: 'referencia', label: 'Ref.', align: 'left', maxWidth: 130, render: (r) => <span title={r.referencia || ''}>{r.referencia || '—'}</span> },
     { key: 'fecha', label: 'Fecha', align: 'left', render: (r) => fmtFecha(r.fecha) },
     { key: 'piezas', label: 'Pz', render: (r) => fmtInt(r.piezas) },
     ...(puedeEditar ? [{ key: 'acc', label: '', align: 'left', render: (r) => (

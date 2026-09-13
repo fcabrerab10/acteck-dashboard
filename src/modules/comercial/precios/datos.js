@@ -2,7 +2,8 @@
 // Base de la pantalla: roadmap (useRoadmap, cache compartido), v_estrategia_precios_lista (1 fila sku+lista),
 // v_estrategia_precios_bajo (cliente facturado más bajo por SKU), promos del mes, v_precios_cambios_mes
 // (último precio vs mes anterior con dato) y, sólo con permiso sensible, costo promedio de v_inventario_comercial.
-// Drill por SKU: carga al abrir (useQuery por sku): facturación 2 años, precios_historico, promos, inventario y tránsito.
+// Drill por SKU: carga al abrir (useQuery por sku): facturación 2 años, precios_historico,
+//   v_precio_vigente_sku_lista (precio vigente + vigente_desde por lista), promos, inventario y tránsito.
 // Segundo paso del drill (bajo demanda, al abrir):
 //   · useElasticidadCategoria(categoria, skus): v_precios_cambios de los SKUs de la categoría + su facturación por
 //     sku/mes (v_sellin_global_sku_canal_mes) → elasticidad por categoría (calculo.js). Vacío con 1 mes de histórico.
@@ -54,15 +55,18 @@ export function useDrillPrecios(sku) {
     enabled: !!sku,
     staleTime: STALE,
     queryFn: async () => {
-      const [fact, historico, promosHist, inv, tr] = await Promise.all([
+      const [fact, historico, vigente, promosHist, inv, tr] = await Promise.all([
         fetchAll('facturacion_clientes', 'anio,mes,cliente_nombre,cliente_key,canal,piezas,monto', (q) => q.eq('sku', sku).in('anio', [anio, anio - 1])),
         fetchAll('precios_historico', 'lista,anio,mes,precio,moneda,primera_vez,ultima_vez', (q) => q.eq('sku', sku)),
+        // 2026-09-12 · precio vigente por lista + desde cuándo y cuántos periodos lleva precios_sku
+        // guardados (el puente ya no borra la tabla completa). Con un mes cargado devuelve 1 fila por lista.
+        fetchAll('v_precio_vigente_sku_lista', 'lista,precio,moneda,anio,mes,vigente_desde,periodos', (q) => q.eq('sku', sku)),
         fetchAll('promos_temporada', 'anio,mes,campania,promo_pct', (q) => q.eq('sku', sku)),
         cachedQuery(supabase.from('v_medidas_inventario_sku').select('articulo,inv_actual_disponible,inv_actual_piezas,costo_promedio,inv_actual').eq('articulo', sku).maybeSingle()),
         cachedQuery(supabase.from('v_transito_sku').select('sku,cantidad,eta_mas_cercana,embarques,embarques_detalle').eq('sku', sku).maybeSingle()),
       ]);
       const invRow = inv?.data ? { sku: inv.data.articulo, disponible: inv.data.inv_actual_disponible, inventario: inv.data.inv_actual_piezas, costo_promedio: inv.data.costo_promedio, valor: inv.data.inv_actual } : null;
-      return { fact: fact || [], historico: historico || [], promosHist: promosHist || [], inv: invRow, tr: tr?.data || null };
+      return { fact: fact || [], historico: historico || [], vigente: vigente || [], promosHist: promosHist || [], inv: invRow, tr: tr?.data || null };
     },
   });
 }

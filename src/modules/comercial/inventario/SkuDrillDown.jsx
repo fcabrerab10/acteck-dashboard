@@ -1,4 +1,5 @@
-// Drill por SKU · 4 KpiCard + desglose transpuesto (métricas × almacén) + POs en tránsito
+// Drill por SKU · 4 KpiCard + desglose transpuesto (métricas × almacén, sólo los almacenes
+// con piezas: 7 + "Otros" + "No com.", máximo 10 columnas) + POs en tránsito
 // + precios vigentes por lista + "Quién lo compra" (sell in 6 meses, carga sólo al abrir)
 // + botón "Compartir disponibilidad". Se monta dentro de TablaCompacta (renderExpandido).
 // `sensible=false` oculta valor a costo, costo promedio y $ de tránsito.
@@ -19,7 +20,7 @@ const TONO_ESTATUS = {
   'EN ESPERA DE CONSOLIDAR': 'orange', 'EN PRODUCCION': 'gray', 'Pendiente modular': 'gray',
 };
 
-export default function SkuDrillDown({ row, almacenes, sensible = true, onCompartir, enCanasta = false, onToggleCanasta }) {
+export default function SkuDrillDown({ row, sensible = true, onCompartir, enCanasta = false, onToggleCanasta }) {
   const { theme } = useTheme();
   const { porSku, listas, cargando: cargandoPrecios } = usePreciosLista([row.sku]);
   const { datos: compra, cargando: cargandoCompra } = useQuienLoCompra(row.sku);
@@ -29,15 +30,20 @@ export default function SkuDrillDown({ row, almacenes, sensible = true, onCompar
   const pctRes = row.totalPz > 0 ? (totalRes / row.totalPz) * 100 : 0;
   const tieneStock = row.totalPz > 0;
 
-  // Columnas: almacenes del grid + "Otros" (comerciales fuera del grid con stock)
-  const otros = useMemo(() => Object.keys(row.byAlm).map(Number).filter((a) => !almacenes.includes(a) && ALM_COMERCIALES.has(a) && (row.byAlm[a]?.pz || 0) > 0), [row, almacenes]);
-  const noComerciales = useMemo(() => Object.keys(row.byAlm).map(Number).filter((a) => !ALM_COMERCIALES.has(a) && (row.byAlm[a]?.pz || 0) > 0), [row]);
-  const nAlm = Object.values(row.byAlm).filter((d) => (d?.pz || 0) > 0).length;
-
+  // Columnas: SÓLO los almacenes donde este SKU tiene piezas, los 7 mayores; el resto se
+  // funde en "Otros" y los no comerciales en "No com.". Regla de ancho: nunca más de 10
+  // columnas (métrica + 9), para que el drill quepa en el ancho de la tabla.
   const agg = (lista) => lista.reduce((s, a) => { const d = row.byAlm[a]; if (!d) return s; return { pz: s.pz + d.pz, disp: s.disp + d.disp, res: s.res + d.res, valor: s.valor + d.valor }; }, { pz: 0, disp: 0, res: 0, valor: 0 });
+  const conStock = useMemo(() => Object.keys(row.byAlm).map(Number).filter((a) => (row.byAlm[a]?.pz || 0) > 0), [row]);
+  const comerciales = useMemo(() => conStock.filter((a) => ALM_COMERCIALES.has(a)).sort((a, b) => (row.byAlm[b]?.pz || 0) - (row.byAlm[a]?.pz || 0)), [conStock, row]);
+  const noComerciales = useMemo(() => conStock.filter((a) => !ALM_COMERCIALES.has(a)), [conStock]);
+  const principales = comerciales.slice(0, 7);
+  const otros = comerciales.slice(7);
+  const nAlm = conStock.length;
+
   const cols = [
-    ...almacenes.map((a) => ({ id: `a${a}`, label: shortAlmacen(a), sub: CEDIS_DE_ALMACEN[a] || '—', title: NOMBRES_ALMACEN[a], d: row.byAlm[a] })),
-    ...(otros.length ? [{ id: 'otros', label: 'OTROS', sub: otros.map(shortAlmacen).join(' · '), title: otros.map((a) => NOMBRES_ALMACEN[a]).join(' · '), d: agg(otros) }] : []),
+    ...principales.map((a) => ({ id: `a${a}`, label: shortAlmacen(a), sub: CEDIS_DE_ALMACEN[a] || '—', title: NOMBRES_ALMACEN[a], d: row.byAlm[a] })),
+    ...(otros.length ? [{ id: 'otros', label: 'OTROS', sub: `${otros.length} alm.`, title: otros.map((a) => NOMBRES_ALMACEN[a] || `Almacén ${a}`).join(' · '), d: agg(otros) }] : []),
     ...(noComerciales.length ? [{ id: 'nocom', label: 'NO COM.', sub: `${noComerciales.length} alm.`, title: noComerciales.map((a) => `${a} · ${NOMBRES_ALMACEN[a] || ''}`).join(' · '), d: agg(noComerciales) }] : []),
   ];
 
@@ -45,11 +51,12 @@ export default function SkuDrillDown({ row, almacenes, sensible = true, onCompar
   const val = (n, color, bold = true) => <span style={{ color: color || theme.text, fontWeight: bold ? 600 : 500 }}>{n}</span>;
   const metricas = [
     { k: 'total', metrica: 'Total', sub: 'piezas', cell: (d) => (d?.pz > 0 ? val(fmtInt(d.pz)) : dash) },
-    { k: 'res', metrica: 'Reservado', sub: 'órdenes en curso', cell: (d) => (!d || d.pz === 0 ? dash : d.res > 0 ? val(fmtInt(d.res), orange, false) : <span style={{ color: theme.textMuted }}>—</span>) },
+    // El apartado sólo aparece si existe: un SKU sin nada comprometido no gana una fila vacía.
+    ...(totalRes > 0 ? [{ k: 'res', metrica: 'Apartado', sub: 'comprometido, no vendible', cell: (d) => (!d || d.pz === 0 ? dash : d.res > 0 ? val(fmtInt(d.res), orange, false) : <span style={{ color: theme.textMuted }}>—</span>) }] : []),
     { k: 'disp', metrica: 'Disponible', sub: 'listo para venta', cell: (d) => (d?.pz > 0 ? val(fmtInt(d.disp), green, false) : dash) },
     ...(sensible ? [{ k: 'valor', metrica: 'Valor', sub: 'a costo', cell: (d) => (d?.pz > 0 ? val(fmtCompact(d.valor)) : dash) }] : []),
     {
-      k: 'comp', metrica: 'Composición', sub: 'reservado / disp', cell: (d) => {
+      k: 'comp', metrica: 'Composición', sub: 'apartado / disp', cell: (d) => {
         if (!d || d.pz === 0) return dash;
         const pctR = (d.res / d.pz) * 100, pctD = (d.disp / d.pz) * 100;
         return (
@@ -123,8 +130,9 @@ export default function SkuDrillDown({ row, almacenes, sensible = true, onCompar
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
         <KpiCard eyebrow="Total inventario" big={fmtInt(row.totalPz)} bigSmall="pz" sub={`${sensible ? `${fmtCompact(row.valor)} · ` : ""}${nAlm} almacenes`} />
         <KpiCard eyebrow="Disponible" big={fmtInt(totalDisp)} bigSmall="pz" bigColor={green} sub={`${(100 - pctRes).toFixed(1)}% · listo para venta`} />
-        <KpiCard eyebrow="Reservado" big={fmtInt(totalRes)} bigSmall="pz" bigColor={totalRes > 0 ? orange : theme.text} sub={`${pctRes.toFixed(1)}% del total · ${pctRes > 40 ? 'alto compromiso' : 'rotación saludable'}`}
-          badge={{ tone: pctRes > 40 ? 'orange' : pctRes > 20 ? 'blue' : 'green', l: pctRes > 40 ? 'Alta reserva' : pctRes > 20 ? 'Normal' : 'Baja reserva' }} />
+        <KpiCard eyebrow="Apartado" big={fmtInt(totalRes)} bigSmall="pz" bigColor={totalRes > 0 ? orange : theme.text}
+          sub={totalRes > 0 ? `${pctRes.toFixed(1)}% del total · comprometido en órdenes en curso` : 'nada comprometido · todo vendible'}
+          badge={{ tone: pctRes > 40 ? 'orange' : pctRes > 20 ? 'blue' : 'green', l: pctRes > 40 ? 'Alto compromiso' : pctRes > 20 ? 'Normal' : 'Bajo' }} />
         <KpiCard eyebrow="Cobertura" big={cob == null || !isFinite(cob) ? (tieneStock ? '∞' : '0') : fmtInt(cob)} bigSmall="días" bigColor={colorTono}
           badge={{ tone: tono, l: etiquetaCobertura(cob, tieneStock) }}
           sub={`${row.demandaMes > 0 ? `${fmtInt(row.demandaMes)} pz/mes ERP (3 m)` : 'sin demanda ERP en 3 m'} · lead time ${row.leadTime ? fmtDias(row.leadTime.dias) : '—'}`} />
@@ -133,7 +141,7 @@ export default function SkuDrillDown({ row, almacenes, sensible = true, onCompar
       <div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '0 2px 6px' }}>
           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text }}>Desglose por almacén</span>
-          <span style={{ fontSize: 10, color: theme.textMuted }}>métricas × {cols.length} columnas · comerciales</span>
+          <span style={{ fontSize: 10, color: theme.textMuted }}>{nAlm} almacén{nAlm === 1 ? '' : 'es'} con piezas</span>
         </div>
         <TablaCompacta columnas={columnas} filas={filas} rowKey={(r) => r.id} dense />
       </div>

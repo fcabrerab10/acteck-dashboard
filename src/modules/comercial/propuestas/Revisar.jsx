@@ -16,6 +16,7 @@ import { compartir, copiar } from '../../../lib/whatsapp';
 import { familiaHoja, MES_FULL, clienteColor, vigenciaPorDefecto } from './constantes';
 import { exportarPropuestaExcel } from './excelPropuesta';
 import { textoPropuesta, vigenciaTexto } from './textos';
+import { mapaEan } from '../../../lib/ean';
 import { IndicadorGuardado } from './MiPropuesta';
 import PrecioPicker from './PrecioPicker';
 
@@ -87,16 +88,21 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
     } catch (e) { toast.error(`No se pudo exportar: ${e?.message || e}`); }
     finally { setOcupado(false); }
   };
+  /** Resumen de WhatsApp con el EAN de cada SKU cuando lo haya (v_sku_ean). Si la vista falla, el texto va igual. */
+  const armarTexto = async () => {
+    const eanPorSku = await mapaEan(propuestaLista.map((r) => r.sku)).catch(() => null);
+    return textoPropuesta({ clienteLabel: cliente.label, nombre, anio, mes, lineas: lineasTexto(), vigencia: vig, eanPorSku });
+  };
   const compartirTexto = async () => {
     if (!listaParaEnviar()) return;
-    const texto = textoPropuesta({ clienteLabel: cliente.label, nombre, anio, mes, lineas: lineasTexto(), vigencia: vig });
+    const texto = await armarTexto();
     const r = await compartir(texto, { titulo: `Propuesta ${cliente.label}` });
     if (!r) return;
     await onEnviada?.();
     toast.ok(r === 'share' ? 'Propuesta compartida' : 'Se abrió WhatsApp con el resumen');
   };
   const copiarTexto = async () => {
-    const ok = await copiar(textoPropuesta({ clienteLabel: cliente.label, nombre, anio, mes, lineas: lineasTexto(), vigencia: vig }));
+    const ok = await copiar(await armarTexto());
     ok ? toast.ok('Resumen copiado') : toast.error('No se pudo copiar');
   };
 

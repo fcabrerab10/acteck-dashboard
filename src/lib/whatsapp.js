@@ -4,7 +4,9 @@
 //   compartir(texto)                       → navigator.share si existe; si no, abre wa.me
 //   copiar(texto)                          → portapapeles (respaldo)
 //
-// items: [{ sku, descripcion, disponible, proximoArribo: { fecha:'YYYY-MM-DD', piezas } | null, enCamino, precio }]
+// items: [{ sku, descripcion, ean?, disponible, proximoArribo: { fecha:'YYYY-MM-DD', piezas } | null, enCamino, precio }]
+// `ean` (código de barras, v_sku_ean) es opcional: si viene, se imprime bajo el SKU — los mayoristas
+// y los marketplaces lo piden siempre. Si no hay EAN para ese SKU, la línea simplemente no sale.
 // El texto NUNCA lleva el nombre de la lista de precios ni márgenes/costos. Precio sin IVA, formato $#,##0.00.
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -53,6 +55,7 @@ export function textoDisponibilidad(items, { fecha = new Date(), marca = 'Acteck
       : '—';
     const nombre = nombreCorto(it.descripcion);
     lineas.push(`• ${it.sku}${nombre ? ` · ${nombre}` : ''}`);
+    if (it.ean) lineas.push(`  EAN: ${it.ean}`);
     lineas.push(`  Disponible: ${piezas(it.disponible)} pz`);
     lineas.push(`  Próximo arribo: ${arribo}`);
     lineas.push(`  Precio: ${esNum(it.precio) ? `${precio(it.precio)} + IVA` : '—'}`);

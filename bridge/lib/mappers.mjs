@@ -79,12 +79,41 @@ export function erpInventario(row) {
   };
 }
 
-// ── Vw_TablaM_Precios → precios_sku (replace completo, mes actual) ──────────
-const LISTAS_INCLUIDAS = new Set(['API PROVISIONAL', 'DECME PROVISIONAL', 'DICOTECH', 'Mayoreo AAA', 'PCEL PROVISIONAL']);
+// ── Vw_TablaM_Precios → precios_sku (replace SÓLO del mes en curso; la historia se queda) ──
+//
+// Top 10 listas por facturación 2026 (erp_ventas.lista_precios, consultado 2026-09-12).
+// Estas 10 concentran el 93 % de la facturación; las 33 restantes suman menos que la #10.
+//
+//    #  lista                    facturación 2026      ¿estaba antes?
+//    1  Mayoreo AAA                   $111,372,769      sí
+//    2  Mayoreo PMM                    $83,466,097      NO  ← nueva
+//    3  DECME PROVISIONAL              $48,318,384      sí
+//    4  PCEL PROVISIONAL               $21,842,574      sí
+//    5  Ingram Retail                  $14,210,690      NO  ← nueva
+//    6  MERCADO LIBRE FULL             $13,084,119      NO  ← nueva
+//    7  API PROVISIONAL                $12,240,268      sí
+//    8  DICOTECH                        $8,951,050      sí
+//    9  SVENSKA PROVISIONAL             $8,669,493      NO  ← nueva
+//   10  AMAZON                          $8,293,756      NO  ← nueva
+//   --  (la 11ª, STF LISTA UNICA, $6,431,200)
+//
+// Para agregar o quitar una lista: edita este arreglo y nada más. El nombre se compara
+// normalizado (sin acentos, sin dobles espacios, en mayúsculas) porque Vw_TablaM_Precios
+// y Vw_TablaH_Ventas no siempre coinciden en mayúsculas; en la tabla se guarda el texto
+// tal cual viene de la vista de precios, que es el que ya usa la pantalla.
+export const LISTAS_PRECIOS = [
+  'Mayoreo AAA', 'Mayoreo PMM', 'DECME PROVISIONAL', 'PCEL PROVISIONAL', 'Ingram Retail',
+  'MERCADO LIBRE FULL', 'API PROVISIONAL', 'DICOTECH', 'SVENSKA PROVISIONAL', 'AMAZON',
+];
+/** Normaliza el nombre de una lista para comparar (mayúsculas, sin acentos, espacios colapsados). */
+export const normalizarLista = (s) => String(s || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/\s+/g, ' ').trim().toUpperCase();
+const LISTAS_INCLUIDAS = new Set(LISTAS_PRECIOS.map(normalizarLista));
 export function preciosERP(row, ctx) {
   const g = rowAccessor(row);
   const lista = txt(g('Lista'));
-  if (!lista || !LISTAS_INCLUIDAS.has(lista)) return null;
+  if (!lista || !LISTAS_INCLUIDAS.has(normalizarLista(lista))) return null;
   const sku = txt(g('Articulo', 'SKU'));
   if (!sku) return null;
   const precio = num(g('Precio'));

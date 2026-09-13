@@ -1,5 +1,7 @@
 // Ficha de producto · consulta de inventario y precio para varios SKUs (canasta, en el contexto de MovilApp).
-// Por SKU: descripción, marca, Disponible (v_inventario_comercial.disponible), inventario total, reservado,
+// Por SKU: descripción, marca, Disponible (v_inventario_comercial.disponible), inventario total, apartado
+// (= inventario − disponible: comprometido a órdenes en curso, no vendible),
+// EAN / código de barras (v_sku_ean: catalogo_articulos.isbn con respaldo en series_generadas.ean; se toca para copiarlo),
 // tránsito (arribo más cercano con las piezas de ESE embarque + total en camino, de v_transito_sku.embarques_detalle),
 // cobertura en días (inventario / demanda ERP de 3 meses cerrados, como Inventario global) y precio de lista
 // SIN IVA (v_estrategia_precios_lista) según la lista elegida. Sin lista elegida no hay precio ni compartir.
@@ -9,6 +11,7 @@ import { Trash2, Plus, Share2, Copy, Tag, Package, Ship, Search } from 'lucide-r
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 import { textoDisponibilidad, compartir, copiar, precio as fmtPrecio, fechaCorta } from '../lib/whatsapp';
+import { useEan, eanLegible } from '../lib/ean';
 import { useNav } from './nav';
 import { TituloGrande, Cabecera, ListaAgrupada, Fila, FilaDeslizable, BotonGrande, CampoBusqueda, Vacio, Skeleton, Pill, HojaM, toast } from './piezas';
 import { useFichaProducto, useCatalogoBusqueda } from './datos';
@@ -26,10 +29,11 @@ export default function FichaProducto({ raiz = false }) {
   const [eligiendo, setEligiendo] = useState(false);
   const { data, isLoading, error } = useFichaProducto(canasta);
   const items = data?.items || [];
+  const ean = useEan(canasta);  // Map sku → ean, sólo los SKUs de la canasta
   const listas = data?.listas || [];
   const listaValida = lista && listas.includes(lista) ? lista : null;
 
-  const paraCompartir = useMemo(() => items.map((it) => ({ sku: it.sku, descripcion: it.descripcion, disponible: it.disponible, proximoArribo: it.proximoArribo, enCamino: it.enCamino, precio: listaValida ? it.precios[listaValida]?.precio ?? null : null })), [items, listaValida]);
+  const paraCompartir = useMemo(() => items.map((it) => ({ sku: it.sku, descripcion: it.descripcion, ean: ean.get(it.sku) || null, disponible: it.disponible, proximoArribo: it.proximoArribo, enCamino: it.enCamino, precio: listaValida ? it.precios[listaValida]?.precio ?? null : null })), [items, listaValida, ean]);
   const texto = useMemo(() => (listaValida && items.length ? textoDisponibilidad(paraCompartir) : ''), [paraCompartir, listaValida, items.length]);
   const puedeCompartir = !!listaValida && items.length > 0 && !isLoading;
 
@@ -54,7 +58,7 @@ export default function FichaProducto({ raiz = false }) {
       {error && <Vacio titulo="No se pudo consultar" sub={error.message} color={theme.red} />}
       {isLoading && canasta.length > 0 && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>{canasta.map((s) => <Skeleton key={s} h={150} r={12} />)}</div>}
 
-      {!isLoading && items.map((it) => <TarjetaSku key={it.sku} it={it} lista={listaValida} onQuitar={() => quitarSku(it.sku)} theme={theme} />)}
+      {!isLoading && items.map((it) => <TarjetaSku key={it.sku} it={it} ean={ean.get(it.sku) || null} lista={listaValida} onQuitar={() => quitarSku(it.sku)} theme={theme} />)}
 
       {canasta.length > 0 && (
         <div style={{ padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -82,7 +86,7 @@ export default function FichaProducto({ raiz = false }) {
   );
 }
 
-function TarjetaSku({ it, lista, onQuitar, theme }) {
+function TarjetaSku({ it, ean, lista, onQuitar, theme }) {
   const p = lista ? it.precios[lista] : null;
   const tono = tonoCobertura(it.cobertura, it.inventario);
   const dato = (k, v, sub, color) => (
@@ -99,12 +103,20 @@ function TarjetaSku({ it, lista, onQuitar, theme }) {
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.015em' }}>{it.sku}{it.marca && <span style={{ fontWeight: 500, fontSize: 12, color: theme.textMuted, marginLeft: 8, fontFamily: TYPO.fontText }}>{it.marca}</span>}</div>
+              {ean && (
+                <button type="button" onClick={async () => { if (await copiar(ean)) toast.ok('EAN copiado'); else toast.error('No se pudo copiar'); }}
+                  title="Copiar el código de barras"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 3, padding: 0, border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+                  <span style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.02em' }}>{eanLegible(ean)}</span>
+                  <Copy size={12} style={{ color: theme.accent, flexShrink: 0 }} />
+                </button>
+              )}
               <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.descripcion || 'Sin descripción en el roadmap'}</div>
             </div>
             <Pill tone={tono} dot style={{ flexShrink: 0 }}>{etiquetaCobertura(it.cobertura, it.inventario)}{it.cobertura != null && Number.isFinite(it.cobertura) ? ` · ${Math.round(it.cobertura)} d` : ''}</Pill>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 10, marginTop: 12 }}>
-            {dato('Disponible', `${int(it.disponible)} pz`, `${int(it.inventario)} inv. · ${int(it.reservado)} res.`, it.disponible > 0 ? theme.text : theme.red)}
+            {dato('Disponible', `${int(it.disponible)} pz`, `${int(it.inventario)} inv.${it.reservado > 0 ? ` · ${int(it.reservado)} apartadas` : ''}`, it.disponible > 0 ? theme.text : theme.red)}
             {dato('Próximo arribo', it.proximoArribo ? fechaCorta(it.proximoArribo.fecha) : '—', it.proximoArribo ? `${int(it.proximoArribo.piezas)} pz · ${ESTATUS_CORTO[it.proximoArribo.estatus] || it.proximoArribo.estatus || 'PO ' + it.proximoArribo.po}` : 'sin tránsito')}
             {dato('Precio de lista', p ? fmtPrecio(p.precio) : lista ? '—' : 'Elige', p ? `+ IVA · ${p.moneda === 'PESOS' ? 'MXN' : p.moneda}` : lista ? 'sin precio en esta lista' : 'una lista', p ? theme.text : theme.orange)}
           </div>

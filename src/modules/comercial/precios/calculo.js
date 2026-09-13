@@ -1,7 +1,7 @@
 // Estrategia de Precios · cálculo puro (sin React): filas SKU × listas, filtros facetados,
 // precio bajo accionable, margen por lista (sensible), cambios del mes y análisis del drill.
 // Elasticidad / simulador / precio bajo por SKU: ./elasticidad.js (sin imports, con test en scripts/test-precios-elasticidad.mjs).
-import { LISTAS, listaDeCliente, normalizar, tokens as tokenizar, coincide, N, mesesCerrados } from './textos';
+import { LISTAS, MAX_COLUMNAS_LISTA, ordenarListas, listaDeCliente, normalizar, tokens as tokenizar, coincide, N, mesesCerrados } from './textos';
 import { precioBajoPorCliente as _precioBajoPorCliente } from './elasticidad';
 
 // ── Filtros ──
@@ -9,7 +9,20 @@ import { precioBajoPorCliente as _precioBajoPorCliente } from './elasticidad';
 export const FILTROS_VACIOS = () => ({ q: '', tokens: [], marca: new Set(), categoria: new Set(), roadmap: new Set(), listas: new Set(), conPromo: false, precioBajo: false, sinPrecio: false });
 export const conBusqueda = (f, q) => ({ ...f, q, tokens: tokenizar(q) });
 export const nActivos = (f) => f.marca.size + f.categoria.size + f.roadmap.size + f.listas.size + (f.conPromo ? 1 : 0) + (f.precioBajo ? 1 : 0) + (f.sinPrecio ? 1 : 0);
-export const listasVisibles = (f) => (f.listas.size ? LISTAS.filter((l) => f.listas.has(l)) : LISTAS);
+
+/**
+ * Listas que realmente vienen en los datos (precios_sku → v_estrategia_precios_lista), en el orden
+ * del catálogo y con las desconocidas al final. Desde 2026-09-12 el puente carga 10 listas en vez de 5:
+ * la pantalla NO las trae en duro, se descubren aquí.
+ */
+export const listasDeDatos = (precios) => ordenarListas((precios || []).map((p) => p.lista));
+
+/**
+ * Columnas de lista visibles en la tabla. Sin filtro se muestran las primeras MAX_COLUMNAS_LISTA
+ * (regla de ancho: la tabla tiene que caber en la tarjeta sin scroll horizontal); con el filtro
+ * "Listas" se ve exactamente lo que el usuario marque. El drill y el Excel siempre llevan todas.
+ */
+export const listasVisibles = (f, listas = LISTAS) => (f.listas.size ? listas.filter((l) => f.listas.has(l)) : listas.slice(0, MAX_COLUMNAS_LISTA));
 
 const GRUPOS = ['busqueda', 'marca', 'categoria', 'roadmap', 'conPromo', 'precioBajo', 'sinPrecio'];
 export function pasaGrupo(r, f, g) {
@@ -29,8 +42,8 @@ export function pasaTodos(r, f, excluir) {
   return true;
 }
 /** Conteos con los DEMÁS filtros aplicados ("si además marco esto, quedan N"). `listas` cuenta SKUs con precio en esa lista. */
-export function facetas(rows, f) {
-  const marca = new Map(), categoria = new Map(), roadmap = new Map(), listas = new Map(LISTAS.map((l) => [l, 0]));
+export function facetas(rows, f, todasLasListas = LISTAS) {
+  const marca = new Map(), categoria = new Map(), roadmap = new Map(), listas = new Map(todasLasListas.map((l) => [l, 0]));
   let conPromo = 0, precioBajo = 0, sinPrecio = 0;
   const suma = (m, k) => { if (!k) return; m.set(k, (m.get(k) || 0) + 1); };
   for (const r of rows) {
@@ -40,7 +53,7 @@ export function facetas(rows, f) {
     if (pasaTodos(r, f, 'conPromo') && r.promo) conPromo += 1;
     if (pasaTodos(r, f, 'precioBajo') && r.bajo) precioBajo += 1;
     if (pasaTodos(r, f, 'sinPrecio') && r.sinPrecio) sinPrecio += 1;
-    if (pasaTodos(r, f, null)) for (const l of LISTAS) if (r.precios[l] != null) listas.set(l, listas.get(l) + 1);
+    if (pasaTodos(r, f, null)) for (const l of todasLasListas) if (r.precios[l] != null) listas.set(l, listas.get(l) + 1);
   }
   const ordenar = (m) => [...m.entries()].map(([id, n]) => ({ id, label: id, n })).sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'es'));
   return { marca: ordenar(marca), categoria: ordenar(categoria), roadmap: ordenar(roadmap), listas, conPromo, precioBajo, sinPrecio };
@@ -75,7 +88,8 @@ export function mapaPromos(promos) {
  * Precio bajo = el cliente más bajo del año (v_estrategia_precios_bajo, ≥ 50 pz) facturó por debajo de
  * la lista que le corresponde (con 0.5 % de tolerancia). "Dejado en la mesa" = (lista − real) × piezas.
  */
-export function construirFilas({ roadmap, precios, bajos, promos, costos, cambios }) {
+export function construirFilas({ roadmap, precios, bajos, promos, costos, cambios, listas }) {
+  const LS = listas?.length ? listas : listasDeDatos(precios);
   const preciosMap = new Map();
   for (const p of precios || []) { if (!preciosMap.has(p.sku)) preciosMap.set(p.sku, {}); preciosMap.get(p.sku)[p.lista] = N(p.precio); }
   const bajoMap = new Map((bajos || []).map((b) => [b.sku, b]));
@@ -90,7 +104,7 @@ export function construirFilas({ roadmap, precios, bajos, promos, costos, cambio
     const promo = promoMap.get(r.sku) || null;
     const costo = costoMap.get(r.sku) || 0;
     const margen = {};
-    if (costo > 0) for (const l of LISTAS) { const p = precioEfectivo(pr, promo, l); if (p > 0) margen[l] = ((p - costo) / p) * 100; }
+    if (costo > 0) for (const l of LS) { const p = precioEfectivo(pr, promo, l); if (p > 0) margen[l] = ((p - costo) / p) * 100; }
     let bajo = null;
     const b = bajoMap.get(r.sku);
     if (b && N(b.precio_bajo) > 0) {
@@ -101,12 +115,12 @@ export function construirFilas({ roadmap, precios, bajos, promos, costos, cambio
         bajo = { cliente: b.cliente_bajo, lista, real, precioLista, piezas, difPct: ((real - precioLista) / precioLista) * 100, dejado: (precioLista - real) * piezas };
       }
     }
-    const nListas = LISTAS.filter((l) => pr[l] != null).length;
+    const nListas = LS.filter((l) => pr[l] != null).length;
     return {
       ...r,
       indice: normalizar([r.sku, r.descripcion, r.marca, r.categoria, r.familia, r.rdmp].filter(Boolean).join(' ')),
       precios: pr, promo, costo, margen, bajo, cambios: cambioMap.get(r.sku) || {},
-      nListas, sinPrecio: nListas < LISTAS.length, conPrecio: nListas > 0,
+      nListas, sinPrecio: nListas < LS.length, conPrecio: nListas > 0,
     };
   });
 }
@@ -167,7 +181,7 @@ export function precioRealPorCliente(fact, precios, promo) {
 }
 
 /** Serie mensual para el LineChart (una clave por lista) + lista de cambios detectados + desde cuándo hay histórico. */
-export function serieHistorico(historico) {
+export function serieHistorico(historico, listas) {
   const porPeriodo = new Map();
   let desde = null;
   for (const h of historico || []) {
@@ -178,7 +192,8 @@ export function serieHistorico(historico) {
   }
   const serie = [...porPeriodo.values()].sort((a, b) => a.key.localeCompare(b.key));
   const cambios = [];
-  for (const l of LISTAS) {
+  // Las listas salen del propio histórico (no de un arreglo en duro): así aparecen las que sume el puente.
+  for (const l of (listas?.length ? listas : ordenarListas((historico || []).map((h) => h.lista)))) {
     let prev = null;
     for (const p of serie) {
       const v = p[l]; if (v == null) continue;

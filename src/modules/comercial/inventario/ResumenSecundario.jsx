@@ -22,7 +22,7 @@ export default function ResumenSecundario({ porCedis, porTipo, kpis, insights, c
 
   const estatus = [
     { tone: 'green', col: green, label: 'Comercial disponible', sub: `${fmtInt(kpis.skus)} SKUs · ${kpis.almacenes} alm.`, val: sensible ? fmtCompact(insights.valorDisponible) : `${fmtInt(insights.disponible)} pz`, vsub: sensible ? `${fmtInt(insights.disponible)} pz` : `${fmtInt(kpis.skus)} SKUs` },
-    { tone: 'orange', col: orange, label: 'Reservado', sub: 'órdenes en curso', val: sensible ? fmtCompact(insights.valorReservado) : `${fmtInt(insights.reservado)} pz`, vsub: sensible ? `${fmtInt(insights.reservado)} pz · ${insights.pctReservado.toFixed(1)}%` : `${insights.pctReservado.toFixed(1)}% del total` },
+    { tone: 'orange', col: orange, label: 'Apartado', sub: 'comprometido en órdenes en curso', val: sensible ? fmtCompact(insights.valorReservado) : `${fmtInt(insights.reservado)} pz`, vsub: sensible ? `${fmtInt(insights.reservado)} pz · ${insights.pctReservado.toFixed(1)}%` : `${insights.pctReservado.toFixed(1)}% del total` },
     { tone: 'blue', col: accent, label: 'En tránsito', sub: insights.transitoEta ? `próximo arribo ${fmtFechaCorta(insights.transitoEta)}` : 'sin embarques pendientes', val: sensible ? fmtCompact(insights.transitoValor) : `${fmtInt(insights.transitoPz)} pz`, vsub: sensible ? `${fmtInt(insights.transitoPz)} pz · ${insights.transitoPos} POs` : `${insights.transitoPos} POs` },
   ];
 

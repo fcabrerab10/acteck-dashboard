@@ -29,6 +29,10 @@ const ESTADO_INICIAL = {
   catalogoArticulos: [],
   // Configuración por SKU (crítico, meses seguridad, %crecimiento override).
   skuConfig: [],
+  // Compras en camino (v_compras_pendientes_sku / _proveedor · tabla compras_oc del ERP):
+  // POs colocadas al proveedor con pendiente > 0. Informativo — no entra en el sugerido.
+  comprasPendientes: [],
+  comprasPendientesProveedor: [],
 };
 
 export function useForecastData() {
@@ -73,9 +77,14 @@ export function useForecastData() {
       fetchAll(() => supabase.from('catalogo_articulos').select('articulo, descripcion')),
       supabase.from('sku_config').select('sku, es_critico, meses_seguridad, crecimiento_override, notas')
         .then((r) => r, () => ({ data: [] })),
+      fetchAll(() => supabase.from('v_compras_pendientes_sku')
+        .select('sku, descripcion, marca, proveedor, po, fecha_po, estatus, piezas_pedidas, piezas_recibidas, piezas_pendientes, usd_pendiente, eta, en_master_embarques, sku_en_transito, dias_desde_po'))
+        .then((r) => r, () => []),
+      supabase.from('v_compras_pendientes_proveedor').select('*').order('usd_pendiente', { ascending: false })
+        .then((r) => r, () => ({ data: [] })),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData, paRes, catArtData, skuCfgRes] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData, paRes, catArtData, skuCfgRes, cpData, cpProvRes] = queries;
 
     setState({
       loading: false,
@@ -95,6 +104,8 @@ export function useForecastData() {
       progArribos: (paRes && paRes.data) || [],
       catalogoArticulos: catArtData || [],
       skuConfig: (skuCfgRes && skuCfgRes.data) || [],
+      comprasPendientes: cpData || [],
+      comprasPendientesProveedor: (cpProvRes && cpProvRes.data) || [],
     });
   };
 

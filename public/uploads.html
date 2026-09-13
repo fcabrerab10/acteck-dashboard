@@ -375,13 +375,25 @@ const PARSERS = {
     // Fuente canónica: hoja "Vw_TablaM_Precios" (formato tabular limpio:
     // Lista | Moneda | Articulo | Precio). Antes se leía "Listas de Precios"
     // (vista pivot) pero era frágil con distintos formatos de encabezado.
+    // 2026-09-12 · Top 10 listas por facturación 2026. RÉPLICA de LISTAS_PRECIOS en
+    // bridge/lib/mappers.mjs: si cambia una, cambia la otra.
+    // Mayoreo AAA 111.4M · Mayoreo PMM 83.5M · DECME 48.3M · PCEL 21.8M · Ingram Retail 14.2M
+    // ML Full 13.1M · API 12.2M · DICOTECH 9.0M · Svenska 8.7M · Amazon 8.3M
+    const normalizarLista = (s) => String(s || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ').trim().toUpperCase();
     const LISTAS_INCLUIDAS = new Set([
-      'API PROVISIONAL',
-      'DECME PROVISIONAL',
-      'DICOTECH',
       'Mayoreo AAA',
+      'Mayoreo PMM',
+      'DECME PROVISIONAL',
       'PCEL PROVISIONAL',
-    ]);
+      'Ingram Retail',
+      'MERCADO LIBRE FULL',
+      'API PROVISIONAL',
+      'DICOTECH',
+      'SVENSKA PROVISIONAL',
+      'AMAZON',
+    ].map(normalizarLista));
     // Tolerante al nombre — Vw_TablaM_Precios canónico, con fallback a variantes.
     const sh = wb.Sheets['Vw_TablaM_Precios']
             || wb.Sheets['VwTablaMPrecios']
@@ -395,7 +407,7 @@ const PARSERS = {
     const out = [];
     for (const r of rows) {
       const lista = toStr(r.Lista || r.lista);
-      if (!lista || !LISTAS_INCLUIDAS.has(lista)) continue;
+      if (!lista || !LISTAS_INCLUIDAS.has(normalizarLista(lista))) continue;
       const sku = toStr(r.Articulo || r.articulo || r.SKU || r.sku);
       if (!sku) continue;
       const precio = toNum(r.Precio || r.precio);

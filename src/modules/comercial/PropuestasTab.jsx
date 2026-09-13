@@ -25,6 +25,7 @@ import { fetchCatalogo, fetchPreciosVigentes } from './propuestas/datos';
 import { listarPropuestas, guardarPropuesta, actualizarPropuesta, eliminarPropuesta, marcarEnviada, migrarRecientesLocales, lineasDesdeMapa, mapaDesdeLineas, resumenDe } from './propuestas/recientes';
 import { cargarFacturacionVentanas, calcularEfectividad, aplicarCierreAutomatico, memoriaPorSku } from './propuestas/efectividad';
 import { textoPropuesta } from './propuestas/textos';
+import { mapaEan } from '../../lib/ean';
 import { cargarExcelSpiffs } from './propuestas/spiffs';
 import Landing from './propuestas/Landing';
 import Armar from './propuestas/Armar';
@@ -196,7 +197,8 @@ export default function PropuestasTab() {
   const compartirPropuesta = async (p) => {
     const cli = CLIENTES.find((c) => c.key === p.clienteKey);
     if (!(p.nombre || '').trim()) { toast.error('Esta propuesta no tiene nombre: ábrela y ponle uno antes de compartirla.'); return; }
-    const texto = textoPropuesta({ clienteLabel: cli?.label || p.clienteLabel, nombre: p.nombre, anio: p.anio, mes: p.mes, lineas: p.lineas || [], vigencia: p.vigencia });
+    const eanPorSku = await mapaEan((p.lineas || []).map((l) => l.sku)).catch(() => null);
+    const texto = textoPropuesta({ clienteLabel: cli?.label || p.clienteLabel, nombre: p.nombre, anio: p.anio, mes: p.mes, lineas: p.lineas || [], vigencia: p.vigencia, eanPorSku });
     const r = await compartir(texto, { titulo: `Propuesta ${cli?.label || ''}` });
     if (!r) return;
     if (p.estado === 'borrador') { try { reemplazarEnLista(await marcarEnviada(p)); } catch (e) { toast.error(`No se pudo marcar como enviada: ${e?.message || e}`); } }

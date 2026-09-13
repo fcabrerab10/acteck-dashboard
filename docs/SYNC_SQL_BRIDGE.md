@@ -15,7 +15,7 @@ Google Sheets · Master Embarques (Drive) ────────────�
 |---|---|---|---|---|
 | Ventas | `192.168.0.151` · `Vw_TablaH_Ventas` | `erp_ventas` → `facturacion_clientes` (rebuild) | Replace por año + `refresh_facturacion_clientes` | Actualizaciones ERP · Ventas |
 | Inventario | `192.168.0.151` · `Vw_TablaH_Inventario` | `inventario_acteck` | Replace completo | Actualizaciones ERP · Inventario |
-| Precios | `192.168.0.151` · `Vw_TablaM_Precios` | `precios_sku` | Replace completo (mes actual) | Actualizaciones ERP · Precios |
+| Precios | `192.168.0.151` · `Vw_TablaM_Precios` | `precios_sku` | Replace **sólo del mes en curso** (la historia se conserva) · 10 listas | Actualizaciones ERP · Precios |
 | Compras (opcional) | `192.168.0.151` · `Vw_TablaH_Compras` | `compras_oc` | Replace completo | Actualizaciones ERP · POs |
 | Cuotas | `192.168.0.213` · base `RevkoBi` · `dbo.BP` | `cuotas_mensuales` | Replace por año presente | Suma por cliente (IDCLIENTE de 5 dígitos) y mes: CUOTAMINIMA → `cuota_min` (mide vendedores), IMPORTEDEVENTA → `cuota_ideal` (cuota vendor, meta del dashboard) |
 | Sell Out General | `192.168.0.160` · base `SELLOUT` · vista `sell out` | `sellout_general` | Upsert por `id`, ventana de 45 días | Sellout General (mayoristas) |
@@ -249,6 +249,16 @@ no se derivó nada desde ahí.
 
 
 **2026-09-12 · la foto diaria ya no depende de la Mac mini.** `api/cron.js` tiene la tarea `inventario-foto` (llama al mismo RPC `snapshot_inventario_diario()` con el service role) y `vercel.json` la programa a las **01:30 UTC = 19:30 CDMX**, después de la última corrida del puente (19:00). Las dos fuentes conviven: el RPC es idempotente (`ON CONFLICT DO UPDATE`), así que la última escritura del día es la que queda. Si la Mac mini está apagada o sin `git pull`, el histórico se sigue llenando desde Vercel. Comprobar a mano: `curl -s "https://acteck-dashboard.vercel.app/api/cron?task=inventario-foto" -H "Authorization: Bearer $CRON_SECRET"` → `{ fecha, filas, dias_en_historico }`.
+**2026-09-12 · precios: 10 listas y la historia se conserva.** Dos cambios en el puente, los dos en `bridge/`:
+
+1. **De 5 a 10 listas.** `LISTAS_PRECIOS` en `bridge/lib/mappers.mjs` (constante exportada, con el ranking en el comentario) sustituye al viejo `LISTAS_INCLUIDAS`. Son las 10 listas con más facturación 2026 según `erp_ventas.lista_precios` — Mayoreo AAA $111.4 M · **Mayoreo PMM $83.5 M** · DECME PROVISIONAL $48.3 M · PCEL PROVISIONAL $21.8 M · **Ingram Retail $14.2 M** · **MERCADO LIBRE FULL $13.1 M** · API PROVISIONAL $12.2 M · DICOTECH $9.0 M · **SVENSKA PROVISIONAL $8.7 M** · **AMAZON $8.3 M** (las 5 en negritas son nuevas; la 11ª, STF LISTA UNICA, factura $6.4 M). La comparación del nombre ahora se hace **normalizada** (mayúsculas, sin acentos, espacios colapsados) porque `Vw_TablaM_Precios.Lista` y `Vw_TablaH_Ventas.lista_precios` no siempre coinciden en mayúsculas; en la tabla se guarda el texto tal cual viene de la vista de precios. Si alguna lista nueva llega vacía, la corrida lo avisa en el log: `⚠ precios: sin filas para …` — ahí se ve el nombre exacto que hay que copiar de la vista. Para agregar o quitar listas basta editar ese arreglo (y su réplica en `public/uploads.html`, que es sólo respaldo técnico).
+
+2. **Ya no se borra la tabla entera.** `bridge/sync.mjs` pasó de `upsertRows('precios_sku', …, { deleteAll: true })` a `{ deleteWhere: 'anio=eq.<año>&mes=eq.<mes>' }`: se reemplaza sólo el periodo que se va a reescribir. `precios_sku` ya tenía la fecha en su PK `(sku, lista, anio, mes)`, así que con esto **la tabla se vuelve la serie histórica** y deja de existir sólo el mes en curso. `precios_historico` y su trigger (migración `20260911_precios_historico.sql`) se quedan como están: siguen aportando `primera_vez` / `ultima_vez`.
+
+Migración que acompaña el cambio: `supabase/migrations/20260912_precios_historia.sql` (**ya aplicada en producción**) — vista `v_precio_vigente_sku_lista` (precio vigente por sku+lista + `vigente_desde` + nº de periodos), índice `precios_sku_sku_lista_periodo_idx` y la vista `v_sku_ean` (código de barras por SKU). **`v_estrategia_precios_lista` no se tocó**: ya era `DISTINCT ON (sku, lista) … ORDER BY anio DESC, mes DESC`, sigue devolviendo el precio más reciente (6,457 filas antes y después).
+
+**Qué hay que hacer en la Mac mini:** `cd ~/acteck/acteck-dashboard && git pull --rebase` (no cambian `package.json` del puente ni los plists, así que **no** hace falta `npm ci` ni `./launchd/install.sh`). El efecto se ve en la siguiente corrida horaria; para verlo ya: `cd bridge && npm run sync -- precios`. En el log debe aparecer `precios por lista: …` con las 10 y `replace ventana anio=eq.… &mes=eq.…` en vez de `replace completo`. Ojo: mientras no se haga el `git pull`, el puente viejo **sigue borrando la tabla completa cada hora**, así que la historia no empieza a acumularse hasta ese momento.
+
 ## Problemas comunes
 
 | Síntoma | Causa · solución |

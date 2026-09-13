@@ -9,7 +9,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Pill, DeltaPill, Boton, toast } from '../../../components/kit';
 import { simular, elegirElasticidad, ELASTICIDAD_DEFAULT } from './calculo';
-import { LISTAS, listaLbl, fmtMoney, fmtInt, fmtPct, fmtPctDelta, fmtElast, selectPill } from './textos';
+import { listaLbl, fmtMoney, fmtInt, fmtPct, fmtPctDelta, fmtElast, selectPill } from './textos';
 
 const ORIGEN_LBL = { sku: 'medida del SKU', categoria: 'de la categoría', supuesto: 'supuesto', default: 'supuesto (default)' };
 const ORIGEN_TONE = { sku: 'blue', categoria: 'purple', supuesto: 'orange', default: 'orange' };
@@ -51,7 +51,7 @@ export default function Simulador({ row, listasConPrecio, precioDe, costo = 0, s
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <select value={lista} onChange={(e) => setLista(e.target.value)} style={selectPill(theme)}>
-              {LISTAS.filter((l) => listasConPrecio.includes(l)).map((l) => <option key={l} value={l}>{listaLbl(l)} · {fmtMoney(precioDe(l))}</option>)}
+              {listasConPrecio.map((l) => <option key={l} value={l}>{listaLbl(l)} · {fmtMoney(precioDe(l))}</option>)}
             </select>
             <span style={{ fontSize: 11, color: theme.textMuted }}>→</span>
             <input type="number" step="0.01" min="0" value={precioTxt} onChange={(e) => setPrecioTxt(e.target.value)} style={inputStyle} title="Precio nuevo sin IVA" />

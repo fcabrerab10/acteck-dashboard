@@ -17,8 +17,8 @@ import Filtros from './sellin/Filtros';
 import TablaPrecios from './precios/TablaPrecios';
 import PanelPrecioBajo from './precios/PanelPrecioBajo';
 import { useDatosPrecios } from './precios/datos';
-import { FILTROS_VACIOS, conBusqueda, nActivos, listasVisibles, pasaTodos, facetas as calcFacetas, construirFilas, resumen, filasPrecioBajo, ordenar, precioEfectivo } from './precios/calculo';
-import { LISTAS, listaLbl, roadmapTone, fmtInt, fmtPct, fmtMoneyShort, MESES_LARGO } from './precios/textos';
+import { FILTROS_VACIOS, conBusqueda, nActivos, listasVisibles, listasDeDatos, pasaTodos, facetas as calcFacetas, construirFilas, resumen, filasPrecioBajo, ordenar, precioEfectivo } from './precios/calculo';
+import { listaLbl, roadmapTone, fmtInt, fmtPct, fmtMoneyShort, MESES_LARGO } from './precios/textos';
 
 export default function EstrategiaPrecios() {
   const perfil = usePerfil();
@@ -37,12 +37,14 @@ function Pantalla({ sensible }) {
   const hoy = new Date();
   const periodo = { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 };
 
-  const todas = useMemo(() => (datos ? construirFilas({ roadmap, ...datos }) : []), [roadmap, datos]);
+  // Las listas salen de los datos: si el puente carga una lista nueva aparece sola (filtro, drill y Excel).
+  const listasTodas = useMemo(() => listasDeDatos(datos?.precios), [datos]);
+  const todas = useMemo(() => (datos ? construirFilas({ roadmap, ...datos, listas: listasTodas }) : []), [roadmap, datos, listasTodas]);
   const filas = useMemo(() => ordenar(todas.filter((r) => pasaTodos(r, f, null)), orden), [todas, f, orden]);
-  const facetas = useMemo(() => calcFacetas(todas, f), [todas, f]);
+  const facetas = useMemo(() => calcFacetas(todas, f, listasTodas), [todas, f, listasTodas]);
   const kpi = useMemo(() => resumen(filas, periodo), [filas, periodo.anio, periodo.mes]); // eslint-disable-line react-hooks/exhaustive-deps
   const bajas = useMemo(() => filasPrecioBajo(filas), [filas]);
-  const listas = listasVisibles(f);
+  const listas = listasVisibles(f, listasTodas);
   const activos = nActivos(f);
 
   const toggleSet = (grupo, id) => setF((p) => { const s = new Set(p[grupo]); if (s.has(id)) s.delete(id); else s.add(id); return { ...p, [grupo]: s }; });
@@ -54,17 +56,17 @@ function Pantalla({ sensible }) {
     const columnas = [
       { label: 'Marca', key: 'marca', ancho: 12 }, { label: 'SKU', key: 'sku', ancho: 14 }, { label: 'Descripción', key: 'descripcion', ancho: 50 }, { label: 'Roadmap', key: 'rdmp', ancho: 10 },
       { label: 'Precio bajo facturado', key: 'bajoReal', tipo: 'moneda', ancho: 16 }, { label: 'Cliente precio bajo', key: 'bajoCliente', ancho: 28 }, { label: 'Piezas precio bajo', key: 'bajoPiezas', tipo: 'numero', ancho: 12 },
-      ...listas.map((l) => ({ label: l, key: `p:${l}`, tipo: 'moneda', ancho: 14 })),
-      ...(sensible ? [{ label: 'Costo promedio', key: 'costo', tipo: 'moneda', ancho: 14 }, ...listas.map((l) => ({ label: `Margen ${listaLbl(l)}`, key: `m:${l}`, tipo: 'pct', ancho: 12 }))] : []),
+      ...listasTodas.map((l) => ({ label: l, key: `p:${l}`, tipo: 'moneda', ancho: 14 })),
+      ...(sensible ? [{ label: 'Costo promedio', key: 'costo', tipo: 'moneda', ancho: 14 }, ...listasTodas.map((l) => ({ label: `Margen ${listaLbl(l)}`, key: `m:${l}`, tipo: 'pct', ancho: 12 }))] : []),
     ];
     const rows = filas.map((r) => {
       const o = { marca: r.marca, sku: r.sku, descripcion: r.descripcion, rdmp: r.rdmp, bajoReal: r.bajo?.real ?? null, bajoCliente: r.bajo?.cliente ?? null, bajoPiezas: r.bajo?.piezas ?? null };
-      for (const l of listas) o[`p:${l}`] = precioEfectivo(r.precios, r.promo, l);
-      if (sensible) { o.costo = r.costo > 0 ? r.costo : null; for (const l of listas) o[`m:${l}`] = r.margen[l] != null ? r.margen[l] / 100 : null; }
+      for (const l of listasTodas) o[`p:${l}`] = precioEfectivo(r.precios, r.promo, l);
+      if (sensible) { o.costo = r.costo > 0 ? r.costo : null; for (const l of listasTodas) o[`m:${l}`] = r.margen[l] != null ? r.margen[l] / 100 : null; }
       return o;
     });
     const titulo = `Lista de Precios ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`;
-    return { titulo, hojas: [{ nombre: 'Lista de Precios', subtitulo: `${filas.length} SKUs · sin IVA`, columnas, filas: rows }] };
+    return { titulo, hojas: [{ nombre: 'Lista de Precios', subtitulo: `${filas.length} SKUs · ${listasTodas.length} listas · sin IVA`, columnas, filas: rows }] };
   };
 
   if (loading) return <Cargando pantalla="estrategiaPrecios" minHeight={480} />;
@@ -80,7 +82,7 @@ function Pantalla({ sensible }) {
     { id: 'marca', label: 'Marca', opciones: facetas.marca, sel: f.marca },
     { id: 'categoria', label: 'Categoría', opciones: facetas.categoria, sel: f.categoria },
     { id: 'roadmap', label: 'Roadmap', opciones: facetas.roadmap.map((o) => ({ ...o, tone: roadmapTone(o.id) })), sel: f.roadmap },
-    { id: 'listas', label: 'Listas', opciones: LISTAS.map((l) => ({ id: l, label: listaLbl(l), n: facetas.listas.get(l) || 0 })), sel: f.listas },
+    { id: 'listas', label: 'Listas', opciones: listasTodas.map((l) => ({ id: l, label: listaLbl(l), n: facetas.listas.get(l) || 0 })), sel: f.listas },
   ];
   const toggles = [
     { id: 'conPromo', label: 'Con promo', on: f.conPromo, n: facetas.conPromo },
@@ -93,7 +95,7 @@ function Pantalla({ sensible }) {
       <Hero eyebrow={`Dirección Comercial · ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} titulo="Estrategia de Precios." sub={narrativa}
         stats={[
           { k: 'SKUs con precio', v: fmtInt(kpi.conPrecio), sub: `de ${fmtInt(filas.length)}` },
-          { k: 'Listas', v: fmtInt(LISTAS.length), sub: 'Mayoreo AAA primero' },
+          { k: 'Listas', v: fmtInt(listasTodas.length), sub: listasTodas.length > listas.length ? `${listas.length} en la tabla · filtra para ver más` : 'Mayoreo AAA primero' },
           { k: 'Promos vigentes', v: fmtInt(kpi.promos), sub: kpi.promos ? 'ya aplicadas en listas' : undefined },
         ]} />
 
@@ -113,10 +115,10 @@ function Pantalla({ sensible }) {
           <KpiCard eyebrow="Promos vigentes" big={fmtInt(kpi.promos)} bigSmall="SKUs" sub="ya aplicadas en las listas (promos_temporada)" />
         )}
         <KpiCard eyebrow="Sin precio en alguna lista" big={fmtInt(kpi.sinPrecio)} bigSmall="SKUs" bigColor={kpi.sinPrecio ? (theme.orange || '#FF9500') : undefined}
-          sub={`de ${fmtInt(filas.length)} · falta precio en al menos una de las ${LISTAS.length} listas`} />
+          sub={`de ${fmtInt(filas.length)} · falta precio en al menos una de las ${listasTodas.length} listas`} />
       </div>
 
-      <Panel titulo="Buscar y filtrar" meta={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs · orden del roadmap${orden ? ' (ordenado por columna)' : ''}`}
+      <Panel titulo="Buscar y filtrar" meta={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs · ${listas.length} de ${listasTodas.length} listas en la tabla${listasTodas.length > listas.length ? ' (usa el filtro "Listas" para ver las demás; el drill y el Excel las llevan todas)' : ''}${orden ? ' · ordenado por columna' : ''}`}
         acciones={<ExportMenu titulo="Lista de Precios" subtitulo={`${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} />}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Buscador value={f.q} onChange={(q) => setF((p) => conBusqueda(p, q))} resultados={f.q ? `${fmtInt(filas.length)} SKUs` : null} width={420}

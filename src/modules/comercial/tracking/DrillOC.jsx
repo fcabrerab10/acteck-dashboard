@@ -74,7 +74,7 @@ export default function DrillOC({ oc, puedeEditar, onRegistrarEnvio, onEditarOC,
     { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 260, render: (r) => <span title={r.descripcion}>{r.descripcion || '—'}</span> },
     { key: 'pedido', label: 'Pedido', render: (r) => fmtInt(r.pedido) },
     { key: 'facturado', label: 'Facturado', render: (r) => <span style={{ color: r.facturado >= r.pedido && r.pedido > 0 ? theme.green : theme.text }}>{fmtInt(r.facturado)}</span> },
-    { key: 'folios', label: 'Factura', align: 'left', mono: true, render: (r) => r.folios.length ? r.folios.join(', ') : (oc.fuenteFacturado === 'manual' && r.facturado > 0 ? 'surtido manual' : '—') },
+    { key: 'folios', label: 'Factura', align: 'left', mono: true, maxWidth: 140, render: (r) => r.folios.length ? r.folios.join(', ') : (oc.fuenteFacturado === 'manual' && r.facturado > 0 ? 'surtido manual' : '—') },
     { key: 'backorder', label: 'Backorder', render: (r) => r.backorder > 0 ? <span style={{ color: theme.orange, fontWeight: 600 }}>{fmtInt(r.backorder)}</span> : '0' },
     { key: 'stock', label: 'Stock hoy', render: (r) => r.backorder > 0 ? fmtInt(r.stock) : '—' },
     { key: 'cubre', label: 'Cubre', align: 'left', render: (r) => r.backorder <= 0 ? <Pill tone="green" size="xs">Completo</Pill> : r.stock >= r.backorder ? <Pill tone="green" size="xs">Stock hoy</Pill> : r.cubre ? <Pill tone="blue" size="xs">PO {r.cubre.po || '—'} · {fmtFecha(r.cubre.eta)}</Pill> : <Pill tone="red" size="xs">Sin PO</Pill> },
@@ -82,17 +82,17 @@ export default function DrillOC({ oc, puedeEditar, onRegistrarEnvio, onEditarOC,
   const colsEnv = [
     { key: 'numero_envio', label: '#', width: 30, render: (r) => r.numero_envio },
     { key: 'guia_rastreo', label: 'Guía', align: 'left', mono: true, maxWidth: 220, render: (r) => <span title={r.guia_rastreo || ''}>{r.guia_rastreo || '—'}</span> },
-    { key: 'paqueteria', label: 'Paquetería', align: 'left', render: (r) => r.paqueteria || (r.metodo_envio === 'unidad_propia' ? 'Unidad propia' : '—') },
+    { key: 'paqueteria', label: 'Paq.', align: 'left', render: (r) => r.paqueteria || (r.metodo_envio === 'unidad_propia' ? 'Unidad propia' : '—') },
     { key: 'numero_factura', label: 'Factura', align: 'left', mono: true, render: (r) => r.numero_factura || '—' },
     { key: 'almacen_origen', label: 'Alm.', align: 'left', render: (r) => r.almacen_origen || '—' },
     { key: 'fechaEnvio', label: 'Envío', align: 'left', render: (r) => <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>{fmtFecha(r.fechaEnvio)}<FuentePill fuente={r.fuenteEnvio} /></span> },
-    { key: 'fechaEntrega', label: 'Recepción', align: 'left', render: (r) => <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>{fmtFecha(r.fechaEntrega)}{r.fechaEntrega && <FuentePill fuente={r.fuenteEntrega} />}{r.persona_recibio ? <span style={{ color: theme.textMuted }}>· {r.persona_recibio}</span> : null}</span> },
-    { key: 'desfase', label: 'Fuente · desfase', align: 'left', render: (r) => <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}><FuentePill fuente={r.fuente === 'erp' ? 'erp' : 'manual'} />{r.tieneGuiaErp && r.fuente !== 'erp' && <Pill tone="blue" size="xs">guía ERP ligada</Pill>}<Desfase e={r} puedeEditar={puedeEditar} /></span> },
+    { key: 'fechaEntrega', label: 'Recibido', align: 'left', render: (r) => <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>{fmtFecha(r.fechaEntrega)}{r.fechaEntrega && <FuentePill fuente={r.fuenteEntrega} />}{r.persona_recibio ? <span style={{ color: theme.textMuted }}>· {r.persona_recibio}</span> : null}</span> },
+    { key: 'desfase', label: 'Fuente', align: 'left', render: (r) => <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}><FuentePill fuente={r.fuente === 'erp' ? 'erp' : 'manual'} />{r.tieneGuiaErp && r.fuente !== 'erp' && <Pill tone="blue" size="xs">guía ERP ligada</Pill>}<Desfase e={r} puedeEditar={puedeEditar} /></span> },
     ...(puedeEditar ? [{ key: 'acc', label: '', width: 60, render: (r) => r.fuente === 'manual' ? <button type="button" onClick={(ev) => { ev.stopPropagation(); onEditarEnvio?.(r); }} style={btn(theme)}>editar</button> : null }] : []),
   ];
 
   return (
-    <div style={{ padding: '12px 14px 14px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.018)', fontFamily: TYPO.fontText }} onClick={(e) => e.stopPropagation()}>
+    <div style={{ padding: '12px 14px 14px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.018)', fontFamily: TYPO.fontText, minWidth: 0, display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, color: theme.text, marginBottom: 8 }}>{cabecera}</div>
       <Timeline oc={oc} />
       <p style={{ margin: '4px 0 10px', fontSize: 12, lineHeight: 1.5, color: theme.textMuted, maxWidth: 780 }}>{textoExplicativo(oc)}</p>

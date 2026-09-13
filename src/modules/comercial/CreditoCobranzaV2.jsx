@@ -328,32 +328,38 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
     return <Pill tone={t?.tone || 'red'} size="xs" dot={r.tramo === 'mas90'}>{r.dAtraso}d</Pill>;
   };
 
+  // Regla de ancho (2026-09-12): 6 columnas, todas con tope, para que la tabla quepa en la
+  // tarjeta (≈ 1,100 px) sin scroll horizontal. La Emisión se fusionó en la celda del Folio
+  // (segunda línea, muted) junto con la referencia, que es el texto que más se estiraba; con
+  // maxWidth la celda recorta con "…" y el texto completo queda en el title. El Excel sigue
+  // exportando Folio, Referencia y Emisión en columnas separadas.
   const columnas = [
-    { key: 'folio', label: 'Folio', align: 'left', render: (r) => (
-      <div style={{ lineHeight: 1.2 }}>
-        <div style={{ ...mono, fontSize: 11.5, fontWeight: 600, color: theme.text }}>{r.folio || '—'}</div>
-        {r.referencia && <div style={{ ...mono, fontSize: 10, color: theme.textSubtle || theme.textMuted }}>{r.referencia}</div>}
+    { key: 'folio', label: 'Folio · emisión', align: 'left', maxWidth: 190, render: (r) => (
+      <div style={{ lineHeight: 1.2, minWidth: 0 }} title={[r.folio, r.referencia, r.emision ? `emitida ${fmtFechaCorta(r.emision)}` : null].filter(Boolean).join(' · ')}>
+        <div style={{ ...mono, fontSize: 11.5, fontWeight: 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.folio || '—'}</div>
+        <div style={{ ...mono, fontSize: 10, color: theme.textSubtle || theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {[fmtFechaCorta(r.emision), r.referencia].filter(Boolean).join(' · ') || '—'}
+        </div>
       </div>
     ) },
-    { key: 'emision', label: 'Emisión', align: 'left', mono: true, render: (r) => fmtFechaCorta(r.emision) },
-    { key: 'vencimiento', label: 'Vencimiento', align: 'left', mono: true, render: (r) => fmtFechaCorta(r.vencimiento) },
-    { key: 'importe', label: 'Importe', sort: true, sum: true, fmt: fmt$Full, render: (r) => fmt$Full(r.importe) },
-    { key: 'saldo', label: 'Saldo', sort: true, sum: true, bold: true, fmt: fmt$Full, render: (r) => fmt$Full(r.saldo) },
-    { key: 'pctPagado', label: '% pagado', sort: true, render: (r) => <span style={{ color: r.pctPagado > 0 ? theme.text : theme.textMuted }}>{r.pctPagado}%</span> },
-    { key: 'dAtraso', label: 'Atraso', sort: true, render: (r) => pillEstatus(r) },
+    { key: 'vencimiento', label: 'Vencimiento', align: 'left', mono: true, width: 96, render: (r) => fmtFechaCorta(r.vencimiento) },
+    { key: 'importe', label: 'Importe', sort: true, sum: true, width: 110, fmt: fmt$Full, render: (r) => fmt$Full(r.importe) },
+    { key: 'saldo', label: 'Saldo', sort: true, sum: true, bold: true, width: 110, fmt: fmt$Full, render: (r) => fmt$Full(r.saldo) },
+    { key: 'pctPagado', label: '% pagado', sort: true, width: 78, render: (r) => <span style={{ color: r.pctPagado > 0 ? theme.text : theme.textMuted }}>{r.pctPagado}%</span> },
+    { key: 'dAtraso', label: 'Atraso', sort: true, width: 78, render: (r) => pillEstatus(r) },
   ];
 
   const columnasHist = [
-    { key: 'etiqueta', label: 'Semana', align: 'left', render: (r) => (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ ...mono, fontWeight: r.id === estado.id ? 700 : 500 }}>{r.etiqueta} · {r.anio}</span>
+    { key: 'etiqueta', label: 'Semana', align: 'left', maxWidth: 200, render: (r) => (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }} title={`${r.etiqueta} · ${r.anio}`}>
+        <span style={{ ...mono, fontWeight: r.id === estado.id ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.etiqueta} · {r.anio}</span>
         {r.id === estado.id && <Pill tone="inverse" size="xs">seleccionada</Pill>}
       </span>
     ) },
-    { key: 'fecha', label: 'Corte', align: 'left', mono: true, render: (r) => fmtFechaCorta(r.fecha) },
-    { key: 'saldo', label: 'Saldo', render: (r) => fmt$Full(r.saldo) },
-    { key: 'vencido', label: 'Vencido', render: (r) => <span style={{ color: r.vencido > 0 ? P.red : theme.textMuted }}>{r.vencido > 0 ? fmt$Full(r.vencido) : '—'}</span> },
-    { key: 'dso', label: 'DSO', render: (r) => (r.dso != null ? `${r.dso}d` : '—') },
+    { key: 'fecha', label: 'Corte', align: 'left', mono: true, width: 96, render: (r) => fmtFechaCorta(r.fecha) },
+    { key: 'saldo', label: 'Saldo', width: 110, render: (r) => fmt$Full(r.saldo) },
+    { key: 'vencido', label: 'Vencido', width: 110, render: (r) => <span style={{ color: r.vencido > 0 ? P.red : theme.textMuted }}>{r.vencido > 0 ? fmt$Full(r.vencido) : '—'}</span> },
+    { key: 'dso', label: 'DSO', width: 70, render: (r) => (r.dso != null ? `${r.dso}d` : '—') },
   ];
 
   return (
@@ -378,7 +384,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
       </Hero>
 
       {/* Aging · 4 KpiCard */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8, ...detStyle }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 8, ...detStyle }}>
         {TRAMOS.map((t) => {
           const b = aging[t.id];
           const pct = agTotal > 0 ? Math.round((b.monto / agTotal) * 100) : 0;
@@ -400,7 +406,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
       </div>
 
       {/* Vencimientos próximos + Línea de crédito y corte */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 10, ...detStyle }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(340px, 100%), 1fr))', gap: 10, ...detStyle }}>
         <Panel titulo="Vencimientos próximos" meta={`${fmt$(totalPorCobrar)} por cobrar en 3 meses`}>
           <div style={{ height: 150, minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">

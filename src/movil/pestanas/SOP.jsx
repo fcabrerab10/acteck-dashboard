@@ -10,7 +10,7 @@
 // Datos SOLO vía src/lib/queries.js (fetchAll con cache 5 min) + React Query; el borrador se lee con useSolicitudes.
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, Ship, Plus, Trash2, ClipboardList, Package, AlertTriangle, Lock, Factory, Anchor } from 'lucide-react';
+import { Search, Ship, Plus, Trash2, ClipboardList, Package, AlertTriangle, Lock, Factory, Anchor, PackagePlus } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { fetchAll } from '../../lib/queries';
@@ -40,7 +40,7 @@ function useSOPDatos(enabled) {
       const hoy = new Date();
       const anioCorte = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1).getFullYear();
       const opcional = (p) => p.catch(() => []);
-      const [inventario, transito, leadTimes, facturacion, embarques, reporteSkus, roadmap, catalogoArticulos, skuConfig] = await Promise.all([
+      const [inventario, transito, leadTimes, facturacion, embarques, reporteSkus, roadmap, catalogoArticulos, skuConfig, comprasPendientes, comprasProv] = await Promise.all([
         fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
         fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,embarques,embarques_detalle'),
         fetchAll('v_lead_time_sku', 'sku,dias_promedio,muestras,supplier_principal,familia'),
@@ -50,8 +50,11 @@ function useSOPDatos(enabled) {
         fetchAll('roadmap_sku', 'sku,descripcion,marca,rdmp'),
         opcional(fetchAll('catalogo_articulos', 'articulo,descripcion')),
         opcional(fetchAll('sku_config', 'sku,es_critico,meses_seguridad,crecimiento_override')),
+        // Compras en camino (POs colocadas al proveedor, pendiente > 0). Informativo: no toca el sugerido.
+        opcional(fetchAll('v_compras_pendientes_sku', 'sku,descripcion,proveedor,po,fecha_po,piezas_pedidas,piezas_pendientes,usd_pendiente,eta,en_master_embarques,dias_desde_po')),
+        opcional(fetchAll('v_compras_pendientes_proveedor', 'proveedor,pos,skus,piezas_pendientes,usd_pendiente,po_mas_antigua,dias_po_mas_antigua,eta_mas_cercana,renglones_sin_embarque')),
       ]);
-      const rows = calcularForecast({ inventario, transito, leadTimes, metadata: [], demanda: [], roadmap, embarques, reporteSkus, facturacion, progArribos: [], catalogoArticulos, skuConfig }, 3);
+      const rows = calcularForecast({ inventario, transito, leadTimes, metadata: [], demanda: [], roadmap, embarques, reporteSkus, facturacion, progArribos: [], catalogoArticulos, skuConfig, comprasPendientes }, 3);
       // Próximos arribos: todos los embarques en camino (v_transito_sku.embarques_detalle) agrupados por PO.
       const porPo = new Map();
       const desc = new Map(roadmap.map((r) => [r.sku, r.descripcion || '']));
@@ -66,7 +69,8 @@ function useSOPDatos(enabled) {
         porPo.set(e.po, o);
       }));
       const arribos = [...porPo.values()].sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')));
-      return { rows, arribos, universoReporte: reporteSkus.length > 0 };
+      const comprasProveedores = (comprasProv || []).slice().sort((a, b) => N(b.usd_pendiente) - N(a.usd_pendiente));
+      return { rows, arribos, universoReporte: reporteSkus.length > 0, comprasPendientes: comprasPendientes || [], comprasProveedores };
     },
   });
 }
@@ -85,6 +89,7 @@ export default function SOP() {
   const [buscando, setBuscando] = useState(false);
   const [exportAbierto, setExportAbierto] = useState(false);
   const [poAbierta, setPoAbierta] = useState(null);
+  const [provAbierto, setProvAbierto] = useState(null);
   useEffect(() => { guardarLS(LS_SKUS, skus); }, [skus]);
 
   const rows = data?.rows || [];
@@ -207,6 +212,8 @@ export default function SOP() {
             })}
           </ListaAgrupada>
 
+          <ComprasEnCamino data={data} sensible={sensible} theme={theme} onProveedor={setProvAbierto} />
+
           <TiemposReales sensible={sensible} theme={theme} />
         </>
       )}
@@ -224,6 +231,9 @@ export default function SOP() {
           </ListaAgrupada>
         )}
       </HojaM>
+
+      <HojaProveedorCompras proveedor={provAbierto} lineas={data?.comprasPendientes || []} sensible={sensible} theme={theme}
+        onClose={() => setProvAbierto(null)} onSku={(sku) => { agregarSku(sku); setProvAbierto(null); }} enCanasta={skus} />
 
       <SOPExport sensible={sensible} abierto={exportAbierto} onClose={() => setExportAbierto(false)} sol={sol} borrador={borrador} lineas={lineas} rows={rows} puedeEditar={puedeEditar} />
     </>
@@ -320,6 +330,57 @@ function TarjetaSop({ r, theme, hoy, linea, puedeEditar, sensible = false, onQui
           {linea && <div style={{ marginTop: 8, fontSize: 11.5, color: theme.green, display: 'flex', alignItems: 'center', gap: 6 }}><ClipboardList size={13} />En el export con {int(linea.cantidad)} pz{sensible && costoDe(r) ? ` · $${int(N(linea.cantidad) * costoDe(r))} USD` : ''}</div>}
         </div>
     </div>
+  );
+}
+
+// ── Compras en camino · POs colocadas al proveedor que siguen pendientes (v_compras_pendientes_*) ──
+// Informativo: NO se restan de la brecha ni del sugerido (eso sólo lo hace el tránsito del master).
+function ComprasEnCamino({ data, sensible, theme, onProveedor }) {
+  const provs = data?.comprasProveedores || [];
+  if (!provs.length) return null;
+  const pz = provs.reduce((a, r) => a + N(r.piezas_pendientes), 0);
+  const totalUsd = provs.reduce((a, r) => a + N(r.usd_pendiente), 0);
+  const pos = provs.reduce((a, r) => a + N(r.pos), 0);
+  return (
+    <ListaAgrupada titulo="Compras en camino" meta={provs.length} style={{ marginTop: 18 }}
+      pie={`${int(pos)} POs colocadas al proveedor con pendiente en el ERP${sensible ? ` · ${usd(totalUsd)} USD` : ''} · ${int(pz)} pz. No se restan del sugerido: eso sólo lo hace el tránsito del master de embarques.`}>
+      {provs.slice(0, 12).map((r) => (
+        <Fila key={r.proveedor} icon={PackagePlus} color={N(r.renglones_sin_embarque) > 0 ? theme.purple || theme.accent : theme.accent}
+          titulo={r.proveedor}
+          sub={[`${int(r.pos)} PO${N(r.pos) === 1 ? '' : 's'}`, `${int(r.skus)} SKU${N(r.skus) === 1 ? '' : 's'}`,
+            N(r.renglones_sin_embarque) > 0 ? `${int(r.renglones_sin_embarque)} sin embarcar` : 'todo embarcado'].filter(Boolean).join(' · ')}
+          valor={sensible ? usd(r.usd_pendiente) : `${int(r.piezas_pendientes)} pz`}
+          valorSub={sensible ? `${int(r.piezas_pendientes)} pz` : (r.eta_mas_cercana ? fechaCorta(r.eta_mas_cercana) : 'sin ETA')}
+          onClick={() => onProveedor(r.proveedor)} />
+      ))}
+    </ListaAgrupada>
+  );
+}
+
+function HojaProveedorCompras({ proveedor, lineas, sensible, theme, onClose, onSku, enCanasta }) {
+  const suyas = useMemo(
+    () => (proveedor ? lineas.filter((l) => l.proveedor === proveedor).sort((a, b) => N(b.usd_pendiente) - N(a.usd_pendiente)) : []),
+    [proveedor, lineas],
+  );
+  const pz = suyas.reduce((a, r) => a + N(r.piezas_pendientes), 0);
+  const totalUsd = suyas.reduce((a, r) => a + N(r.usd_pendiente), 0);
+  return (
+    <HojaM abierto={!!proveedor} onClose={onClose} titulo={proveedor || ''}
+      sub={`${int(pz)} pz pendientes${sensible ? ` · ${usd(totalUsd)} USD` : ''}`} alto="76vh">
+      <ListaAgrupada pie="Toca un SKU para agregarlo a tu consulta del S&OP.">
+        {suyas.map((l) => {
+          const ya = enCanasta.includes(l.sku);
+          return (
+            <Fila key={`${l.po}-${l.sku}`} titulo={<span style={{ fontFamily: TYPO.fontDisplay }}>{l.sku}</span>}
+              sub={[l.po ? `PO ${l.po}` : null, l.fecha_po ? fechaCorta(l.fecha_po) : null,
+                l.en_master_embarques ? (l.eta ? `embarcada · ${fechaCorta(l.eta)}` : 'embarcada') : 'sin embarcar'].filter(Boolean).join(' · ')}
+              valor={`${int(l.piezas_pendientes)} pz`} valorSub={sensible ? `${usd(l.usd_pendiente)} USD` : null} chevron={false}
+              trailing={ya ? <Pill tone="gray">Consultado</Pill> : <Plus size={18} style={{ color: theme.accent }} />}
+              onClick={ya ? undefined : () => onSku(l.sku)} />
+          );
+        })}
+      </ListaAgrupada>
+    </HojaM>
   );
 }
 

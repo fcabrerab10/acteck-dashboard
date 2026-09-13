@@ -23,7 +23,7 @@ import PanelElasticidad from './PanelElasticidad';
 import Simulador from './Simulador';
 import Competencia from './Competencia';
 import PrecioBajoSku from './PrecioBajoSku';
-import { LISTAS, listaLbl, listaColor, fmtMoney, fmtInt, fmtPct, fmtMoneyShort, fmtPctDelta, textoPrecio, marcaDe, roadmapTone, MESES, N, periodoLbl } from './textos';
+import { ordenarListas, listaLbl, listaColor, fmtMoney, fmtInt, fmtPct, fmtMoneyShort, fmtPctDelta, textoPrecio, marcaDe, roadmapTone, MESES, N, periodoLbl } from './textos';
 
 const hoyMes = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 }; };
 
@@ -58,8 +58,12 @@ export default function DrillSku({ row, sensible = false, onClose }) {
 
   const calc = useMemo(() => {
     if (!data) return null;
-    const { fact, historico, promosHist, inv, tr } = data;
-    const hist = serieHistorico(historico);
+    const { fact, historico, vigente, promosHist, inv, tr } = data;
+    const listasSku = ordenarListas([...Object.keys(row.precios || {}), ...(historico || []).map((h) => h.lista)]);
+    const hist = serieHistorico(historico, listasSku);
+    const historial = ordenarListas((vigente || []).map((v) => v.lista))
+      .map((l) => (vigente || []).find((v) => v.lista === l))
+      .filter(Boolean);
     // Evolución del año: piezas facturadas por mes + precio AAA del histórico (arrastrado hacia adelante)
     const serie = Array.from({ length: 12 }, (_, i) => ({ mes: MESES[i], piezas: 0, monto: 0, precio: null }));
     for (const f of fact) { if (Number(f.anio) !== anio) continue; const m = Number(f.mes) - 1; if (m < 0 || m > 11) continue; serie[m].piezas += N(f.piezas); serie[m].monto += N(f.monto); }
@@ -75,7 +79,7 @@ export default function DrillSku({ row, sensible = false, onClose }) {
     const top = [...cli.values()].filter((c) => c.piezas > 0).sort((a, b) => b.piezas - a.piezas);
     const piezasYTD = top.reduce((s, c) => s + c.piezas, 0), montoYTD = top.reduce((s, c) => s + c.monto, 0);
     return {
-      hist, serieAnio, top: top.slice(0, 5), restantes: top.slice(5), piezasYTD, montoYTD,
+      hist, historial, listasSku, serieAnio, top: top.slice(0, 5), restantes: top.slice(5), piezasYTD, montoYTD,
       clientes: precioRealPorCliente(fact, row.precios, row.promo),
       promosHist: [...promosHist].sort((a, b) => b.anio - a.anio || b.mes - a.mes),
       disp: disponibilidad(inv, tr),
@@ -90,7 +94,7 @@ export default function DrillSku({ row, sensible = false, onClose }) {
   if (isLoading || !calc) return <div style={wrap} onClick={(e) => e.stopPropagation()}><Cargando pantalla="preciosDrill" minHeight={320} /></div>;
   if (error) return <div style={{ ...wrap, color: theme.red || '#FF3B30', fontSize: 12 }}>No se pudo cargar el detalle de {row.sku}: {String(error.message || error)}</div>;
 
-  const listasConPrecio = LISTAS.filter((l) => row.precios[l] != null);
+  const listasConPrecio = calc.listasSku.filter((l) => row.precios[l] != null);
   const listaValida = lista && listasConPrecio.includes(lista) ? lista : '';
   const precioSel = listaValida ? precioEfectivo(row.precios, row.promo, listaValida) : null;
   const precioAAA = row.precios['Mayoreo AAA'], precioAAAneto = precioEfectivo(row.precios, row.promo, 'Mayoreo AAA');
@@ -113,6 +117,12 @@ export default function DrillSku({ row, sensible = false, onClose }) {
     { key: 'real', label: 'Real', render: (r) => <span style={{ fontWeight: 600 }}>{fmtMoney(r.real)}</span> },
     { key: 'precioLista', label: 'Lista', render: (r) => (r.precioLista != null ? fmtMoney(r.precioLista) : '—') },
     { key: 'difPct', label: 'Desv.', render: (r) => <DeltaPill value={r.difPct} digits={1} /> },
+  ];
+  const colsHistorial = [
+    { key: 'lista', label: 'Lista', align: 'left', maxWidth: 130, render: (r) => <span title={r.lista} style={{ color: listaColor(theme, r.lista), fontWeight: 600 }}>{listaLbl(r.lista)}</span> },
+    { key: 'precio', label: 'Vigente', render: (r) => <span style={{ fontWeight: 600 }}>{fmtMoney(N(r.precio))}</span> },
+    { key: 'vigente_desde', label: 'Desde', render: (r) => periodoLbl(Number(r.anio), Number(r.mes)) },
+    { key: 'periodos', label: 'Periodos', render: (r) => fmtInt(N(r.periodos)) },
   ];
   const colsCambios = [
     { key: 'periodo', label: 'Mes', align: 'left', render: (r) => periodoLbl(r.anio, r.mes) },
@@ -143,7 +153,7 @@ export default function DrillSku({ row, sensible = false, onClose }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
         <KpiCard eyebrow="Precio Mayoreo AAA" badge={row.promo ? { l: `promo −${Math.round(row.promo.promo_pct * 100)}%`, tone: 'purple' } : undefined}
           big={precioAAAneto != null ? fmtMoney(precioAAAneto) : '—'} bigSmall={row.promo && precioAAA != null ? `lista ${fmtMoney(precioAAA)}` : 'sin IVA'}
-          sub={sensible && calc.costo > 0 && precioAAAneto > 0 ? `Margen ${fmtPct(((precioAAAneto - calc.costo) / precioAAAneto) * 100, 1)} · costo ${fmtMoney(calc.costo)}` : `${listasConPrecio.length} de ${LISTAS.length} listas con precio`} />
+          sub={sensible && calc.costo > 0 && precioAAAneto > 0 ? `Margen ${fmtPct(((precioAAAneto - calc.costo) / precioAAAneto) * 100, 1)} · costo ${fmtMoney(calc.costo)}` : `${listasConPrecio.length} lista${listasConPrecio.length === 1 ? '' : 's'} con precio`} />
         <KpiCard eyebrow="Precio bajo facturado" badge={row.bajo ? { l: fmtPctDelta(row.bajo.difPct), tone: row.bajo.difPct >= -8 ? 'orange' : 'red' } : undefined}
           big={row.bajo ? fmtMoney(row.bajo.real) : '—'} bigSmall={row.bajo ? `vs ${listaLbl(row.bajo.lista)} ${fmtMoney(row.bajo.precioLista)}` : undefined}
           sub={row.bajo ? `${row.bajo.cliente} · ${fmtInt(row.bajo.piezas)} pz · ${fmtMoneyShort(row.bajo.dejado)} dejados en la mesa` : 'Ningún cliente (≥ 50 pz) debajo de su lista'} />
@@ -165,13 +175,27 @@ export default function DrillSku({ row, sensible = false, onClose }) {
             {listasConPrecio.length === 0 && <div style={{ fontSize: 11, color: theme.textMuted, padding: '8px 0' }}>Sin precio en ninguna lista.</div>}
           </Panel>
 
+          {/* Historial de precio · v_precio_vigente_sku_lista (precios_sku ya conserva los meses: el puente
+              dejó de borrar la tabla el 2026-09-12). Mientras sólo haya un periodo cargado se ve 1 fila por
+              lista con "1 periodo"; a partir del próximo mes empieza a haber "desde" reales. */}
+          <Panel titulo="Historial de precio" meta={calc.historial.length ? `${calc.historial.length} lista${calc.historial.length === 1 ? '' : 's'} · precio vigente y desde cuándo` : undefined}>
+            <TablaCompacta
+              columnas={colsHistorial} filas={calc.historial} rowKey={(r) => r.lista} dense maxHeight={180}
+              vacio="Sin precio de lista guardado para este SKU." />
+            {calc.historial.length > 0 && calc.historial.every((h) => Number(h.periodos) <= 1) && (
+              <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 6 }}>
+                Un solo periodo guardado: la historia se acumula mes a mes desde que el puente dejó de reemplazar la tabla completa.
+              </div>
+            )}
+          </Panel>
+
           <Panel titulo="Evolución del precio por lista" meta={soloUnMes ? `Histórico desde ${hist.desde ? fmtFecha(hist.desde) : 'hoy'} · acumula mes a mes` : `${hist.meses} meses · desde ${hist.desde ? fmtFecha(hist.desde) : '—'}`}>
             {hist.serie.length === 0 ? (
               <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '18px 0' }}>Sin histórico de precios para este SKU.</div>
             ) : (
               <>
                 {(() => {
-                  const listas = LISTAS.filter((l) => hist.serie.some((p) => p[l] != null));
+                  const listas = calc.listasSku.filter((l) => hist.serie.some((p) => p[l] != null));
                   const principal = listas.includes('Mayoreo AAA') ? 'Mayoreo AAA' : listas[0];
                   const series = listas.map((l) => ({ key: l, label: listaLbl(l), tipo: l === principal ? 'principal' : 'linea', color: listaColor(theme, l) }));
                   return (
@@ -198,7 +222,7 @@ export default function DrillSku({ row, sensible = false, onClose }) {
           </Panel>
 
           <PanelElasticidad elast={elast} elastCat={elastCatQ.data} elastCatLoading={elastCatQ.isLoading} categoria={row.categoria}
-            lista={listaElast} onLista={setListaElast} listasConPrecio={null} historicoDesde={hist.desde} soloUnMes={soloUnMes} />
+            lista={listaElast} onLista={setListaElast} listas={calc.listasSku} listasConPrecio={listasConPrecio} historicoDesde={hist.desde} soloUnMes={soloUnMes} />
         </div>
 
         {/* Columna derecha */}

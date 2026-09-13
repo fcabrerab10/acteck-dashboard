@@ -101,8 +101,16 @@ export default function TablaForecast({
     { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 360, render: (r) => <span title={r.descripcion} style={{ fontFamily: TYPO.fontText, fontSize: 12, color: theme.text }}>{r.descripcion || '—'}</span> },
     { key: 'roadmapEstado', label: 'Roadmap', align: 'center', width: 64, render: (r) => (r.roadmapEstado ? <Pill tone={roadmapTone(r.roadmapEstado)} size="xs">{r.roadmapEstado}</Pill> : dash) },
     { key: 'inv', label: 'Inv', width: 64, sort: true, render: (r) => fmtInt(r.inv), renderTotal: (v) => fmtInt(v) },
-    { key: 'traCant', label: 'Tránsito', width: 70, sort: true, render: (r) => (r.traCant > 0 ? fmtInt(r.traCant) : dash), renderTotal: (v) => fmtInt(v) },
-    { key: 'traEta', label: 'Arribo', width: 76, sort: true, render: (r) => (r.traEta ? <span style={{ fontFamily: TYPO.fontText, fontSize: 11.5 }}>{fmtEtaCorta(r.traEta)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted, fontFamily: TYPO.fontText, fontSize: 11 }}>sin OC</span>) },
+    // Tránsito = lo que YA embarcó (v_transito_sku). Si no hay tránsito pero sí una PO colocada al
+    // proveedor todavía pendiente (compras_oc), se pinta la píldora informativa "PO n pz": no cambia
+    // la brecha ni el sugerido, sólo evita volver a pedir algo que ya está pedido.
+    { key: 'traCant', label: 'Tránsito', width: 78, sort: true, render: (r) => (
+      r.traCant > 0 ? fmtInt(r.traCant)
+        : r.poPendiente?.sinTransito
+          ? <Pill tone="purple" size="xs" title={`PO colocada y pendiente, aún sin embarcar: ${r.poPendiente.pos.map((p) => `${p.po || 's/n'} · ${fmtInt(p.piezas)} pz`).join(' · ')}`}>PO {fmtInt(r.poPendiente.piezas)} pz</Pill>
+          : dash
+    ), renderTotal: (v) => fmtInt(v) },
+    { key: 'traEta', label: 'Arribo', width: 76, sort: true, render: (r) => (r.traEta ? <span style={{ fontFamily: TYPO.fontText, fontSize: 11.5 }}>{fmtEtaCorta(r.traEta)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted, fontFamily: TYPO.fontText, fontSize: 11 }}>{r.poPendiente?.sinTransito ? 'sin embarcar' : 'sin OC'}</span>) },
     { key: 'demandaMesErp', label: 'Dem 3m', width: 80, sort: true, title: 'Ritmo mensual ERP · promedio 3 meses (todos los clientes)', render: (r) => <>{fmtInt(r.demandaMesErp)}<span style={{ color: theme.textMuted, marginLeft: 3, fontSize: 10 }}>pz/m</span></>, renderTotal: (v) => fmtInt(v) },
     { key: 'coberturaDiasErp', label: 'Días inv', align: 'center', width: 72, sort: true, render: (r) => (
       r.coberturaDiasErp == null || !isFinite(r.coberturaDiasErp)

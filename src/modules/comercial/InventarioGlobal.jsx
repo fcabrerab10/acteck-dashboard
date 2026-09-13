@@ -1,6 +1,9 @@
-// Inventario global · V3. Hero narrativo → 4 KpiCard → tabla SKU × almacén (buscador por
-// palabras + pills de filtro facetadas, canasta para compartir, drill por SKU) → Próximos
-// arribos → Tendencia (histórico diario) → secundario plegable (CEDIS / estatus / tipos).
+// Inventario global · V3. Hero narrativo → 4 KpiCard → tabla de SKUs (buscador por
+// palabras + pills de filtro facetadas, canasta para compartir, drill por SKU con el
+// desglose por almacén) → Próximos arribos → Apartado por SKU → Fuera de venta →
+// Tendencia (histórico diario) → secundario plegable (CEDIS / estatus / tipos).
+// Regla de ancho: la tabla principal cabe en su tarjeta (9 columnas, marca dentro de la
+// descripción, almacenes en el drill); nada de scroll horizontal.
 // Datos: inventario/useInventarioDatos.js · filtros: inventario/filtros.js · compartir: inventario/compartir.js.
 // Sensible (permisos.puedeVerSensible): sin él la pantalla se lee en piezas y días; nada de $ a costo.
 import React, { useMemo, useRef, useState } from 'react';
@@ -12,7 +15,7 @@ import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
-import { Hero, KpiCard, Pill, Segmented, TablaCompacta, HeatCell, Panel, Boton, SkeletonPantalla, toast, elevation } from '../../components/kit';
+import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, SkeletonPantalla, toast, elevation } from '../../components/kit';
 import { EASE, DUR } from '../../lib/motion';
 import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import useInventarioDatos from './inventario/useInventarioDatos';
@@ -22,9 +25,11 @@ import FiltrosPills from './inventario/FiltrosPills';
 import ProximosArribos from './inventario/ProximosArribos';
 import HistoricoPanel, { fotoHace } from './inventario/HistoricoPanel';
 import CompartirHoja from './inventario/CompartirHoja';
+import ApartadoPanel from './inventario/ApartadoPanel';
+import FueraDeVenta from './inventario/FueraDeVenta';
 import { FILTROS_VACIOS, estadoDe, pasaTodos, facetas as calcularFacetas, nActivos as contarActivos } from './inventario/filtros';
 import {
-  NOMBRES_ALMACEN, CEDIS_CORTO, ALMACENES_GRID, shortAlmacen, tipoDe, esComercial,
+  CEDIS_CORTO, ALMACENES_GRID, shortAlmacen, tipoDe,
   COBERTURA_CRITICA, COBERTURA_SOBRESTOCK, N,
   fmtCompact, fmtInt, fmtDias, fmtFechaCorta, diasHasta, tonoCobertura, normalizar, tokensBusqueda,
 } from './inventario/constantes';
@@ -45,13 +50,16 @@ function agregarSkus(filas, { descripciones, transito, leadTime, demanda }) {
   filas.forEach((r) => {
     const sku = r.articulo;
     if (!sku) return;
-    if (!m.has(sku)) m.set(sku, { sku, byAlm: {}, totalPz: 0, totalDisp: 0, totalRes: 0, valor: 0, costoRef: 0, cedisSet: new Set() });
+    if (!m.has(sku)) m.set(sku, { sku, byAlm: {}, totalPz: 0, totalDisp: 0, totalRes: 0, valorRes: 0, valor: 0, costoRef: 0, cedisSet: new Set() });
     const it = m.get(sku);
     const alm = Number(r.no_almacen);
+    // res = apartado (inventario − disponible) · valorRes = su costo, exactamente como
+    // v_inventario_apartado_sku (costoinventario − costodisponible), no una estimación.
     const pz = N(r.inventario), disp = N(r.disponible), res = Math.max(0, pz - disp), val = N(r.costoinventario);
-    if (!it.byAlm[alm]) it.byAlm[alm] = { pz: 0, disp: 0, res: 0, valor: 0, cedis: r.cedis };
-    it.byAlm[alm].pz += pz; it.byAlm[alm].disp += disp; it.byAlm[alm].res += res; it.byAlm[alm].valor += val;
-    it.totalPz += pz; it.totalDisp += disp; it.totalRes += res; it.valor += val;
+    const valRes = Math.max(0, val - N(r.costodisponible));
+    if (!it.byAlm[alm]) it.byAlm[alm] = { pz: 0, disp: 0, res: 0, valor: 0, valorRes: 0, cedis: r.cedis };
+    it.byAlm[alm].pz += pz; it.byAlm[alm].disp += disp; it.byAlm[alm].res += res; it.byAlm[alm].valor += val; it.byAlm[alm].valorRes += valRes;
+    it.totalPz += pz; it.totalDisp += disp; it.totalRes += res; it.valor += val; it.valorRes += valRes;
     it.costoRef = Math.max(it.costoRef, N(r.costopromedio));
     if (pz > 0 && r.cedis) it.cedisSet.add(r.cedis);
   });
@@ -185,7 +193,7 @@ function InventarioGlobalPantalla({ sensible }) {
     const valor = universo.reduce((s, r) => s + r.valor, 0);
     const piezas = universo.reduce((s, r) => s + r.totalPz, 0);
     const reservado = universo.reduce((s, r) => s + r.totalRes, 0);
-    const valorReservado = universo.reduce((s, r) => s + r.totalRes * (r.totalPz > 0 ? r.valor / r.totalPz : 0), 0);
+    const valorReservado = universo.reduce((s, r) => s + N(r.valorRes), 0);
     return {
       valor, piezas, nSkus: universo.length, conStock: conStock.length,
       agotados: agotados.length, criticos: criticos.length, sobrestock: sobre.length, enTransito: enTransito.length, riesgo: riesgo.length,
@@ -222,19 +230,11 @@ function InventarioGlobalPantalla({ sensible }) {
     return m;
   }, [skuRowsTodos, f]);
 
-  const maxCelda = useMemo(() => {
-    let m = 0;
-    filasTabla.forEach((r) => ALMACENES_GRID.forEach((a) => { const v = r.byAlm[a]?.pz || 0; if (v > m) m = v; }));
-    return m || 1;
-  }, [filasTabla]);
-
   const totales = useMemo(() => {
-    const t = { totalPz: 0, totalDisp: 0, transitoPz: 0, valor: 0 };
-    ALMACENES_GRID.forEach((a) => { t[`alm_${a}`] = 0; });
+    const t = { totalPz: 0, totalDisp: 0, totalRes: 0, transitoPz: 0, valor: 0 };
     let pzCob = 0, demDia = 0;
     filasTabla.forEach((r) => {
-      t.totalPz += r.totalPz; t.totalDisp += r.totalDisp; t.transitoPz += r.transitoPz; t.valor += r.valor;
-      ALMACENES_GRID.forEach((a) => { t[`alm_${a}`] += r.byAlm[a]?.pz || 0; });
+      t.totalPz += r.totalPz; t.totalDisp += r.totalDisp; t.totalRes += r.totalRes; t.transitoPz += r.transitoPz; t.valor += r.valor;
       if (r.demandaMes > 0) { pzCob += r.totalPz; demDia += r.demandaMes / 30; }
     });
     t.coberturaDias = demDia > 0 ? pzCob / demDia : null;
@@ -358,7 +358,6 @@ function InventarioGlobalPantalla({ sensible }) {
           title={canasta.has(r.sku) ? 'Quitar de la canasta' : 'Añadir a la canasta para compartir'} style={{ accentColor: theme.accent, cursor: 'pointer', margin: 0, verticalAlign: 'middle' }} />
       ),
     },
-    { key: 'marca', label: 'Marca', align: 'left', width: 70, sort: true, render: (r) => <span style={{ color: theme.textMuted, fontSize: 10.5 }}>{r.marca || '—'}</span> },
     {
       key: 'sku', label: 'SKU', align: 'left', width: 110, mono: true, bold: true, sort: true,
       render: (r) => (
@@ -368,15 +367,26 @@ function InventarioGlobalPantalla({ sensible }) {
         </span>
       ),
     },
-    { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 260, sort: true, render: (r) => <span title={r.descripcion} style={{ fontFamily: TYPO.fontDisplay, fontWeight: 500 }}>{r.descripcion || '—'}</span> },
-    ...ALMACENES_GRID.map((a) => ({
-      key: `alm_${a}`, label: <span title={NOMBRES_ALMACEN[a]}>{shortAlmacen(a)}</span>, width: 58, sort: true,
-      render: (r) => <HeatCell v={r.byAlm[a]?.pz || 0} max={maxCelda} />, renderTotal: (v) => fmtInt(v),
-    })),
+    {
+      // Marca va dentro de la celda de descripción (regla de ancho: la tabla cabe en su
+      // tarjeta, sin scroll horizontal). El desglose por almacén vive en el drill.
+      key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 320, sort: true,
+      render: (r) => (
+        <span title={`${r.descripcion || ''}${r.marca ? ` · ${r.marca}` : ''}`}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 500 }}>{r.descripcion || '—'}</span>
+          {r.marca && <span style={{ display: 'block', fontSize: 9.5, color: theme.textMuted }}>{r.marca}</span>}
+        </span>
+      ),
+    },
     { key: 'totalPz', label: 'Total pz', width: 70, sort: true, bold: true, render: (r) => fmtInt(r.totalPz), renderTotal: (v) => fmtInt(v) },
     { key: 'totalDisp', label: 'Disp.', width: 64, sort: true, render: (r) => (r.totalDisp > 0 ? <span style={{ color: theme.green }}>{fmtInt(r.totalDisp)}</span> : dash), renderTotal: (v) => fmtInt(v) },
     {
-      key: 'transitoPz', label: 'Tránsito', width: 84, sort: true,
+      key: 'totalRes', label: 'Apart.', width: 64, sort: true,
+      render: (r) => (r.totalRes > 0 ? <span style={{ color: theme.orange }} title={`${fmtInt(r.totalRes)} pz comprometidas en órdenes en curso`}>{fmtInt(r.totalRes)}</span> : dash),
+      renderTotal: (v) => fmtInt(v),
+    },
+    {
+      key: 'transitoPz', label: 'Trán.', width: 84, sort: true,
       render: (r) => (r.transitoPz > 0
         ? <Pill tone={r.riesgo ? 'red' : 'blue'} size="xs" title={r.transitoEta ? `ETA ${fmtFechaCorta(r.transitoEta)} · ${r.transitoPos} PO${r.transitoPos > 1 ? 's' : ''}` : ''}>{fmtInt(r.transitoPz)}{r.transitoEta ? ` · ${fmtFechaCorta(r.transitoEta)}` : ''}</Pill>
         : dash),
@@ -415,6 +425,13 @@ function InventarioGlobalPantalla({ sensible }) {
             ? { k: 'Inv Actual', medida: tooltip('inv_actual'), v: fmtCompact(resumen.valor), sub: subHistorico || `${fmtInt(resumen.piezas)} pz a costo` }
             : { k: 'Piezas', medida: tooltip('inv_actual', 'piezas'), v: fmtInt(resumen.piezas), sub: subHistorico || `${fmtInt(resumen.disponible)} disponibles` },
           { k: 'SKUs con stock', v: fmtInt(resumen.conStock), sub: `de ${fmtInt(resumen.nSkus)} SKUs` },
+          // Apartado = inventario − disponible: comprometido a órdenes en curso, no vendible otra vez.
+          {
+            k: 'Apartado', medida: 'Apartado = inventario − disponible dentro de [Inv Actual]. Producto comprometido a órdenes en curso: no se puede volver a vender.',
+            v: sensible ? fmtCompact(resumen.valorReservado) : fmtInt(resumen.reservado),
+            sub: sensible ? `${fmtInt(resumen.reservado)} pz · ${resumen.pctReservado.toFixed(1)}% del inventario` : `pz · ${resumen.pctReservado.toFixed(1)}% del inventario`,
+            color: resumen.pctReservado > 20 ? theme.orange : undefined,
+          },
           soloComerciales && cedisFiltro === 'TODOS' && med?.dias_inv != null
             ? { k: 'Días de Inv', medida: tooltip('dias_inv'), v: `${fmtInt(Math.round(med.dias_inv))} d`, sub: `Inv Actual / CV 3 meses × 90`, color: med.dias_inv > 120 ? theme.orange : med.dias_inv < 30 ? theme.red : theme.green }
             : { k: 'Cobertura SKU', medida: 'Cobertura por SKU · piezas / (demanda ERP 3 meses cerrados / 30). NO es la medida Dias de Inv del director (esa es en pesos a costo).', v: resumen.cobertura != null ? `${fmtInt(resumen.cobertura)} d` : enriqueciendo ? '…' : '—', sub: 'ritmo ERP · 3 meses · piezas', color: resumen.cobertura != null ? colorTono[tonoCob] : undefined },
@@ -444,7 +461,7 @@ function InventarioGlobalPantalla({ sensible }) {
       </div>
 
       {/* Detalle principal · tabla SKU × almacén */}
-      <Panel titulo="SKUs por almacén" meta={`${fmtInt(filasTabla.length)} SKUs · ${ALMACENES_GRID.length} almacenes · click en una fila abre el drill`}
+      <Panel titulo="SKUs por almacén" meta={`${fmtInt(filasTabla.length)} SKUs · click en una fila abre el desglose por almacén`}
         padding={0}
         acciones={<ExportMenu titulo="Inventario" subtitulo={`${fmtInt(filasTabla.length)} SKUs · ${ALMACENES_GRID.length} almacenes`} excel={handleExport} pdf={{ ref: rootRef }} deshabilitado={exportando || filasTabla.length === 0} size="md" />}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
@@ -475,7 +492,7 @@ function InventarioGlobalPantalla({ sensible }) {
           vacio={enriqueciendo && filtros.estado.size ? 'Calculando cobertura y tránsito…' : 'Sin SKUs con estos filtros.'}
           onRowClick={(r) => setSkuAbierto((s) => (s === r.sku ? null : r.sku))}
           expandidoKey={skuAbierto}
-          renderExpandido={(r) => <SkuDrillDown row={r} almacenes={ALMACENES_GRID} sensible={sensible} onCompartir={(sku) => setCompartirSkus([sku])} enCanasta={canasta.has(r.sku)} onToggleCanasta={toggleCanasta} />}
+          renderExpandido={(r) => <SkuDrillDown row={r} sensible={sensible} onCompartir={(sku) => setCompartirSkus([sku])} enCanasta={canasta.has(r.sku)} onToggleCanasta={toggleCanasta} />}
         />
         {filasTabla.length > MAX_FILAS && (
           <div style={{ padding: '8px 12px', textAlign: 'center', fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
@@ -487,6 +504,11 @@ function InventarioGlobalPantalla({ sensible }) {
       {/* Próximos arribos (POs con ETA en 7/14/30 días, cruzados con la cobertura) */}
       <ProximosArribos transito={transito} skuRows={skuRows} descripciones={descripciones} sensible={sensible}
         onVerSku={(sku) => { setFiltros(FILTROS_VACIOS()); setBusqueda(sku); setSkuAbierto(sku); rootRef.current?.querySelector('input')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
+
+      {/* Inventario comprometido (apartado) y fuera de venta · dos cifras que no se veían */}
+      <ApartadoPanel skuRows={universo} sensible={sensible}
+        onVerSku={(sku) => { setFiltros(FILTROS_VACIOS()); setBusqueda(sku); setSkuAbierto(sku); }} />
+      <FueraDeVenta filas={filas} descripciones={descripciones} sensible={sensible} />
 
       {/* Tendencia (histórico diario) */}
       <HistoricoPanel historico={historico} demandaDia={resumen.demDia} sensible={sensible} />

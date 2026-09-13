@@ -42,6 +42,7 @@ import TablaForecast, { fmtEtaCorta } from './forecast/TablaForecast';
 import ExportCart from './forecast/ExportCart';
 import ExportPreviewModal from './forecast/ExportPreviewModal';
 import UltimasComprasCard from './forecast/UltimasComprasCard';
+import ComprasEnCamino from './forecast/ComprasEnCamino';
 import TransitoTimeline from './forecast/TransitoTimeline';
 import TiemposProveedores from './forecast/TiemposProveedores';
 import Reuniones from './forecast/reuniones/Reuniones';
@@ -92,6 +93,17 @@ function ForecastPantalla({ perfil, sensible }) {
   // ── Motor ──
   const rowsAll = useMemo(() => (data.loading ? [] : indexar(calcularForecast(data, HORIZONTE))), [data]);
   const metaBySku = useMemo(() => Object.fromEntries((data.metadata || []).map((r) => [r.sku, r])), [data.metadata]);
+
+  // Compras en camino (compras_oc): resumen del Panel plegable. Informativo — no toca el sugerido.
+  const comprasMeta = useMemo(() => {
+    const prov = data.comprasPendientesProveedor || [];
+    if (!prov.length) return 'POs colocadas al proveedor · sin pendientes en el ERP';
+    const pz = prov.reduce((a, r) => a + (Number(r.piezas_pendientes) || 0), 0);
+    const usd = prov.reduce((a, r) => a + (Number(r.usd_pendiente) || 0), 0);
+    const pos = prov.reduce((a, r) => a + (Number(r.pos) || 0), 0);
+    const sinEmb = (data.comprasPendientes || []).filter((l) => !l.en_master_embarques).length;
+    return `${fmtInt(pos)} POs · ${fmtInt(pz)} pz${sensible ? ` · USD ${fmtInt(usd)}` : ''} · ${fmtInt(sinEmb)} renglones sin embarcar · no se restan del sugerido`;
+  }, [data.comprasPendientesProveedor, data.comprasPendientes, sensible]);
 
   // Foto mensual silenciosa (una vez al día por usuario, sólo internos).
   useEffect(() => { if (!data.loading && rowsAll.length) guardarSnapshotMensual(rowsAll, perfil); }, [data.loading, rowsAll, perfil]);
@@ -450,6 +462,12 @@ function ForecastPantalla({ perfil, sensible }) {
           onAgregarSolicitud={onAgregarSolicitud} skusEnBorrador={skusEnBorrador} lineasBorrador={lineasBorrador}
           puedeEditar={puedeEditarSol} sensible={sensible} facturacion={data.facturacion} metaBySku={metaBySku}
           vacio={busqueda || nActivos ? 'Ningún SKU coincide con la búsqueda y los filtros.' : 'Sin SKUs en el Reporte.'} />
+      </Panel>
+
+      <Panel plegable abiertoInicial={false} titulo="Compras en camino · POs pendientes"
+        meta={comprasMeta} padding="10px 12px">
+        <ComprasEnCamino proveedores={data.comprasPendientesProveedor} lineas={data.comprasPendientes} sensible={sensible}
+          onSku={(sku) => { setBusqueda(sku); setExpandedSku(sku); }} />
       </Panel>
 
       <Panel plegable abiertoInicial={false} titulo="Últimas compras colocadas" meta="POs del Master Embarques · 6 meses · click en una PO para el detalle" padding="10px 12px">

@@ -13,6 +13,32 @@ import DrillOC from './DrillOC';
 
 const FUENTE_LABEL = { manual: 'Manual', correo: 'Correo', factura: 'Desde factura', cotizacion: 'Cotización' };
 
+// Resumen de una línea: cuántas facturas y cómo va el envío. El detalle completo (folios, guías,
+// paquetería, fechas, desfase) vive en el drill — así la tabla cabe en la tarjeta sin scroll lateral.
+function Detalle({ oc }) {
+  const { theme } = useTheme();
+  const mute = { color: theme.textMuted, fontSize: 11.5 };
+  if (oc.esCotizacion) {
+    return <span style={mute}>{oc.cotizacion?.estado === 'enviada' ? 'esperando OC' : oc.cotizacion?.estado === 'perdida' ? (oc.cotizacion.motivo_perdida || 'perdida') : '—'}</span>;
+  }
+  const folios = (oc.facturas || []).map((x) => x.folio).concat(oc.folioPendientes || []);
+  const envios = oc.envios || [];
+  const ult = envios[envios.length - 1] || null;
+  const paq = [...new Set(envios.map((x) => x.paqueteria).filter(Boolean))].join('/') || (envios.some((x) => x.metodo_envio === 'unidad_propia') ? 'Unidad propia' : '');
+  const fecha = ult ? (ult.fechaEntrega || ult.fechaEnvio) : null;
+  const titulo = [folios.length ? `Facturas: ${folios.join(', ')}` : null,
+    envios.length ? `${envios.length} envío${envios.length === 1 ? '' : 's'}${paq ? ` · ${paq}` : ''}${ult?.guia_rastreo ? ` · guía ${ult.guia_rastreo}` : ''}` : null].filter(Boolean).join(' · ');
+  if (!folios.length && !envios.length) return <span style={mute}>—</span>;
+  return (
+    <span title={titulo || undefined} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+      {folios.length > 0 && <Pill tone="gray" size="xs">{folios.length} fact.</Pill>}
+      {envios.length > 0 && <span style={{ ...mute, whiteSpace: 'nowrap' }}>{[paq || `${envios.length} envío${envios.length === 1 ? '' : 's'}`, fecha ? fmtFecha(fecha) : null].filter(Boolean).join(' · ')}</span>}
+      {envios.some((x) => x.fuente === 'erp' || x.tieneGuiaErp) && <FuentePill fuente="erp" />}
+      {oc.conDesfase && <Pill tone="orange" size="xs">desfase</Pill>}
+    </span>
+  );
+}
+
 export default function TablaPedidos({ filas, f, setF, abierta, setAbierta, refrescando, puedeEditar, drill, subtitulo }) {
   const { theme } = useTheme();
   const rootRef = useRef(null);
@@ -40,25 +66,29 @@ export default function TablaPedidos({ filas, f, setF, abierta, setAbierta, refr
     { id: 'surtible', label: 'Surtible hoy', on: f.surtible, n: fac.surtible },
     { id: 'desfase', label: 'Guía con desfase', on: f.desfase, n: fac.desfase },
   ];
+  // Regla de ancho: 7 columnas visibles. La fecha de recibida va dentro de la celda de la OC (línea
+  // chica en gris) y el detalle de facturas y envíos vive en el drill (DrillOC), que ya los muestra
+  // completos; aquí sólo quedan los indicadores (n.º de facturas, guía, desfase) como píldoras.
   const columnas = [
     { key: 'cliente', label: 'Cliente', align: 'left', sort: true, render: (r) => <ClientePill k={r.cliente_key} /> },
-    { key: 'oc', label: 'OC', align: 'left', mono: true, sort: true, bold: true, render: (r) => <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>{r.numero_oc_cliente}{r.esCotizacion && <Pill tone="purple" size="xs">cot.</Pill>}{r.fuente && r.fuente !== 'manual' && !r.esCotizacion && <FuentePill fuente={r.fuente === 'factura' ? 'erp' : null} />}</span> },
-    { key: 'recibida', label: 'Recibida', align: 'left', sort: true, render: (r) => r.esCotizacion ? <span style={{ color: theme.textMuted }}>{fmtFecha(r.fechaEtapa)}</span> : fmtFecha(r.fecha_recibida) },
-    { key: 'etapa', label: 'Etapa', align: 'left', sort: true, render: (r) => <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><EtapaPill oc={r} />{r.detenida && <Pill tone="red" size="xs" dot>detenida</Pill>}</span> },
+    { key: 'oc', label: 'OC', align: 'left', mono: true, sort: true, bold: true, maxWidth: 180, render: (r) => (
+      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+        <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center', minWidth: 0 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.numero_oc_cliente}</span>
+          {r.esCotizacion && <Pill tone="purple" size="xs">cot.</Pill>}
+          {r.fuente && r.fuente !== 'manual' && !r.esCotizacion && <FuentePill fuente={r.fuente === 'factura' ? 'erp' : null} />}
+        </span>
+        <span style={{ fontSize: 10, color: theme.textMuted, fontWeight: 400, letterSpacing: 0 }}>
+          {r.esCotizacion ? fmtFecha(r.fechaEtapa) : fmtFecha(r.fecha_recibida)}
+        </span>
+      </span>
+    ) },
+    { key: 'etapa', label: 'Etapa', align: 'left', sort: true, render: (r) => <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}><EtapaPill oc={r} />{r.detenida && <Pill tone="red" size="xs" dot>detenida</Pill>}</span> },
     { key: 'avance', label: 'Avance', align: 'left', render: (r) => <Avance oc={r} /> },
     { key: 'pedido', label: 'Pz', sort: true, render: (r) => fmtInt(r.pedido) },
     { key: 'fill', label: 'Fill', sort: true, render: (r) => r.esCotizacion ? '—' : <span style={{ fontWeight: 600, color: r.fill >= 99.5 ? theme.green : r.fill >= 85 ? theme.text : r.fill > 0 ? theme.orange : theme.textMuted }}>{fmtPct(r.fill)}</span> },
     { key: 'dias', label: 'Días', sort: true, render: (r) => r.diasEnEtapa == null ? '—' : <span style={{ color: r.detenida ? theme.red : theme.text }}>{Math.round(r.diasEnEtapa)}</span> },
-    { key: 'facturas', label: 'Facturas', align: 'left', mono: true, maxWidth: 150, render: (r) => { const fs = (r.facturas || []).map((x) => x.folio).concat(r.folioPendientes || []); return fs.length ? <span title={fs.join(', ')}>{fs.slice(0, 2).join(', ')}{fs.length > 2 ? ` +${fs.length - 2}` : ''}</span> : '—'; } },
-    { key: 'envio', label: 'Envío', align: 'left', maxWidth: 220, render: (r) => {
-      if (r.esCotizacion) return <span style={{ color: theme.textMuted }}>{r.cotizacion?.estado === 'enviada' ? 'esperando OC' : r.cotizacion?.estado === 'perdida' ? (r.cotizacion.motivo_perdida || 'perdida') : '—'}</span>;
-      const e = r.envios || [];
-      if (!e.length) return <span style={{ color: theme.textMuted }}>—</span>;
-      const paq = [...new Set(e.map((x) => x.paqueteria).filter(Boolean))].join('/') || (e.some((x) => x.metodo_envio === 'unidad_propia') ? 'Unidad propia' : '');
-      const ult = e[e.length - 1];
-      const txt = [paq, e.length > 1 ? `${e.length} envíos` : (ult.guia_rastreo ? `guía ${String(ult.guia_rastreo).split(/[\/,]/)[0].trim()}` : null), ult.fechaEntrega ? `${ult.persona_recibio ? `${ult.persona_recibio} · ` : ''}${fmtFecha(ult.fechaEntrega)}` : (ult.fechaEnvio ? fmtFecha(ult.fechaEnvio) : null)].filter(Boolean).join(' · ');
-      return <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', minWidth: 0 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={txt}>{txt || '—'}</span>{e.some((x) => x.fuente === 'erp' || x.tieneGuiaErp) && <FuentePill fuente="erp" />}{r.conDesfase && <Pill tone="orange" size="xs">desfase {Math.round(Math.max(...e.map((x) => x.desfase || 0)))} d</Pill>}</span>;
-    } },
+    { key: 'estado', label: 'Detalle', align: 'left', maxWidth: 180, render: (r) => <Detalle oc={r} /> },
   ];
   const excel = () => ({
     hojas: [{ nombre: 'Pedidos', columnas: [
@@ -79,7 +109,11 @@ export default function TablaPedidos({ filas, f, setF, abierta, setAbierta, refr
         <TablaCompacta columnas={columnas} filas={visibles} rowKey={(r) => r.id} onRowClick={(r) => setAbierta(abierta === r.id ? null : r.id)} orden={orden} onSort={(col) => setOrden((o) => (o?.col === col ? (o.dir === 'asc' ? { col, dir: 'desc' } : null) : { col, dir: 'asc' }))}
           expandidoKey={abierta} maxHeight={640} vacio={f.q || nFiltrosActivos(f) ? 'Nada coincide con la búsqueda o los filtros.' : 'Sin pedidos: registra la primera OC.'}
           rowStyle={(r) => (r.id === abierta ? { background: theme.mode === 'dark' ? 'rgba(10,132,255,0.10)' : 'rgba(0,122,255,0.06)' } : null)}
-          renderExpandido={(r) => (refrescando ? <Cargando pantalla="trackingDrill" minHeight={220} /> : <DrillOC oc={r} puedeEditar={puedeEditar} {...drill} />)} />
+          renderExpandido={(r) => (
+            <div style={{ minWidth: 0 }}>
+              {refrescando ? <Cargando pantalla="trackingDrill" minHeight={220} /> : <DrillOC oc={r} puedeEditar={puedeEditar} {...drill} />}
+            </div>
+          )} />
       </Panel>
     </div>
   );

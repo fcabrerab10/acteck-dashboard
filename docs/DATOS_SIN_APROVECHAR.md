@@ -101,8 +101,8 @@ Ya se usa en el drill de Forecast (contenedor, terminal, cita, arribo). Sin usar
 
 ## 8. Dos cosas que hoy estamos perdiendo (no es que no se usen: se borran)
 
-1. **Historia de precios.** El puente hace *replace completo* de `precios_sku` cada hora con el mes en curso: en la base **sólo existe 2026-09**. No hay forma de ver cómo se movió un precio en el año. (Existe una tabla `precios_historico` con trigger, conviene verificar que sí esté capturando.)
-2. **Sólo cargamos 5 de las 43 listas de precios.** El puente filtra a API Provisional, DECME Provisional, Dicotech, Mayoreo AAA y PCEL Provisional. Quedan fuera listas que facturan fuerte: **Mayoreo PMM ($83 M), Ingram Retail ($14 M), Mercado Libre Full ($13 M), Amazon ($8 M), Svenska ($8.7 M)**. Ampliar el filtro es cambiar una línea.
+1. ~~**Historia de precios.**~~ **HECHO 2026-09-12.** El puente ya no hace *replace completo* de `precios_sku`: reemplaza sólo el periodo que reescribe (`deleteWhere: anio=eq.X&mes=eq.Y`), así que la tabla —cuya PK ya era `(sku, lista, anio, mes)`— se vuelve la serie histórica. Vista nueva `v_precio_vigente_sku_lista` (precio vigente + `vigente_desde` + nº de periodos) y panel "Historial de precio" en el drill de Estrategia de Precios. `precios_historico` y su trigger siguen capturando (aportan `primera_vez`/`ultima_vez`). **Requiere `git pull` en la Mac mini** para que empiece a acumular.
+2. ~~**Sólo cargamos 5 de las 43 listas de precios.**~~ **HECHO 2026-09-12.** `LISTAS_PRECIOS` en `bridge/lib/mappers.mjs` son ya las **10** con más facturación 2026 (se sumaron Mayoreo PMM $83.5 M, Ingram Retail $14.2 M, ML Full $13.1 M, Svenska $8.7 M y Amazon $8.3 M) y el nombre se compara normalizado. La pantalla no las trae en duro: las descubre de los datos (`listasDeDatos`), muestra 5 columnas por la regla de ancho y las demás con el filtro "Listas"; el drill y el Excel las llevan todas. **Requiere `git pull` en la Mac mini.**
 
 ---
 
@@ -114,11 +114,11 @@ Ya se usa en el drill de Forecast (contenedor, terminal, cita, arribo). Sin usar
 | 2 | **% de alcance de cuota en las 17 cuentas** de Sell Out y en Sell In global | `cuotas_mensuales` + vista ya hecha | Bajo | La vista `v_medidas_cuota_cliente_mes` ya existe y nadie la consume. Es conectar cables. |
 | 3 | **Pestaña "Equipo comercial"** — venta, margen, devoluciones y cuota por vendedor (25 personas) | `erp_ventas.vendedor` | Medio | 100 % de cobertura y una dimensión completa del negocio que no existe en el dashboard. |
 | 4 | **Inventario comprometido ($8.8 M apartado) e inventario fuera de venta (~$30 M)** | `inventario_acteck` | Bajo | Dos números grandes, ya en la tabla, con una resta. |
-| 5 | **Ampliar listas de precios (5 → 10) y confirmar que se guarda la historia** | `precios_sku` | Bajo | Cambio de una línea en el puente; sin él, Estrategia de Precios se queda ciega en la mitad de la facturación. |
+| 5 | ~~Ampliar listas de precios (5 → 10) y confirmar que se guarda la historia~~ **HECHO 2026-09-12** (falta `git pull` en la Mac mini) | `precios_sku` | Bajo | Cambio de una línea en el puente; sin él, Estrategia de Precios se queda ciega en la mitad de la facturación. |
 | 6 | **Lead time real y costo de flete por CBM** ($330/CBM, 34 días ETD→CEDIS, por proveedor y naviera) | `embarques_compras` | Medio | Mejora directa del S&OP, que hoy usa lead time fijo. |
 | 7 | **Confirmar la foto diaria de inventario** y encender el panel "Tendencia" | `inventario_historico` | Bajo | El panel ya está construido y vacío; sólo falta que se acumulen días. |
 | 8 | **Bloque "Compras en camino"** — $9.59 M USD y 585 K piezas pendientes por proveedor | `compras_oc` | Medio | Tabla completa que hoy no se abre en ninguna pantalla. |
 | 9 | **Pasar `guias_erp` al puente** y encender tiempo de entrega por paquetería | `guias_erp` | Medio | Lleva un mes sin actualizarse; con el puente, Tracking Pedidos gana el dato de entrega real. |
-| 10 | **EAN/código de barras de 8,850 SKUs** en ficha de producto y listas a clientes | `catalogo_articulos` + `series_generadas` | Bajo | Dato limpio y pedido recurrentemente por mayoristas y marketplaces. |
+| 10 | ~~EAN/código de barras en ficha de producto y listas a clientes~~ **HECHO 2026-09-12** · vista `v_sku_ean` (ficha móvil con copiar, columna EAN en el Excel de Propuestas y línea EAN en los textos de WhatsApp). **Ojo: son 4,239 SKUs, no 8,850** — 4,711 de los `isbn` de `catalogo_articulos` son un "0" de relleno. | `catalogo_articulos` + `series_generadas` | Bajo | Dato limpio y pedido recurrentemente por mayoristas y marketplaces. |
 
 **Bonus de configuración (5 minutos cada uno):** agendar la tarea `tipo-cambio` en `vercel.json` (hoy no corre sola) y confirmar en RevkoBi el nombre de las columnas de **cuota en piezas y en costo**, que ya están programadas de punta a punta y llegan vacías.

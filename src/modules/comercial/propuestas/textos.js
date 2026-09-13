@@ -19,17 +19,19 @@ export function vigenciaDe(anio, mes) {
 }
 
 /**
- * textoPropuesta({ clienteLabel, nombre, anio, mes, lineas, marca, vigencia }) → string
+ * textoPropuesta({ clienteLabel, nombre, anio, mes, lineas, marca, vigencia, eanPorSku }) → string
  *   vigencia: 'YYYY-MM-DD' (columna propuestas_borradores.vigencia) o texto ya formateado.
+ *   eanPorSku: Map sku → ean (opcional, de src/lib/ean.js). Si hay EAN se imprime bajo la línea del SKU.
  *
  *   *Acteck · Propuesta Digitalife*
  *   Cierre Septiembre 2026 · vigencia al 30 sep 2026
  *
  *   • AC-928984 · Mouse Óptico · 100 pz · $92.00 + IVA
+ *     EAN 7506215289845
  *   …
  *   Total: $9,200.00 + IVA · 1 SKU · 100 pz
  */
-export function textoPropuesta({ clienteLabel, nombre, anio, mes, lineas = [], marca = 'Acteck', vigencia } = {}) {
+export function textoPropuesta({ clienteLabel, nombre, anio, mes, lineas = [], marca = 'Acteck', vigencia, eanPorSku } = {}) {
   const a = anio || new Date().getFullYear(), m = mes || new Date().getMonth() + 1;
   const vig = vigencia ? vigenciaTexto(vigencia) : vigenciaDe(a, m);
   const titulo = [(nombre || '').trim(), `${MES_FULL[m - 1]} ${a}`].filter(Boolean).join(' ');
@@ -40,6 +42,8 @@ export function textoPropuesta({ clienteLabel, nombre, anio, mes, lineas = [], m
     total += n * p; pz += n;
     const nom = nombreCorto(l.descripcion);
     out.push(`• ${l.sku}${nom ? ` · ${nom}` : ''} · ${fmtPz(n)} pz · ${fmtPx(p)} + IVA`);
+    const ean = l.ean || eanPorSku?.get?.(l.sku);
+    if (ean) out.push(`  EAN ${ean}`);
   }
   out.push('', `Total: ${fmtPx(total)} + IVA · ${lineas.length} SKU${lineas.length === 1 ? '' : 's'} · ${fmtPz(pz)} pz`);
   return out.join('\n');

@@ -6,17 +6,21 @@
 //   construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nombre, vigencia }) → { wb, filename }
 //
 // cliente = { key, label } · propuestaLista = [{ sku, descripcion, marca, familia, piezas, precio }] · vigencia 'YYYY-MM-DD'
+// El EAN (columna después del SKU) lo bajan solos los dos wrappers async con mapaEan(): los llamadores no cambian.
 // Nombre del archivo: "Propuesta <Cliente> <nombre> <Mes> <Año>.xlsx" (mes/año = momento del export).
 // La hoja Resumen abre con un bloque Propuesta · Cliente · Vigencia · Generada y luego la tabla por concepto.
 import { MES_FULL, familiaHoja } from './constantes';
 import { vigenciaTexto } from './textos';
+import { mapaEan } from '../../../lib/ean';
 
 async function cargarXLSX() {
   const mod = await import('xlsx-js-style');
   return mod.default || mod;
 }
 
-export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nombre, vigencia }) {
+export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nombre, vigencia, eanPorSku }) {
+  // EAN opcional: Map sku → ean (lo bajan los wrappers async con mapaEan). Si no viene, la columna sale vacía.
+  if (eanPorSku) propuestaLista = propuestaLista.map((r) => ({ ...r, ean: r.ean || eanPorSku.get(r.sku) || '' }));
   const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
   const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
   // ─── Estilos: header negro con letra blanca en negritas ───
@@ -62,32 +66,35 @@ export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nomb
   const TOTAL_MONEY_STYLE = { ...MONEY_STYLE, font: { bold: true, sz: 11, name: 'Calibri' }, fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' } };
 
   // ─── Helper: construir una hoja con estilo ───
-  // rows es array de { sku, descripcion|desc, marca, familia, piezas, precio }
+  // rows es array de { sku, ean?, descripcion|desc, marca, familia, piezas, precio }
+  // 2026-09-12 · columna EAN (código de barras) después del SKU: los mayoristas y los
+  // marketplaces la piden en cada lista. Sale de v_sku_ean (≈ 4,200 SKUs); vacía si no hay.
   const buildSheet = (rowsData, { incluirFamilia = true } = {}) => {
     const headers = incluirFamilia
-      ? ['SKU', 'Descripción', 'Marca', 'Familia', 'Piezas', 'Precio unitario', 'Total línea']
-      : ['SKU', 'Descripción', 'Marca', 'Piezas', 'Precio unitario', 'Total línea'];
+      ? ['SKU', 'EAN', 'Descripción', 'Marca', 'Familia', 'Piezas', 'Precio unitario', 'Total línea']
+      : ['SKU', 'EAN', 'Descripción', 'Marca', 'Piezas', 'Precio unitario', 'Total línea'];
 
     const dataRows = rowsData.map((r) => {
       const pz = Number(r.piezas) || 0;
       const px = Number(r.precio) || 0;
+      const ean = r.ean ? String(r.ean) : '';
       return incluirFamilia
-        ? [r.sku, r.descripcion || r.desc || '', r.marca || '', r.familia || '', pz, px, pz * px]
-        : [r.sku, r.descripcion || r.desc || '', r.marca || '', pz, px, pz * px];
+        ? [r.sku, ean, r.descripcion || r.desc || '', r.marca || '', r.familia || '', pz, px, pz * px]
+        : [r.sku, ean, r.descripcion || r.desc || '', r.marca || '', pz, px, pz * px];
     });
 
     const sumPz = rowsData.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
     const sumTotal = rowsData.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
     const totalRow = incluirFamilia
-      ? ['', '', '', 'TOTAL', sumPz, '', sumTotal]
-      : ['', '', 'TOTAL', sumPz, '', sumTotal];
+      ? ['', '', '', '', 'TOTAL', sumPz, '', sumTotal]
+      : ['', '', '', 'TOTAL', sumPz, '', sumTotal];
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows, totalRow]);
 
     // Anchos
     ws['!cols'] = incluirFamilia
-      ? [{ wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }]
-      : [{ wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 16 }];
+      ? [{ wch: 14 }, { wch: 16 }, { wch: 60 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }]
+      : [{ wch: 14 }, { wch: 16 }, { wch: 60 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 16 }];
     ws['!rows'] = [{ hpt: 24 }]; // header más alto
 
     const colCount = headers.length;
@@ -103,9 +110,9 @@ export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nomb
       for (let r = 1; r <= dataRows.length; r++) {
         const addr = XLSX.utils.encode_cell({ r, c });
         if (!ws[addr]) continue;
-        const piezasCol = incluirFamilia ? 4 : 3;
-        const precioCol = incluirFamilia ? 5 : 4;
-        const totalCol  = incluirFamilia ? 6 : 5;
+        const piezasCol = incluirFamilia ? 5 : 4;
+        const precioCol = incluirFamilia ? 6 : 5;
+        const totalCol  = incluirFamilia ? 7 : 6;
         if (c === piezasCol) ws[addr].s = NUM_STYLE;
         else if (c === precioCol || c === totalCol) ws[addr].s = MONEY_STYLE;
         else ws[addr].s = CELL_STYLE;
@@ -116,8 +123,8 @@ export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nomb
       if (!ws[tAddr]) {
         ws[tAddr] = { t: 's', v: '' };
       }
-      const piezasCol = incluirFamilia ? 4 : 3;
-      const totalCol  = incluirFamilia ? 6 : 5;
+      const piezasCol = incluirFamilia ? 5 : 4;
+      const totalCol  = incluirFamilia ? 7 : 6;
       if (c === piezasCol) ws[tAddr].s = TOTAL_NUM_STYLE;
       else if (c === totalCol) ws[tAddr].s = TOTAL_MONEY_STYLE;
       else ws[tAddr].s = TOTAL_LABEL_STYLE;
@@ -230,17 +237,22 @@ export function construirWorkbookPropuesta(XLSX, { cliente, propuestaLista, nomb
   return { wb, filename: fname };
 }
 
+/** Baja el EAN de los SKUs de la propuesta. Nunca hace fallar el export: si la vista falla, la columna va vacía. */
+async function eanDe(propuestaLista) {
+  try { return await mapaEan((propuestaLista || []).map((r) => r.sku)); } catch { return null; }
+}
+
 export async function exportarPropuestaExcel(opts) {
-  const XLSX = await cargarXLSX();
-  const { wb, filename } = construirWorkbookPropuesta(XLSX, opts);
+  const [XLSX, eanPorSku] = await Promise.all([cargarXLSX(), eanDe(opts?.propuestaLista)]);
+  const { wb, filename } = construirWorkbookPropuesta(XLSX, { ...opts, eanPorSku });
   XLSX.writeFile(wb, filename);
   return filename;
 }
 
 /** Mismo libro que exportarPropuestaExcel pero como Blob (compartir por WhatsApp/correo desde el celular). */
 export async function propuestaExcelBlob(opts) {
-  const XLSX = await cargarXLSX();
-  const { wb, filename } = construirWorkbookPropuesta(XLSX, opts);
+  const [XLSX, eanPorSku] = await Promise.all([cargarXLSX(), eanDe(opts?.propuestaLista)]);
+  const { wb, filename } = construirWorkbookPropuesta(XLSX, { ...opts, eanPorSku });
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   return { blob, filename };

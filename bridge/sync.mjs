@@ -92,9 +92,21 @@ const FUENTES = {
     run: async () => {
       const now = new Date(); const ctx = { anio: now.getFullYear(), mes: now.getMonth() + 1 };
       const { rows, leidas } = await readView('ERP', env('ERP_VIEW_PRECIOS', 'Vw_TablaM_Precios'), { top, mapRow: (r) => M.preciosERP(r, ctx) });
-      log(`  precios: ${leidas} leídas → ${rows.length} válidas (listas incluidas, ${ctx.anio}-${ctx.mes})`);
-      await upsertRows('precios_sku', 'sku,lista,anio,mes', rows, { deleteAll: true, dryRun });
-      return { filas: rows.length, detalles: { leidas, periodo: `${ctx.anio}-${ctx.mes}` } };
+      const porLista = new Map();
+      for (const r of rows) porLista.set(r.lista, (porLista.get(r.lista) || 0) + 1);
+      log(`  precios: ${leidas} leídas → ${rows.length} válidas · ${porLista.size} de ${M.LISTAS_PRECIOS.length} listas · periodo ${ctx.anio}-${ctx.mes}`);
+      log(`  precios por lista: ${[...porLista.entries()].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${l} ${n}`).join(' · ') || '(ninguna)'}`);
+      const faltan = M.LISTAS_PRECIOS.filter((l) => !porLista.has(l));
+      if (faltan.length) log(`  ⚠ precios: sin filas para ${faltan.join(', ')} — revisa el nombre exacto en ${env('ERP_VIEW_PRECIOS', 'Vw_TablaM_Precios')}.Lista`);
+      // HISTORIA (2026-09-12): antes era { deleteAll: true }, o sea DELETE de la tabla
+      // entera cada hora, así que en Supabase sólo existía el mes en curso. Ahora se
+      // reemplaza SÓLO el periodo que se va a reescribir: los meses anteriores se quedan
+      // y precios_sku (PK sku,lista,anio,mes) pasa a ser la serie histórica.
+      // Vía Vercel (sin service role) no hay replace por ventana: queda como upsert puro,
+      // que también conserva la historia (sólo puede dejar filas huérfanas del mes en curso
+      // si un SKU desaparece de una lista a media hora; la corrida DIRECTA lo corrige).
+      await upsertRows('precios_sku', 'sku,lista,anio,mes', rows, { deleteWhere: `anio=eq.${ctx.anio}&mes=eq.${ctx.mes}`, dryRun });
+      return { filas: rows.length, detalles: { leidas, periodo: `${ctx.anio}-${ctx.mes}`, listas: [...porLista.keys()].sort(), faltan } };
     },
   },
   compras: {
