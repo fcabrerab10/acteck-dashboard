@@ -1523,7 +1523,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
             placeholder="Buscar SKU, descripción…"
             style={{ border: 0, outline: 0, background: 'transparent', flex: 1, fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} />
         </div>
-        <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
+        <span style={{ marginLeft: 'auto', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 10.5, color: theme.textMuted }}>
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
         <SelectorUnidad unidad={unidad} onChange={onUnidad} />
@@ -1568,7 +1568,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   <td style={{ ...cellStyle(theme), fontFamily: TYPO.fontDisplay, fontWeight: 600, color: marcaColor(r.marca, P) }}>
                     {r.marca || 'Acteck'}
                   </td>
-                  <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace', color: (clickable && isOpen) ? P.accent : (clickable ? P.accent : theme.text), fontWeight: clickable ? 600 : 400 }}>
+                  <td style={{ ...cellStyle(theme), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', color: (clickable && isOpen) ? P.accent : (clickable ? P.accent : theme.text), fontWeight: clickable ? 600 : 400 }}>
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                     }}>
@@ -1590,7 +1590,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   {(unidad === 'monto' ? r.montos : r.piezas).map((v, i) => {
                     const h = heatCell(v);
                     return (
-                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: '"SF Mono", ui-monospace, monospace', opacity: i + 1 > mesActual ? 0.5 : 1 }}>
+                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', opacity: i + 1 > mesActual ? 0.5 : 1 }}>
                         {h ? (
                           <span style={{
                             display: 'inline-block', padding: '3px 7px', borderRadius: 6,
@@ -1603,9 +1603,9 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                       </td>
                     );
                   })}
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: r.invStock > 0 ? theme.text : theme.textMuted }}>{r.invStock > 0 ? fmt.int(r.invStock) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: r.invStock > 0 ? theme.text : theme.textMuted }}>{r.invStock > 0 ? fmt.int(r.invStock) : '—'}</td>
                 </tr>
                 {isOpen && (
                   <tr>

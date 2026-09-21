@@ -699,7 +699,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             placeholder="Buscar SKU, descripción, marca…"
             style={{ border: 0, outline: 0, background: 'transparent', flex: 1, fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} />
         </div>
-        <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
+        <span style={{ marginLeft: 'auto', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 10.5, color: theme.textMuted }}>
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
         <SelectorUnidad unidad={unidad} onChange={onUnidad} />
@@ -732,7 +732,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                   {(unidad === 'monto' ? r.montos : r.piezas).map((v, i) => {
                     const h = heatCell(v);
                     return (
-                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>
                         {h ? (
                           <span style={{
                             display: 'inline-block', padding: '3px 7px', borderRadius: 6,
@@ -745,8 +745,8 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                       </td>
                     );
                   })}
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
                 </tr>
               );
             })}

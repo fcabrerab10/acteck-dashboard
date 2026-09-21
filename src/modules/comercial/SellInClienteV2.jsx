@@ -994,7 +994,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                         return (
                           <td key={`${y}-${i}`} style={{
                             ...cellStyle(theme, 'right'), padding: '4px 6px',
-                            fontFamily: '"SF Mono", ui-monospace, monospace',
+                            fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
                             borderLeft: i === 0 ? `2px solid ${theme.divider || theme.border}` : undefined,
                           }}>
                             {h ? (
@@ -1010,8 +1010,8 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                         );
                       })
                     ))}
-                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
-                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
+                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
+                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
                   </tr>
                   {abierto && (
                     <tr>
