@@ -6,6 +6,7 @@
 // ─ Tabla SKU con Sell In + Sell Out + Roadmap chip + Heat
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useUnidadDetalle, fmtUnidad, etiquetaUnidad, SelectorUnidad } from './sellin/unidad.jsx';
 import { supabase } from '../../lib/supabase';
 import { useRoadmap, useFacturacion, useFacturacionAll, useCuotasMensuales } from '../../lib/queries';
 import { formatMXN } from '../../lib/utils';
@@ -307,6 +308,7 @@ export default function SellInClienteV2({ clienteKey }) {
   // actual (para no romper el sort por mes y para KPIs YoY que ya usan
   // .piezas[i] del año principal).
   // Fuente: consolidado ? todos los canales : solo cliente actual.
+  const [unidad, setUnidad] = useUnidadDetalle(); // piezas | monto (preferencia compartida)
   const filasSKU = useMemo(() => {
     const acc = new Map();
     const emptyPorAnio = () => Object.fromEntries(aniosSelOrd.map((y) => [y, Array(12).fill(0)]));
@@ -316,12 +318,12 @@ export default function SellInClienteV2({ clienteKey }) {
       const y = Number(r.anio);
       if (!aniosSel.has(y)) continue;
       const sku = r.sku;
-      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), piezasPorAnio: emptyPorAnio(), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
+      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montos: Array(12).fill(0), piezasPorAnio: emptyPorAnio(), montoPorAnio: emptyPorAnio(), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
       const it = acc.get(sku);
       const mIdx = Number(r.mes) - 1;
       if (mIdx >= 0 && mIdx < 12) {
-        if (it.piezasPorAnio[y]) it.piezasPorAnio[y][mIdx] += Number(r.piezas) || 0;
-        if (y === anio) it.piezas[mIdx] += Number(r.piezas) || 0;
+        if (it.piezasPorAnio[y]) { it.piezasPorAnio[y][mIdx] += Number(r.piezas) || 0; it.montoPorAnio[y][mIdx] += Number(r.monto) || 0; }
+        if (y === anio) { it.piezas[mIdx] += Number(r.piezas) || 0; it.montos[mIdx] += Number(r.monto) || 0; }
       }
       if (y === anio) {
         it.montoSI += Number(r.monto) || 0;
@@ -330,7 +332,7 @@ export default function SellInClienteV2({ clienteKey }) {
     }
     // Sell Out por sku (join)
     selloutBySku.forEach((v, sku) => {
-      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), piezasPorAnio: emptyPorAnio(), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
+      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montos: Array(12).fill(0), piezasPorAnio: emptyPorAnio(), montoPorAnio: emptyPorAnio(), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
       const it = acc.get(sku);
       it.montoSO = v.monto;
       it.piezasSO = v.piezas;
@@ -358,8 +360,11 @@ export default function SellInClienteV2({ clienteKey }) {
       }
       // Total = suma de TODOS los años seleccionados; Promedio = avg de
       // meses cerrados con venta del año actual (referencia).
-      const total = aniosSelOrd.reduce((s, y) => s + (it.piezasPorAnio[y] || []).reduce((a, b) => a + b, 0), 0);
-      const cerrados = it.piezas.slice(0, mesActual - 1);
+      // Total y promedio en la unidad activa (piezas o monto): el switch de la tabla los cambia juntos.
+      const porAnioU = unidad === 'monto' ? it.montoPorAnio : it.piezasPorAnio;
+      const serieU = unidad === 'monto' ? it.montos : it.piezas;
+      const total = aniosSelOrd.reduce((s, y) => s + (porAnioU[y] || []).reduce((a, b) => a + b, 0), 0);
+      const cerrados = serieU.slice(0, mesActual - 1);
       const conVenta = cerrados.filter((v) => v > 0);
       const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
       const ratio = it.montoSI > 0 ? (it.montoSO / it.montoSI * 100) : null;
@@ -376,16 +381,18 @@ export default function SellInClienteV2({ clienteKey }) {
       } else if (mesMatchAnio) {
         const yy = Number(mesMatchAnio[1]);
         const i = Number(mesMatchAnio[2]);
-        rows.sort((a, b) => (((a.piezasPorAnio?.[yy]?.[i] || 0) - (b.piezasPorAnio?.[yy]?.[i] || 0))) * factor);
+        const k = unidad === 'monto' ? 'montoPorAnio' : 'piezasPorAnio';
+        rows.sort((a, b) => (((a[k]?.[yy]?.[i] || 0) - (b[k]?.[yy]?.[i] || 0))) * factor);
       } else if (mesMatch) {
         const i = Number(mesMatch[1]);
-        rows.sort((a, b) => ((a.piezas[i] || 0) - (b.piezas[i] || 0)) * factor);
+        const k = unidad === 'monto' ? 'montos' : 'piezas';
+        rows.sort((a, b) => ((a[k][i] || 0) - (b[k][i] || 0)) * factor);
       } else {
         rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
       }
     }
     return rows;
-  }, [facturacion, facturacionAll, consolidado, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter, aniosSel, aniosSelOrd]);
+  }, [facturacion, facturacionAll, consolidado, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter, aniosSel, aniosSelOrd, unidad]);
 
   const toggleSort = (col) => {
     setOrden((prev) => {
@@ -493,6 +500,7 @@ export default function SellInClienteV2({ clienteKey }) {
         aniosSel={aniosSelOrd} aniosDisponibles={aniosDisponibles} onToggleAnio={toggleAnio}
         anio={anio}
         consolidado={consolidado} onToggleConsolidado={() => setConsolidado((v) => !v)}
+        unidad={unidad} onUnidad={setUnidad}
         facturacion={facturacion} facturacionAll={facturacionAll}
         pdfRef={rootRef} clienteKey={clienteKey}
       />
@@ -754,7 +762,7 @@ function anioColor(y, aniosSel, P) {
   return paleta[idx % paleta.length] || P.textMuted || '#8E8E93';
 }
 
-function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, consolidado = false, onToggleConsolidado = () => {}, facturacion = [], facturacionAll = [], pdfRef, clienteKey }) {
+function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, unidad = 'piezas', onUnidad = () => {}, consolidado = false, onToggleConsolidado = () => {}, facturacion = [], facturacionAll = [], pdfRef, clienteKey }) {
   const [skuAbierto, setSkuAbierto] = useState(null);
   const clienteLabel = clienteKey ? clienteKey.charAt(0).toUpperCase() + clienteKey.slice(1) : '';
   // Excel con las columnas visibles (años seleccionados / consolidado)
@@ -771,23 +779,25 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
     const totales = { marca: 'TOTAL', sku: `${rows.length} SKUs`, promedio: 0, total: 0 };
     const filas = rows.map((r) => {
       const o = { marca: r.marca || '', sku: r.sku, descripcion: r.descripcion || '', rdmp: r.rdmp || '', promedio: Math.round(r.promedio) || null, total: r.total || null };
-      aniosSel.forEach((y) => (r.piezasPorAnio?.[y] || []).forEach((v, i) => { const k = `m_${y}_${i}`; o[k] = v || null; totales[k] = (totales[k] || 0) + (v || 0); }));
+      aniosSel.forEach((y) => ((unidad === 'monto' ? r.montoPorAnio : r.piezasPorAnio)?.[y] || []).forEach((v, i) => { const k = `m_${y}_${i}`; o[k] = v ? Math.round(v) : null; totales[k] = (totales[k] || 0) + (v || 0); }));
       totales.promedio += Math.round(r.promedio) || 0; totales.total += r.total || 0;
       return o;
     });
     return {
       titulo: `Sell In ${clienteLabel}${consolidado ? ' · Todos los canales' : ''}`,
       archivo: `Sell In ${clienteLabel} ${aniosSel.join('-')}`,
-      hojas: [{ nombre: 'Detalle por SKU', subtitulo: `${aniosSel.join(' · ')}${familiaFilter ? ` · Familia ${familiaFilter}` : ''}`, columnas, filas, totales }],
+      hojas: [{ nombre: 'Detalle por SKU', subtitulo: `${aniosSel.join(' · ')} · ${etiquetaUnidad(unidad)}${familiaFilter ? ` · Familia ${familiaFilter}` : ''}`, columnas, filas, totales }],
     };
   };
   const isDark = theme.mode === 'dark';
   // Max celda (piezas mensuales) para heat coloring
   const maxCelda = useMemo(() => {
     let m = 0;
-    for (const r of rows) for (const v of r.piezas) if (v > m) m = v;
+    const k = unidad === 'monto' ? 'montos' : 'piezas';
+    for (const r of rows) for (const v of (r[k] || r.piezas)) if (v > m) m = v;
     return m || 1;
-  }, [rows]);
+  }, [rows, unidad]);
+  const fmtU = fmtUnidad(unidad);
 
   // Heat pill · Apple iOS blue con 4 intensidades
   const heatCell = (v) => {
@@ -902,6 +912,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
         <span style={{ marginLeft: 'auto', fontFamily: TYPO.fontDisplay, fontSize: 11, color: theme.textMuted, fontWeight: 500, letterSpacing: '-0.005em' }}>
           <strong style={{ color: theme.text, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
+        <SelectorUnidad unidad={unidad} onChange={onUnidad} />
         <ExportMenu titulo="Sell In" subtitulo={`${clienteLabel} · ${aniosSel.join(' · ')}`} excel={excelSKU} pdf={{ ref: pdfRef }} deshabilitado={!rows.length} />
       </div>
       <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
@@ -978,7 +989,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                     <td style={{ ...cellStyle(theme, 'left'), maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
                     <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
                     {aniosSel.map((y) => (
-                      (r.piezasPorAnio?.[y] || Array(12).fill(0)).map((v, i) => {
+                      ((unidad === 'monto' ? r.montoPorAnio : r.piezasPorAnio)?.[y] || Array(12).fill(0)).map((v, i) => {
                         const h = heatCell(v);
                         return (
                           <td key={`${y}-${i}`} style={{
@@ -991,7 +1002,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                                 display: 'inline-block', padding: '3px 7px', borderRadius: 6,
                                 background: h.bg, color: h.color, fontWeight: h.weight || 500,
                                 minWidth: 30, textAlign: 'right',
-                              }}>{fmt.int(v)}</span>
+                              }}>{fmtU(v)}</span>
                             ) : (
                               <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
                             )}
@@ -999,8 +1010,8 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                         );
                       })
                     ))}
-                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
-                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
+                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
+                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
                   </tr>
                   {abierto && (
                     <tr>

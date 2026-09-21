@@ -4,6 +4,7 @@
 //   2. Cuota simple: cuando mín === ideal, se muestra una sola línea "Cuota"
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useUnidadDetalle, fmtUnidad, SelectorUnidad } from './sellin/unidad.jsx';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -228,15 +229,16 @@ export default function SellInDicotech({ clienteKey }) {
   }, [facturacion, roadmapMap, anio, mesActual, P, theme]);
 
   // Tabla SKU · sin datos de Sell Out (Dicotech no expone SO por SKU)
+  const [unidad, setUnidad] = useUnidadDetalle(); // piezas | monto (preferencia compartida)
   const filasSKU = useMemo(() => {
     const acc = new Map();
     for (const r of facturacion) {
       if (Number(r.anio) !== anio) continue;
       const sku = r.sku;
-      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montoSI: 0, piezasSI: 0 });
+      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montos: Array(12).fill(0), montoSI: 0, piezasSI: 0 });
       const it = acc.get(sku);
       const mIdx = Number(r.mes) - 1;
-      if (mIdx >= 0 && mIdx < 12) it.piezas[mIdx] += Number(r.piezas) || 0;
+      if (mIdx >= 0 && mIdx < 12) { it.piezas[mIdx] += Number(r.piezas) || 0; it.montos[mIdx] += Number(r.monto) || 0; }
       it.montoSI += Number(r.monto) || 0;
       it.piezasSI += Number(r.piezas) || 0;
     }
@@ -259,8 +261,9 @@ export default function SellInDicotech({ clienteKey }) {
         const famCap = famNorm.charAt(0).toUpperCase() + famNorm.slice(1).toLowerCase();
         if (famCap !== familiaFilter) return;
       }
-      const total = it.piezas.reduce((a, b) => a + b, 0);
-      const cerrados = it.piezas.slice(0, mesActual - 1);
+      const serieU = unidad === 'monto' ? it.montos : it.piezas; // unidad activa del switch
+      const total = serieU.reduce((a, b) => a + b, 0);
+      const cerrados = serieU.slice(0, mesActual - 1);
       const conVenta = cerrados.filter((v) => v > 0);
       const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
       rows.push({ ...it, descripcion, marca, categoria, familia, rdmp, total, promedio });
@@ -273,13 +276,14 @@ export default function SellInDicotech({ clienteKey }) {
         rows.sort((a, b) => String(a[orden.col] || '').localeCompare(String(b[orden.col] || '')) * factor);
       } else if (mesMatch) {
         const i = Number(mesMatch[1]);
-        rows.sort((a, b) => ((a.piezas[i] || 0) - (b.piezas[i] || 0)) * factor);
+        const k = unidad === 'monto' ? 'montos' : 'piezas';
+        rows.sort((a, b) => ((a[k][i] || 0) - (b[k][i] || 0)) * factor);
       } else {
         rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
       }
     }
     return rows;
-  }, [facturacion, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter]);
+  }, [facturacion, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter, unidad]);
 
   const toggleSort = (col) => {
     setOrden((prev) => {
@@ -377,6 +381,7 @@ export default function SellInDicotech({ clienteKey }) {
         busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
+        unidad={unidad} onUnidad={setUnidad}
       />
 
       {/* Apoyo comercial: bonificaciones por concepto (erp_ventas · rama SERVICIOS) */}
@@ -621,13 +626,14 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
 }
 
 // ═══════════════ Tabla SKU ═══════════════
-function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia }) {
+function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, unidad = 'piezas', onUnidad = () => {} }) {
+  const fmtU = fmtUnidad(unidad);
   const isDark = theme.mode === 'dark';
   const maxCelda = useMemo(() => {
     let m = 0;
-    for (const r of rows) for (const v of r.piezas) if (v > m) m = v;
+    for (const r of rows) for (const v of (unidad === 'monto' ? r.montos : r.piezas)) if (v > m) m = v;
     return m || 1;
-  }, [rows]);
+  }, [rows, unidad]);
 
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
@@ -696,6 +702,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
         <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
+        <SelectorUnidad unidad={unidad} onChange={onUnidad} />
       </div>
       <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
@@ -722,7 +729,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                   <td style={{ ...cellStyle(theme, 'left'), maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{r.categoria || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
-                  {r.piezas.map((v, i) => {
+                  {(unidad === 'monto' ? r.montos : r.piezas).map((v, i) => {
                     const h = heatCell(v);
                     return (
                       <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: '"SF Mono", ui-monospace, monospace' }}>
@@ -731,15 +738,15 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                             display: 'inline-block', padding: '3px 7px', borderRadius: 6,
                             background: h.bg, color: h.color, fontWeight: h.weight || 500,
                             minWidth: 34, textAlign: 'right',
-                          }}>{fmt.int(v)}</span>
+                          }}>{fmtU(v)}</span>
                         ) : (
                           <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
                         )}
                       </td>
                     );
                   })}
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
                 </tr>
               );
             })}

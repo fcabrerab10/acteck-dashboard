@@ -7,6 +7,7 @@
 // ─ Tabla SKU con Roadmap chip + 12 meses heat + Inv. Digitalife
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useUnidadDetalle, fmtUnidad, SelectorUnidad } from './sellin/unidad.jsx';
 import { useRoadmap, useInventarioCliente } from '../../lib/queries';
 import { disponibilidadDeCampos } from '../../lib/disponibilidad';
 import { supabase } from '../../lib/supabase';
@@ -200,11 +201,13 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
     const m = new Map();
     for (const r of skuMesRaw) {
       if (r.anio !== anio) continue;
-      if (!m.has(r.sku)) m.set(r.sku, Array(12).fill(0));
-      m.get(r.sku)[r.mes - 1] += Number(r.piezas) || 0;
+      if (!m.has(r.sku)) m.set(r.sku, { piezas: Array(12).fill(0), montos: Array(12).fill(0) });
+      m.get(r.sku).piezas[r.mes - 1] += Number(r.piezas) || 0;
+      m.get(r.sku).montos[r.mes - 1] += Number(r.monto) || 0;
     }
     return m;
   }, [skuMesRaw, anio]);
+  const [unidad, setUnidad] = useUnidadDetalle(); // switch Piezas · Monto de la tabla (preferencia compartida)
 
   const skusVendidos = useMemo(() => {
     const s = new Set();
@@ -400,14 +403,16 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
         const hay = String(r.sku || '').toUpperCase().includes(q) || String(r.descripcion || '').toUpperCase().includes(q);
         if (!hay) continue;
       }
-      const piezas = matrizSku.get(r.sku) || Array(12).fill(0);
-      const total = piezas.reduce((a, b) => a + b, 0);
-      const cerrados = piezas.slice(0, mesActual);
+      const mat = matrizSku.get(r.sku) || { piezas: Array(12).fill(0), montos: Array(12).fill(0) };
+      const piezas = mat.piezas, montos = mat.montos;
+      const serieU = unidad === 'monto' ? montos : piezas; // total y promedio en la unidad activa
+      const total = serieU.reduce((a, b) => a + b, 0);
+      const cerrados = serieU.slice(0, mesActual);
       const conVenta = cerrados.filter((v) => v > 0);
       const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
       const inv = inventarioMap.get(r.sku);
       rows.push({
-        ...r, piezas, total, promedio,
+        ...r, piezas, montos, total, promedio,
         vendido: tieneVenta,
         invStock: inv?.stock || 0,
         invValor: inv?.valor || 0,
@@ -419,13 +424,13 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
       rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
     }
     return rows;
-  }, [roadmapOrdenado, skusVendidos, skusConInventario, inventarioMap, matrizSku, busqueda, marcaFilter, familiaFilter, orden, mesActual]);
+  }, [roadmapOrdenado, skusVendidos, skusConInventario, inventarioMap, matrizSku, busqueda, marcaFilter, familiaFilter, orden, mesActual, unidad]);
 
   const maxCelda = useMemo(() => {
     let m = 0;
-    for (const r of filas) for (const v of r.piezas) if (v > m) m = v;
+    for (const r of filas) for (const v of (unidad === 'monto' ? r.montos : r.piezas)) if (v > m) m = v;
     return m || 1;
-  }, [filas]);
+  }, [filas, unidad]);
 
   const toggleSort = (col) => {
     setOrden((prev) => {
@@ -535,6 +540,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
+        unidad={unidad} onUnidad={setUnidad}
         marcaFilter={marcaFilter} onClearMarca={() => setMarcaFilter(null)}
         familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
         skuOpen={skuOpen}
@@ -826,7 +832,8 @@ function MarcaCard({ theme, P, marcas, totalYTD, selected, onSelect }) {
 }
 
 // ═══════════════ Tabla SKU ═══════════════
-function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
+function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
+  const fmtU = fmtUnidad(unidad);
   // Heat pill · idéntico a SI V2 (4 niveles Apple iOS blue)
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
@@ -866,6 +873,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
         <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
+        <SelectorUnidad unidad={unidad} onChange={onUnidad} />
       </div>
       <div style={{ overflowX: 'auto', maxHeight: '65vh' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
@@ -914,7 +922,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                     {rmpStyle ? <span style={{ display: 'inline-block', fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '2px 6px', borderRadius: 4, background: rmpStyle.bg, color: rmpStyle.color }}>{r.rdmp}</span>
                       : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
                   </td>
-                  {r.piezas.map((v, i) => {
+                  {(unidad === 'monto' ? r.montos : r.piezas).map((v, i) => {
                     const h = heatCell(v);
                     return (
                       <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: '"SF Mono", ui-monospace, monospace', opacity: i + 1 > mesActual ? 0.5 : 1 }}>
@@ -923,15 +931,15 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                             display: 'inline-block', padding: '3px 7px', borderRadius: 6,
                             background: h.bg, color: h.color, fontWeight: h.weight || 500,
                             minWidth: 34, textAlign: 'right',
-                          }}>{fmt.int(v)}</span>
+                          }}>{fmtU(v)}</span>
                         ) : (
                           <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
                         )}
                       </td>
                     );
                   })}
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmtU(r.promedio) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmtU(r.total) : '—'}</td>
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: r.invStock > 0 ? theme.text : theme.textMuted }}>{r.invStock > 0 ? fmt.int(r.invStock) : '—'}</td>
                 </tr>
                 {isOpen && (
