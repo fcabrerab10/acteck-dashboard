@@ -39,7 +39,7 @@ const ALLOWED = {
   // UNIQUE en la BD respaldando esto. Antes usaba (po,codigo,contenedor) y
   // permitía filas duplicadas exactas cuando el Excel origen las tenía.
   embarques_compras:     'po,codigo,arribo_cedis,shp_qty',
-  facturacion_clientes:  'cliente_nombre,sku,anio,mes',
+  facturacion_clientes:  'cliente_nombre,sku,anio,mes,canal',   // UNIQUE con canal desde 2026-09-21 (Ingram = 2 códigos)
   estados_resultados:    'razon_social,anio,mes,cuenta_norm',
   compras_oc:            'movid,articulo',
   promos_temporada:      'sku,anio,mes,campania',
