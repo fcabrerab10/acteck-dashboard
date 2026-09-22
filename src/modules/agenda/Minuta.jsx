@@ -104,8 +104,6 @@ export default function Minuta({ reunion, items, reuniones = [], personas, perso
       acciones={<>
         <span style={{ fontSize: 10.5, color: guardando ? theme.orange : theme.green, fontFamily: TYPO.fontDisplay, whiteSpace: 'nowrap' }}>{indicador}</span>
         <ExportMenu titulo={`Minuta · ${reunion.titulo}`} subtitulo={subReunion(reunion, hoy)} pdf={{ ref: rootRef }} label="PDF" />
-        <Boton icon={Share2} onClick={compartirWa} title="Compartir por WhatsApp">WhatsApp</Boton>
-        {puedeEditar && <Boton icon={Mail} onClick={() => setVerCorreo(true)} title={`Enviar la minuta por correo a ${nombreClienteAgenda(reunion.cliente_key)}`}>Correo</Boton>}
       </>}>
       <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 4px 24px', fontFamily: TYPO.fontText }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -114,7 +112,9 @@ export default function Minuta({ reunion, items, reuniones = [], personas, perso
           <Pill tone={cerrada ? 'gray' : reunion.estado === 'en_curso' ? 'blue' : 'orange'} dot>{ESTADO_REUNION_LABEL[reunion.estado]}</Pill>
           {ultimoEnvio && <Pill tone="green" dot title={`Enviada a ${ultimoEnvio.para.join(', ')}`}>Enviada {relativo(ultimoEnvio.at)}</Pill>}
           <Pill tone="gray">{res.abiertos.length} abierto{res.abiertos.length === 1 ? '' : 's'} · {res.resueltos.length} resuelto{res.resueltos.length === 1 ? '' : 's'}{res.arrastradosAqui.length ? ` · ${res.arrastradosAqui.length} arrastrado${res.arrastradosAqui.length === 1 ? '' : 's'}` : ''}</Pill>
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <Boton icon={Share2} onClick={compartirWa} title="Compartir por WhatsApp">WhatsApp</Boton>
+            {puedeEditar && <Boton icon={Mail} onClick={() => setVerCorreo(true)} title={`Enviar la minuta por correo a ${nombreClienteAgenda(reunion.cliente_key)}`}>Correo</Boton>}
             {puedeEditar && <Boton icon={Pencil} onClick={onEditar} title="Editar fecha, lugar, asistentes">Editar</Boton>}
             {editable && reunion.estado === 'programada' && <Boton icon={Play} onClick={iniciar}>Iniciar</Boton>}
             {editable && acuerdos.length > 0 && <Boton icon={Split} onClick={() => setVerReparto(true)} title="Convertir las líneas de las Notas en pendientes">Repartir {acuerdos.length}</Boton>}

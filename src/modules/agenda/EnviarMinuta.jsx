@@ -3,6 +3,7 @@
 // agenda_contactos) + alta rápida "nombre <correo>"; copia a quien envía siempre; mensaje libre;
 // vista previa en texto. Manda api/google-calendar.js?action=enviar-minuta y anota reunion.envios.
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Mail, Plus, X, Check } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -53,7 +54,9 @@ export default function EnviarMinuta({ abierto, onClose, reunion, puntos = [], p
   const previa = useMemo(() => textoMinuta(reunion, puntos, { personasPorId, porId }).replace(/[*_]/g, ''), [reunion, puntos, personasPorId, porId]);
   const lbl = { fontFamily: TYPO.fontDisplay, fontSize: 10.5, letterSpacing: '0.07em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, marginBottom: 6 };
 
-  return (
+  // La minuta vive en una HojaLateral con transform: un fixed dentro de ella queda encerrado en la hoja,
+  // así que el modal se pinta en document.body (en SSR no hay body: se pinta en línea).
+  const modal = (
     <Modal abierto={abierto} onClose={onClose} theme={theme} ancho={560} titulo={`Enviar minuta a ${cliente}`} sub={ultimo ? `Último envío ${relativo(ultimo.at)} a ${ultimo.para.join(', ')}` : 'Se manda desde el correo de Acteck con copia para ti'}
       pie={<><Boton onClick={onClose}>Cancelar</Boton><Boton primario icon={Mail} onClick={enviar} disabled={enviando || !sel.size}>{enviando ? 'Enviando…' : `Enviar${sel.size ? ` a ${sel.size}` : ''}`}</Boton></>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: TYPO.fontText }}>
@@ -94,4 +97,5 @@ export default function EnviarMinuta({ abierto, onClose, reunion, puntos = [], p
       </div>
     </Modal>
   );
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : modal;
 }
