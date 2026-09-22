@@ -50,6 +50,8 @@ const CUENTAS = [
 ];
 const NOTAS = new Map([['c1', [{ id: 'n1', cuenta_id: 'c1', fecha: '2026-09-01', texto: 'Se presentó el portafolio.' }]]]);
 
+/** SSR intercala <!-- --> entre expresiones: para comparar frases hay que quitarlos. */
+const txt = (html) => String(html).replace(/<!--.*?-->/g, '');
 const sano = (html, donde) => {
   assert.ok(!/NaN/.test(html), `${donde}: sale un NaN en pantalla`);
   assert.ok(!/undefined/.test(html), `${donde}: sale un "undefined" en pantalla`);
@@ -63,6 +65,7 @@ test('cargan todos los módulos que toca la Agenda V4 (web y móvil)', async () 
     '/src/modules/agenda/Archivados.jsx', '/src/modules/agenda/Subtareas.jsx', '/src/modules/agenda/HojaItem.jsx',
     '/src/modules/agenda/Reuniones.jsx', '/src/modules/agenda/Minuta.jsx', '/src/modules/agenda/FormReunion.jsx',
     '/src/modules/agenda/HojaReparto.jsx', '/src/movil/pestanas/agenda/Reparto.jsx', '/src/movil/pestanas/agenda/Minuta.jsx',
+    '/src/modules/agenda/Comentarios.jsx', '/src/modules/agenda/ReunionAnterior.jsx', '/src/movil/pestanas/agenda/Comentarios.jsx',
     '/src/movil/pestanas/agenda/Agenda.jsx', '/src/movil/pestanas/agenda/Pendientes.jsx',
     '/src/movil/pestanas/agenda/Cuentas.jsx', '/src/movil/pestanas/agenda/Archivados.jsx',
     '/src/movil/pestanas/agenda/Semana.jsx', '/src/movil/pestanas/agenda/Captura.jsx',
@@ -75,7 +78,8 @@ test('cargan todos los módulos que toca la Agenda V4 (web y móvil)', async () 
   const datos = await vite.ssrLoadModule('/src/modules/agenda/datos.js');
   for (const h of ['useAgendaV4', 'useSubtareas', 'useCuentas', 'useMinutasCliente', 'crearSubtarea', 'marcarSubtarea',
     'borrarSubtarea', 'moverSubtarea', 'crearCuenta', 'actualizarCuenta', 'borrarCuenta', 'agregarNotaCuenta',
-    'registrarContactoCuenta', 'crearPendienteDeCuenta', 'repartirAcuerdos']) {
+    'registrarContactoCuenta', 'crearPendienteDeCuenta', 'repartirAcuerdos',
+    'useComentarios', 'crearComentario', 'borrarComentario', 'traerPuntosDeReunion', 'crearPendienteDePunto', 'moverPunto']) {
     assert.equal(typeof datos[h], 'function', `datos.js debe exportar ${h}`);
   }
   const bloques = await vite.ssrLoadModule('/src/modules/comercial/home/bloques.jsx');
@@ -212,7 +216,8 @@ test('los crones de la Agenda están declarados en vercel.json', async () => {
   const { readFileSync } = await import('node:fs');
   const v = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   const agenda = v.crons.filter((c) => c.path.includes('agenda-correo'));
-  assert.deepEqual(agenda.map((c) => c.schedule).sort(), ['0 21,23 * * 1-5', '15,30 14 * * 1-5']);
+  // Hobby rechaza los horarios múltiples ("15,30"): una entrada por horario (commit eb71192).
+  assert.deepEqual(agenda.map((c) => c.schedule).sort(), ['0 21 * * 1-5', '0 23 * * 1-5', '15 14 * * 1-5', '30 14 * * 1-5']);
   assert.equal(v.crons.some((c) => c.path.includes('agenda-hoy')), false, 'agenda-hoy se reemplazó por agenda-correo');
   // Plan Hobby: 12 funciones serverless; los crones no cuentan, pero conviene no dispararse.
   assert.ok(v.crons.length <= 20, 'demasiadas entradas de cron');
@@ -240,4 +245,82 @@ test('el reparto de la minuta pinta una fila por acuerdo y sabe cerrar', async (
   assert.ok(html.includes('Crear 2 pendientes y cerrar minuta'), 'el pie cuenta sólo lo incluido');
   assert.ok(html.includes('Sólo guardar notas'), 'la salida sin crear nada está a la mano');
   assert.ok(html.includes('ya está en la minuta'), 'lo duplicado se avisa');
+});
+
+// ── Seguimiento por punto y panel de la reunión anterior (2026-09-21) ─────────
+const PUNTOS = [
+  { id: 'p1', tipo: 'punto', reunion_id: 'r0', estado: 'abierta', titulo: 'Camisas', orden: 0, responsables: ['u-fer'], cliente_key: 'digitalife', categoria: null, created_at: '2026-08-11' },
+  { id: 'p2', tipo: 'punto', reunion_id: 'r0', estado: 'hecha', titulo: 'Notas de crédito', orden: 1, responsables: [], cliente_key: 'digitalife', categoria: null, resolucion: 'las aplican esta semana', created_at: '2026-08-11' },
+];
+const REU_PREVIA = { id: 'r0', tipo: 'reunion', titulo: 'Reunión Digitalife · agosto', cliente_key: 'digitalife', fecha: '2026-08-11T16:00:00Z', duracion_min: 60, estado: 'cerrada', asistentes: [] };
+const REU_HOY = { id: 'r9', tipo: 'reunion', titulo: 'Reunión Digitalife · puntos del martes', cliente_key: 'digitalife', fecha: '2026-09-22T16:00:00Z', duracion_min: 60, estado: 'programada', asistentes: [], notas: '' };
+const COMENTARIOS = [
+  { id: 'k1', item_id: 'p1', reunion_id: 'r0', tipo: 'seguimiento', texto: 'Pedimos cotización de 50 camisas', autor: 'u-fer', created_at: '2026-08-11T17:00:00Z' },
+  { id: 'k2', item_id: 'p1', reunion_id: 'r0', tipo: 'mejora', texto: 'Mejor con logo bordado', autor: 'u-kar', created_at: '2026-08-12T17:00:00Z' },
+];
+
+test('el hilo de comentarios de un punto se pinta con autor, tipo y campo de captura', async () => {
+  const { default: Hilo } = await vite.ssrLoadModule('/src/modules/agenda/Comentarios.jsx');
+  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
+  const { hiloComentarios } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
+  const porId = new Map(PUNTOS.map((p) => [p.id, p]));
+  const hilo = hiloComentarios(COMENTARIOS, PUNTOS[0], porId);
+  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Hilo, {
+    item: PUNTOS[0], hilo, personasPorId: PP, reunionId: 'r0', puedeEditar: true,
+  })));
+  sano(html, 'Comentarios');
+  assert.ok(html.includes('Pedimos cotización de 50 camisas'), 'el comentario sale');
+  assert.ok(html.includes('Mejor con logo bordado'), 'el segundo también');
+  assert.ok(html.includes('Seguimiento') && html.includes('Mejora'), 'los dos tipos se ven');
+  assert.ok(html.includes('Comentario de seguimiento'), 'el campo de una línea está a la mano');
+  const vacio = renderToString(React.createElement(ThemeProvider, null, React.createElement(Hilo, {
+    item: PUNTOS[1], hilo: [], personasPorId: PP, puedeEditar: false, vacio: 'Sin comentarios todavía.',
+  })));
+  sano(vacio, 'Comentarios (vacío)');
+  assert.ok(vacio.includes('Sin comentarios todavía.'));
+  assert.ok(!vacio.includes('Comentario de seguimiento'), 'sin permiso no hay campo');
+});
+
+test('el panel «Reunión anterior» lista los puntos de la previa y ofrece traer los abiertos', async () => {
+  const { default: ReunionAnterior } = await vite.ssrLoadModule('/src/modules/agenda/ReunionAnterior.jsx');
+  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
+  const { comentariosPorItem } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
+  const props = {
+    reunion: REU_HOY, reuniones: [REU_PREVIA, REU_HOY], items: PUNTOS, porId: new Map(PUNTOS.map((p) => [p.id, p])),
+    comentariosPor: comentariosPorItem(COMENTARIOS), personasPorId: PP, hoy: HOY, puedeEditar: true,
+    onVerTodas: () => {}, onAbrirMinuta: () => {},
+  };
+  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(ReunionAnterior, props)));
+  sano(html, 'ReunionAnterior');
+  assert.ok(html.includes('Reunión anterior'), 'el control está en el encabezado');
+  assert.ok(txt(html).includes('1 abierto') && txt(html).includes('1 resuelto'), 'cuenta lo abierto y lo resuelto de la previa');
+  assert.ok(!html.includes('Traer puntos abiertos'), 'plegado por omisión: el botón vive dentro');
+
+  // Sin reunión anterior del mismo cliente: no se ofrece nada, se explica.
+  const sola = renderToString(React.createElement(ThemeProvider, null, React.createElement(ReunionAnterior, { ...props, reuniones: [REU_HOY] })));
+  sano(sola, 'ReunionAnterior (primera)');
+  assert.ok(txt(sola).includes('Es la primera reunión con Digitalife'));
+});
+
+test('la minuta monta el panel de la reunión anterior y un hilo por punto', async () => {
+  const { default: Minuta } = await vite.ssrLoadModule('/src/modules/agenda/Minuta.jsx');
+  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
+  const { comentariosPorItem } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
+  const puntosHoy = [
+    { id: 'q1', tipo: 'punto', reunion_id: 'r9', estado: 'abierta', titulo: 'Alcance de compra Q3', orden: 0, responsables: ['u-fer'], cliente_key: 'digitalife', categoria: null, created_at: '2026-09-21', origen: { fuente: 'correo', enlace: { pagina: 'sellIn', clienteKey: 'digitalife' } } },
+    { id: 'q2', tipo: 'punto', reunion_id: 'r9', estado: 'abierta', titulo: 'Camisas', orden: 1, responsables: ['u-fer'], cliente_key: 'digitalife', categoria: null, created_at: '2026-09-21', arrastrado_desde: 'p1' },
+  ];
+  const items = [...PUNTOS, ...puntosHoy, { id: 'w1', tipo: 'tarea', estado: 'abierta', titulo: 'Cotizar camisas', responsables: [], origen: { fuente: 'reparto', punto_id: 'q2' } }];
+  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Minuta, {
+    reunion: REU_HOY, items, reuniones: [REU_PREVIA, REU_HOY], personas: PERSONAS, personasPorId: PP,
+    porId: new Map(items.map((i) => [i.id, i])), hoy: HOY, uid: 'u-fer', puedeEditar: true,
+    comentariosPor: comentariosPorItem(COMENTARIOS), onClose: () => {}, onEditar: () => {}, onNavegar: () => {}, onVerReuniones: () => {},
+  })));
+  sano(html, 'Minuta');
+  assert.ok(html.includes('Reunión anterior'), 'el panel de la reunión anterior se monta');
+  assert.ok(html.includes('Alcance de compra Q3'), 'los puntos del martes salen');
+  assert.ok(html.includes('Ver'), 'el punto con origen.enlace ofrece ir al dashboard');
+  assert.ok(html.includes('Pedimos cotización de 50 camisas'), 'el hilo heredado del punto arrastrado sigue ahí');
+  assert.ok(txt(html).includes('viene de la reunión del 11 ago'), 'se dice de dónde viene el punto arrastrado');
+  assert.ok(txt(html).includes('1 pendiente'), 'la pastilla cuenta los pendientes ligados al punto');
 });

@@ -2,24 +2,26 @@
 // guardado al momento (debounce 600 ms por punto + "guardado hace N s"), asistentes, notas; Cerrar reunión
 // (avisos a responsables + arrastre a la siguiente del mismo cliente); compartir por WhatsApp y PDF.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Share2, Check, Play, Lock, Pencil, Split } from 'lucide-react';
+import { Trash2, Share2, Check, Play, Lock, Pencil, Split, ChevronUp, ChevronDown, ArrowUpRight } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { HojaLateral, Campo } from '../../components/perfil/comun';
 import { Pill, Boton, Segmented, toast } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import { compartir } from '../../lib/whatsapp';
-import { guardarPunto, actualizarReunion, cerrarReunion, borrarItem, recargarAgenda } from './datos';
-import { resumenReunion, vecesArrastrado, ordinal, cuando, isoDia } from './calculo';
+import { guardarPunto, actualizarReunion, cerrarReunion, borrarItem, recargarAgenda, moverPunto } from './datos';
+import { resumenReunion, vecesArrastrado, ordinal, cuando, isoDia, hiloComentarios, pendientesDePunto, fmtCorta } from './calculo';
 import { textoConEtiquetas, CATEGORIAS, nombreClienteAgenda } from './etiquetas';
 import { textoMinuta, subReunion, ESTADO_REUNION_LABEL } from './textos';
 import { CampoEtiquetas, Palomita, TagPersona, CatPill, TagCliente, Avatar } from './comun';
 import { detectarAcuerdos } from './reparto';
 import HojaReparto from './HojaReparto';
+import Hilo from './Comentarios';
+import ReunionAnterior from './ReunionAnterior';
 
 const DEBOUNCE_MS = 600;
 
-export default function Minuta({ reunion, items, personas, personasPorId, porId, hoy, uid = null, puedeEditar, onClose, onEditar, google }) {
+export default function Minuta({ reunion, items, reuniones = [], personas, personasPorId, porId, hoy, uid = null, puedeEditar, comentariosPor, onClose, onEditar, onNavegar, onVerReuniones, google }) {
   const { theme } = useTheme();
   const res = useMemo(() => resumenReunion(reunion, items, porId), [reunion, items, porId]);
   const cerrada = reunion.estado === 'cerrada';
@@ -59,6 +61,13 @@ export default function Minuta({ reunion, items, personas, personasPorId, porId,
   };
   const togglePunto = (p) => { if (!editable) return; const estado = p.estado === 'hecha' ? 'abierta' : 'hecha'; guardarAhora(p.id, { estado }); };
   const borrar = async (p) => { if (!editable) return; try { await borrarItem(p.id); toast.ok('Punto eliminado'); } catch (e) { toast.error(e.message); } };
+  const mover = async (p, delta) => { if (!editable) return; try { await moverPunto(res.puntos, p.id, delta); } catch (e) { toast.error(e.message); } };
+  // «Ver en dashboard»: los puntos sembrados desde el correo traen origen.enlace = { pagina, clienteKey }.
+  const irAEnlace = (p) => {
+    const e = p.origen?.enlace; if (!e?.pagina) return;
+    if (onNavegar) onNavegar(e.clienteKey || null, e.pagina);
+    else if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: { pagina: e.pagina, clienteKey: e.clienteKey || null } }));
+  };
   const guardarNotas = (v) => { setNotas(v); if (timers.current.has('__notas')) clearTimeout(timers.current.get('__notas')); timers.current.set('__notas', setTimeout(async () => { setGuardando((n) => n + 1); try { await actualizarReunion(reunion.id, { notas: v }); marcarGuardado(); } catch (e) { setGuardando((n) => Math.max(0, n - 1)); toast.error(e.message); } }, DEBOUNCE_MS)); };
   const toggleAsistente = async (p) => {
     if (!editable) return;
@@ -107,6 +116,9 @@ export default function Minuta({ reunion, items, personas, personasPorId, porId,
           </span>
         </div>
 
+        <ReunionAnterior reunion={reunion} reuniones={reuniones} items={items} porId={porId} comentariosPor={comentariosPor}
+          personasPorId={personasPorId} hoy={hoy} puedeEditar={editable} onVerTodas={onVerReuniones} />
+
         <Bloque theme={theme} titulo="Asistentes" sub={editable ? 'clic para marcar' : ''}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {personas.map((p) => { const on = (reunion.asistentes || []).some((a) => a.user_id === p.user_id); return <button key={p.user_id} type="button" onClick={() => toggleAsistente(p)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px 3px 4px', borderRadius: 999, border: `1px solid ${on ? theme.accent : theme.border}`, background: on ? (theme.accentBg || 'rgba(0,122,255,0.08)') : theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 11.5, cursor: editable ? 'pointer' : 'default', opacity: on ? 1 : 0.6 }}><Avatar persona={p} size={18} />{(p.nombre || '').split(' ')[0]}{on && <Check size={11} />}</button>; })}
@@ -114,9 +126,15 @@ export default function Minuta({ reunion, items, personas, personasPorId, porId,
           </div>
         </Bloque>
 
-        <Bloque theme={theme} titulo="Puntos" sub="#cliente @persona /categoría · palomita = resuelto · «quedó:» nota corta">
+        <Bloque theme={theme} titulo="Puntos" sub="#cliente @persona /categoría · palomita = resuelto · comenta debajo de cada punto">
           <div style={{ border: `1px solid ${theme.border}`, borderRadius: 10, background: theme.surface, padding: '4px 10px' }}>
-            {res.puntos.map((p) => <LineaPunto key={p.id} p={p} theme={theme} editable={editable && p.estado !== 'arrastrada'} personas={personas} personasPorId={personasPorId} porId={porId} hoy={hoy} onTexto={(texto) => programar(p.id, { texto })} onResolucion={(resolucion) => programar(p.id, { resolucion })} onFecha={(fecha_limite) => guardarAhora(p.id, { fecha_limite })} onToggle={() => togglePunto(p)} onBorrar={() => borrar(p)} />)}
+            {res.puntos.map((p, i) => (
+              <LineaPunto key={p.id} p={p} theme={theme} editable={editable && p.estado !== 'arrastrada'} personas={personas} personasPorId={personasPorId} porId={porId} hoy={hoy}
+                hilo={hiloComentarios([], p, porId, { porItem: comentariosPor })} nPendientes={pendientesDePunto(items, p.id).length}
+                reunionOrigen={p.arrastrado_desde ? reuniones.find((r) => r.id === porId.get(p.arrastrado_desde)?.reunion_id) : null}
+                puedeSubir={editable && i > 0} puedeBajar={editable && i < res.puntos.length - 1} onMover={(d) => mover(p, d)} onEnlace={p.origen?.enlace?.pagina ? () => irAEnlace(p) : null}
+                onTexto={(texto) => programar(p.id, { texto })} onResolucion={(resolucion) => programar(p.id, { resolucion })} onFecha={(fecha_limite) => guardarAhora(p.id, { fecha_limite })} onToggle={() => togglePunto(p)} onBorrar={() => borrar(p)} reunionId={reunion.id} />
+            ))}
             {editable && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '6px 0' }}>
                 <span style={{ width: 14, height: 14, borderRadius: 999, border: `1.5px dashed ${theme.borderStrong || theme.border}`, flexShrink: 0 }} />
@@ -159,7 +177,7 @@ function Bloque({ theme, titulo, sub, children }) {
   );
 }
 
-function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, onTexto, onResolucion, onFecha, onToggle, onBorrar }) {
+function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, hilo = [], nPendientes = 0, reunionOrigen = null, puedeSubir, puedeBajar, onMover, onEnlace, reunionId, onTexto, onResolucion, onFecha, onToggle, onBorrar }) {
   const [texto, setTexto] = useState(() => textoConEtiquetas(p, personas));
   const [quedo, setQuedo] = useState(p.resolucion || '');
   const [editando, setEditando] = useState(false);
@@ -180,14 +198,29 @@ function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, o
           : p.fecha_limite && <Pill tone="gray" size="xs">{cuando(p.fecha_limite, hoy)}</Pill>}
         {n > 0 && <Pill tone="orange" size="xs">{ordinal(n)}</Pill>}
         {p.estado === 'arrastrada' && <Pill tone="gray" size="xs">arrastrado</Pill>}
+        {onEnlace && <button type="button" onClick={onEnlace} title="Ver en el dashboard" style={{ border: 0, background: 'transparent', color: theme.accent, cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600 }}><ArrowUpRight size={12} />Ver</button>}
+        {editable && <span style={{ display: 'inline-flex', opacity: hover ? 1 : 0 }}>
+          <button type="button" onClick={() => onMover?.(-1)} disabled={!puedeSubir} title="Subir" style={flecha(theme, puedeSubir)}><ChevronUp size={12} /></button>
+          <button type="button" onClick={() => onMover?.(1)} disabled={!puedeBajar} title="Bajar" style={flecha(theme, puedeBajar)}><ChevronDown size={12} /></button>
+        </span>}
         {editable && <button type="button" onClick={onBorrar} title="Eliminar punto" style={{ border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', opacity: hover ? 1 : 0, padding: 2, display: 'inline-flex' }}><Trash2 size={12} /></button>}
       </div>
+      {(reunionOrigen || nPendientes > 0) && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 20, marginTop: 2 }}>
+          {reunionOrigen && <span style={{ fontSize: 10, color: theme.textMuted }}>viene de la reunión del {fmtCorta(isoDia(new Date(reunionOrigen.fecha)))}</span>}
+          {nPendientes > 0 && <Pill tone="blue" size="xs">{nPendientes} pendiente{nPendientes === 1 ? '' : 's'}</Pill>}
+        </div>
+      )}
       {(editable || p.resolucion) && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 20, marginTop: 2 }}>
           <span style={{ fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>quedó:</span>
           {editable ? <input value={quedo} onChange={(e) => { setQuedo(e.target.value); onResolucion(e.target.value); }} placeholder="en qué quedó (nota corta)" style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} /> : <span style={{ fontSize: 11, color: theme.text }}>{p.resolucion}</span>}
         </div>
       )}
+      {/* Seguimiento del punto: el hilo no se pierde cuando el punto se arrastra a la siguiente reunión. */}
+      <Hilo item={p} hilo={hilo} personasPorId={personasPorId} reunionId={reunionId} puedeEditar={editable} compacto />
     </div>
   );
 }
+
+const flecha = (theme, on) => ({ border: 0, background: 'transparent', color: on ? theme.textMuted : theme.border, cursor: on ? 'pointer' : 'default', padding: 0, display: 'inline-flex' });

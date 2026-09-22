@@ -7,14 +7,14 @@
 // sola cada 800 ms en agenda_reuniones.notas (la misma columna que usa la web), con las líneas que parecen
 // acuerdo resaltadas detrás del texto y el contador «N acuerdos detectados» → botón Repartir (hoja Reparto.jsx).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Share2, Lock, Play, MoreHorizontal, Plus, Check, Split } from 'lucide-react';
+import { Share2, Lock, Play, MoreHorizontal, Plus, Check, Split, ChevronRight, ChevronDown, ArrowDownToLine, ArrowUpRight } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Cargando } from '../../../components/kit';
 import { compartir } from '../../../lib/whatsapp';
-import { useAgendaDatos, guardarPunto, actualizarReunion, cerrarReunion, recargarAgenda } from '../../../modules/agenda/datos';
+import { useAgendaDatos, useComentarios, guardarPunto, actualizarReunion, cerrarReunion, recargarAgenda, traerPuntosDeReunion } from '../../../modules/agenda/datos';
 import { detectarAcuerdos, lineasMarcadas } from '../../../modules/agenda/reparto';
-import { resumenReunion, vecesArrastrado, ordinal, cuando, isoDia, fmtHora } from '../../../modules/agenda/calculo';
+import { resumenReunion, vecesArrastrado, ordinal, cuando, isoDia, fmtHora, fmtCorta, hiloComentarios, pendientesDePunto, reunionAnterior } from '../../../modules/agenda/calculo';
 import { textoConEtiquetas, nombreClienteAgenda, fechaNatural } from '../../../modules/agenda/etiquetas';
 import { textoMinuta, subReunion, ESTADO_REUNION_LABEL } from '../../../modules/agenda/textos';
 import { useNav, ALTO_BARRA } from '../../nav';
@@ -23,6 +23,7 @@ import { MONO } from '../../util';
 import { PalomitaM, TagPersona, CatPill, BotonMic, SeccionM, ChipM, useReloj, primerNombre } from './comun';
 import CapturaHoja from './Captura';
 import Reparto from './Reparto';
+import HiloM from './Comentarios';
 
 const DEBOUNCE_MS = 600;
 const NOTAS_MS = 800;   // las notas son un texto largo: un respiro más que los puntos
@@ -32,6 +33,7 @@ export default function Minuta({ reunionId }) {
   const nav = useNav();
   const hoy = useMemo(() => new Date(), []);
   const { items, reuniones, personas, personasPorId, porId, cargando } = useAgendaDatos();
+  const { comentariosPor } = useComentarios();
   const reunion = reuniones.find((r) => r.id === reunionId) || null;
   const perfil = nav.perfil;
   const puedeEditar = !!perfil?.es_super_admin || perfil?.tipo === 'interno';
@@ -128,8 +130,12 @@ export default function Minuta({ reunionId }) {
   const deHoy = res.puntos.filter((p) => !p.arrastrado_desde || p.estado === 'arrastrada');
   const dark = theme.mode === 'dark';
 
+  const irAEnlace = (p) => { const e = p.origen?.enlace; if (e?.pagina) nav.navegar({ pagina: e.pagina, clienteKey: e.clienteKey || null }); };
   const punto = (p) => (
     <LineaPunto key={p.id} p={p} theme={theme} editable={editable && p.estado !== 'arrastrada'} personas={personas} personasPorId={personasPorId} porId={porId} hoy={hoy}
+      hilo={hiloComentarios([], p, porId, { porItem: comentariosPor })} nPendientes={pendientesDePunto(items, p.id).length} reunionId={reunion.id}
+      reunionOrigen={p.arrastrado_desde ? reuniones.find((r) => r.id === porId.get(p.arrastrado_desde)?.reunion_id) : null}
+      onEnlace={p.origen?.enlace?.pagina ? () => irAEnlace(p) : null}
       onTexto={(texto) => programar(p.id, { texto })} onToggle={() => togglePunto(p)} onMas={() => setCap({ item: p })} />
   );
 
@@ -150,6 +156,8 @@ export default function Minuta({ reunionId }) {
       )}
 
       <div style={{ padding: '4px 16px 0' }}>
+        <PanelAnterior reunion={reunion} reuniones={reuniones} items={items} porId={porId} comentariosPor={comentariosPor} personasPorId={personasPorId}
+          hoy={hoy} puedeEditar={editable} theme={theme} />
         {arrastrados.length > 0 && <><SeccionM tone="orange" n={arrastrados.length}>Arrastrados de reuniones anteriores</SeccionM>{arrastrados.map(punto)}</>}
         <SeccionM n={deHoy.length}>{cerrada ? 'Puntos' : 'Puntos de hoy'}</SeccionM>
         {deHoy.map(punto)}
@@ -192,7 +200,7 @@ export default function Minuta({ reunionId }) {
 
 const pie = (theme, primario) => ({ flex: 1, height: 48, borderRadius: 12, border: primario ? 0 : `1px solid ${theme.border}`, background: primario ? theme.accent : theme.surface, color: primario ? '#FFF' : theme.text, fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer' });
 
-function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, onTexto, onToggle, onMas }) {
+function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, hilo = [], nPendientes = 0, reunionOrigen = null, reunionId, onEnlace, onTexto, onToggle, onMas }) {
   const [texto, setTexto] = useState(() => textoConEtiquetas(p, personas));
   const [foco, setFoco] = useState(false);
   useEffect(() => { if (!foco) setTexto(textoConEtiquetas(p, personas)); }, [p.titulo, p.cliente_key, p.categoria, p.responsables, personas, foco]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -215,7 +223,11 @@ function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, o
           {hecha && <Pill tone="green" size="xs">resuelto</Pill>}
           {p.estado === 'arrastrada' && <Pill tone="gray" size="xs">arrastrado</Pill>}
           {p.resolucion && <span>— {p.resolucion}</span>}
+          {nPendientes > 0 && <Pill tone="blue" size="xs">{nPendientes} pendiente{nPendientes === 1 ? '' : 's'}</Pill>}
+          {reunionOrigen && <span>viene de la reunión del {fmtCorta(isoDia(new Date(reunionOrigen.fecha)))}</span>}
+          {onEnlace && <button type="button" onClick={onEnlace} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2, padding: 0, cursor: 'pointer' }}><ArrowUpRight size={12} />Ver en dashboard</button>}
         </div>
+        <HiloM item={p} hilo={hilo} personasPorId={personasPorId} reunionId={reunionId} puedeEditar={editable} />
       </div>
       <button type="button" onClick={onMas} aria-label="Más opciones" style={{ width: 32, height: 32, margin: '-4px -6px 0 0', border: 0, background: 'transparent', color: theme.textMuted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><MoreHorizontal size={18} /></button>
     </div>
@@ -253,6 +265,57 @@ function NotasMinuta({ theme, valor, onChange, editable, hoy }) {
       <textarea value={valor} onChange={(e) => onChange(e.target.value)} rows={filas} placeholder="Anota la reunión. Las líneas con «-», @alguien, #cliente o una fecha se reparten al cerrar."
         autoCapitalize="sentences" onScroll={(e) => { if (fondo.current) fondo.current.scrollTop = e.target.scrollTop; }}
         style={{ ...caja, position: 'relative', background: 'transparent', color: theme.text, caretColor: theme.accent, outline: 'none', resize: 'none', display: 'block' }} />
+    </div>
+  );
+}
+
+/**
+ * «Reunión anterior ›» del celular: plegado por omisión, lista los puntos de la última reunión del
+ * mismo cliente con su estado y sus comentarios, y trae aquí los que quedaron abiertos
+ * (RPC agenda_traer_puntos). Mismo cálculo que la web: calculo.js#reunionAnterior.
+ */
+function PanelAnterior({ reunion, reuniones, items, porId, comentariosPor, personasPorId, hoy, puedeEditar, theme }) {
+  const [abierto, setAbierto] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const previa = useMemo(() => reunionAnterior(reuniones, reunion), [reuniones, reunion]);
+  const res = useMemo(() => (previa ? resumenReunion(previa, items, porId) : null), [previa, items, porId]);
+  if (!previa) return null;
+  const traer = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { const n = await traerPuntosDeReunion(reunion.id, previa.id); toast.ok(n ? `${n} punto${n === 1 ? '' : 's'} traído${n === 1 ? '' : 's'}` : 'No quedaban puntos abiertos'); }
+    catch (e) { toast.error(e.message); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, background: theme.surface, marginBottom: 8 }}>
+      <button type="button" onClick={() => setAbierto((v) => !v)} style={{ width: '100%', display: 'flex', gap: 8, alignItems: 'center', padding: '10px 12px', border: 0, background: 'transparent', color: theme.text, cursor: 'pointer', textAlign: 'left' }}>
+        {abierto ? <ChevronDown size={16} style={{ color: theme.textMuted }} /> : <ChevronRight size={16} style={{ color: theme.textMuted }} />}
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600 }}>Reunión anterior · {cuando(isoDia(new Date(previa.fecha)), hoy)}</span>
+        <span style={{ marginLeft: 'auto' }}><Pill tone={res.abiertos.length ? 'orange' : 'green'} size="xs">{res.abiertos.length} abierto{res.abiertos.length === 1 ? '' : 's'}</Pill></span>
+      </button>
+      {abierto && (
+        <div style={{ borderTop: `1px solid ${theme.border}`, padding: '8px 12px 12px' }}>
+          {!res.puntos.length && <div style={{ fontSize: 13, color: theme.textMuted }}>Esa reunión no tuvo puntos.</div>}
+          {res.puntos.map((p) => {
+            const hilo = hiloComentarios([], p, porId, { porItem: comentariosPor });
+            return (
+              <div key={p.id} style={{ borderTop: `1px dashed ${theme.border}`, paddingTop: 6, marginTop: 6 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: theme.text, textDecoration: p.estado === 'hecha' ? 'line-through' : 'none' }}>{p.titulo}</span>
+                  <Pill tone={p.estado === 'hecha' ? 'green' : p.estado === 'arrastrada' ? 'gray' : 'orange'} size="xs">{p.estado === 'hecha' ? 'resuelto' : p.estado === 'arrastrada' ? 'arrastrado' : 'abierto'}</Pill>
+                </div>
+                {hilo.length > 0 && <HiloM item={p} hilo={hilo} personasPorId={personasPorId} puedeEditar={false} />}
+              </div>
+            );
+          })}
+          {puedeEditar && res.abiertos.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <BotonGrande icon={ArrowDownToLine} disabled={busy} onClick={traer}>Traer {res.abiertos.length} punto{res.abiertos.length === 1 ? '' : 's'} abierto{res.abiertos.length === 1 ? '' : 's'}</BotonGrande>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

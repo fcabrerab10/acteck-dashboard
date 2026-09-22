@@ -476,3 +476,79 @@ export function fraseAgenda({ bloques = [], reunionesHoy = [], cuentasHoy = [], 
     : 'Captura arriba en una línea: «Mandar propuesta a CT mañana @karolina #ct».';
   return { titulo, sub, venc, hoy: hoyN };
 }
+
+// ── Seguimiento por punto (2026-09-21) ────────────────────────────────────────
+// Fernando: «abajo de cada punto ir poniendo los comentarios (seguimiento o mejora) para que no se
+// pierda nada». Los comentarios viven en `agenda_item_comentarios` y el hilo NO se rompe cuando el
+// punto se arrastra a la siguiente reunión: `hiloComentarios` junta los del punto y los de todos
+// los puntos de los que viene arrastrado.
+
+export const TIPOS_COMENTARIO = [
+  { id: 'seguimiento', label: 'Seguimiento', tone: 'blue' },
+  { id: 'mejora',      label: 'Mejora',      tone: 'purple' },
+  { id: 'acuerdo',     label: 'Acuerdo',     tone: 'green' },
+];
+export const TIPO_COMENTARIO_LABEL = Object.fromEntries(TIPOS_COMENTARIO.map((t) => [t.id, t.label]));
+export const TIPO_COMENTARIO_TONE = Object.fromEntries(TIPOS_COMENTARIO.map((t) => [t.id, t.tone]));
+
+/**
+ * Cadena de un punto hacia atrás: [él mismo, del que se arrastró, …]. Sigue `arrastrado_desde` y,
+ * si la fila viene de `agenda_traer_puntos`, también `origen.item_anterior`.
+ */
+export function cadenaItem(item, porId) {
+  if (!item) return [];
+  const out = [item.id];
+  const vistos = new Set(out);
+  let cur = item;
+  for (let i = 0; i < 50 && cur; i += 1) {
+    const prev = cur.arrastrado_desde || cur.origen?.item_anterior || null;
+    if (!prev || vistos.has(prev)) break;
+    vistos.add(prev);
+    out.push(prev);
+    cur = porId?.get?.(prev) || null;
+  }
+  return out;
+}
+
+/** Map(item_id → comentarios ordenados del más viejo al más nuevo). */
+export function comentariosPorItem(comentarios = []) {
+  const m = new Map();
+  for (const c of comentarios) {
+    if (!m.has(c.item_id)) m.set(c.item_id, []);
+    m.get(c.item_id).push(c);
+  }
+  for (const arr of m.values()) arr.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  return m;
+}
+
+/**
+ * Hilo completo de un punto: sus comentarios + los de los puntos de los que viene arrastrado,
+ * en orden cronológico. `deOtraReunion` marca los que se escribieron en otra reunión.
+ */
+export function hiloComentarios(comentarios = [], item, porId, { porItem = null } = {}) {
+  if (!item) return [];
+  const mapa = porItem || comentariosPorItem(comentarios);
+  const ids = cadenaItem(item, porId);
+  const out = [];
+  for (const id of ids) for (const c of (mapa.get(id) || [])) out.push({ ...c, deOtroPunto: id !== item.id, deOtraReunion: !!c.reunion_id && !!item.reunion_id && c.reunion_id !== item.reunion_id });
+  return out.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+}
+
+/** Reunión anterior del mismo cliente (tipo 'reunion', fecha < la de ésta). La más reciente. */
+export function reunionAnterior(reuniones = [], reunion) {
+  if (!reunion) return null;
+  const ck = reunion.cliente_key || 'interno';
+  const t = new Date(reunion.fecha).getTime();
+  return (reuniones || [])
+    .filter((r) => r.id !== reunion.id && r.tipo === 'reunion' && (r.cliente_key || 'interno') === ck && new Date(r.fecha).getTime() < t)
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0] || null;
+}
+
+/** Reuniones de un cliente, de la más reciente a la más vieja. */
+export const reunionesDeCliente = (reuniones = [], clienteKey) => (reuniones || [])
+  .filter((r) => r.tipo === 'reunion' && (r.cliente_key || 'interno') === (clienteKey || 'interno'))
+  .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+/** Pendientes creados desde un punto (origen.punto_id) — la pastilla «N pendientes». */
+export const pendientesDePunto = (items = [], puntoId) => (items || [])
+  .filter((i) => i.origen?.punto_id === puntoId);

@@ -154,6 +154,59 @@ Los asistentes externos de una reunión (`agenda_reuniones.asistentes` sin `user
 responsables: `agenda_items.responsables` es `uuid[]`, así que el selector sólo ofrece a los internos con
 Agenda (Fernando y Karolina).
 
+### 3.2 Seguimiento por punto · «que no se pierda nada» (2026-09-21, pedido por Fernando)
+
+> «como seguimiento de una reunión dentro de agenda, que se pueda abrir una reunión anterior o los
+> puntos que se verán en una reunión próxima, y abajo de cada punto ir poniendo los comentarios
+> (seguimiento o mejora) para que no se pierda nada».
+
+**El hilo.** Debajo de cada punto de la minuta (web y celular) hay una conversación: los comentarios
+con avatar, nombre, hora y una pastilla de tipo (**Seguimiento** · **Mejora** · **Acuerdo**), y un campo
+de una línea «Comentario de seguimiento… (⌘↵)» con el chip del tipo. Se guarda de golpe (optimista +
+`recargarAgenda()`); no hay botón de guardar.
+
+**El hilo no se rompe al arrastrar.** `calculo.js#hiloComentarios(comentarios, punto, porId)` junta los
+comentarios del punto y los de todos los puntos de los que viene arrastrado (sigue `arrastrado_desde` y
+`origen.item_anterior`, `cadenaItem`), en orden cronológico; cada comentario llega marcado `deOtroPunto`
+y `deOtraReunion`. Por eso en `HojaItem` (web) y en la hoja del ítem del celular la sección
+**Seguimiento** muestra la historia completa aunque el punto lleve tres reuniones rodando.
+
+**Abrir la reunión anterior.** En el encabezado de la minuta va el panel plegable
+**«Reunión anterior · <cuándo>»** (`ReunionAnterior.jsx`, móvil `PanelAnterior` dentro de `Minuta.jsx`):
+lista los puntos de la última reunión del mismo cliente con su estado, su «quedó:» y su hilo; deja
+elegir otra reunión del cliente (`reunionesDeCliente`), **«Traer puntos abiertos»** y
+**«Ver todas las reuniones de este cliente»**. El traspaso es el RPC `agenda_traer_puntos(p_reunion,
+p_desde)`: misma semántica que `agenda_arrastrar_pendientes` (la copia queda `abierta`, el original
+`arrastrada`) pero eligiendo la reunión origen a mano, sin exigir que esté cerrada y dejando
+`origen.item_anterior` / `origen.reunion_anterior` para que debajo del punto se lea
+«viene de la reunión del 11 ago».
+
+**Preparar una reunión próxima.** Los puntos se pueden capturar antes (la línea «Escribe un punto…»
+de siempre) y **reordenar con ▲▼** (`datos.js#moverPunto`, reescribe `orden` de la lista completa).
+
+**Pendientes ligados al punto.** `HojaItem` tiene **«Crear pendiente»** (`crearPendienteDePunto`) y el
+reparto de la minuta liga la línea al punto que ya existía (`reparto.js#idsExistentes` →
+`origen.punto_id`). El punto pinta la pastilla **«N pendientes»** (`calculo.js#pendientesDePunto`).
+
+**«Ver en dashboard».** Un punto con `origen.enlace = { pagina, clienteKey }` muestra un enlace que
+navega a esa pantalla (web: `onNavegar` de `Agenda.jsx`, con `acteck:navegar` de respaldo · celular:
+`nav.navegar`). Así se sembraron los 12 puntos del martes.
+
+| Objeto | Qué es |
+|---|---|
+| `agenda_item_comentarios` | `id, item_id (fk cascade), reunion_id (la reunión EN LA QUE se comentó; el trigger `agenda_comentario_defaults` la hereda del punto), tipo (seguimiento\|mejora\|acuerdo), texto, autor (auth.uid()), created_at`. RLS con `agenda_puede_ver()/agenda_puede_editar()` + auditoría; `anon` revocado. |
+| `agenda_traer_puntos(uuid, uuid)` | Trae los puntos abiertos de UNA reunión anterior. Idempotente: no copia un punto que ya se trajo. |
+| `src/modules/agenda/Comentarios.jsx` | El hilo de la web (lo usan Minuta, HojaItem y el panel de la reunión anterior). |
+| `src/modules/agenda/ReunionAnterior.jsx` | El panel plegable de la minuta. |
+| `src/movil/pestanas/agenda/Comentarios.jsx` | El hilo del celular (misma lógica, chips y campo de 16 px). |
+| `datos.js` | `useComentarios`, `crearComentario`, `borrarComentario`, `traerPuntosDeReunion`, `crearPendienteDePunto`, `moverPunto`. |
+
+**Semilla del martes 22-sep-2026** (`supabase/migrations/20260921_agenda_comentarios.sql`): reunión
+«Reunión Digitalife · puntos del martes» (`digitalife`, 22 sep 10:00 CDMX, 60 min, `programada` = abierta
+en la UI) con los **12 puntos del correo** en orden y su `origen.enlace`, más dos **proyectos** de abasto
+para octubre 2026 (`probable`, responsable Fernando, sin líneas): «Bocinas Digitalife (1,000 + 500 por
+confirmar)» y «Gabinetes proyecto Batauro».
+
 ## 4. Correos (`api/cron.js`)
 
 Dos envíos al día, sólo a quien usa la Agenda:
@@ -190,7 +243,7 @@ activa cuyo `proximo_seguimiento` ya llegó; severidad alta pasados 7 días de r
 ```bash
 node --test scripts/test-agenda-calculo.mjs scripts/test-agenda-etiquetas.mjs   # 27
 node --test scripts/test-agenda-reparto.mjs                                     # 12 (reparto de la minuta)
-node --test scripts/test-agenda-ssr.mjs                                        # 10 (render con datos sembrados)
+node --test scripts/test-agenda-ssr.mjs                                        # 13 (render con datos sembrados)
 node --test scripts/test-pantallas-ssr.mjs                                     # 479 módulos
 node scripts/verificar-deploy.mjs && npm run build
 ```

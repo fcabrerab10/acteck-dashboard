@@ -58,6 +58,16 @@ export function analizarLinea(linea, { clienteKey = null, personas = [], hoy = n
 export const clavesExistentes = (existentes = []) =>
   new Set((existentes || []).map((x) => normalizar(typeof x === 'string' ? x : x?.titulo)).filter(Boolean));
 
+/** Map(título normalizado → id del punto) para ligar el pendiente al punto (origen.punto_id). */
+export const idsExistentes = (existentes = []) => {
+  const m = new Map();
+  for (const x of existentes || []) {
+    const clave = normalizar(typeof x === 'string' ? x : x?.titulo);
+    if (clave && typeof x !== 'string' && x?.id && !m.has(clave)) m.set(clave, x.id);
+  }
+  return m;
+};
+
 /**
  * Lee el texto completo de la minuta y devuelve las filas del reparto (en el orden del texto).
  * Quita líneas vacías, líneas sin título y repetidas; las que ya existen como punto de la reunión
@@ -65,6 +75,7 @@ export const clavesExistentes = (existentes = []) =>
  */
 export function detectarAcuerdos(texto, { clienteKey = null, personas = [], hoy = new Date(), yo = null, existentes = [] } = {}) {
   const ya = clavesExistentes(existentes);
+  const ids = idsExistentes(existentes);
   const vistos = new Set();
   const out = [];
   const lineas = String(texto ?? '').split(/\r?\n/);
@@ -77,7 +88,7 @@ export function detectarAcuerdos(texto, { clienteKey = null, personas = [], hoy 
     if (vistos.has(clave)) continue;
     vistos.add(clave);
     const yaExiste = ya.has(clave);
-    out.push({ id: `l${i}`, indice: i, ...a, yaExiste, incluir: !yaExiste });
+    out.push({ id: `l${i}`, indice: i, ...a, yaExiste, puntoId: ids.get(clave) || null, incluir: !yaExiste });
   }
   return out;
 }
@@ -114,7 +125,9 @@ export function filasAItems(filas, reunion, { orden0 = 0 } = {}) {
     hora: f.hora || null,
     categoria: f.categoria || null,
     orden: orden0 + k,
-    origen: { fuente: 'reparto', reunion_id: reunion?.id || null },
+    // Si la línea corresponde a un punto que ya estaba en la minuta, el pendiente queda ligado a él
+    // (la pastilla «N pendientes» del punto lo cuenta: calculo.js#pendientesDePunto).
+    origen: { fuente: 'reparto', reunion_id: reunion?.id || null, ...(f.puntoId ? { punto_id: f.puntoId } : {}) },
   }));
 }
 

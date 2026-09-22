@@ -8,12 +8,13 @@ import { Check, Trash2, CalendarDays, ChevronRight, RotateCcw } from 'lucide-rea
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { HojaM, BotonGrande, Segmented, toast } from '../../piezas';
-import { crearItem, guardarItemDesdeTexto, actualizarItem, borrarItem } from '../../../modules/agenda/datos';
+import { crearItem, guardarItemDesdeTexto, actualizarItem, borrarItem, useComentarios } from '../../../modules/agenda/datos';
 import { parsearEtiquetas, fechaNatural, textoConEtiquetas, CLIENTES_AGENDA, CATEGORIAS, nombreClienteAgenda, conHandles } from '../../../modules/agenda/etiquetas';
-import { cuando, isoDia, sumarDias, fmtHora, proximaReunion } from '../../../modules/agenda/calculo';
+import { cuando, isoDia, sumarDias, fmtHora, proximaReunion, hiloComentarios } from '../../../modules/agenda/calculo';
 import { PRIORIDAD_LABEL } from '../../../modules/agenda/textos';
 import { ChipM, BotonMic, CampoM, lbl, primerNombre } from './comun';
 import Subtareas from '../../../modules/agenda/Subtareas';
+import HiloM from './Comentarios';
 
 const TIPOS = [{ id: 'tarea', label: 'Tarea' }, { id: 'punto', label: 'Punto de reunión' }];
 
@@ -28,6 +29,9 @@ export default function CapturaHoja({ cfg, personas = [], reuniones = [], hoy = 
 function Captura({ cfg, personas, reuniones, hoy, onClose, onGuardado, onAbrirMinuta, subtareas = [], puedeEditar = true }) {
   const { theme } = useTheme();
   const item = cfg.item || null;
+  const { comentariosPor } = useComentarios();
+  const personasPorId = useMemo(() => new Map((personas || []).map((x) => [x.user_id, x])), [personas]);
+  const hilo = useMemo(() => (item ? hiloComentarios([], item, null, { porItem: comentariosPor }) : []), [item, comentariosPor]);
   const [texto, setTexto] = useState(() => (item ? textoConEtiquetas(item, personas) : cfg.texto || ''));
   const [tipo, setTipo] = useState(item?.tipo || cfg.tipo || 'tarea');
   const [reunionId, setReunionId] = useState(item?.reunion_id || cfg.reunion_id || null);
@@ -163,6 +167,14 @@ function Captura({ cfg, personas, reuniones, hoy, onClose, onGuardado, onAbrirMi
 
       {/* V4 · subtareas del pendiente. Marcarlas todas NO lo tacha: sólo lo sugiere. */}
       {item && <Subtareas item={item} subtareas={subtareas} puedeEditar={puedeEditar} compacto onMarcarHecho={toggleHecha} />}
+      {/* Seguimiento (2026-09-21): hilo completo, incluye lo comentado en reuniones anteriores. */}
+      {item && (
+        <div>
+          <span style={lbl(theme)}>Seguimiento{hilo.length ? ` · ${hilo.length}` : ''}</span>
+          <HiloM item={item} hilo={hilo} personasPorId={personasPorId} reunionId={item.reunion_id || null} puedeEditar={puedeEditar}
+            vacio="Sin comentarios todavía." />
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
         <BotonMic onTexto={onDictado} onEstado={onEstadoMic} />

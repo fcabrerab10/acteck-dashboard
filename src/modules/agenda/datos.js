@@ -20,7 +20,7 @@ import { useEstadoImportador } from '../settings/importador/useImportadorData';
 import { frescuraManual } from '../settings/importador/frescura';
 import { GRUPOS } from '../settings/importador/config';
 import { parsearEtiquetas, conHandles, asignables } from './etiquetas';
-import { bandeja as calcBandeja, avisosSistema, isoDia, sumarDias, progresoPorItem, registrarContacto } from './calculo';
+import { bandeja as calcBandeja, avisosSistema, isoDia, sumarDias, progresoPorItem, registrarContacto, comentariosPorItem } from './calculo';
 import { filasAItems } from './reparto';
 
 export const KEY_AGENDA = ['agenda', 'datos'];
@@ -414,11 +414,12 @@ export function useAgendaV4({ enabled = true } = {}) {
   const ag = useAgendaDatos({ enabled });
   const sub = useSubtareas({ enabled });
   const cta = useCuentas({ enabled });
+  const com = useComentarios({ enabled });   // hilos de seguimiento por punto (2026-09-21)
   const hoy = useMemo(() => new Date(), []);
   return {
-    ...ag, ...sub, ...cta, hoy,
+    ...ag, ...sub, ...cta, ...com, hoy,
     cargando: ag.cargando || sub.cargando || cta.cargando,
-    error: ag.error || sub.error || cta.error || null,
+    error: ag.error || sub.error || cta.error || com.error || null,
   };
 }
 
@@ -447,4 +448,84 @@ export function useMinutasCliente(clienteKey, { limite = 5, enabled = true } = {
     },
   });
   return { minutas: q.data || [], cargando: q.isLoading, error: q.error || null };
+}
+
+// ═══════════════════ Seguimiento por punto · 2026-09-21 ════════════════════════
+// agenda_item_comentarios la ESCRIBE la app → nunca con cachedQuery; tras cada escritura,
+// recargarAgenda() (invalidateDataCache + invalidateQueries(['agenda'])).
+
+export const KEY_COMENTARIOS = ['agenda', 'comentarios'];
+
+export async function fetchComentarios() {
+  if (!DB_CONFIGURED) return [];
+  return leer('agenda_item_comentarios', '*', (q) => q, 'created_at');
+}
+
+/** Comentarios de todos los puntos + Map(item_id → hilo ordenado). */
+export function useComentarios({ enabled = true } = {}) {
+  const q = useQuery({ queryKey: KEY_COMENTARIOS, queryFn: fetchComentarios, staleTime: STALE_MS, enabled });
+  const comentarios = q.data || [];
+  const comentariosPor = useMemo(() => comentariosPorItem(comentarios), [comentarios]);
+  return { comentarios, comentariosPor, cargando: q.isLoading, error: q.error || null };
+}
+
+const parcharComentarios = (fn) => queryClient.setQueryData(KEY_COMENTARIOS, (prev) => (Array.isArray(prev) ? fn(prev) : prev));
+
+/**
+ * Comentario bajo un punto. `reunionId` = la reunión EN LA QUE se comenta (por omisión la del punto,
+ * que la rellena el trigger agenda_comentario_defaults). Optimista: la fila entra en la cache al
+ * instante y el refetch la confirma.
+ */
+export async function crearComentario({ itemId, texto, tipo = 'seguimiento', reunionId = null }) {
+  const t = String(texto || '').trim();
+  if (!t) throw new Error('Escribe el comentario');
+  if (!itemId) throw new Error('Sin punto');
+  const row = limpio({ item_id: itemId, texto: t, tipo, reunion_id: reunionId || undefined, autor: await uid() });
+  const data = lanzar(await supabase.from('agenda_item_comentarios').insert(row).select('*').single());
+  parcharComentarios((prev) => [...prev, data]);
+  await recargarAgenda();
+  return data;
+}
+
+export async function borrarComentario(id) {
+  parcharComentarios((prev) => prev.filter((c) => c.id !== id));
+  try { lanzar(await supabase.from('agenda_item_comentarios').delete().eq('id', id)); }
+  finally { await recargarAgenda(); }
+}
+
+/**
+ * «Traer puntos abiertos» del panel «Reunión anterior»: copia a `reunionId` los puntos abiertos de
+ * `desdeId` (RPC agenda_traer_puntos, misma semántica que el arrastre: la copia queda 'abierta' y
+ * el original 'arrastrada', con origen.item_anterior / origen.reunion_anterior para el hilo). → n
+ */
+export async function traerPuntosDeReunion(reunionId, desdeId) {
+  const n = lanzar(await supabase.rpc('agenda_traer_puntos', { p_reunion: reunionId, p_desde: desdeId }));
+  await recargarAgenda();
+  return n || 0;
+}
+
+/** Pendiente (tarea) creado desde un punto de la minuta: queda ligado por origen.punto_id. */
+export function crearPendienteDePunto(punto, { texto, fecha_limite, responsables } = {}, personas = []) {
+  return crearItem({
+    texto: texto || punto.titulo,
+    tipo: 'tarea', categoria: punto.categoria || null, cliente_key: punto.cliente_key || null,
+    fecha_limite: fecha_limite ?? punto.fecha_limite ?? null,
+    responsables: responsables?.length ? responsables : (punto.responsables || []),
+    origen: { fuente: 'punto', punto_id: punto.id, reunion_id: punto.reunion_id || null },
+  }, personas);
+}
+
+/**
+ * Sube o baja un punto dentro de su reunión (reescribe `orden` de la lista completa), igual que
+ * moverSubtarea. Así se puede preparar el orden del día de una reunión próxima.
+ */
+export async function moverPunto(lista, id, delta) {
+  const i = lista.findIndex((p) => p.id === id);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= lista.length) return;
+  const arr = [...lista];
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  arr.forEach((p, k) => parcharItemLocal(p.id, { orden: k }));
+  try { await Promise.all(arr.map((p, k) => supabase.from('agenda_items').update({ orden: k }).eq('id', p.id))); }
+  finally { await recargarAgenda(); }
 }

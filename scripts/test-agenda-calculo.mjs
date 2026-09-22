@@ -281,3 +281,53 @@ test('V4 · David Millán no es asignable y #cliente acepta las cuentas del ERP'
   assert.equal(buscarCliente('meli'), 'mercadolibre');
   assert.equal(buscarCliente('pcel'), 'pcel');
 });
+
+// ── Seguimiento por punto (2026-09-21) ────────────────────────────────────────
+test('el hilo de un punto no se pierde al arrastrarlo a la siguiente reunión', async () => {
+  const { hiloComentarios, comentariosPorItem, cadenaItem, pendientesDePunto } =
+    await import('../src/modules/agenda/calculo.js');
+  // p1 (reunión r1) se arrastró a p2 (r2) y p2 a p3 (r3).
+  const p1 = { id: 'p1', tipo: 'punto', reunion_id: 'r1', estado: 'arrastrada', titulo: 'Camisas' };
+  const p2 = { id: 'p2', tipo: 'punto', reunion_id: 'r2', estado: 'arrastrada', titulo: 'Camisas', arrastrado_desde: 'p1' };
+  const p3 = { id: 'p3', tipo: 'punto', reunion_id: 'r3', estado: 'abierta', titulo: 'Camisas', origen: { item_anterior: 'p2' } };
+  const porId = new Map([p1, p2, p3].map((p) => [p.id, p]));
+  assert.deepEqual(cadenaItem(p3, porId), ['p3', 'p2', 'p1']);
+
+  const comentarios = [
+    { id: 'c1', item_id: 'p1', reunion_id: 'r1', tipo: 'seguimiento', texto: 'Se pidió cotización', created_at: '2026-08-11T10:00:00Z' },
+    { id: 'c3', item_id: 'p3', reunion_id: 'r3', tipo: 'mejora', texto: 'Mejor con logo bordado', created_at: '2026-09-21T10:00:00Z' },
+    { id: 'c2', item_id: 'p2', reunion_id: 'r2', tipo: 'seguimiento', texto: 'Siguen sin mandar tallas', created_at: '2026-09-01T10:00:00Z' },
+  ];
+  const hilo = hiloComentarios(comentarios, p3, porId);
+  assert.deepEqual(hilo.map((c) => c.id), ['c1', 'c2', 'c3'], 'orden cronológico, aunque lleguen desordenados');
+  assert.deepEqual(hilo.map((c) => c.deOtroPunto), [true, true, false]);
+  assert.deepEqual(hilo.map((c) => c.deOtraReunion), [true, true, false]);
+  // El mapa precalculado da el mismo resultado (es el que usan las pantallas).
+  const porItem = comentariosPorItem(comentarios);
+  assert.deepEqual(hiloComentarios([], p3, porId, { porItem }).map((c) => c.id), ['c1', 'c2', 'c3']);
+  // Un punto sin arrastres sólo ve lo suyo.
+  assert.deepEqual(hiloComentarios(comentarios, p1, porId).map((c) => c.id), ['c1']);
+  assert.deepEqual(hiloComentarios(comentarios, null, porId), []);
+
+  // Pendientes ligados al punto (origen.punto_id) → pastilla «N pendientes».
+  const tareas = [{ id: 't1', origen: { fuente: 'reparto', punto_id: 'p3' } }, { id: 't2', origen: { fuente: 'reparto' } }];
+  assert.deepEqual(pendientesDePunto(tareas, 'p3').map((t) => t.id), ['t1']);
+  assert.deepEqual(pendientesDePunto([], 'p3'), []);
+});
+
+test('reunionAnterior encuentra la previa del mismo cliente y sólo reuniones', async () => {
+  const { reunionAnterior, reunionesDeCliente } = await import('../src/modules/agenda/calculo.js');
+  const R = [
+    { id: 'r1', tipo: 'reunion', cliente_key: 'digitalife', fecha: '2026-08-11T16:00:00Z', estado: 'cerrada' },
+    { id: 'r2', tipo: 'reunion', cliente_key: 'digitalife', fecha: '2026-09-01T16:00:00Z', estado: 'cerrada' },
+    { id: 'r3', tipo: 'reunion', cliente_key: 'digitalife', fecha: '2026-09-22T16:00:00Z', estado: 'programada' },
+    { id: 'r4', tipo: 'reunion', cliente_key: 'pcel',       fecha: '2026-09-15T16:00:00Z', estado: 'cerrada' },
+    { id: 'v1', tipo: 'viaje',   cliente_key: 'digitalife', fecha: '2026-09-10T16:00:00Z', estado: 'programada' },
+  ];
+  assert.equal(reunionAnterior(R, R[2]).id, 'r2', 'la más reciente anterior del mismo cliente');
+  assert.equal(reunionAnterior(R, R[1]).id, 'r1');
+  assert.equal(reunionAnterior(R, R[0]), null, 'la primera no tiene anterior');
+  assert.equal(reunionAnterior(R, R[3]), null, 'PCEL no hereda las de Digitalife');
+  assert.equal(reunionAnterior([], null), null);
+  assert.deepEqual(reunionesDeCliente(R, 'digitalife').map((r) => r.id), ['r3', 'r2', 'r1'], 'sin viajes, de la más nueva a la más vieja');
+});

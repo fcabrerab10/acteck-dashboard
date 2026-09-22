@@ -52,7 +52,7 @@ export default function Agenda({ onNavegar, inicial }) {
   const puedeEditar = !!perfil?.es_super_admin || puedeEditarPestanaGlobal(perfil, 'agenda');
 
   const d = useAgendaV4({ enabled: !!perfil });
-  const { items, reuniones, personas, personasPorId, porId, subtareas, progreso, cuentas, notasPorCuenta, hoy } = d;
+  const { items, reuniones, personas, personasPorId, porId, subtareas, progreso, cuentas, notasPorCuenta, comentariosPor, hoy } = d;
   const g = useGoogleEstado();
 
   const [vista, setVista] = useState(inicial?.vista || 'pendientes');
@@ -197,8 +197,9 @@ export default function Agenda({ onNavegar, inicial }) {
       {vista === 'archivados' && <Archivados items={items} personasPorId={personasPorId} hoy={hoy} progreso={progreso} puedeEditar={puedeEditar} onAbrir={setHojaItem} />}
 
       {hojaItem && <HojaItem item={porId.get(hojaItem.id) || hojaItem} personas={personas} personasPorId={personasPorId} porId={porId} reuniones={reuniones} hoy={hoy}
-        subtareas={subtareas} puedeEditar={puedeEditar} onClose={() => setHojaItem(null)} onAbrirMinuta={(rid) => { setHojaItem(null); setVista('reuniones'); setMinutaId(rid); }} />}
+        subtareas={subtareas} comentariosPor={comentariosPor} items={items} puedeEditar={puedeEditar} onClose={() => setHojaItem(null)} onAbrirMinuta={(rid) => { setHojaItem(null); setVista('reuniones'); setMinutaId(rid); }} />}
       {minuta && <Minuta reunion={minuta} items={items} personas={personas} personasPorId={personasPorId} porId={porId} reuniones={reuniones} hoy={hoy} uid={uid}
+        comentariosPor={comentariosPor} onNavegar={ir} onVerReuniones={() => { setMinutaId(null); setVista('reuniones'); }}
         puedeEditar={puedeEditar} onClose={() => setMinutaId(null)} onEditar={() => setFormReunion({ reunion: minuta })} google={comunes.google} />}
       {formReunion && <FormReunion inicial={formReunion} personas={personas} google={comunes.google} onClose={() => setFormReunion(null)}
         onCreada={(r) => { setFormReunion(null); if (r?.tipo === 'reunion') { setVista('reuniones'); setMinutaId(r.id); } }} />}
