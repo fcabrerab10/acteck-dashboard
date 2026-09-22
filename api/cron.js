@@ -1293,13 +1293,16 @@ export function armarCorreoAgenda({ momento, userId, items, reuniones, cuentas, 
     const deHoy = mios.filter((it) => it.fecha_limite === hoy);
     const ayer = masDias(hoy, -1);
     const nuevos = mios.filter((it) => it.creado_por && it.creado_por !== userId && String(it.created_at || '').slice(0, 10) >= ayer);
+    // Reuniones de hoy también van en la mañana (Fernando, 2026-09-22): "lo que dejaste" + "lo que tienes hoy".
+    const reusHoy = reuniones.filter((r) => r.tipo === 'reunion' && r.estado !== 'cerrada' && diaCDMX(r.fecha) === hoy).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    if (reusHoy.length) sec.push({ titulo: 'Reuniones de hoy', sub: `${reusHoy.length}`, filas: reusHoy.map((r) => ({ severidad: 'info', titulo: `${horaCorta(r.fecha)} · ${r.titulo}`, detalle: r.cliente_key && r.cliente_key !== 'interno' ? r.cliente_key : 'interna' })) });
     if (venc.length) sec.push({ titulo: 'Vencidos', sub: `${venc.length}`, filas: venc.map((i) => ({ severidad: 'alta', titulo: i.titulo, detalle: `límite ${i.fecha_limite}${i.cliente_key && i.cliente_key !== 'interno' ? ` · #${i.cliente_key}` : ''}`, accion: ACCION_AGENDA })) });
     if (deHoy.length) sec.push({ titulo: 'Hoy', sub: `${deHoy.length}`, filas: deHoy.map((i) => ({ severidad: 'info', titulo: i.titulo, detalle: i.cliente_key && i.cliente_key !== 'interno' ? nombreCliente(i.cliente_key) : null, accion: ACCION_AGENDA })) });
     if (nuevos.length) sec.push({ titulo: 'Te asignaron', sub: `${nuevos.length} desde ayer`, filas: nuevos.map((i) => ({ severidad: 'media', titulo: i.titulo, detalle: i.fecha_limite ? `límite ${i.fecha_limite}` : 'sin fecha', accion: ACCION_AGENDA })) });
     if (cuentas.length) sec.push({ titulo: 'Cuentas por contactar', sub: `${cuentas.length}`, filas: cuentas.map((c) => ({ severidad: 'media', titulo: `${c.nombre}${c.empresa ? ` · ${c.empresa}` : ''}`, detalle: `${c.mayorista ? `vía ${c.mayorista} · ` : ''}desde ${c.proximo_seguimiento}${c.telefono ? ` · ${c.telefono}` : ''}`, accion: ACCION_CUENTAS })) });
     if (!sec.length) return null;
     const n = (sec.find((x) => x.titulo === 'Vencidos')?.filas.length || 0);
-    return { titulo: 'Lo que dejaste', intro: `${n ? `${n} vencido${n === 1 ? '' : 's'} · ` : ''}${(sec.find((x) => x.titulo === 'Hoy')?.filas.length || 0)} para hoy${cuentas.length ? ` · ${cuentas.length} cuenta${cuentas.length === 1 ? '' : 's'} por contactar` : ''}`, secciones: sec };
+    return { titulo: 'Lo que dejaste', intro: `${reusHoy.length ? `${reusHoy.length} reunión${reusHoy.length === 1 ? '' : 'es'} hoy · ` : ''}${n ? `${n} vencido${n === 1 ? '' : 's'} · ` : ''}${(sec.find((x) => x.titulo === 'Hoy')?.filas.length || 0)} para hoy${cuentas.length ? ` · ${cuentas.length} cuenta${cuentas.length === 1 ? '' : 's'} por contactar` : ''}`, secciones: sec };
   }
   // ── tarde: lo de mañana ──
   const reus = reuniones.filter((r) => r.tipo === 'reunion' && r.estado !== 'cerrada' && diaCDMX(r.fecha) === manana).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
