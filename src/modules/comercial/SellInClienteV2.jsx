@@ -7,6 +7,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useUnidadDetalle, fmtUnidad, etiquetaUnidad, SelectorUnidad } from './sellin/unidad.jsx';
+import { useAnchoMes } from './sellin/ajuste.js';
 import { supabase } from '../../lib/supabase';
 import { useRoadmap, useFacturacion, useFacturacionAll, useCuotasMensuales } from '../../lib/queries';
 import { formatMXN } from '../../lib/utils';
@@ -764,6 +765,9 @@ function anioColor(y, aniosSel, P) {
 
 function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, unidad = 'piezas', onUnidad = () => {}, consolidado = false, onToggleConsolidado = () => {}, facturacion = [], facturacionAll = [], pdfRef, clienteKey }) {
   const [skuAbierto, setSkuAbierto] = useState(null);
+  // Regla de ancho: las columnas de mes se reparten el espacio del contenedor (ver sellin/ajuste.js).
+  const contRef = useRef(null);
+  const { anchoMes, compacto, desc: descMax } = useAnchoMes(contRef, aniosSel.length * 12, 118 + 68 + 54 + 62);
   const clienteLabel = clienteKey ? clienteKey.charAt(0).toUpperCase() + clienteKey.slice(1) : '';
   // Excel con las columnas visibles (años seleccionados / consolidado)
   const excelSKU = () => {
@@ -915,7 +919,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
         <SelectorUnidad unidad={unidad} onChange={onUnidad} />
         <ExportMenu titulo="Sell In" subtitulo={`${clienteLabel} · ${aniosSel.join(' · ')}`} excel={excelSKU} pdf={{ ref: pdfRef }} deshabilitado={!rows.length} />
       </div>
-      <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
+      <div ref={contRef} style={{ overflow: 'auto', maxHeight: '65vh' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
@@ -959,7 +963,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                     col={y === anio ? `mes-${i}` : `mes-${y}-${i}`}
                     label={m}
                     orden={orden} onToggleSort={onToggleSort}
-                    align="right" width={38}
+                    align="right" width={anchoMes} compacto={compacto}
                     topOffset={28}
                     borderLeft={i === 0 ? `2px solid ${theme.divider || theme.border}` : undefined}
                   />
@@ -985,20 +989,20 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                       {r.sku}
                       {r.marca && <span title={r.marca} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: theme.textMuted, textTransform: 'uppercase' }}>{String(r.marca).slice(0, 2)}</span>}
                     </td>
-                    <td style={{ ...cellStyle(theme, 'left'), maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                    <td style={{ ...cellStyle(theme, 'left'), maxWidth: descMax, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
                     <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
                     {aniosSel.map((y) => (
                       ((unidad === 'monto' ? r.montoPorAnio : r.piezasPorAnio)?.[y] || Array(12).fill(0)).map((v, i) => {
                         const h = heatCell(v);
                         return (
                           <td key={`${y}-${i}`} style={{
-                            ...cellStyle(theme, 'right'), padding: '3px 3px',
+                            ...cellStyle(theme, 'right'), padding: compacto ? '3px 1px' : '3px 3px', fontSize: compacto ? 10 : 11.5,
                             fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
                             borderLeft: i === 0 ? `2px solid ${theme.divider || theme.border}` : undefined,
                           }}>
                             {h ? (
                               <span style={{
-                                display: 'inline-block', padding: '2px 5px', borderRadius: 6,
+                                display: 'inline-block', padding: compacto ? '1px 2px' : '2px 5px', borderRadius: 6,
                                 background: h.bg, color: h.color, fontWeight: h.weight || 500,
                                 minWidth: 0, textAlign: 'right',
                               }}>{fmtU(v)}</span>
@@ -1039,14 +1043,14 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
   );
 }
 
-function SortableHeader({ theme, col, label, orden, onToggleSort, align, width, rowSpan, borderLeft, topOffset = 0 }) {
+function SortableHeader({ theme, col, label, orden, onToggleSort, align, width, rowSpan, borderLeft, topOffset = 0, compacto = false }) {
   const active = orden.col === col;
   const Icon = !active ? ArrowUpDown : orden.dir === 'asc' ? ArrowUp : ArrowDown;
   return (
     <th rowSpan={rowSpan} style={{
       position: 'sticky', top: topOffset, background: theme.surface, zIndex: 1,
-      textAlign: align, padding: '7px 6px',
-      fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9.5,
+      textAlign: align, padding: compacto ? '7px 2px' : '7px 6px',
+      fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: compacto ? 8.5 : 9.5,
       textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
       borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width,
       ...(borderLeft ? { borderLeft } : {}),
@@ -1059,7 +1063,7 @@ function SortableHeader({ theme, col, label, orden, onToggleSort, align, width, 
           cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
         }}>
         {label}
-        <Icon size={11} />
+        {!compacto && <Icon size={11} />}
       </button>
     </th>
   );
