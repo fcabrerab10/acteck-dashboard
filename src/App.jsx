@@ -43,7 +43,7 @@ import { precargarEnCola, siguientesPantallas } from './lib/prefetch';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 // Responsive por dispositivo (2026-09-21): modo por ancho+táctil, preferencias por máquina
 // (densidad, sidebar, ancho máximo, paneles) y el modo Paneles del monitor panorámico.
-import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, aplicarDensidad, maxColumnas, normalizarPaneles } from './lib/dispositivo';
+import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, aplicarDensidad, panelesEfectivos } from './lib/dispositivo';
 import PaginaContenido from './components/PaginaContenido';
 const Paneles = lazy(() => import('./components/nav/Paneles'));
 // MobileNav y MobileShell (legacy) ya no se montan: los sustituyó MovilApp (V3).
@@ -417,13 +417,13 @@ export default function App() {
   // de esta máquina y el ancho real limita cuántas caben (900 px por columna).
   const arbolNav = React.useMemo(() => { try { return construirArbol(perfil); } catch { return []; } }, [perfil]);
   const panelesActivos = React.useMemo(() => {
-    if (disp.modo !== 'panoramico' || mobile) return [];
-    const n = Math.min(maxColumnas(disp.ancho), (prefsDisp.paneles || []).length);
-    if (n < 2) return [];
-    const cols = normalizarPaneles(prefsDisp.paneles, n);
+    if (disp.modo !== 'panoramico' || mobile) return { disposicion: 'uno', slots: [] };
+    const { disposicion, slots } = panelesEfectivos(prefsDisp.paneles, { ancho: disp.ancho, alto: disp.alto });
+    if (slots.length < 2) return { disposicion: 'uno', slots: [] };
+    const cols = slots.slice();
     cols[0] = { pagina: vistaActual === 'configuracion' ? 'configuracion' : paginaActiva, clienteKey: clienteActivo };
-    return cols;
-  }, [disp.modo, disp.ancho, mobile, prefsDisp.paneles, paginaActiva, clienteActivo, vistaActual]);
+    return { disposicion, slots: cols };
+  }, [disp.modo, disp.ancho, disp.alto, mobile, prefsDisp.paneles, paginaActiva, clienteActivo, vistaActual]);
 
   const puedeActualizar = puedeActualizarDatos(perfil);
   const puedeVerConfig  = puedeConfigurar(perfil);
@@ -460,12 +460,13 @@ export default function App() {
     extra: paginaExtra,
   };
 
-  const contenido = panelesActivos.length > 1 && !mobile ? (
+  const contenido = panelesActivos.slots.length > 1 && !mobile ? (
     <>
     <Suspense fallback={<Cargando pantalla={paginaHoy} />}>
     <Paneles
-      columnas={panelesActivos}
-      onCambiar={(cols) => setPrefDispositivo(disp.modo, 'paneles', cols)}
+      disposicion={panelesActivos.disposicion}
+      slots={panelesActivos.slots}
+      onCambiar={(next) => setPrefDispositivo(disp.modo, 'paneles', next)}
       paginaProps={paginaProps}
       arbol={arbolNav}
       anchoMax={anchoMax}

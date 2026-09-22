@@ -10,7 +10,8 @@ import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { usePreferencias, setPreferencia, getPath, MODOS_MENU, MODOS_MENU_MOVIL } from '../../lib/preferencias';
 // Preferencias de ESTA pantalla (por máquina, no por usuario): densidad del contenido, menú lateral,
 // ancho máximo y paneles. Ver src/lib/dispositivo.js.
-import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, ANCHOS_MAX, maxColumnas, normalizarPaneles } from '../../lib/dispositivo';
+import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, ANCHOS_MAX, panelesEfectivos, normalizarPaneles, DISPOSICION_POR_ID } from '../../lib/dispositivo';
+import SelectorDisposicion from '../nav/SelectorDisposicion';
 import { puedeConfigurar } from '../../lib/permisos';
 import { versionLabel, APP_VERSION } from '../../lib/version';
 import { AvatarImg, usePerfilVivo, aplicarPerfilLocal, quitarAvatar } from '../../lib/avatar';
@@ -52,8 +53,7 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
   const disp = useDispositivo();
   const prefsDisp = usePrefsDispositivo();
   const ETIQUETA_MODO = { telefono: 'iPhone', tabletaCompacta: 'Tableta', tableta: 'iPad', laptop: 'Laptop', panoramico: 'Monitor panorámico' };
-  const topeColumnas = maxColumnas(disp.ancho);
-  const columnas = Math.max(1, Math.min(topeColumnas, (prefsDisp.paneles || []).length || 1));
+  const panelesHoy = panelesEfectivos(prefsDisp.paneles, { ancho: disp.ancho, alto: disp.alto });
   const [foto, setFoto] = useState(false);
   const [sub, setSub] = useState(null); // 'notificaciones' → página anidada con su propio “Atrás”
   const refs = useRef({});
@@ -128,10 +128,21 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
                 <Segmented value={Number(prefsDisp.anchoMax) || 0} onChange={(v) => setPrefDispositivo(disp.modo, 'anchoMax', Number(v))}
                   options={ANCHOS_MAX.map((a) => ({ id: a.id, label: a.label }))} />
               </Fila>
-              <Fila theme={theme} icon={LayoutGrid} label="Paneles" sub={`Pantallas a la vez · caben ${topeColumnas} en ${disp.ancho} px`}>
-                <Segmented value={columnas} onChange={(v) => setPrefDispositivo(disp.modo, 'paneles', Number(v) <= 1 ? [] : normalizarPaneles(prefsDisp.paneles, Number(v)))}
-                  options={[1, 2, 3, 4].filter((n) => n <= topeColumnas).map((n) => ({ id: n, label: String(n) }))} />
-              </Fila>
+              <Fila theme={theme} icon={LayoutGrid} label="Paneles"
+                sub={`Cómo se reparten las pantallas en este monitor (${disp.ancho} × ${disp.alto} px). Las grises no caben aquí.`} />
+              <div style={{ padding: '2px 12px 12px' }}>
+                <SelectorDisposicion
+                  valor={panelesHoy.disposicion}
+                  ancho={disp.ancho}
+                  alto={disp.alto}
+                  onElegir={(id) => {
+                    const d = DISPOSICION_POR_ID[id];
+                    if (!d) return;
+                    setPrefDispositivo(disp.modo, 'paneles', d.slots <= 1
+                      ? { disposicion: 'uno', slots: [] }
+                      : { disposicion: id, slots: normalizarPaneles(panelesHoy.slots, d.slots) });
+                  }} />
+              </div>
             </>
           )}
           <Fila theme={theme} icon={Sparkles} label="Reducir movimiento" sub="Menos animaciones al navegar">

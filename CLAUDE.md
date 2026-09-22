@@ -170,11 +170,18 @@ Pendientes conocidos de rendimiento: agregar en Postgres (vistas/RPC) lo que hoy
   (localStorage `disp_prefs_v1`, una entrada por modo: `densidad`, `sidebar`, `anchoMax`, `paneles`).
   `useMobileShell` NO se tocó: el celular y el iPad siguen exactamente igual que antes.
   El switch de pantallas salió de `App.jsx` a **`src/components/PaginaContenido.jsx`** (`{ pagina, clienteKey }`),
-  que es por donde pasa TODO — con una columna y con varias. En monitores ≥ 1900 px el control **Paneles**
-  de la pastilla superior (`src/components/nav/ControlPaneles.jsx`, perezoso) abre 2-4 columnas
-  (`src/components/nav/Paneles.jsx`): la primera es la pestaña activa (y la que reciben `acteck:navegar`,
-  el menú y ⌘K), las demás se eligen en el selector de su cabecera y cada una tiene su propio scroll y su
-  propio estado. Tope por ancho: 900 px mínimos por columna (27" → 2 · 34" → 3 · 49" → 4).
+  que es por donde pasa TODO — con un panel y con varios. En monitores ≥ 1900 px el control **Paneles**
+  de la pastilla superior (`src/components/nav/ControlPaneles.jsx`, perezoso) y Preferencias → Apariencia
+  comparten el selector de **disposiciones** con pictogramas (`src/components/nav/SelectorDisposicion.jsx`):
+  `uno` · `dos` · `tres` · `dosArriba1Lado` · `unoLado2Derecha` · `unoArriba2Abajo` · `cuatro`, definidas en
+  `DISPOSICIONES` (`src/lib/dispositivo.js`) como rejillas con `grid-template-areas` y pintadas por
+  `src/components/nav/Paneles.jsx`. Cada hueco es una pantalla independiente (su scroll, su estado); el hueco 0
+  es la pestaña activa (la que reciben `acteck:navegar`, el menú y ⌘K, y la única con `PageTransition`), y los
+  huecos se intercambian arrastrando su cabecera o con ▲▼/◀▶ — si otro entra al hueco 0, la pestaña activa se va
+  con él. Qué disposiciones caben lo decide el monitor (900 px por columna, 420 px de alto por fila apilada:
+  27" todas menos `tres`, 34" y 49" todas); las que no caben salen en gris con el porqué. Se guardan por máquina
+  en `paneles = { disposicion, slots:[{pagina,clienteKey},…] }` (la forma vieja de array se migra sola) y con
+  más de un hueco la rejilla usa todo el ancho, ignorando `anchoMax`.
   Densidad compacta = variables CSS `--dens-panel-pad` / `--dens-kpi-pad` / `--dens-fila-pad` que leen
   `Panel`, `KpiCard` y `TablaCompacta` (cómoda = los valores de siempre). ⌘\ colapsa/expande la sidebar.
   Todo se configura en el avatar → Preferencias → Apariencia. Pruebas: `scripts/test-dispositivo.mjs` y
