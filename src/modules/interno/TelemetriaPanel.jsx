@@ -15,6 +15,7 @@ import { resumenTelemetria, resumenAcciones, cumplimientoAgenda, inactividad, ev
 import { fraseHero, fmtHm, plural, MESES, MESES_CORTO } from './equipo/textos.js';
 import TarjetaPersona from './equipo/TarjetaPersona.jsx';
 import HojaPersona from './equipo/HojaPersona.jsx';
+import CalendarioPersona from './equipo/CalendarioPersona.jsx';
 
 const GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 10 };
 
@@ -23,7 +24,8 @@ export default function TelemetriaPanel() {
   const esAdmin = perfil?.rol === 'super_admin' || perfil?.es_super_admin === true;
   const { theme } = useTheme();
   const [umbral, setUmbral] = useUmbralInactividad();
-  const [selId, setSelId] = useState(null);
+  const [selId, setSelId] = useState(null);       // persona elegida → calendario del mes debajo de las tarjetas
+  const [hojaAbierta, setHojaAbierta] = useState(false); // ficha completa (hoja lateral) bajo demanda
   const datos = useDatosEquipo(esAdmin);
   const { usuarios, eventos, auditoria, agenda, evaluaciones, mesActual, cargando, error, refetch } = datos;
   const { eventosPor, auditoriaPor } = useIndicesPorUsuario(eventos, auditoria);
@@ -84,7 +86,7 @@ export default function TelemetriaPanel() {
           badge={pulso.inactivos > 0 ? { l: 'atender', tone: 'red' } : { l: 'al día', tone: 'green' }} />
         <KpiCard eyebrow="Evaluaciones" big={evalsPendientes.length} bigSmall="por cerrar"
           sub={evalsPendientes.length ? `${evalsPendientes.map((u) => (u.nombre || '').split(' ')[0]).join(', ')} · ${MESES_CORTO[porUsuario.get(evalsPendientes[0].user_id).evalPendiente.mes - 1]}` : `${plural(internos.filter((u) => u.se_evalua).length, 'persona')} con evaluación mensual`}
-          onClick={evalsPendientes.length ? () => setSelId(evalsPendientes[0].user_id) : undefined}
+          onClick={evalsPendientes.length ? () => { setSelId(evalsPendientes[0].user_id); setHojaAbierta(true); } : undefined}
           badge={evalsPendientes.length && hoy.getDate() > 3 ? { l: 'venció el día 3', tone: 'orange' } : undefined} />
       </div>
 
@@ -100,23 +102,27 @@ export default function TelemetriaPanel() {
         <div style={GRID} data-stagger>
           {internosOrden.map((u) => (
             <TarjetaPersona key={u.user_id} u={u} datos={porUsuario.get(u.user_id)} agendaDisponible={!!agenda?.disponible} mesActual={mesActual}
-              evalPendiente={porUsuario.get(u.user_id)?.evalPendiente} onClick={() => setSelId(u.user_id)} />
+              evalPendiente={porUsuario.get(u.user_id)?.evalPendiente} onClick={() => { setSelId(u.user_id); setTimeout(() => document.getElementById('calendario-persona')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }} />
           ))}
           {internos.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: theme.textMuted }}>Sin usuarios internos activos.</div>}
         </div>
       </Panel>
 
+      {sel && (
+        <CalendarioPersona u={sel} onClose={() => setSelId(null)} onAbrirHoja={() => setHojaAbierta(true)} />
+      )}
+
       {externos.length > 0 && (
         <Panel titulo="Externos · clientes y aliados" meta={plural(externos.length, 'usuario')} plegable abiertoInicial={false}>
           <div style={GRID}>
             {externosOrden.map((u) => (
-              <TarjetaPersona key={u.user_id} u={u} datos={porUsuario.get(u.user_id)} agendaDisponible={false} mesActual={null} onClick={() => setSelId(u.user_id)} />
+              <TarjetaPersona key={u.user_id} u={u} datos={porUsuario.get(u.user_id)} agendaDisponible={false} mesActual={null} onClick={() => { setSelId(u.user_id); setTimeout(() => document.getElementById('calendario-persona')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }} />
             ))}
           </div>
         </Panel>
       )}
 
-      <HojaPersona u={sel} datos={sel ? porUsuario.get(sel.user_id) : null} abierto={!!sel} onClose={() => setSelId(null)}
+      <HojaPersona u={sel} datos={sel ? porUsuario.get(sel.user_id) : null} abierto={!!sel && hojaAbierta} onClose={() => setHojaAbierta(false)}
         agendaDisponible={!!agenda?.disponible} evaluaciones={evaluaciones} />
     </div>
   );

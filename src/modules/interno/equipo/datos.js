@@ -164,3 +164,25 @@ export function useIndicesPorUsuario(eventos, auditoria) {
 }
 
 export { isoDia };
+
+/** Actividad completa de UNA persona en UN mes (eventos + auditoría): alimenta el calendario debajo de las tarjetas. */
+export function useActividadMes(userId, anio, mes, enabled = true) {
+  return useQuery({
+    queryKey: ['equipo', 'actividad-mes', userId, anio, mes],
+    enabled: enabled && !!userId && !!anio && !!mes,
+    staleTime: STALE,
+    queryFn: async () => {
+      const desde = new Date(anio, mes - 1, 1, 0, 0, 0, 0).toISOString();
+      const hasta = new Date(anio, mes, 1, 0, 0, 0, 0).toISOString();
+      const [eventos, auditoria] = await Promise.all([
+        fetchPaged((from, to, withCount) => supabase.from('eventos_usuario')
+          .select('user_id,ts,tipo,cliente,pagina', conCount(withCount))
+          .eq('user_id', userId).gte('ts', desde).lt('ts', hasta).order('ts', { ascending: true }).range(from, to), { pageSize: 1000, label: 'eventos_usuario mes' }),
+        fetchPaged((from, to, withCount) => supabase.from('auditoria_cambios')
+          .select('id,tabla,operacion,registro_id,cliente_key,usuario_id,cambios,creado_at', conCount(withCount))
+          .eq('usuario_id', userId).gte('creado_at', desde).lt('creado_at', hasta).order('creado_at', { ascending: true }).range(from, to), { pageSize: 1000, label: 'auditoria mes' }),
+      ]);
+      return { eventos, auditoria };
+    },
+  });
+}
