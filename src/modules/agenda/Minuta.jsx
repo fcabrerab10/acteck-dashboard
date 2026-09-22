@@ -2,7 +2,7 @@
 // guardado al momento (debounce 600 ms por punto + "guardado hace N s"), asistentes, notas; Cerrar reunión
 // (avisos a responsables + arrastre a la siguiente del mismo cliente); compartir por WhatsApp y PDF.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Share2, Check, Play, Lock, Pencil, Split, ChevronUp, ChevronDown, ArrowUpRight } from 'lucide-react';
+import { Trash2, Share2, Check, Play, Lock, Pencil, Split, ChevronUp, ChevronDown, ArrowUpRight, MessageSquare, CalendarDays } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { HojaLateral, Campo } from '../../components/perfil/comun';
@@ -126,7 +126,7 @@ export default function Minuta({ reunion, items, reuniones = [], personas, perso
           </div>
         </Bloque>
 
-        <Bloque theme={theme} titulo="Puntos" sub="#cliente @persona /categoría · palomita = resuelto · comenta debajo de cada punto">
+        <Bloque theme={theme} titulo="Puntos" sub={editable ? "palomita = resuelto · clic en el texto para editar · el globo abre los comentarios" : ""}>
           <div style={{ border: `1px solid ${theme.border}`, borderRadius: 10, background: theme.surface, padding: '4px 10px' }}>
             {res.puntos.map((p, i) => (
               <LineaPunto key={p.id} p={p} theme={theme} editable={editable && p.estado !== 'arrastrada'} personas={personas} personasPorId={personasPorId} porId={porId} hoy={hoy}
@@ -178,47 +178,66 @@ function Bloque({ theme, titulo, sub, children }) {
 }
 
 function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, hilo = [], nPendientes = 0, reunionOrigen = null, puedeSubir, puedeBajar, onMover, onEnlace, reunionId, onTexto, onResolucion, onFecha, onToggle, onBorrar }) {
+  // Dos modos (2026-09-22, Fernando: «no entiendo cómo funciona»): en reposo el punto se LEE limpio —
+  // título sin códigos, responsable, fecha y categoría como pastillas—; al hacer clic en el texto se edita
+  // con #cliente @persona /categoría. Los comentarios van plegados detrás del globo con su contador.
   const [texto, setTexto] = useState(() => textoConEtiquetas(p, personas));
   const [quedo, setQuedo] = useState(p.resolucion || '');
   const [editando, setEditando] = useState(false);
+  const [verHilo, setVerHilo] = useState(() => hilo.length > 0); // con seguimiento previo, abierto; sin él, plegado
   const [hover, setHover] = useState(false);
+  const fechaRef = useRef(null);
   useEffect(() => { if (!editando) setTexto(textoConEtiquetas(p, personas)); }, [p.titulo, p.cliente_key, p.categoria, p.responsables, personas, editando]); // eslint-disable-line react-hooks/exhaustive-deps
   const n = vecesArrastrado(p, porId);
   const hecha = p.estado === 'hecha';
+  const vencida = !hecha && p.fecha_limite && p.fecha_limite < isoDia(hoy);
+  const abrirFecha = () => { const el = fechaRef.current; if (!el) return; if (typeof el.showPicker === 'function') { try { el.showPicker(); return; } catch { /* Safari */ } } el.focus(); el.click(); };
+  const nComentarios = hilo.length;
   return (
-    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{ borderBottom: `1px dashed ${theme.border}`, padding: '5px 0', opacity: p.estado === 'arrastrada' ? 0.55 : 1 }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <Palomita hecha={hecha} onClick={onToggle} size={14} disabled={!editable} />
-        {editable
-          ? <CampoEtiquetas value={texto} onChange={(v) => { setTexto(v); onTexto(v); }} personas={personas} sinBorde onBlur={() => setEditando(false)} onKeyDownExtra={() => setEditando(true)} style={{ textDecoration: hecha ? 'line-through' : 'none' }} />
-          : <span style={{ flex: 1, fontSize: 12.5, color: theme.text, textDecoration: hecha ? 'line-through' : 'none' }}>{p.titulo}</span>}
-        <CatPill categoria={p.categoria} />
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{ borderBottom: `1px dashed ${theme.border}`, padding: '6px 0', opacity: p.estado === 'arrastrada' ? 0.55 : 1 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, position: 'relative' }}>
+        <Palomita hecha={hecha} onClick={onToggle} size={15} disabled={!editable} />
+        {editable && editando
+          ? <CampoEtiquetas value={texto} onChange={(v) => { setTexto(v); onTexto(v); }} personas={personas} sinBorde autoFocus onBlur={() => setEditando(false)} onEnter={() => setEditando(false)} onEscape={() => setEditando(false)} style={{ textDecoration: hecha ? 'line-through' : 'none' }} />
+          : <button type="button" onClick={editable ? () => setEditando(true) : undefined} title={editable ? 'Clic para editar el punto' : undefined}
+              style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', padding: '2px 0', cursor: editable ? 'text' : 'default', fontFamily: TYPO.fontText, fontSize: 13, color: hecha ? theme.textMuted : theme.text, textDecoration: hecha ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.titulo || <span style={{ color: theme.textMuted }}>Sin texto</span>}
+            </button>}
         {(p.responsables || []).slice(0, 2).map((u) => <TagPersona key={u} persona={personasPorId.get(u)} />)}
-        {editable ? <input type="date" value={p.fecha_limite || ''} onChange={(e) => onFecha(e.target.value || null)} title="Fecha límite" style={{ border: `1px solid ${theme.border}`, borderRadius: 6, background: theme.bg, color: p.fecha_limite ? theme.text : theme.textMuted, fontFamily: TYPO.fontDisplay, fontSize: 10.5, padding: '1px 4px', width: 108 }} />
-          : p.fecha_limite && <Pill tone="gray" size="xs">{cuando(p.fecha_limite, hoy)}</Pill>}
+        {/* Fecha límite: pastilla que abre el selector; sin fecha, un icono discreto */}
+        {editable && <input ref={fechaRef} type="date" value={p.fecha_limite || ''} onChange={(e) => onFecha(e.target.value || null)} aria-label="Fecha límite" style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />}
+        {p.fecha_limite
+          ? <button type="button" onClick={editable ? abrirFecha : undefined} title={editable ? 'Cambiar la fecha límite' : 'Fecha límite'} style={{ border: 0, background: 'transparent', padding: 0, cursor: editable ? 'pointer' : 'default' }}><Pill tone={vencida ? 'red' : 'gray'} size="xs">{cuando(p.fecha_limite, hoy)}</Pill></button>
+          : editable && <button type="button" onClick={abrirFecha} title="Poner fecha límite" style={{ border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', padding: 2, display: 'inline-flex', opacity: hover ? 1 : 0.35 }}><CalendarDays size={13} /></button>}
+        <CatPill categoria={p.categoria} />
         {n > 0 && <Pill tone="orange" size="xs">{ordinal(n)}</Pill>}
         {p.estado === 'arrastrada' && <Pill tone="gray" size="xs">arrastrado</Pill>}
         {onEnlace && <button type="button" onClick={onEnlace} title="Ver en el dashboard" style={{ border: 0, background: 'transparent', color: theme.accent, cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600 }}><ArrowUpRight size={12} />Ver</button>}
+        <button type="button" onClick={() => setVerHilo((v) => !v)} title={verHilo ? 'Ocultar comentarios' : nComentarios ? `${nComentarios} comentario${nComentarios === 1 ? '' : 's'}` : 'Comentar'}
+          style={{ border: 0, background: 'transparent', color: nComentarios || verHilo ? theme.accent : theme.textMuted, cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', gap: 3, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, opacity: nComentarios || verHilo || hover ? 1 : 0.35 }}>
+          <MessageSquare size={13} />{nComentarios > 0 && nComentarios}
+        </button>
         {editable && <span style={{ display: 'inline-flex', opacity: hover ? 1 : 0 }}>
           <button type="button" onClick={() => onMover?.(-1)} disabled={!puedeSubir} title="Subir" style={flecha(theme, puedeSubir)}><ChevronUp size={12} /></button>
           <button type="button" onClick={() => onMover?.(1)} disabled={!puedeBajar} title="Bajar" style={flecha(theme, puedeBajar)}><ChevronDown size={12} /></button>
+          <button type="button" onClick={onBorrar} title="Eliminar punto" style={{ border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', padding: 2, display: 'inline-flex' }}><Trash2 size={12} /></button>
         </span>}
-        {editable && <button type="button" onClick={onBorrar} title="Eliminar punto" style={{ border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', opacity: hover ? 1 : 0, padding: 2, display: 'inline-flex' }}><Trash2 size={12} /></button>}
       </div>
       {(reunionOrigen || nPendientes > 0) && (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 20, marginTop: 2 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 23, marginTop: 2 }}>
           {reunionOrigen && <span style={{ fontSize: 10, color: theme.textMuted }}>viene de la reunión del {fmtCorta(isoDia(new Date(reunionOrigen.fecha)))}</span>}
           {nPendientes > 0 && <Pill tone="blue" size="xs">{nPendientes} pendiente{nPendientes === 1 ? '' : 's'}</Pill>}
         </div>
       )}
-      {(editable || p.resolucion) && (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 20, marginTop: 2 }}>
-          <span style={{ fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>quedó:</span>
-          {editable ? <input value={quedo} onChange={(e) => { setQuedo(e.target.value); onResolucion(e.target.value); }} placeholder="en qué quedó (nota corta)" style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} /> : <span style={{ fontSize: 11, color: theme.text }}>{p.resolucion}</span>}
+      {/* «quedó:» = en qué quedó el punto; se escribe al resolverlo o al abrir los comentarios */}
+      {(p.resolucion || (editable && (hecha || verHilo))) && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 23, marginTop: 3 }}>
+          <span style={{ fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap', fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>quedó:</span>
+          {editable ? <input value={quedo} onChange={(e) => { setQuedo(e.target.value); onResolucion(e.target.value); }} placeholder="en qué quedó (nota corta)" style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.text }} /> : <span style={{ fontSize: 11.5, color: theme.text }}>{p.resolucion}</span>}
         </div>
       )}
       {/* Seguimiento del punto: el hilo no se pierde cuando el punto se arrastra a la siguiente reunión. */}
-      <Hilo item={p} hilo={hilo} personasPorId={personasPorId} reunionId={reunionId} puedeEditar={editable} compacto />
+      {verHilo && <Hilo item={p} hilo={hilo} personasPorId={personasPorId} reunionId={reunionId} puedeEditar={editable} compacto />}
     </div>
   );
 }

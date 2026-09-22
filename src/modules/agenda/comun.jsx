@@ -153,7 +153,9 @@ export function CampoEtiquetas({ value, onChange, personas = [], placeholder, on
   const el = inputRef || ref;
   const [cursor, setCursor] = useState(null);
   const [sel, setSel] = useState(0);
-  const [abierto, setAbierto] = useState(true);
+  // Cerrado hasta que el campo tiene foco: si arranca abierto, un texto que termina en «@fernando» pinta el
+  // sugeridor debajo de cada punto de la minuta sin que nadie esté escribiendo (visto el 22-sep).
+  const [abierto, setAbierto] = useState(false);
   const token = useMemo(() => (abierto ? tokenActivo(value, cursor) : null), [value, cursor, abierto]);
   const sugs = useMemo(() => sugerencias(token, personas), [token, personas]);
   useEffect(() => { setSel(0); }, [token?.texto, token?.tipo]);
@@ -177,7 +179,7 @@ export function CampoEtiquetas({ value, onChange, personas = [], placeholder, on
   const h = size === 'md' ? 34 : 28;
   return (
     <div style={{ position: 'relative', flex: 1, minWidth: 0, ...style }}>
-      <input ref={el} value={value ?? ''} onChange={actualizar} onKeyDown={onKeyDown} onKeyUp={(e) => setCursor(e.target.selectionStart)} onClick={(e) => setCursor(e.target.selectionStart)} onBlur={(e) => { setTimeout(() => setAbierto(false), 120); onBlur?.(e); }} onFocus={() => setAbierto(true)}
+      <input ref={el} value={value ?? ''} onChange={actualizar} onKeyDown={onKeyDown} onKeyUp={(e) => setCursor(e.target.selectionStart)} onClick={(e) => setCursor(e.target.selectionStart)} onBlur={(e) => { setTimeout(() => setAbierto(false), 120); onBlur?.(e); }} onFocus={(e) => { setCursor(e.target.selectionStart); setAbierto(true); }}
         placeholder={placeholder} autoFocus={autoFocus}
         style={{ width: '100%', height: h, padding: sinBorde ? '0 2px' : '0 10px', borderRadius: 8, border: sinBorde ? 0 : `1px solid ${theme.border}`, background: sinBorde ? 'transparent' : theme.bg, outline: 'none', fontFamily: TYPO.fontText, fontSize: size === 'md' ? 13 : 12.5, color: theme.text, boxSizing: 'border-box' }} />
       {token && sugs.length > 0 && (
