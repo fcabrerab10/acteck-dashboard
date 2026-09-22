@@ -99,10 +99,12 @@ function CursorFluido({ contRef, theme, alto }) {
       const x = ultimoX - rs.left;
       const paths = [...svg.querySelectorAll('path.recharts-area-curve, path.recharts-line-curve')];
       if (!paths.length) return;
-      // Rango horizontal del trazo principal (el área); si no hay, el de todos.
-      const area = paths.find((p) => p.classList.contains('recharts-area-curve')) || paths[0];
-      const b0 = area.getPointAtLength(0).x, b1 = area.getPointAtLength(area.getTotalLength()).x;
-      const xs = Math.min(Math.max(x, Math.min(b0, b1)), Math.max(b0, b1));
+      // Rango horizontal = el más ancho de todos los trazos (la cuota llega a diciembre aunque el año
+      // en curso termine en el mes actual); cada punto sólo aparece donde su curva existe.
+      let b0 = Infinity, b1 = -Infinity;
+      for (const p of paths) { const L = p.getTotalLength(); if (!L) continue; const a = p.getPointAtLength(0).x, z = p.getPointAtLength(L).x; b0 = Math.min(b0, a, z); b1 = Math.max(b1, a, z); }
+      if (!Number.isFinite(b0)) return;
+      const xs = Math.min(Math.max(x, b0), b1);
       const puntos = paths.map((p) => { const pt = puntoEnX(p, xs); if (!pt) return null; return { y: pt.y, color: p.getAttribute('stroke') || theme.accent, principal: p.classList.contains('recharts-area-curve') }; }).filter(Boolean);
       const grid = svg.querySelectorAll('.recharts-cartesian-grid-horizontal line');
       const ys = [...grid].map((l) => Number(l.getAttribute('y1'))).filter((v) => !Number.isNaN(v));
