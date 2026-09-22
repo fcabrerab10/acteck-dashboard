@@ -179,12 +179,14 @@ export function intercambiarSlots(slots, i, j) {
 }
 
 // ─── Preferencias por modo ───
+// `vidrio` ∈ opaco | tintado | vidrio (ver src/lib/vidrio.js). 'opaco' = el chrome de siempre.
+export const NIVELES_VIDRIO_IDS = ['opaco', 'tintado', 'vidrio'];
 export const DEFAULTS_DISPOSITIVO = {
-  telefono:        { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO },
-  tabletaCompacta: { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO },
-  tableta:         { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO },
-  laptop:          { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO },
-  panoramico:      { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO },
+  telefono:        { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
+  tabletaCompacta: { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
+  tableta:         { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
+  laptop:          { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
+  panoramico:      { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
 };
 
 export const ANCHOS_MAX = [
@@ -220,6 +222,7 @@ export function leerPrefsDispositivo(modo, st) {
   p.paneles = migrarPaneles(p.paneles);
   if (!['comoda', 'compacta'].includes(p.densidad)) p.densidad = base.densidad;
   if (!['completa', 'iconos'].includes(p.sidebar)) p.sidebar = base.sidebar;
+  if (!NIVELES_VIDRIO_IDS.includes(p.vidrio)) p.vidrio = base.vidrio;
   if (!Number.isFinite(Number(p.anchoMax))) p.anchoMax = base.anchoMax;
   else p.anchoMax = Number(p.anchoMax);
   return p;

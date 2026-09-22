@@ -56,8 +56,10 @@ export default function BarraApple({ arbol, favoritos, toggleFavorito, estado, o
       <div ref={res.refContenedor} style={{
         position: 'relative',
         height: BARRA_ALTO, display: 'flex', alignItems: 'center', gap: 2, padding: '0 14px',
-        background: dark ? 'rgba(0,0,0,0.7)' : 'rgba(29,29,31,0.86)',
-        backdropFilter: 'saturate(180%) blur(20px)', WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+        // Chrome SIEMPRE oscuro → usa las variables `-oscuro` del deslizador (src/lib/vidrio.js).
+        background: `var(--vidrio-bg-oscuro, ${dark ? 'rgba(0,0,0,0.7)' : 'rgba(29,29,31,0.86)'})`,
+        backdropFilter: 'var(--vidrio-blur, saturate(180%) blur(20px))', WebkitBackdropFilter: 'var(--vidrio-blur, saturate(180%) blur(20px))',
+        boxShadow: 'var(--vidrio-shine-oscuro, 0 0 0 0 rgba(0,0,0,0))',
         borderBottom: '1px solid rgba(255,255,255,0.08)', color: colorTexto, fontFamily: TYPO.fontText,
       }}>
         {res.pastilla}

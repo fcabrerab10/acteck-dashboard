@@ -62,8 +62,11 @@ export default function HojaM({ abierto, onClose, titulo, sub, alto = '78vh', ac
       <div role="dialog" aria-modal="true" aria-label={titulo}
         style={{
           width: '100%', maxHeight: alturaMax, display: 'flex', flexDirection: 'column',
-          background: dark ? 'rgba(28,28,30,0.97)' : theme.bg, color: theme.text, fontFamily: TYPO.fontText,
-          borderRadius: '18px 18px 0 0', border: bordeFlotante(theme), borderBottom: 0, boxShadow: elevation(theme, 'flotante'),
+          background: `var(--vidrio-bg, ${dark ? 'rgba(28,28,30,0.97)' : theme.bg})`,
+          backdropFilter: 'var(--vidrio-blur, none)', WebkitBackdropFilter: 'var(--vidrio-blur, none)',
+          color: theme.text, fontFamily: TYPO.fontText,
+          borderRadius: '18px 18px 0 0', border: `var(--vidrio-border, ${bordeFlotante(theme)})`, borderBottom: 0,
+          boxShadow: `var(--vidrio-shine, 0 0 0 0 rgba(0,0,0,0)), ${elevation(theme, 'flotante')}`,
           transform: visible ? `translateY(${dy}px)` : 'translateY(100%)',
           transition: anim ? `transform ${DUR.page}ms ${EASE}` : 'none',
           paddingBottom: 'env(safe-area-inset-bottom)', boxSizing: 'border-box', overscrollBehavior: 'contain',

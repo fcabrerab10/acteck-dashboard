@@ -3,7 +3,7 @@
 // Grupos: Mi cuenta · Apariencia · Menú · Notificaciones · Atajos · Acerca de.
 // Nombre y cargo se guardan en perfiles (nombre / puesto) vía RPC set_perfil_propio (la fila propia).
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Trash2, User, Briefcase, Mail, KeyRound, Sun, Moon, Palette, Monitor, Rows3, Rows4, Sparkles, LayoutGrid, Star, ArrowUp, ArrowDown, X, Bell, Keyboard, Info, LogOut, Shield, ChevronRight, Smartphone } from 'lucide-react';
+import { Camera, Trash2, User, Briefcase, Mail, KeyRound, Sun, Moon, Palette, Monitor, Rows3, Rows4, Sparkles, LayoutGrid, Layers, Star, ArrowUp, ArrowDown, X, Bell, Keyboard, Info, LogOut, Shield, ChevronRight, Smartphone } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
@@ -11,6 +11,8 @@ import { usePreferencias, setPreferencia, getPath, MODOS_MENU, MODOS_MENU_MOVIL 
 // Preferencias de ESTA pantalla (por máquina, no por usuario): densidad del contenido, menú lateral,
 // ancho máximo y paneles. Ver src/lib/dispositivo.js.
 import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, ANCHOS_MAX, panelesEfectivos, normalizarPaneles, DISPOSICION_POR_ID } from '../../lib/dispositivo';
+// Deslizador de vidrio del chrome (barras, sidebar, hojas y modales). 'opaco' = como siempre.
+import { NIVELES_VIDRIO, sistemaPideOpaco } from '../../lib/vidrio';
 import SelectorDisposicion from '../nav/SelectorDisposicion';
 import { puedeConfigurar } from '../../lib/permisos';
 import { versionLabel, APP_VERSION } from '../../lib/version';
@@ -54,6 +56,8 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
   const prefsDisp = usePrefsDispositivo();
   const ETIQUETA_MODO = { telefono: 'iPhone', tabletaCompacta: 'Tableta', tableta: 'iPad', laptop: 'Laptop', panoramico: 'Monitor panorámico' };
   const panelesHoy = panelesEfectivos(prefsDisp.paneles, { ancho: disp.ancho, alto: disp.alto });
+  // prefers-reduced-transparency / prefers-reduced-motion mandan: el chrome se queda Opaco.
+  const vidrioForzado = sistemaPideOpaco();
   const [foto, setFoto] = useState(false);
   const [sub, setSub] = useState(null); // 'notificaciones' → página anidada con su propio “Atrás”
   const refs = useRef({});
@@ -145,6 +149,13 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
               </div>
             </>
           )}
+          <Fila theme={theme} icon={Layers} label="Vidrio en barras y hojas"
+            sub={vidrioForzado
+              ? 'Tu sistema pide menos transparencia: se queda en Opaco.'
+              : `${NIVELES_VIDRIO.find((n) => n.id === prefsDisp.vidrio)?.desc} · sólo en ${ETIQUETA_MODO[disp.modo] || 'esta pantalla'}`}>
+            <Segmented value={vidrioForzado ? 'opaco' : prefsDisp.vidrio} onChange={(v) => setPrefDispositivo(disp.modo, 'vidrio', v)}
+              options={NIVELES_VIDRIO.map((n) => ({ id: n.id, label: n.label, title: n.desc, disabled: vidrioForzado && n.id !== 'opaco' }))} />
+          </Fila>
           <Fila theme={theme} icon={Sparkles} label="Reducir movimiento" sub="Menos animaciones al navegar">
             <Interruptor theme={theme} on={!!getPath(prefs, 'apariencia.reducirMovimiento', false)} onChange={(v) => setPreferencia('apariencia.reducirMovimiento', v)} />
           </Fila>

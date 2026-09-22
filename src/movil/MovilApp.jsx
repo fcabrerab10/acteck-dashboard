@@ -4,13 +4,14 @@
 //     abre un cajón lateral que replica el sidebar iPad (perfil, FAVORITOS, grupos, clientes con punto). Sin barra inferior.
 //   · "barra": barra inferior flotante Inicio · General · Comercial · Clientes · Interno · avatar; cada grupo abre una
 //     hoja desde abajo con sus pestañas (HojaGrupo). Lupa y campana en la barra superior.
-// Cuatro pestañas raíz con pila propia (inicio · clientes · alertas · buscar; push/pop 340 ms EASE, volver deslizando),
+// Cinco pestañas raíz con pila propia (inicio · agenda · clientes · alertas · buscar; push/pop 340 ms EASE, volver
+// deslizando; Agenda sólo con permiso `agenda` — ver puedeVerPaginaGlobal),
 // hoja global desde abajo (HojaM), deslizar para actualizar y la canasta de la Ficha de producto.
 // Nodo → pantalla: SOLO en src/movil/rutas.js (nav.navegar(nodo)).
 //
 //   <MovilApp perfil={perfil} onCerrarSesion={handleLogout} />   (App monta <ToastHost/> aparte)
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { puedeVerInicio } from '../lib/permisos';
+import { puedeVerInicio, puedeVerPaginaGlobal } from '../lib/permisos';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 import { DUR, reduceMotion } from '../lib/motion';
@@ -19,6 +20,7 @@ import { invalidateDataCache } from '../lib/queries';
 import { usePreferencias } from '../lib/preferencias';
 import { construirArbol, buscarNodo, idNodo } from '../components/nav/arbol';
 import useContadorNotificaciones from '../components/notificaciones/useContadorNotificaciones';
+import { useContadorAgenda } from '../modules/agenda/datos';
 import { NavContext, Pantalla } from './nav';
 import { HojaM, Skeleton, Proximamente } from './piezas';
 import { leerLS, guardarLS } from './util';
@@ -32,10 +34,12 @@ const Inicio   = lazy(() => import('./pestanas/Inicio'));
 const Clientes = lazy(() => import('./pestanas/Clientes'));
 const Alertas  = lazy(() => import('./pestanas/Alertas'));
 const Buscar   = lazy(() => import('./pestanas/Buscar'));
+const Agenda   = lazy(() => import('./pestanas/agenda/Agenda'));
 const PreferenciasHoja = lazy(() => import('../components/perfil/PreferenciasHoja'));
 
-const RAIZ = { inicio: Inicio, clientes: Clientes, alertas: Alertas, buscar: Buscar };
-const TAB_A_NODO = { inicio: 'inicio', clientes: 'resumenClientes' };
+const RAIZ = { inicio: Inicio, clientes: Clientes, alertas: Alertas, buscar: Buscar, agenda: Agenda };
+// Nodo del árbol que queda resaltado al estar en cada pestaña raíz (alertas y buscar no son nodos).
+const TAB_A_NODO = { inicio: 'inicio', agenda: 'agenda', clientes: 'resumenClientes' };
 const LS_CANASTA = 'movil_canasta_v1';
 const BORDE = 24; // px desde el borde izquierdo que abren el cajón
 
@@ -61,6 +65,8 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
 
   // Un externo (o quien no tenga Visión General / Resumen de Clientes) no ve Inicio: arranca en Clientes.
   const veInicio = puedeVerInicio(perfil);
+  // Agenda es pestaña raíz sólo con el permiso global `agenda` (David Millán y los externos no la ven).
+  const veAgenda = puedeVerPaginaGlobal(perfil, 'agenda');
   const [tab, setTab] = useState(veInicio ? 'inicio' : 'clientes');
   const [visitadas, setVisitadas] = useState(() => new Set([veInicio ? 'inicio' : 'clientes']));
   const [pilas, setPilas] = useState(() => Object.fromEntries(TABS_RAIZ.map((t) => [t, []]))); // tab → [{ key, el, fase }]
@@ -72,7 +78,9 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const [arrastreCajon, setArrastreCajon] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [canasta, setCanasta] = useState(() => leerLS(LS_CANASTA, []).filter((s) => typeof s === 'string').slice(0, 12));
+  const [agendaInicial, setAgendaInicial] = useState(null); // { itemId | reunionId | vista } de una notificación
   const contador = useContadorNotificaciones();
+  const pendientesAgenda = useContadorAgenda({ enabled: veAgenda }); // vencidos + de hoy (lee la cache, no consulta)
   const timers = useRef([]);
   const raiz = useRef(null);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -110,7 +118,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const tabRef = useRef(tab); tabRef.current = tab;
   const tabPrev = useRef(veInicio ? 'inicio' : 'clientes');
   const irATab = useCallback((id) => {
-    if (!RAIZ[id]) return;
+    if (!RAIZ[id] || (id === 'agenda' && !veAgenda)) return;
     setVisitadas((v) => (v.has(id) ? v : new Set(v).add(id)));
     if (tabRef.current === id) {
       // Tocar la pestaña activa = volver a su raíz y subir al inicio (como iOS).
@@ -119,7 +127,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     } else if (TAB_A_NODO[tabRef.current]) tabPrev.current = tabRef.current; // desde alertas/buscar no se pisa la anterior
     if (TAB_A_NODO[id]) setActivoId(TAB_A_NODO[id]);
     setTab(id);
-  }, [popTodo]);
+  }, [popTodo, veAgenda]);
   // Lupa / campana: tocarlas con su pestaña al frente vuelve a la pestaña anterior.
   const alternarTab = useCallback((id) => { if (tabRef.current === id) irATab(tabPrev.current || (veInicio ? 'inicio' : 'clientes')); else irATab(id); }, [irATab]);
 
@@ -134,7 +142,13 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     const id = nodo.id || idNodo(nodo.clienteKey || null, nodo.pagina);
     const label = nodo.label || buscarNodo(arbol, id)?.label;
     const d = destino({ pagina: nodo.pagina, clienteKey: nodo.clienteKey || null, label, extra: nodo.extra });
-    if (d.tipo === 'tab') { irATab(d.tab); return; }
+    if (d.tipo === 'tab') {
+      // Una pestaña raíz con `extra` (hoy sólo Agenda: { itemId } · { reunionId } · { vista }) recibe el dato
+      // como `inicial`; sin extra se conserva el último para no reabrir el ítem al volver a la pestaña.
+      if (d.tab === 'agenda' && d.extra) setAgendaInicial({ ...d.extra, _n: Date.now() });
+      irATab(d.tab);
+      return;
+    }
     if (d.tipo === 'push') { setActivoId(id); push(d.el, nodo.extra ? `${d.key}-${Date.now()}` : d.key, id); return; }
     abrirProximamente(d.label);
   }, [arbol, irATab, push, abrirProximamente]);
@@ -145,6 +159,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   }, [arbol, abrirHoja]);
   const onEntradaBarra = useCallback((id) => {
     if (id === 'inicio') { irATab('inicio'); return; }
+    if (id === 'agenda') { irATab('agenda'); return; }
     if (id === 'perfil') { setPerfilAbierto(true); return; }
     abrirGrupo(id);
   }, [irATab, abrirGrupo]);
@@ -210,15 +225,20 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     if (activoId.includes(':')) return 'clientesPropios';
     return buscarNodo(arbol, activoId)?.grupo || null;
   }, [arbol, activoId]);
-  const activoBarra = perfilAbierto ? 'perfil' : hojaAbierta && hoja?.grupo ? hoja.grupo : tab === 'inicio' ? 'inicio' : tab === 'clientes' ? 'clientesPropios' : grupoActivo;
+  const activoBarra = perfilAbierto ? 'perfil' : hojaAbierta && hoja?.grupo ? hoja.grupo
+    : tab === 'inicio' ? 'inicio' : tab === 'agenda' ? 'agenda' : tab === 'clientes' ? 'clientesPropios' : grupoActivo;
 
   return (
     <NavContext.Provider value={ctx}>
       <style>{`@keyframes movilGiro{to{transform:rotate(360deg)}} [data-movil] button{-webkit-tap-highlight-color:transparent} [data-movil]{-webkit-text-size-adjust:100%}`}</style>
       <div ref={raiz} data-movil data-modo={modo} style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText }}>
         {TABS_RAIZ.map((id) => {
-          if (!visitadas.has(id)) return null;
+          if (!visitadas.has(id) || (id === 'agenda' && !veAgenda)) return null;
           const Comp = RAIZ[id];
+          // La Agenda es raíz: sin "‹ Atrás" (como Clientes) y con lo que traiga la notificación.
+          const propsRaiz = id === 'agenda' ? { raiz: true, inicial: agendaInicial } : null;
+          // Una notificación nueva (`_n`) remonta la Agenda para que vuelva a abrir el ítem o la minuta.
+          const claveRaiz = id === 'agenda' ? `${refreshKey}-${agendaInicial?._n || 0}` : refreshKey;
           const pila = pilas[id];
           const activa = id === tab;
           const topIdx = pila.length - 1;
@@ -226,7 +246,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
             <div key={id} data-tab={id} style={{ position: 'absolute', inset: 0, display: activa ? 'block' : 'none' }}>
               <Pantalla id="raiz" cubierta={pila.some((e) => e.fase !== 'saliendo')} onRefrescar={refrescar} sinBarraInferior={sinBarra}>
                 <Suspense fallback={<Cargando />}>
-                  <Comp key={refreshKey} />
+                  <Comp key={claveRaiz} {...propsRaiz} />
                 </Suspense>
               </Pantalla>
               {pila.map((e, i) => (
@@ -242,7 +262,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
         <BarraSuperior modo={modo} tab={tab} badge={contador.pilas} badgeCritica={contador.criticaNueva} perfil={perfil}
           onMenu={() => setCajonAbierto(true)} onBuscar={() => alternarTab('buscar')} onAlertas={() => alternarTab('alertas')} onAvatar={() => setPerfilAbierto(true)} />
 
-        {modo === 'barra' && <BarraGrupos arbol={arbol} activo={activoBarra} onEntrada={onEntradaBarra} perfil={perfil} />}
+        {modo === 'barra' && <BarraGrupos arbol={arbol} activo={activoBarra} onEntrada={onEntradaBarra} perfil={perfil} badgeAgenda={pendientesAgenda} />}
         {modo === 'cajon' && <Cajon abierto={cajonAbierto} arrastre={arrastreCajon} onClose={() => setCajonAbierto(false)} onAbrirPerfil={() => setPerfilAbierto(true)} />}
 
         <HojaM abierto={hojaAbierta && !!hoja} onClose={cerrarHoja} titulo={hoja?.titulo} sub={hoja?.sub} alto={hoja?.alto || '78vh'} acciones={hoja?.acciones}>

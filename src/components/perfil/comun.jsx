@@ -12,12 +12,16 @@ export const hoverBg = (theme) => (esOscuro(theme) ? 'rgba(255,255,255,0.06)' : 
 export const suaveBg = (theme) => (esOscuro(theme) ? 'rgba(255,255,255,0.07)' : 'rgba(120,120,128,0.10)');
 export const hairline = (theme) => theme?.border || (esOscuro(theme) ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)');
 
-/** Superficie translúcida flotante (popover / hoja / modal). blur 24 · ELEV.flotante · borde flotante. */
+/** Superficie translúcida flotante (popover / hoja / modal). blur 24 · ELEV.flotante · borde flotante.
+ *  `var(--vidrio-*)` = deslizador de vidrio (src/lib/vidrio.js); en "Opaco" no existen y manda el fallback. */
 export function vidrio(theme, radio = 14) {
+  const bg = esOscuro(theme) ? 'rgba(36,36,40,0.88)' : theme?.key === 'marfil' ? 'rgba(255,251,244,0.92)' : 'rgba(255,255,255,0.90)';
+  const blur = 'saturate(180%) blur(24px)';
   return {
-    background: esOscuro(theme) ? 'rgba(36,36,40,0.88)' : theme?.key === 'marfil' ? 'rgba(255,251,244,0.92)' : 'rgba(255,255,255,0.90)',
-    backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
-    border: bordeFlotante(theme), borderRadius: radio, boxShadow: elevation(theme, 'flotante'),
+    background: `var(--vidrio-bg, ${bg})`,
+    backdropFilter: `var(--vidrio-blur, ${blur})`, WebkitBackdropFilter: `var(--vidrio-blur, ${blur})`,
+    border: `var(--vidrio-border, ${bordeFlotante(theme)})`, borderRadius: radio,
+    boxShadow: `var(--vidrio-shine, 0 0 0 0 rgba(0,0,0,0)), ${elevation(theme, 'flotante')}`,
     color: theme?.text, fontFamily: TYPO.fontText,
   };
 }
@@ -95,7 +99,8 @@ export function HojaLateral({ abierto, onClose, titulo, sub, ancho = 440, childr
   return (
     <Overlay abierto={abierto} onClose={onClose} zIndex={zIndex} alinear="stretch" justificar="flex-end">
       <div role="dialog" aria-modal="true" aria-label={titulo} style={{
-        ...vidrio(theme, 0), background: esOscuro(theme) ? 'rgba(30,30,32,0.97)' : theme?.key === 'marfil' ? 'rgba(252,249,243,0.98)' : 'rgba(250,250,252,0.98)',
+        ...vidrio(theme, 0),
+        background: `var(--vidrio-bg, ${esOscuro(theme) ? 'rgba(30,30,32,0.97)' : theme?.key === 'marfil' ? 'rgba(252,249,243,0.98)' : 'rgba(250,250,252,0.98)'})`,
         borderRadius: '16px 0 0 16px', borderRight: 0, width: anchoCSS, height: '100%', display: 'flex', flexDirection: 'column',
         transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: `transform ${DUR.page}ms ${EASE}`,
       }}>

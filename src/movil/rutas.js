@@ -1,6 +1,6 @@
 // Rutas de la app móvil · ÚNICO lugar que traduce un nodo del árbol web (src/components/nav/arbol.js) a una
 // pantalla del celular. `destino({ pagina, clienteKey, label })` devuelve:
-//   { tipo: 'tab',  tab }             → pestaña raíz con su propia pila (inicio · clientes · alertas · buscar)
+//   { tipo: 'tab',  tab, extra? }     → pestaña raíz con su propia pila (inicio · agenda · clientes · alertas · buscar)
 //   { tipo: 'push', key, el }         → pantalla empujada sobre la pila de la pestaña activa
 //   { tipo: 'proximamente', label }   → hoja "Próximamente · edita desde la computadora"
 // `extra` (opcional) llega desde nav.navegar({ pagina, extra }) y lo reciben las páginas globales (p. ej. Agenda).
@@ -20,7 +20,6 @@ const MarketingCliente = lazy(() => import('./pestanas/MarketingCliente'));
 const CobranzaCliente  = lazy(() => import('./pestanas/CobranzaCliente'));
 const SOP              = lazy(() => import('./pestanas/SOP'));
 const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
-const Agenda           = lazy(() => import('./pestanas/agenda/Agenda'));
 const SellInGlobal     = lazy(() => import('./pestanas/sellin/SellInGlobal'));
 const SellOutGlobal    = lazy(() => import('./pestanas/selloutGlobal/SellOutGlobal'));
 const Equipo           = lazy(() => import('./pestanas/equipo/Equipo'));
@@ -30,10 +29,10 @@ const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
 const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
 
-/** Pestañas raíz del shell (cada una con pila push/pop propia). Ninguna aparece como nodo salvo `inicio`. */
-export const TABS_RAIZ = ['inicio', 'clientes', 'alertas', 'buscar'];
+/** Pestañas raíz del shell (cada una con pila push/pop propia). Sólo `inicio` y `agenda` son nodos del árbol. */
+export const TABS_RAIZ = ['inicio', 'agenda', 'clientes', 'alertas', 'buscar'];
 
-const tab = (t) => ({ tipo: 'tab', tab: t });
+const tab = (t, extra) => ({ tipo: 'tab', tab: t, extra: extra || null });
 const ficha = () => ({ tipo: 'push', key: 'ficha', el: h(FichaProducto) });
 
 // Páginas globales (nodo.clienteKey == null) → pantalla móvil.
@@ -63,10 +62,11 @@ const GLOBALES = {
     : { tipo: 'push', key: 'tracking', el: h(Tracking) }),
   // Proyectos y abasto (V3 · 2026-09-21): sustituye al Forecast de reservas en el celular.
   forecastReservas:  () => ({ tipo: 'push', key: 'proyectos', el: h(Proyectos) }),
-  // Agenda V3 (tareas, reuniones con minuta, semana, clientes). `extra` viene de una notificación: { itemId } abre el ítem
-  // o su minuta; { vista } elige la pestaña inicial. adminInterna (página vieja) cae aquí también.
-  agenda:            (extra) => ({ tipo: 'push', key: 'agenda', el: h(Agenda, { inicial: extra || null }) }),
-  adminInterna:      (extra) => ({ tipo: 'push', key: 'agenda', el: h(Agenda, { inicial: extra || null }) }),
+  // Agenda V4 · pestaña RAÍZ del shell (2026-09-22), con su propia pila: ya no se empuja sobre otra pestaña.
+  // `extra` viene de una notificación: { itemId } abre el ítem o su minuta; { vista } elige la vista inicial;
+  // MovilApp se lo pasa a la pantalla raíz. adminInterna (página vieja) cae aquí también.
+  agenda:            (extra) => tab('agenda', extra),
+  adminInterna:      (extra) => tab('agenda', extra),
 };
 
 // Pestañas de cliente propio (nodo.clienteKey = digitalife | pcel | dicotech).

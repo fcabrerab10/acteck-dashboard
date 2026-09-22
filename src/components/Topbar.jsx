@@ -73,10 +73,11 @@ export default function Topbar(props) {
       )}
       <div style={{
         pointerEvents: 'auto', display: 'inline-flex', alignItems: 'center', height: 36, padding: '0 4px 0 6px', borderRadius: 999,
-        background: theme.key === 'midnight' ? 'rgba(30,30,32,0.72)' : theme.key === 'marfil' ? 'rgba(255,251,244,0.78)' : 'rgba(255,255,255,0.78)',
-        backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
-        border: `1px solid ${theme.key === 'midnight' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
-        boxShadow: elevation(theme, 'hover'),
+        // Deslizador de vidrio (src/lib/vidrio.js): en "Opaco" las variables no existen y queda el literal de siempre.
+        background: `var(--vidrio-bg, ${theme.key === 'midnight' ? 'rgba(30,30,32,0.72)' : theme.key === 'marfil' ? 'rgba(255,251,244,0.78)' : 'rgba(255,255,255,0.78)'})`,
+        backdropFilter: 'var(--vidrio-blur, saturate(180%) blur(24px))', WebkitBackdropFilter: 'var(--vidrio-blur, saturate(180%) blur(24px))',
+        border: `var(--vidrio-border, 1px solid ${theme.key === 'midnight' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'})`,
+        boxShadow: `var(--vidrio-shine, 0 0 0 0 rgba(0,0,0,0)), ${elevation(theme, 'hover')}`,
       }}>
         <ChromeDerecho {...props} />
       </div>

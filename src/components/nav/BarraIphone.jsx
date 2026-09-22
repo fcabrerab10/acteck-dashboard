@@ -44,9 +44,10 @@ export default function BarraIphone({ arbol, favoritos, toggleFavorito, estado, 
       <nav ref={res.refContenedor} aria-label="Navegación" style={{
         position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(14px + env(safe-area-inset-bottom))', zIndex: 50,
         height: 56, padding: '0 8px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 440,
-        background: dark ? 'rgba(28,28,30,0.78)' : esMarfil(theme) ? 'rgba(255,251,244,0.82)' : 'rgba(255,255,255,0.80)',
-        backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
-        border: bordeFlotante(theme), boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText,
+        background: `var(--vidrio-bg, ${dark ? 'rgba(28,28,30,0.78)' : esMarfil(theme) ? 'rgba(255,251,244,0.82)' : 'rgba(255,255,255,0.80)'})`,
+        backdropFilter: 'var(--vidrio-blur, saturate(180%) blur(24px))', WebkitBackdropFilter: 'var(--vidrio-blur, saturate(180%) blur(24px))',
+        border: `var(--vidrio-border, ${bordeFlotante(theme)})`,
+        boxShadow: `var(--vidrio-shine, 0 0 0 0 rgba(0,0,0,0)), ${elevation(theme, 'flotante')}`, fontFamily: TYPO.fontText,
       }}>
         {res.pastilla}
         {entradas.map((e) => {

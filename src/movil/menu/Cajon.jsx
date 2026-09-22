@@ -103,8 +103,8 @@ export default function Cajon({ abierto, arrastre = null, onClose, onAbrirPerfil
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd}
         style={{
           position: 'absolute', top: 0, bottom: 0, left: 0, width: ancho, display: 'flex', flexDirection: 'column', boxSizing: 'border-box',
-          background: dark ? 'rgba(22,22,24,0.97)' : theme.key === 'marfil' ? 'rgba(250,247,241,0.98)' : 'rgba(247,247,249,0.98)',
-          backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
+          background: `var(--vidrio-bg, ${dark ? 'rgba(22,22,24,0.97)' : theme.key === 'marfil' ? 'rgba(250,247,241,0.98)' : 'rgba(247,247,249,0.98)'})`,
+          backdropFilter: 'var(--vidrio-blur, saturate(180%) blur(24px))', WebkitBackdropFilter: 'var(--vidrio-blur, saturate(180%) blur(24px))',
           borderRight: `1px solid ${hairline(theme)}`, boxShadow: progreso > 0 ? '8px 0 32px rgba(0,0,0,0.22)' : 'none',
           color: theme.text, fontFamily: TYPO.fontText, transform: `translateX(${x}px)`, transition: sinAnim ? 'none' : `transform ${DUR.page}ms ${EASE}`,
           paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', willChange: 'transform',

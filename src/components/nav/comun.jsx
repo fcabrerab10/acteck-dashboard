@@ -11,19 +11,26 @@ import { estiloVidrio } from './Resaltado';
 export const esMidnight = (theme) => theme?.key === 'midnight';
 export const esMarfil = (theme) => theme?.key === 'marfil';
 
-/** Fondo translúcido de chrome (sidebar / hojas / popovers). */
+/** Fondo translúcido de chrome (sidebar / hojas / popovers).
+ *  Las `var(--vidrio-*)` las escribe src/lib/vidrio.js (deslizador Opaco · Tintado · Vidrio de
+ *  Preferencias › Apariencia). En "Opaco" NO existen y mandan los fallbacks = los literales de siempre. */
 export function vidrio(theme, nivel = 'chrome') {
   const dark = esMidnight(theme);
   if (nivel === 'popover') {
+    const bg = dark ? 'rgba(40,40,45,0.90)' : esMarfil(theme) ? 'rgba(255,251,244,0.94)' : 'rgba(255,255,255,0.92)';
+    const blur = 'saturate(180%) blur(30px)';
     return {
-      background: dark ? 'rgba(40,40,45,0.90)' : esMarfil(theme) ? 'rgba(255,251,244,0.94)' : 'rgba(255,255,255,0.92)',
-      backdropFilter: 'saturate(180%) blur(30px)', WebkitBackdropFilter: 'saturate(180%) blur(30px)',
-      border: bordeFlotante(theme), boxShadow: elevation(theme, 'flotante'),
+      background: `var(--vidrio-bg, ${bg})`,
+      backdropFilter: `var(--vidrio-blur, ${blur})`, WebkitBackdropFilter: `var(--vidrio-blur, ${blur})`,
+      border: `var(--vidrio-border, ${bordeFlotante(theme)})`,
+      boxShadow: `var(--vidrio-shine, 0 0 0 0 rgba(0,0,0,0)), ${elevation(theme, 'flotante')}`,
     };
   }
+  const bg = dark ? 'rgba(10,10,12,0.78)' : esMarfil(theme) ? 'rgba(247,243,236,0.86)' : 'rgba(245,245,247,0.82)';
+  const blur = 'saturate(180%) blur(24px)';
   return {
-    background: dark ? 'rgba(10,10,12,0.78)' : esMarfil(theme) ? 'rgba(247,243,236,0.86)' : 'rgba(245,245,247,0.82)',
-    backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
+    background: `var(--vidrio-bg, ${bg})`,
+    backdropFilter: `var(--vidrio-blur, ${blur})`, WebkitBackdropFilter: `var(--vidrio-blur, ${blur})`,
   };
 }
 
@@ -159,10 +166,10 @@ export function Hoja({ abierto, onClose, titulo, children, alto = '78vh', theme,
     <Overlay abierto={abierto} onClose={onClose} zIndex={zIndex}>
       <div role="dialog" aria-modal="true" style={{
         width: 'min(100%, 640px)', maxHeight: alto, display: 'flex', flexDirection: 'column',
-        background: dark ? 'rgba(28,28,30,0.96)' : esMarfil(theme) ? 'rgba(250,247,241,0.97)' : 'rgba(248,248,250,0.97)',
-        backdropFilter: 'saturate(180%) blur(30px)', WebkitBackdropFilter: 'saturate(180%) blur(30px)',
-        borderRadius: '18px 18px 0 0', border: bordeFlotante(theme), borderBottom: 0,
-        boxShadow: elevation(theme, 'flotante'),
+        background: `var(--vidrio-bg, ${dark ? 'rgba(28,28,30,0.96)' : esMarfil(theme) ? 'rgba(250,247,241,0.97)' : 'rgba(248,248,250,0.97)'})`,
+        backdropFilter: 'var(--vidrio-blur, saturate(180%) blur(30px))', WebkitBackdropFilter: 'var(--vidrio-blur, saturate(180%) blur(30px))',
+        borderRadius: '18px 18px 0 0', border: `var(--vidrio-border, ${bordeFlotante(theme)})`, borderBottom: 0,
+        boxShadow: `var(--vidrio-shine, 0 0 0 0 rgba(0,0,0,0)), ${elevation(theme, 'flotante')}`,
         transform: visible ? 'translateY(0)' : 'translateY(100%)', transition: `transform ${DUR.page}ms ${EASE}`,
         paddingBottom: 'env(safe-area-inset-bottom)', fontFamily: TYPO.fontText, color: theme?.text,
       }}>

@@ -265,6 +265,21 @@ export function useFuentesManuales(enabled = true) {
 }
 
 /**
+ * Contador para el badge de la pestaña Agenda del celular: pendientes vencidos + de hoy.
+ * Se suscribe a la cache de KEY_AGENDA SIN disparar la consulta (`enabled: false`): la llena Inicio
+ * (useBandejaHoy) o la propia pestaña Agenda. Sin datos aún devuelve 0 y el badge no se pinta.
+ */
+export function useContadorAgenda({ enabled = true } = {}) {
+  const q = useQuery({ queryKey: KEY_AGENDA, queryFn: fetchAgenda, staleTime: STALE_MS, enabled: false });
+  const items = enabled ? q.data?.items : null;
+  return useMemo(() => {
+    if (!items || !items.length) return 0;
+    const b = calcBandeja(items, new Date());
+    return b.vencidas.length + b.hoy.length;
+  }, [items]);
+}
+
+/**
  * Bandeja de hoy + avisos del sistema. `ligero` (Inicio): sin tracking ni frescura del importador
  * (evita 12 queries + /api/status en la portada); la pestaña Agenda carga todo.
  */

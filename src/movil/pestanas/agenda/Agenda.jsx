@@ -7,6 +7,7 @@
 //   Archivados  lo hecho y lo cancelado, con desarchivar
 // Las alertas de SKUs ya NO salen aquí: viven en la campana. `inicial` viene de rutas.js
 // (notificación → { itemId } abre el ítem o su minuta; { reunionId } abre la minuta).
+// Desde 2026-09-22 es una pestaña RAÍZ del shell (`raiz`): sin "‹ Atrás", como Clientes.
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CalendarCheck } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -38,7 +39,7 @@ const VISTAS = [
   { id: 'archivados', label: 'Archivados' },
 ];
 
-export default function Agenda({ inicial }) {
+export default function Agenda({ inicial, raiz = false }) {
   const { theme } = useTheme();
   const nav = useNav();
   const perfil = nav.perfil;
@@ -84,7 +85,7 @@ export default function Agenda({ inicial }) {
 
   const cabecera = (
     <>
-      <Cabecera onVolver={nav.pop} />
+      {!raiz && <Cabecera onVolver={nav.pop} />}
       <TituloGrande titulo="Agenda" sub={fechaLarga(d.hoy).replace(/^./, (c) => c.toUpperCase())} />
       <div style={{ padding: '0 16px 12px' }}>
         <Segmented size="md" value={vista} onChange={setVista} options={VISTAS} style={{ display: 'flex', width: '100%' }} />

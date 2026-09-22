@@ -44,6 +44,8 @@ import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 // Responsive por dispositivo (2026-09-21): modo por ancho+táctil, preferencias por máquina
 // (densidad, sidebar, ancho máximo, paneles) y el modo Paneles del monitor panorámico.
 import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, aplicarDensidad, panelesEfectivos } from './lib/dispositivo';
+// Vidrio del chrome (barras, sidebar, hojas, modales) · 'opaco' = como siempre. Ver src/lib/vidrio.js.
+import { useVidrio } from './lib/vidrio';
 import PaginaContenido from './components/PaginaContenido';
 const Paneles = lazy(() => import('./components/nav/Paneles'));
 // MobileNav y MobileShell (legacy) ya no se montan: los sustituyó MovilApp (V3).
@@ -274,6 +276,8 @@ export default function App() {
   const prefsDisp = usePrefsDispositivo();
   // Densidad → variables CSS que leen Panel / KpiCard / TablaCompacta del kit. 'comoda' = como siempre.
   useEffect(() => { aplicarDensidad(prefsDisp.densidad); }, [prefsDisp.densidad]);
+  // Vidrio del chrome: escribe --vidrio-* en <html>. En 'opaco' no define nada (fallbacks = literales de hoy).
+  useVidrio();
 
   // ── Buzón de salida ──
   // Sincroniza al volver la señal / al foco / cada 60 s, refresca la cache al subir algo
