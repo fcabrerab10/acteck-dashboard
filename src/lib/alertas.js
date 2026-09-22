@@ -18,7 +18,7 @@ const CLIENTES_CON_TAB = new Set(['digitalife', 'pcel', 'dicotech']);
 export const AREAS = ['agenda', 'inventario', 'ventas', 'pagos', 'cobranza', 'datos', 'operacion', 'forecast', 'tracking', 'equipo'];
 export const AREA_LABEL = { agenda: 'Agenda', inventario: 'Inventario', ventas: 'Ventas', pagos: 'Pagos', cobranza: 'Cobranza', datos: 'Datos', operacion: 'Operación', forecast: 'Forecast', tracking: 'Tracking', equipo: 'Equipo' };
 // Agenda (V3): agenda_vencida · agenda_hoy · agenda_asignado van dirigidas a una persona (alertas.para_usuario).
-const AREA_POR_TIPO = { agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', reserva_3dias: 'forecast', reserva_dia: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking', equipo_inactivo: 'equipo', pago_por_solicitar: 'pagos', pago_sin_autorizar_5d: 'pagos', pago_sin_folio: 'pagos', pago_vence_7d: 'pagos', fondo_negativo: 'pagos' };
+const AREA_POR_TIPO = { agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', reserva_3dias: 'forecast', reserva_dia: 'forecast', proyecto_sin_cobertura: 'forecast', arribo_tarde_proyecto: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking', equipo_inactivo: 'equipo', pago_por_solicitar: 'pagos', pago_sin_autorizar_5d: 'pagos', pago_sin_folio: 'pagos', pago_vence_7d: 'pagos', fondo_negativo: 'pagos' };
 export const MODOS_AREA = ['inmediato', 'resumen', 'silencio'];
 export const HORAS_RESUMEN = ['09:00', '13:00', '18:00'];  // horas con cron en vercel.json (15:00 / 19:00 / 00:00 UTC)
 export const NOMBRE_CLIENTE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech', mayoreo: 'Mayoreo', distribuidor: 'Distribuidor', e_commerce: 'E-commerce', mostrador: 'Mostrador', retail_propios: 'Retail propios', retail_representados: 'Retail rep.', otros: 'Otros' };
@@ -47,6 +47,9 @@ export function destinoAlerta(a) {
     case 'datos_sin_actualizar':   return { clienteKey: null, pagina: 'actualizacion' };
     case 'reserva_3dias':
     case 'reserva_dia':            return { clienteKey: null, pagina: 'forecastReservas', sku: a.sku };
+    // Proyectos y abasto (V3 · 2026-09-21): la página es la misma `forecastReservas`.
+    case 'proyecto_sin_cobertura':
+    case 'arribo_tarde_proyecto':  return { clienteKey: null, pagina: 'forecastReservas', sku: a.sku };
     case 'oc_detenida':
     case 'oc_backorder_sin_po':
     case 'factura_sin_oc':         return { clienteKey: null, pagina: 'ordenesCompra', sku: a.sku };

@@ -18,7 +18,6 @@ const AnalisisClientes = lazy(() => import('./pestanas/AnalisisClientes'));
 const SellOutCliente   = lazy(() => import('./pestanas/SellOutCliente'));
 const MarketingCliente = lazy(() => import('./pestanas/MarketingCliente'));
 const CobranzaCliente  = lazy(() => import('./pestanas/CobranzaCliente'));
-const ForecastCliente  = lazy(() => import('./pestanas/ForecastCliente'));
 const SOP              = lazy(() => import('./pestanas/SOP'));
 const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
 const Agenda           = lazy(() => import('./pestanas/agenda/Agenda'));
@@ -29,6 +28,7 @@ const Admin            = lazy(() => import('./pestanas/admin/Admin'));
 const Tracking         = lazy(() => import('./pestanas/tracking/Tracking'));
 const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
+const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Ninguna aparece como nodo salvo `inicio`. */
 export const TABS_RAIZ = ['inicio', 'clientes', 'alertas', 'buscar'];
@@ -61,7 +61,8 @@ const GLOBALES = {
   ordenesCompra:     (extra) => (extra?.ocId
     ? { tipo: 'push', key: `oc-${extra.ocId}`, el: h(FichaOC, { ocId: extra.ocId }) }
     : { tipo: 'push', key: 'tracking', el: h(Tracking) }),
-  forecastReservas:  () => ({ tipo: 'push', key: 'forecast', el: h(ForecastCliente) }),
+  // Proyectos y abasto (V3 · 2026-09-21): sustituye al Forecast de reservas en el celular.
+  forecastReservas:  () => ({ tipo: 'push', key: 'proyectos', el: h(Proyectos) }),
   // Agenda V3 (tareas, reuniones con minuta, semana, clientes). `extra` viene de una notificación: { itemId } abre el ítem
   // o su minuta; { vista } elige la pestaña inicial. adminInterna (página vieja) cae aquí también.
   agenda:            (extra) => ({ tipo: 'push', key: 'agenda', el: h(Agenda, { inicial: extra || null }) }),

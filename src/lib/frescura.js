@@ -36,6 +36,8 @@ export const FUENTES_POR_PANTALLA = {
   propuestas:        ['precios_sku', 'inventario_acteck', 'inventario_cliente'],
   visionGeneral:     ['facturacion_clientes', 'inventario_acteck', 'sellout_general'],
   forecastClientes:  ['sellout_*', 'inventario_acteck', 'embarques_compras'],
+  // Proyectos y abasto: la cobertura se calcula con el inventario y el tránsito vivos.
+  proyectos:         ['inventario_acteck', 'embarques_compras'],
   cobranza:          ['estados_cuenta'],
   estrategiaPrecios: ['precios_sku', 'roadmap_sku'],
   ventasErp:         ['erp_ventas'],

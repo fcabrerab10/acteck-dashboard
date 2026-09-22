@@ -39,6 +39,8 @@ import { calcularTodo, backorderPorSku, facturasSinOC } from '../src/modules/com
 // Pagos V3 · el mismo motor puro que usa la pantalla (no duplicar fórmulas aquí).
 import { taskPagosCalcular as _taskPagosCalcular, reglasAlertasPagos } from './_pagos.js';
 import { ETAPA_LABEL as ETAPA_LABEL_TRACKING, DIAS_DETENIDA } from '../src/modules/comercial/tracking/textos.js';
+// Proyectos y abasto V3 · el mismo motor puro que pinta la pantalla (FIFO por mes, lead time real).
+import { calcular as calcularProyectos, CLIENTE_LABEL as CLIENTE_LABEL_PROY, etiquetaMesLarga as mesLargoProy } from '../src/modules/comercial/proyectos/calculo.js';
 
 async function upsertChunks(rows) {
   const CHUNK = 200;
@@ -877,6 +879,81 @@ async function reglaReservasArribo(hoy, tipo) {
   return out;
 }
 
+// ─── g-bis. proyecto_sin_cobertura / arribo_tarde_proyecto (Proyectos y abasto) ───
+// Mismo cálculo que la pantalla (src/modules/comercial/proyectos/calculo.js): el inventario
+// disponible y el tránsito se reparten FIFO entre los meses, y lo que no alcanza es faltante.
+//   · proyecto_sin_cobertura → proyecto activo a ≤ 30 días de su mes con piezas sin respaldo.
+//   · arribo_tarde_proyecto  → sí hay embarque de ese SKU, pero su ETA cae después del mes.
+// Área forecast; la acción lleva a la misma página (`forecastReservas`).
+let _proyectos = null;
+async function datosProyectos(hoy) {
+  if (_proyectos) return _proyectos;
+  const [proyectos, lineas, inventario, transito, leadTimes] = await Promise.all([
+    sbGetAll('proyectos?select=id,nombre,cliente,anio,mes,probabilidad,responsable', 1000),
+    sbGetAll('proyecto_lineas?select=id,proyecto_id,sku,piezas,reservado', 1000),
+    sbGetAll('v_inventario_comercial?select=sku,disponible,inventario', 1000),
+    sbGetAll('v_transito_sku?select=sku,supplier,cantidad,eta_mas_cercana,embarques_detalle', 1000),
+    sbGetAll('v_lead_time_sku?select=sku,dias_promedio,supplier_principal', 1000).catch(() => []),
+  ]);
+  _proyectos = calcularProyectos({
+    proyectos, lineas, inventario, transito, leadTimes,
+    hoy: new Date(hoy.anio, hoy.mes - 1, hoy.dia),
+  });
+  return _proyectos;
+}
+
+async function reglaProyectoSinCobertura(hoy) {
+  const res = await datosProyectos(hoy);
+  const out = [];
+  for (const p of res.porProyecto) {
+    if (!['prospecto', 'probable', 'confirmado'].includes(p.probabilidad)) continue;
+    if (p.faltante <= 0 || p.diasAlMes == null || p.diasAlMes > 30) continue;
+    const skus = p.faltantes.slice(0, 8).map((f) => `${f.sku} (${fmtN(f.faltante)} pz)`).join(' · ');
+    const cuando = p.diasAlMes <= 0 ? 'este mes' : `en ${p.diasAlMes} día${p.diasAlMes === 1 ? '' : 's'}`;
+    out.push({
+      tipo: 'proyecto_sin_cobertura',
+      severidad: p.probabilidad === 'confirmado' && p.diasAlMes <= 15 ? 'critica' : p.probabilidad === 'confirmado' ? 'alta' : 'media',
+      clave: `proyecto_sin_cobertura|${p.id}`,
+      titulo: `${p.nombre}: faltan ${fmtN(p.faltante)} pz y entrega ${cuando}`,
+      detalle: `${CLIENTE_LABEL_PROY[p.cliente] || p.cliente} · ${p.anio && p.mes ? mesLargoProy(p.anio, p.mes) : 'sin mes'} · ${fmtN(p.pz)} pz comprometidas, ${p.cubiertoPct == null ? '—' : Math.round(p.cubiertoPct)} % con respaldo. Sin cobertura: ${skus || '—'}.`,
+      cliente_key: p.cliente, sku: p.faltantes[0]?.sku || null,
+      area: 'forecast',
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'forecastReservas', label: 'Ver el proyecto' },
+      caduca_at: p.anio && p.mes ? new Date(Date.UTC(p.anio, p.mes, 15)).toISOString() : null,
+      valor: p.faltante,
+      meta: { proyecto_id: p.id, piezas: p.pz, faltante: p.faltante, cubierto_pct: p.cubiertoPct, dias: p.diasAlMes, skus: p.faltantes.slice(0, 20) },
+    });
+  }
+  return out;
+}
+
+async function reglaArriboTardeProyecto(hoy) {
+  const res = await datosProyectos(hoy);
+  const out = [];
+  for (const p of res.porProyecto) {
+    if (!['prospecto', 'probable', 'confirmado'].includes(p.probabilidad)) continue;
+    const tarde = p.faltantes.filter((f) => f.transitoDespues > 0 && f.etaTarde);
+    if (!tarde.length || p.diasAlMes == null || p.diasAlMes > 60) continue;
+    const det = tarde.slice(0, 6).map((f) => {
+      const [, m, d] = String(f.etaTarde).split('-').map(Number);
+      return `${f.sku} llega el ${d} ${MESES_CORTO[m - 1]}`;
+    }).join(' · ');
+    out.push({
+      tipo: 'arribo_tarde_proyecto', severidad: p.probabilidad === 'confirmado' ? 'alta' : 'media',
+      clave: `arribo_tarde_proyecto|${p.id}`,
+      titulo: `${p.nombre}: el embarque llega después de la entrega`,
+      detalle: `${CLIENTE_LABEL_PROY[p.cliente] || p.cliente} · ${p.anio && p.mes ? mesLargoProy(p.anio, p.mes) : 'sin mes'}. Hay piezas en tránsito, pero con ETA posterior al mes objetivo: ${det}. Adelanta el embarque o mueve la fecha del proyecto.`,
+      cliente_key: p.cliente, sku: tarde[0].sku,
+      area: 'forecast',
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'forecastReservas', label: 'Ver el proyecto' },
+      caduca_at: p.anio && p.mes ? new Date(Date.UTC(p.anio, p.mes, 15)).toISOString() : null,
+      valor: tarde.reduce((s, f) => s + f.transitoDespues, 0),
+      meta: { proyecto_id: p.id, skus: tarde.slice(0, 20) },
+    });
+  }
+  return out;
+}
+
 // ─── h. Tracking Pedidos V3: oc_detenida · oc_backorder_sin_po · factura_sin_oc ───
 // Misma lógica que la pantalla (src/modules/comercial/tracking/calculo.js). Antes de evaluar se corre la RPC
 // oc_sincronizar_erp() (idempotente) para que facturas y guías del ERP estén ligadas. Área tracking → ordenesCompra.
@@ -1215,6 +1292,8 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['oc_sin_actualizar',      () => reglaOcSinActualizar()],
     ['reserva_3dias',          () => reglaReservasArribo(hoy, 'reserva_3dias')],
     ['reserva_dia',            () => reglaReservasArribo(hoy, 'reserva_dia')],
+    ['proyecto_sin_cobertura', () => reglaProyectoSinCobertura(hoy)],
+    ['arribo_tarde_proyecto',  () => reglaArriboTardeProyecto(hoy)],
     ['oc_detenida',            () => reglaOcDetenida(hoy)],
     ['oc_backorder_sin_po',    () => reglaOcBackorderSinPo(hoy)],
     ['factura_sin_oc',         () => reglaFacturaSinOc(hoy)],
@@ -1225,6 +1304,7 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['pagos_v3',               () => reglasAlertasPagos({ sbGetAll, hoy })],
   ];
   _datosTracking = null;
+  _proyectos = null;
   _agenda = null;   // datos frescos por corrida (la instancia serverless puede reutilizarse)
   const errores = [];
   const tiposEvaluados = new Set();

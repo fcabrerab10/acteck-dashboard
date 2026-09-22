@@ -54,6 +54,11 @@ export const SILUETAS = {
   sopDrill: [fila(6, 22), kpis(6), fila(1, 70), grid('minmax(0,1.4fr) minmax(0,1fr)', [chart(170), panel(6, { alto: 190 })]), tabla(6, 10)],
   // Forecast › Reservas V3: hero 4 stats + fila de segmented · 4 KPIs · panel buscador+filtros · tabla a todo el ancho (la reserva vive en la hoja lateral)
   forecastReservas: [hero(4), kpis(4), panel(3, { alto: 130 }), tabla(18, 13)],
+  // Proyectos y abasto V3: hero 3 stats · 4 KPIs · barra de control · tablero de 6 columnas + panel "Qué falta comprar"
+  proyectos: [hero(3), kpis(4), fila(4, 30), grid('minmax(0,1fr) minmax(280px,340px)', [fila(6, 300), panel(8, { alto: 360 })])],
+  // Móvil · Proyectos: hero 3 stats · segmented de meses · lista de proyectos · faltantes
+  movilProyectos: [hero(3), fila(1, 34), panel(7, { alto: 320 }), panel(4, { alto: 180 })],
+
   // Drill del SKU en Reservas: cabecera de pills · heatmap 3 clientes × 12 meses + reservas anteriores · arribos por PO + stock/cobertura
   forecastDrill: [fila(6, 22), grid('minmax(0,1.35fr) minmax(0,1fr)', [[tabla(4, 14, { alto: 150 }), tabla(4, 7, { alto: 130 })], [tabla(4, 4, { alto: 130 }), tabla(3, 4, { alto: 110 })]])],
   // Forecast CRM (captura): 4 KPIs · panel de cliente/mes/tipo · tabla con 6 meses editables · "Lotes exportados" plegable

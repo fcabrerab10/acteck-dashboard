@@ -32,7 +32,9 @@ const SellOutGlobal          = lazy(() => import('./modules/comercial/SellOutGlo
 const InventarioGlobal       = lazy(() => import('./modules/comercial/InventarioGlobal'));
 const EstrategiaPrecios      = lazy(() => import('./modules/comercial/EstrategiaPrecios'));
 const ForecastCliente        = lazy(() => import('./modules/comercial/ForecastCliente'));
-const ForecastReservas       = lazy(() => import('./modules/comercial/ForecastReservas'));
+// Proyectos y abasto (V3 · 2026-09-21): sustituye a ForecastReservas en la página `forecastReservas`.
+// El archivo viejo (ForecastReservas.jsx) se queda en el repo sin uso, por si hay que consultarlo.
+const ProyectosAbasto        = lazy(() => import('./modules/comercial/ProyectosAbasto'));
 const SellInCliente          = lazy(() => import('./modules/comercial/SellInCliente'));
 const SellInClienteV2        = lazy(() => import('./modules/comercial/SellInClienteV2'));
 const SellInDicotech         = lazy(() => import('./modules/comercial/SellInDicotech'));
@@ -260,7 +262,7 @@ const GLOBAL_PAGES_INFO = {
   cobranzaGlobal:   { label: 'Cobranza',               icon: HandCoins },
   forecastClientes: { label: 'S&OP',                   icon: Target },
   estrategiaPrecios:{ label: 'Estrategia de Precios',  icon: TrendingUp },
-  forecastReservas: { label: 'Forecast',    icon: Target },
+  forecastReservas: { label: 'Proyectos y abasto', icon: Target },
   ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
   agenda:           { label: 'Agenda',                 icon: ClipboardList },
   axonMexico:       { label: 'Axon de México',          icon: Building2 },
@@ -646,8 +648,8 @@ export default function App() {
           )}
           {paginaActiva === "forecastReservas" && (
             puedeVerPestanaGlobal(perfil, "forecast_reservas")
-              ? <ForecastReservas />
-              : <SinAcceso motivo="No tienes acceso a Forecast · Reservas." />
+              ? <ProyectosAbasto />
+              : <SinAcceso motivo="No tienes acceso a Proyectos y abasto." />
           )}
           {paginaActiva === "ordenesCompra" && (
             puedeVerPestanaGlobal(perfil, "ordenes_compra")
