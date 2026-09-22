@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 globalThis.window ??= globalThis;
 globalThis.navigator ??= { userAgent: 'node', language: 'es-MX', onLine: true };
@@ -323,4 +324,16 @@ test('la minuta monta el panel de la reunión anterior y un hilo por punto', asy
   assert.ok(html.includes('Pedimos cotización de 50 camisas'), 'el hilo heredado del punto arrastrado sigue ahí');
   assert.ok(txt(html).includes('viene de la reunión del 11 ago'), 'se dice de dónde viene el punto arrastrado');
   assert.ok(txt(html).includes('1 pendiente'), 'la pastilla cuenta los pendientes ligados al punto');
+});
+
+test('la minuta ofrece «Correo» y el modal de envío se monta con los contactos del cliente', async () => {
+  const { default: EnviarMinuta, parsearContacto } = await vite.ssrLoadModule('/src/modules/agenda/EnviarMinuta.jsx');
+  assert.deepEqual(parsearContacto('Ana López <Ana@Digitalife.mx>'), { nombre: 'Ana López', email: 'ana@digitalife.mx' });
+  assert.deepEqual(parsearContacto('compras@digitalife.mx'), { nombre: null, email: 'compras@digitalife.mx' });
+  assert.equal(parsearContacto('sin correo'), null);
+  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
+  const queryClient = new QueryClient();
+  const html = renderToString(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(ThemeProvider, null, React.createElement(EnviarMinuta, { abierto: true, onClose: () => {}, reunion: { id: 'r1', cliente_key: 'digitalife', fecha: '2026-09-22T16:00:00Z', titulo: 'Reunión', envios: [] }, puntos: [], personasPorId: new Map(), porId: new Map(), yo: { email: 'fernando.cabrera@acteck.com' } }))));
+  assert.ok(html.includes('Enviar minuta a Digitalife'));
+  assert.ok(html.includes('fernando.cabrera@acteck.com'), 'la copia muestra a quien envía');
 });

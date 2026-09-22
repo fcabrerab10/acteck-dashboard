@@ -7,7 +7,7 @@
 // sola cada 800 ms en agenda_reuniones.notas (la misma columna que usa la web), con las líneas que parecen
 // acuerdo resaltadas detrás del texto y el contador «N acuerdos detectados» → botón Repartir (hoja Reparto.jsx).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Share2, Lock, Play, MoreHorizontal, Plus, Check, Split, ChevronRight, ChevronDown, ArrowDownToLine, ArrowUpRight } from 'lucide-react';
+import { Share2, Lock, Play, Mail, MoreHorizontal, Plus, Check, Split, ChevronRight, ChevronDown, ArrowDownToLine, ArrowUpRight } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Cargando } from '../../../components/kit';
@@ -23,6 +23,7 @@ import { MONO } from '../../util';
 import { PalomitaM, TagPersona, CatPill, BotonMic, SeccionM, ChipM, useReloj, primerNombre } from './comun';
 import CapturaHoja from './Captura';
 import Reparto from './Reparto';
+import EnviarMinutaM from './EnviarMinutaM';
 import HiloM from './Comentarios';
 
 const DEBOUNCE_MS = 600;
@@ -109,6 +110,7 @@ export default function Minuta({ reunionId }) {
     } catch (e) { toast.error(e.message); }
     setCerrando(false);
   };
+  const [verCorreo, setVerCorreo] = useState(false);
   const compartirWa = () => compartir(textoMinuta(reunion, res.puntos, { personasPorId, porId }), { titulo: `Minuta ${nombreClienteAgenda(reunion.cliente_key)}` });
   const onDictado = (t, final) => { const sep = baseDictado.current && !/\s$/.test(baseDictado.current) ? ' ' : ''; setNuevo(`${baseDictado.current}${sep}${t}`); if (final) baseDictado.current = `${baseDictado.current}${sep}${t}`; };
 
@@ -187,11 +189,13 @@ export default function Minuta({ reunionId }) {
 
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: `10px 16px calc(12px + ${bottomPie})`, background: dark ? 'rgba(0,0,0,0.78)' : 'rgba(245,245,247,0.86)', backdropFilter: 'saturate(180%) blur(20px)', WebkitBackdropFilter: 'saturate(180%) blur(20px)', borderTop: `1px solid ${theme.border}`, display: 'flex', gap: 8, zIndex: 30 }}>
         <button type="button" onClick={compartirWa} style={pie(theme, false)}><Share2 size={16} />Compartir</button>
+        {puedeEditar && <button type="button" onClick={() => setVerCorreo(true)} style={pie(theme, false)}><Mail size={16} />Correo</button>}
         {editable && <button type="button" onClick={cerrar} disabled={cerrando} style={{ ...pie(theme, true), opacity: cerrando ? 0.5 : 1 }}><Lock size={16} />Cerrar reunión</button>}
         {cerrada && <span style={{ ...pie(theme, false), background: 'transparent', border: 0, color: theme.textMuted }}>Cerrada{res.arrastradosFuera.length ? ` · ${res.arrastradosFuera.length} arrastrado${res.arrastradosFuera.length === 1 ? '' : 's'}` : ''}</span>}
       </div>
 
       <CapturaHoja cfg={cap} personas={personas} reuniones={reuniones} hoy={hoy} onClose={() => setCap(null)} onGuardado={() => setGuardadoAt(Date.now())} />
+      {verCorreo && <EnviarMinutaM abierto onClose={() => setVerCorreo(false)} reunion={reunion} />}
       <Reparto abierto={verReparto} onClose={() => setVerReparto(false)} reunion={reunion} filas={acuerdos} personas={personas} hoy={hoy}
         orden0={(res.puntos.at(-1)?.orden ?? -1) + 1} onListo={() => nav.pop()} />
     </>

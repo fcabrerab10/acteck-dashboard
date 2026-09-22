@@ -100,6 +100,8 @@ const sinConfig = () => !CLIENT_ID || !CLIENT_SECRET;
 
 export default async function handler(req, res) {
   const action = req.query?.action || '';
+  // Minuta por correo al cliente (2026-09-22): no depende de Google, sólo del SMTP de Vercel.
+  if (action === 'enviar-minuta') return enviarMinuta(req, res);
   if (sinConfig()) return json(res, 503, { error: 'Google no está configurado: faltan GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET en Vercel', codigo: 'sin_config' });
   if (!SRK) return json(res, 500, { error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
 
@@ -195,4 +197,52 @@ export default async function handler(req, res) {
     console.error('[google-calendar]', e);
     return json(res, e.status === 403 ? 403 : 500, { error: e.message || String(e) });
   }
+}
+
+
+// ── Minuta por correo (2026-09-22) ──────────────────────────────────────────────
+//   POST ?action=enviar-minuta (JWT) { reunionId, para:[email], cc:[email], mensaje } → { ok, para, cc, at }
+// Quién puede: super admin o permisos.globales.agenda = 'edit' (misma regla que agenda_puede_editar).
+// Manda con SMTP_USER (Gmail) y pone reply-to + copia a quien envía; anota el envío en agenda_reuniones.envios.
+const SIN_AGENDA = ['dmillan@acteck.com'];
+async function enviarMinuta(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { error: 'POST' });
+  if (!SRK) return json(res, 500, { error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
+  const perfil = await requireAuth(req, res);
+  if (!perfil) return;
+  const nivel = perfil.permisos?.globales?.agenda;
+  const puede = perfil.es_super_admin || (nivel === 'edit' && !SIN_AGENDA.includes(String(perfil.email || '').toLowerCase()));
+  if (!puede) return json(res, 403, { error: 'Sin permiso para enviar minutas' });
+  const { reunionId, para, cc, mensaje } = (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body) || {};
+  const { armarCorreoMinuta, limpiarCorreos } = await import('./_minuta.js');
+  const destinos = limpiarCorreos(para);
+  if (!reunionId || !destinos.length) return json(res, 400, { error: 'Falta la reunión o un correo válido' });
+  const copias = limpiarCorreos([...(cc || []), perfil.email]).filter((e) => !destinos.includes(e));
+  const SMTP_USER = process.env.SMTP_USER, SMTP_PASS = process.env.SMTP_PASS;
+  if (!SMTP_USER || !SMTP_PASS) return json(res, 503, { error: 'El correo no está configurado en el servidor (SMTP_USER / SMTP_PASS)' });
+
+  const H = { apikey: SRK, Authorization: `Bearer ${SRK}` };
+  const [rr, ri, rp] = await Promise.all([
+    fetch(`${SB_URL}/rest/v1/agenda_reuniones?id=eq.${encodeURIComponent(reunionId)}&select=*`, { headers: H }),
+    fetch(`${SB_URL}/rest/v1/agenda_items?reunion_id=eq.${encodeURIComponent(reunionId)}&select=titulo,estado,categoria,responsables,fecha_limite,resolucion,orden&order=orden.asc,created_at.asc`, { headers: H }),
+    fetch(`${SB_URL}/rest/v1/perfiles?select=user_id,nombre,email,puesto`, { headers: H }),
+  ]);
+  const reunion = (await rr.json())?.[0];
+  if (!reunion) return json(res, 404, { error: 'Reunión no encontrada' });
+  const puntos = (await ri.json()) || [];
+  const personas = (await rp.json()) || [];
+  const yo = personas.find((p) => p.user_id === perfil.user_id) || {};
+  const remitente = { nombre: perfil.nombre || yo.nombre || 'Acteck', email: perfil.email, puesto: yo.puesto || '' };
+  const { asunto, html, texto } = armarCorreoMinuta({ reunion, puntos, personas, mensaje: String(mensaje || '').trim(), remitente });
+
+  try {
+    const { default: nodemailer } = await import('nodemailer');
+    const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: SMTP_USER, pass: SMTP_PASS.replace(/\s+/g, '') } });
+    await transporter.sendMail({ from: `"${remitente.nombre} · Acteck" <${SMTP_USER}>`, to: destinos.join(', '), cc: copias.join(', ') || undefined, replyTo: perfil.email, subject: asunto, text: texto, html });
+  } catch (e) { return json(res, 502, { error: `No se pudo enviar: ${e.message}` }); }
+
+  const envio = { at: new Date().toISOString(), para: destinos, cc: copias, por: perfil.email, asunto };
+  const envios = [...(Array.isArray(reunion.envios) ? reunion.envios : []), envio];
+  await fetch(`${SB_URL}/rest/v1/agenda_reuniones?id=eq.${encodeURIComponent(reunionId)}`, { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ envios }) }).catch(() => {});
+  return json(res, 200, { ok: true, ...envio, envios });
 }

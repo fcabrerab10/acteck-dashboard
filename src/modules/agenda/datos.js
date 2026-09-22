@@ -556,3 +556,37 @@ export async function moverPunto(lista, id, delta) {
   try { await Promise.all(arr.map((p, k) => supabase.from('agenda_items').update({ orden: k }).eq('id', p.id))); }
   finally { await recargarAgenda(); }
 }
+
+// ── Minuta por correo al cliente (2026-09-22) ────────────────────────────────────
+// Contactos por cliente (agenda_contactos) + envío por api/google-calendar.js?action=enviar-minuta.
+export const KEY_CONTACTOS = ['agenda', 'contactos'];
+export async function fetchContactos() {
+  if (!DB_CONFIGURED) return [];
+  const { data, error } = await supabase.from('agenda_contactos').select('*').eq('activo', true).order('nombre', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+export function useContactos({ enabled = true } = {}) {
+  const q = useQuery({ queryKey: KEY_CONTACTOS, queryFn: fetchContactos, staleTime: 5 * 60 * 1000, enabled: enabled && DB_CONFIGURED });
+  return { contactos: q.data || [], cargando: q.isLoading, error: q.error };
+}
+export async function crearContacto({ cliente_key, nombre, email, puesto }) {
+  const { data, error } = await supabase.from('agenda_contactos').upsert({ cliente_key, nombre: nombre || null, email: String(email).trim().toLowerCase(), puesto: puesto || null, activo: true }, { onConflict: 'cliente_key,email' }).select().single();
+  if (error) throw error;
+  queryClient.setQueryData(KEY_CONTACTOS, (prev) => { const l = (prev || []).filter((c) => c.id !== data.id); return [...l, data].sort((a, b) => String(a.nombre || a.email).localeCompare(String(b.nombre || b.email))); });
+  return data;
+}
+export async function borrarContacto(id) {
+  const { error } = await supabase.from('agenda_contactos').update({ activo: false }).eq('id', id);
+  if (error) throw error;
+  queryClient.setQueryData(KEY_CONTACTOS, (prev) => (prev || []).filter((c) => c.id !== id));
+}
+/** Manda la minuta por correo; devuelve el envío registrado y parcha reunion.envios en cache. */
+export async function enviarMinutaCorreo({ reunionId, para, cc = [], mensaje = '' }) {
+  const { apiFetch } = await import('../../lib/apiFetch');
+  const r = await apiFetch('/api/google-calendar?action=enviar-minuta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reunionId, para, cc, mensaje }) });
+  const js = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(js.error || `HTTP ${r.status}`);
+  parcharReunionLocal(reunionId, { envios: js.envios || [] });
+  return js;
+}

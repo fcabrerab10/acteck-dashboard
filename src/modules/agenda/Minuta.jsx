@@ -2,7 +2,7 @@
 // guardado al momento (debounce 600 ms por punto + "guardado hace N s"), asistentes, notas; Cerrar reunión
 // (avisos a responsables + arrastre a la siguiente del mismo cliente); compartir por WhatsApp y PDF.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Share2, Check, Play, Lock, Pencil, Split, ChevronUp, ChevronDown, ArrowUpRight, MessageSquare, CalendarDays } from 'lucide-react';
+import { Trash2, Share2, Check, Play, Lock, Pencil, Split, ChevronUp, ChevronDown, ArrowUpRight, MessageSquare, CalendarDays, Mail } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { HojaLateral, Campo } from '../../components/perfil/comun';
@@ -18,6 +18,8 @@ import { detectarAcuerdos } from './reparto';
 import HojaReparto from './HojaReparto';
 import Hilo from './Comentarios';
 import ReunionAnterior from './ReunionAnterior';
+import EnviarMinuta from './EnviarMinuta';
+import { relativo } from '../../lib/format';
 
 const DEBOUNCE_MS = 600;
 
@@ -33,6 +35,8 @@ export default function Minuta({ reunion, items, reuniones = [], personas, perso
   const [notas, setNotas] = useState(reunion.notas || '');
   const [cerrando, setCerrando] = useState(false);
   const [verReparto, setVerReparto] = useState(false);
+  const [verCorreo, setVerCorreo] = useState(false);
+  const ultimoEnvio = (reunion.envios || []).at(-1);
   const rootRef = useRef(null);
   const timers = useRef(new Map());
   const pendientes = useRef(new Map());
@@ -101,12 +105,14 @@ export default function Minuta({ reunion, items, reuniones = [], personas, perso
         <span style={{ fontSize: 10.5, color: guardando ? theme.orange : theme.green, fontFamily: TYPO.fontDisplay, whiteSpace: 'nowrap' }}>{indicador}</span>
         <ExportMenu titulo={`Minuta · ${reunion.titulo}`} subtitulo={subReunion(reunion, hoy)} pdf={{ ref: rootRef }} label="PDF" />
         <Boton icon={Share2} onClick={compartirWa} title="Compartir por WhatsApp">WhatsApp</Boton>
+        {puedeEditar && <Boton icon={Mail} onClick={() => setVerCorreo(true)} title={`Enviar la minuta por correo a ${nombreClienteAgenda(reunion.cliente_key)}`}>Correo</Boton>}
       </>}>
       <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 4px 24px', fontFamily: TYPO.fontText }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <TagCliente clienteKey={reunion.cliente_key} size="sm" />
           {reunion.google_event_id && <Pill tone="blue">Google</Pill>}
           <Pill tone={cerrada ? 'gray' : reunion.estado === 'en_curso' ? 'blue' : 'orange'} dot>{ESTADO_REUNION_LABEL[reunion.estado]}</Pill>
+          {ultimoEnvio && <Pill tone="green" dot title={`Enviada a ${ultimoEnvio.para.join(', ')}`}>Enviada {relativo(ultimoEnvio.at)}</Pill>}
           <Pill tone="gray">{res.abiertos.length} abierto{res.abiertos.length === 1 ? '' : 's'} · {res.resueltos.length} resuelto{res.resueltos.length === 1 ? '' : 's'}{res.arrastradosAqui.length ? ` · ${res.arrastradosAqui.length} arrastrado${res.arrastradosAqui.length === 1 ? '' : 's'}` : ''}</Pill>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             {puedeEditar && <Boton icon={Pencil} onClick={onEditar} title="Editar fecha, lugar, asistentes">Editar</Boton>}
@@ -159,6 +165,7 @@ export default function Minuta({ reunion, items, reuniones = [], personas, perso
         </Bloque>
         {reunion.migrado_de && <div style={{ fontSize: 10.5, color: theme.textMuted }}>Migrada de {reunion.migrado_de.tabla} · {reunion.migrado_de.fuente ? `fuente ${reunion.migrado_de.fuente}` : ''}</div>}
       </div>
+      {verCorreo && <EnviarMinuta abierto onClose={() => setVerCorreo(false)} reunion={reunion} puntos={res.puntos} personasPorId={personasPorId} porId={porId} yo={personasPorId.get(uid)} />}
       <HojaReparto abierto={verReparto} onClose={() => setVerReparto(false)} reunion={reunion} filas={acuerdos} personas={personas} hoy={hoy}
         orden0={(res.puntos.at(-1)?.orden ?? -1) + 1} onListo={onClose} />
     </HojaLateral>
