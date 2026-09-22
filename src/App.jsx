@@ -289,8 +289,10 @@ export default function App() {
       configurarAviso((m) => toastKit.info(m));
       const parar = arrancarBuzon({
         onSincronizado: async (n) => {
-          const { invalidateDataCache } = await import('./lib/queries');
-          await invalidateDataCache();
+          // Tras sincronizar el buzón, refresca TODO React Query (agenda, proyectos, pagos, marketing usan sus propias llaves),
+          // no sólo fetchAll/q: si no, la lista no muestra lo recién subido hasta recargar (visto en la prueba del 22-sep).
+          const { queryClient } = await import('./lib/queryClient');
+          await queryClient.invalidateQueries();
           toastKit.ok(n === 1 ? 'Se sincronizó 1 cambio guardado sin conexión' : `Se sincronizaron ${n} cambios guardados sin conexión`);
         },
       });

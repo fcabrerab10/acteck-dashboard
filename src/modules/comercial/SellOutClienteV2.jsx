@@ -879,7 +879,6 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr>
-              <th style={headStyle(theme)}>Marca</th>
               <th style={headStyle(theme)}>SKU</th>
               <th style={headStyle(theme)}>Descripción</th>
               <th style={{ ...headStyle(theme), textAlign: 'center' }}>Roadmap</th>
@@ -893,7 +892,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={5 + MESES.length + 3} style={{ padding: '32px', textAlign: 'center', color: theme.textMuted }}>Sin SKUs para los filtros seleccionados.</td></tr>
+              <tr><td colSpan={4 + MESES.length + 3} style={{ padding: '32px', textAlign: 'center', color: theme.textMuted }}>Sin SKUs para los filtros seleccionados.</td></tr>
             )}
             {rows.slice(0, 500).map((r) => {
               const rmpStyle = r.rdmp ? roadmapChipStyle(r.rdmp, P, theme) : null;
@@ -910,14 +909,14 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   }}
                   onMouseEnter={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = `${theme.text}05`; }}
                   onMouseLeave={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = 'transparent'; }}>
-                  <td style={cellStyle(theme)}><span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: marcaColor(r.marca) }}>{r.marca || '—'}</span></td>
                   <td style={{ ...cellStyle(theme), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', color: (clickable && isOpen) ? P.accent : theme.text, fontWeight: clickable ? 600 : 400 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       {clickable && <ChevronRight size={11} style={{ color: isOpen ? P.accent : theme.textSubtle, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 280ms cubic-bezier(.4,0,.2,1)' }} />}
                       {r.sku}
+                      {r.marca && <span title={r.marca} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: marcaColor(r.marca), textTransform: 'uppercase' }}>{String(r.marca).slice(0, 2)}</span>}
                     </span>
                   </td>
-                  <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
+                  <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
                   <td style={{ ...cellStyle(theme), textAlign: 'center' }}>
                     {rmpStyle ? <span style={{ display: 'inline-block', fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '2px 6px', borderRadius: 4, background: rmpStyle.bg, color: rmpStyle.color }}>{r.rdmp}</span>
                       : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
@@ -925,12 +924,12 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   {(unidad === 'monto' ? r.montos : r.piezas).map((v, i) => {
                     const h = heatCell(v);
                     return (
-                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', opacity: i + 1 > mesActual ? 0.5 : 1 }}>
+                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '3px 3px', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', opacity: i + 1 > mesActual ? 0.5 : 1 }}>
                         {h ? (
                           <span style={{
-                            display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+                            display: 'inline-block', padding: '2px 5px', borderRadius: 6,
                             background: h.bg, color: h.color, fontWeight: h.weight || 500,
-                            minWidth: 34, textAlign: 'right',
+                            minWidth: 0, textAlign: 'right',
                           }}>{fmtU(v)}</span>
                         ) : (
                           <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
@@ -944,7 +943,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                 </tr>
                 {isOpen && (
                   <tr>
-                    <td colSpan={5 + MESES.length + 3} style={{ padding: 0, border: 0 }}>
+                    <td colSpan={4 + MESES.length + 3} style={{ padding: 0, border: 0 }}>
                       <SkuDrillInline theme={theme} P={P} isDark={isDark}
                         skuRow={r}
                         anio={anio} anioPrev={anioPrev}
@@ -982,13 +981,13 @@ function headStyle(theme) {
   return {
     position: 'sticky', top: 0, background: theme.surface, textAlign: 'left',
     fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em',
-    color: theme.textMuted, fontWeight: 600, padding: '8px 6px',
+    color: theme.textMuted, fontWeight: 600, padding: '7px 4px',
     borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
   };
 }
 function cellStyle(theme, align) {
   return {
-    padding: '7px 6px', borderBottom: `1px solid ${theme.divider || theme.border}`,
+    padding: '5px 5px', borderBottom: `1px solid ${theme.divider || theme.border}`,
     verticalAlign: 'middle', textAlign: align || 'left',
   };
 }

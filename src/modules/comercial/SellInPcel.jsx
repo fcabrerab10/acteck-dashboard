@@ -747,36 +747,34 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
-              <SortableHeader theme={theme} col="marca" label="Marca" orden={orden} onToggleSort={onToggleSort} align="left" width={90} />
-              <SortableHeader theme={theme} col="sku" label="SKU" orden={orden} onToggleSort={onToggleSort} align="left" width={100} />
+              <SortableHeader theme={theme} col="sku" label="SKU" orden={orden} onToggleSort={onToggleSort} align="left" width={118} />
               <SortableHeader theme={theme} col="descripcion" label="Descripción" orden={orden} onToggleSort={onToggleSort} align="left" />
               <SortableHeader theme={theme} col="categoria" label="Categoría" orden={orden} onToggleSort={onToggleSort} align="left" width={110} />
               <SortableHeader theme={theme} col="rdmp" label="Roadmap" orden={orden} onToggleSort={onToggleSort} align="left" width={80} />
               {MESES.map((m, i) => (
-                <SortableHeader key={m} theme={theme} col={`mes-${i}`} label={m} orden={orden} onToggleSort={onToggleSort} align="right" width={54} />
+                <SortableHeader key={m} theme={theme} col={`mes-${i}`} label={m} orden={orden} onToggleSort={onToggleSort} align="right" width={38} />
               ))}
-              <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" width={64} />
-              <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
+              <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" width={54} />
+              <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" width={62} />
             </tr>
           </thead>
           <tbody>
             {rows.slice(0, 500).map((r) => {
               return (
                 <tr key={r.sku} style={{ borderTop: `1px solid ${theme.divider || theme.border}` }}>
-                  <td style={cellStyle(theme, 'left')}>{r.marca || '—'}</td>
-                  <td style={cellStyle(theme, 'left')}>{r.sku}</td>
-                  <td style={{ ...cellStyle(theme, 'left'), maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'left'), display: 'flex', alignItems: 'center', gap: 6 }}>{r.sku}{r.marca && <span title={r.marca} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: theme.textMuted, textTransform: 'uppercase' }}>{String(r.marca).slice(0, 2)}</span>}</td>
+                  <td style={{ ...cellStyle(theme, 'left'), maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{r.categoria || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
                   {(unidad === 'monto' ? r.montos : r.piezas).map((v, i) => {
                     const h = heatCell(v);
                     return (
-                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>
+                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '3px 3px', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>
                         {h ? (
                           <span style={{
-                            display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+                            display: 'inline-block', padding: '2px 5px', borderRadius: 6,
                             background: h.bg, color: h.color, fontWeight: h.weight || 500,
-                            minWidth: 34, textAlign: 'right',
+                            minWidth: 0, textAlign: 'right',
                           }}>{fmtU(v)}</span>
                         ) : (
                           <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
@@ -807,7 +805,7 @@ function SortableHeader({ theme, col, label, orden, onToggleSort, align, width }
   return (
     <th style={{
       position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
-      textAlign: align, padding: '9px 10px',
+      textAlign: align, padding: '7px 6px',
       fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9.5,
       textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
       borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width,
@@ -828,7 +826,7 @@ function SortableHeader({ theme, col, label, orden, onToggleSort, align, width }
 
 function cellStyle(theme, align) {
   return {
-    padding: '7px 10px', fontSize: 11.5, fontFamily: TYPO.fontText, color: theme.text,
+    padding: '5px 7px', fontSize: 11.5, fontFamily: TYPO.fontText, color: theme.text,
     textAlign: align, whiteSpace: 'nowrap',
   };
 }
