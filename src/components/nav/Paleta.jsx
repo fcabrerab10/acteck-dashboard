@@ -1,6 +1,7 @@
 // Paleta ⌘K · busca pestañas, clientes propios, SKUs (roadmap_sku) y clientes finales del ERP.
 // Flotante 520 px, radio 12, ELEV.flotante. Teclado ↑↓ ↵ Esc.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import { Search, Package, Building2, CornerDownLeft, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -65,8 +66,10 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
   const resClientes = useMemo(() => (nq ? clientes.filter((c) => normalizar(c.label).includes(nq)) : []), [clientes, nq]);
 
   // SKUs (roadmap_sku) · cachedQuery, límite 8, debounce 160 ms
+  // Permisos (2026-09-21): SKUs y clientes finales del ERP sólo para internos con Inventario o Resumen de Clientes.
+  const veEmpresa = !!perfil?.es_super_admin || puedeVerPestanaGlobal(perfil, 'inventario_global') || puedeVerPestanaGlobal(perfil, 'resumen_clientes');
   useEffect(() => {
-    if (!abierto || !DB_CONFIGURED || nq.length < 2) { setSkus([]); return; }
+    if (!abierto || !DB_CONFIGURED || nq.length < 2 || !veEmpresa) { setSkus([]); return; }
     let cancel = false;
     const t = setTimeout(async () => {
       try {
@@ -78,11 +81,11 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
       } catch { if (!cancel) setSkus([]); }
     }, 160);
     return () => { cancel = true; clearTimeout(t); };
-  }, [abierto, nq, q]);
+  }, [abierto, nq, q, veEmpresa]);
 
   // Clientes finales · precarga una vez, filtro local
   useEffect(() => {
-    if (!abierto || nq.length < 2) { setFinales([]); return; }
+    if (!abierto || nq.length < 2 || !veEmpresa) { setFinales([]); return; }
     let cancel = false;
     cargarClientesFinales().then((lista) => {
       if (cancel) return;

@@ -1,6 +1,7 @@
 // Pestaña Buscar · campo con foco automático; resultados: SKUs (roadmap_sku + disponible comercial),
 // clientes (propios y del ERP) y pestañas (árbol de navegación). Recientes en localStorage. SKU → Ficha de producto.
 import React, { useMemo, useState } from 'react';
+import { puedeVerCliente, puedeVerPestanaGlobal } from '../../lib/permisos';
 import { Package, Users, LayoutGrid, Clock } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -21,21 +22,25 @@ export default function Buscar() {
   const nav = useNav();
   const [q, setQ] = useState('');
   const [recientes, setRecientes] = useState(() => leerLS(LS_RECIENTES, []));
-  const { data: catalogo, isLoading } = useCatalogoBusqueda(true);
+  // Permisos (2026-09-21): SKUs con disponible de la empresa sólo para quien ve Inventario; clientes sólo los que ve.
+  const perfilB = nav.perfil;
+  const veSkus = !!perfilB?.es_super_admin || puedeVerPestanaGlobal(perfilB, 'inventario_global') || puedeVerPestanaGlobal(perfilB, 'resumen_clientes');
+  const veErp = !!perfilB?.es_super_admin || puedeVerPestanaGlobal(perfilB, 'resumen_clientes') || puedeVerPestanaGlobal(perfilB, 'sell_in');
+  const { data: catalogo, isLoading } = useCatalogoBusqueda(veSkus);
   const nq = norm(q.trim());
 
   const clientes = useMemo(() => {
     const propios = CLIENTES_ORDEN.map((k) => ({ key: k, label: CLIENTES_NAV[k].label, sub: `Cliente propio · ${CLIENTES_NAV[k].marca}`, tipo: 'propio' }));
     const erp = Object.entries(NOMBRE_CLIENTE).filter(([k]) => !CLIENTES_NAV[k]).map(([k, label]) => ({ key: k, label, sub: 'Canal del ERP', tipo: 'otro' }));
-    return [...propios, ...erp];
-  }, []);
+    return [...propios.filter((c) => puedeVerCliente(perfilB, c.key)), ...(veErp ? erp : [])];
+  }, [perfilB, veErp]);
   const pestanas = useMemo(() => { try { return nodosPlanos(construirArbol(nav.perfil, { movil: true })).filter((n) => n.tipo !== 'enlace'); } catch { return []; } }, [nav.perfil]);
 
   const res = useMemo(() => {
     if (!nq) return null;
     const terms = nq.split(/\s+/).filter(Boolean);
     const coincide = (txt) => { const t = norm(txt); return terms.every((w) => t.includes(w)); };
-    const skus = (catalogo || []).filter((s) => coincide(`${s.sku} ${s.descripcion} ${s.marca}`)).sort((a, b) => (norm(b.sku).startsWith(nq) - norm(a.sku).startsWith(nq)) || b.disponible - a.disponible).slice(0, 30);
+    const skus = (veSkus ? (catalogo || []) : []).filter((s) => coincide(`${s.sku} ${s.descripcion} ${s.marca}`)).sort((a, b) => (norm(b.sku).startsWith(nq) - norm(a.sku).startsWith(nq)) || b.disponible - a.disponible).slice(0, 30);
     return {
       skus,
       clientes: clientes.filter((c) => coincide(`${c.label} ${c.key} ${c.sub}`)).slice(0, 6),

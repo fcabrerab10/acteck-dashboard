@@ -1,5 +1,6 @@
 // Pestaña Clientes · lista agrupada Propios / Canales del ERP / Otros del ERP con pill de cuota o YoY (MTD a mismo día).
 import React, { useMemo } from 'react';
+import { puedeVerCliente, puedeVerPestanaGlobal } from '../../lib/permisos';
 import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { canalLabel } from '../../modules/general/inicio/config';
@@ -19,6 +20,10 @@ export default function Clientes() {
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const { data, isLoading, error } = useClientesMes(anio);
+  // Permisos (2026-09-21): sólo los clientes propios que ve el perfil; los canales y otros del ERP (venta de toda
+  // la empresa) sólo con Resumen de Clientes o Sell In consolidado. Un externo ve únicamente su cliente.
+  const perfil = nav.perfil;
+  const veEmpresa = puedeVerPestanaGlobal(perfil, 'resumen_clientes') || puedeVerPestanaGlobal(perfil, 'sell_in') || !!perfil?.es_super_admin;
 
   const { propios, canales, otros } = useMemo(() => {
     if (!data) return { propios: [], canales: [], otros: [] };
@@ -32,13 +37,13 @@ export default function Clientes() {
     };
     const byKey = new Map();
     data.fact.forEach((r) => { if (!byKey.has(r.cliente_key)) byKey.set(r.cliente_key, []); byKey.get(r.cliente_key).push(r); });
-    const propios = PROPIOS.map((k) => fila(k, byKey.get(k) || [], sum(data.cuotas.filter((c) => c.cliente === k && N(c.mes) === mes), (c) => c.cuota_ideal)));
+    const propios = PROPIOS.filter((k) => puedeVerCliente(perfil, k)).map((k) => fila(k, byKey.get(k) || [], sum(data.cuotas.filter((c) => c.cliente === k && N(c.mes) === mes), (c) => c.cuota_ideal)));
     const otros = [...byKey.keys()].filter((k) => !PROPIOS.includes(k)).map((k) => fila(k, byKey.get(k), 0)).filter((f) => f.cur || f.prev || f.ytd).sort((a, b) => b.cur - a.cur);
     const byCanal = new Map();
     data.canales.forEach((r) => { const k = r.canal || 'otros'; if (!byCanal.has(k)) byCanal.set(k, []); byCanal.get(k).push({ ...r, monto: r.fact_neta }); });
     const canales = [...byCanal.keys()].map((k) => fila(k, byCanal.get(k), 0)).filter((f) => f.cur || f.prev).sort((a, b) => b.cur - a.cur);
     return { propios, canales, otros };
-  }, [data, anio, mes, hoy]);
+  }, [data, anio, mes, hoy, perfil]);
 
   // El 3er argumento fija el nodo activo del menú (sólo los clientes propios están en el árbol).
   const abrir = (key, tipo, label) => nav.push(<FichaCliente clienteKey={key} tipo={tipo} label={label} />, `cliente-${key}`, PROPIOS.includes(key) ? idNodo(key, 'home') : null);
@@ -60,18 +65,18 @@ export default function Clientes() {
             pill={pillDe(f)} onClick={() => abrir(f.key, 'propio')} />
         ))}
       </ListaAgrupada>
-      <ListaAgrupada titulo="Canales del ERP" meta={canales.length || undefined} style={{ marginTop: 18 }} pie="Fact Neta del ERP · YoY contra el mismo día del año anterior.">
+      {veEmpresa && <ListaAgrupada titulo="Canales del ERP" meta={canales.length || undefined} style={{ marginTop: 18 }} pie="Fact Neta del ERP · YoY contra el mismo día del año anterior.">
         {canales.length === 0 && <Vacio icon={null} titulo="Sin ventas del ERP este mes" style={{ padding: '18px' }} />}
         {canales.map((f) => (
           <Fila key={f.key} titulo={canalLabel(f.key)} sub={`${money(f.cur)} · YTD ${moneyCompact(f.ytd)}`} pill={pillDe(f)} onClick={() => abrir(f.key, 'canal', canalLabel(f.key))} />
         ))}
-      </ListaAgrupada>
-      <ListaAgrupada titulo="Otros del ERP" meta={otros.length || undefined} style={{ marginTop: 18 }} pie="Clientes sin pestaña propia, agrupados por canal en facturacion_clientes.">
+      </ListaAgrupada>}
+      {veEmpresa && <ListaAgrupada titulo="Otros del ERP" meta={otros.length || undefined} style={{ marginTop: 18 }} pie="Clientes sin pestaña propia, agrupados por canal en facturacion_clientes.">
         {otros.length === 0 && <Vacio icon={null} titulo="Sin otros clientes con facturación" style={{ padding: '18px' }} />}
         {otros.map((f) => (
           <Fila key={f.key} titulo={nombreCliente(f.key)} sub={`${money(f.cur)} · YTD ${moneyCompact(f.ytd)}`} pill={pillDe(f)} onClick={() => abrir(f.key, 'otro')} />
         ))}
-      </ListaAgrupada>
+      </ListaAgrupada>}
     </>
   );
 }
