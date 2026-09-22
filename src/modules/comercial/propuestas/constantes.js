@@ -1,9 +1,11 @@
 // constantes.js — constantes del armador de propuestas, compartidas por la pestaña de escritorio
 // (PropuestasTab.jsx) y la app móvil (src/movil/pestanas/Propuestas.jsx · PropuestaEditor.jsx).
+import { MARCAS_CASA_LABEL } from '../../../lib/marcas';
+
 export const CLIENTES = [
-  { key: 'digitalife', label: 'Digitalife', iniciales: 'D', marca: 'Acteck · Balam Rush' },
+  { key: 'digitalife', label: 'Digitalife', iniciales: 'D', marca: MARCAS_CASA_LABEL },
   { key: 'pcel',       label: 'PCEL',       iniciales: 'P', marca: 'Acteck' },
-  { key: 'dicotech',   label: 'Dicotech',   iniciales: 'Di', marca: 'Acteck · Balam Rush' },
+  { key: 'dicotech',   label: 'Dicotech',   iniciales: 'Di', marca: MARCAS_CASA_LABEL },
 ];
 
 const FAMILIA_DIGITALIFE_HOJA = {

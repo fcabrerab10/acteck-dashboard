@@ -113,6 +113,25 @@ Ambas van al área `forecast` y navegan a `forecastReservas`. `caduca_at` = día
 siguiente al del proyecto. En `src/lib/alertas.js` están dadas de alta en `AREA_POR_TIPO` y
 en `destinoAlerta`.
 
+## SKUs en tránsito en el buscador (2026-09-21)
+
+El buscador de SKUs del formulario (web `proyectos/HojaProyecto.jsx` y celular
+`src/movil/pestanas/Proyectos.jsx`) tiene **tres** fuentes, en este orden: `roadmap_sku`
+(los vivos), `catalogo_articulos` (lo que el ERP ya conoce) y — desde esta fecha —
+**`embarques_compras`**: lo que viene en camino y todavía no existe en ningún otro lado.
+
+Sin esa tercera fuente no se podía armar un proyecto con mercancía estrenada: una marca o
+un producto nuevo llega primero como embarque y sólo entra al roadmap y al ERP cuando ya
+está facturándose. Es el caso de **Audive** (`AV-*`): 19 bocinas en producción con arribo a
+CEDIS el 6 de noviembre, que Digitalife ya tiene apalabradas.
+
+`useAbasto()` (`proyectos/datos.js`) baja `codigo, descripcion, arribo_cedis, estatus` de los
+embarques con `arribo_cedis >= hoy` (o sin fecha), descarta los entregados, se queda con el
+arribo **más cercano** por SKU y lo añade a `catalogoSkus` con `enTransito: true` y
+`etaTransito`. Son ~380 filas: una sola página de `fetchAll`. El buscador los distingue con
+una píldora naranja **"en tránsito · llega 6 nov"**, y su marca sale de `marcaDeSku()`
+(`src/lib/marcas.js`) porque el roadmap aún no la tiene.
+
 ## Lo que quedó fuera a propósito
 
 - `ForecastReservas.jsx` y `src/modules/comercial/reservas/` **siguen en el repo sin uso**

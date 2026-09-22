@@ -12,7 +12,7 @@
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const MARCAS = ['BALAM RUSH', 'ACTECK', 'TRUEBASIX', 'EVOROK', 'MOBIFREE', 'ENERGY SISTEM', 'LF ACOUSTICS', 'SWANN', 'DXT'];
+const MARCAS = ['BALAM RUSH', 'ACTECK', 'AUDIVE', 'TRUEBASIX', 'EVOROK', 'MOBIFREE', 'ENERGY SISTEM', 'LF ACOUSTICS', 'SWANN', 'DXT'];
 // Familias conocidas (roadmap_sku); las de dos+ palabras primero para que ganen en el match.
 const FAMILIAS = [
   'Alfombrillas y Almoadillas', 'Alfombrillas y Almohadillas', 'Cables y Cargadores', 'Hubs y Adaptadores', 'Sillas y Mesas', 'Bases y Soportes',

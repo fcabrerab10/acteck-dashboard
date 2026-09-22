@@ -13,6 +13,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { formatMXN } from '../../../lib/utils';
 import { KpiCard, Pill, DeltaPill, Panel, Boton, Cargando, HeatCell, toast } from '../../../components/kit';
 import { textoDisponibilidad, compartir, copiar, fechaCorta, precio as fmtPrecio } from '../../../lib/whatsapp';
+import { marcaDeSku, normalizarMarca, toneMarca } from '../../../lib/marcas';
 import { tonoCobertura, etiquetaCobertura } from '../inventario/constantes';
 import { MESES, N, fmtInt, fmtMoneyShort, fmtPct, pctDelta, capitalizar, canalLabel, canalTone, roadmapTone, ultimosMeses, mesesCerrados } from './textos';
 
@@ -104,7 +105,7 @@ export default function DrillSku({ sku, info = {}, anio, anioPrev, mesActual, se
 
   const listaValida = lista && calc.listas.includes(lista) ? lista : '';
   const precioLista = listaValida ? N(calc.porLista.get(listaValida)?.precio) : null;
-  const armarTexto = () => textoDisponibilidad([{ sku, descripcion: info.descripcion, disponible: calc.disponible, proximoArribo: calc.proximoArribo, enCamino: calc.enCamino, precio: precioLista }], { marca: /balam/i.test(info.marca || '') ? 'Balam Rush' : 'Acteck' });
+  const armarTexto = () => textoDisponibilidad([{ sku, descripcion: info.descripcion, disponible: calc.disponible, proximoArribo: calc.proximoArribo, enCamino: calc.enCamino, precio: precioLista }], { marca: normalizarMarca(info.marca) || marcaDeSku(sku) || 'Acteck' });
   const exigirLista = () => { if (!listaValida) { toast.error('Elige una lista de precios para compartir'); return false; } return true; };
   const onCompartir = async () => { if (!exigirLista()) return; const r = await compartir(armarTexto(), { titulo: `Disponibilidad ${sku}` }); if (r === 'share') toast.ok('Compartido'); };
   const onCopiar = async () => { if (!exigirLista()) return; if (await copiar(armarTexto())) toast.ok('Texto copiado'); else toast.error('No se pudo copiar'); };
@@ -140,7 +141,7 @@ export default function DrillSku({ sku, info = {}, anio, anioPrev, mesActual, se
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ ...mono, fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: theme.text }}>{sku}</span>
-            {info.marca && <Pill tone={/balam/i.test(info.marca) ? 'purple' : 'blue'} size="xs">{info.marca}</Pill>}
+            {info.marca && <Pill tone={toneMarca(info.marca, 'blue')} size="xs">{normalizarMarca(info.marca)}</Pill>}
             {info.categoriaCap && <Pill tone="gray" size="xs">{info.categoriaCap}</Pill>}
             {info.rdmp && <Pill tone={roadmapTone(info.rdmp)} size="xs">{info.rdmp}</Pill>}
           </div>

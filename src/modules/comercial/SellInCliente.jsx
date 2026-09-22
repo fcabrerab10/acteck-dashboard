@@ -29,6 +29,7 @@ import { textoResumenMesCanal, compartir, copiar } from '../../lib/whatsapp';
 import Buscador from './sellin/Buscador';
 import Filtros from './sellin/Filtros';
 import DrillSku from './sellin/DrillSku';
+import { marcaDeSku, normalizarMarca } from '../../lib/marcas';
 import ApoyoComercial from './sellin/ApoyoComercial';
 import EquipoComercial from './sellin/EquipoComercial';
 import { MESES, MESES_LARGO, normalizar, tokens, coincide, capitalizar, canalLabel, canalTone, N, fmtInt, fmtPct, fmtMoneyShort, pctDelta, anioColor, roadmapTone, CAT_COLORS } from './sellin/textos';
@@ -244,7 +245,9 @@ function SellInGlobal({ sensible }) {
       if (familiaSel && capitalizar(r.familia || 'Sin familia') !== familiaSel) continue;
       const d = porSku.get(r.sku);
       const pzAct = d?.piezas[anio] || Array(12).fill(0);
-      out.push({ ...r, categoriaCap: catCap, rdmp: r.rdmp || '', canales: canalesSku.get(r.sku) || new Set(), ventaMes: pzAct[mesActual - 1] > 0, stock: (stockMap.get(r.sku) || 0) > 0, d });
+      // marca normalizada; si el roadmap aún no la trae (SKU nuevo, p. ej. Audive AV-*)
+      // se infiere del prefijo para que la faceta Marca no lo mande a "—".
+      out.push({ ...r, marca: normalizarMarca(r.marca) || marcaDeSku(r.sku) || '', categoriaCap: catCap, rdmp: r.rdmp || '', canales: canalesSku.get(r.sku) || new Set(), ventaMes: pzAct[mesActual - 1] > 0, stock: (stockMap.get(r.sku) || 0) > 0, d });
     }
     return out;
   }, [roadmap, busqueda, familiaSel, porSku, canalesSku, stockMap, anio, mesActual]);

@@ -1,4 +1,5 @@
-// Shared data constants for the Acteck/Balam Rush dashboard
+// Shared data constants for the Acteck / Balam Rush / Audive dashboard
+import { MARCAS_CASA_LABEL } from './marcas';
 
 // ─── DATOS REALES — DIGITALIFE (API GLOBAL) ───────────────────────────────────
 // Fuentes: Vw_TablaH_Ventas (Sell In), BD Sellout (Sell Out), BD Inventario
@@ -141,7 +142,7 @@ export const ML_SELLOUT_DEFAULT = {
 export const clientes = {
   digitalife: {
     nombre: "Digitalife",
-    marca: "Acteck / Balam Rush",
+    marca: MARCAS_CASA_LABEL,
     ejecutivo: "Fernando Cabrera",
     frecuencia: "Semanal",
     color: "#E31E26",
@@ -232,7 +233,7 @@ export const clientes = {
   },
   dicotech: {
     nombre: "Dicotech",
-    marca: "Acteck / Balam Rush",
+    marca: MARCAS_CASA_LABEL,
     ejecutivo: "Fernando Cabrera",
     frecuencia: "Semanal",
     color: "#0EA5E9",

@@ -19,6 +19,7 @@ import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, Filtros, SkeletonPantalla, toast, elevation } from '../../components/kit';
 import { EASE, DUR } from '../../lib/motion';
 import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
+import { marcaDeSku, normalizarMarca } from '../../lib/marcas';
 import useInventarioDatos from './inventario/useInventarioDatos';
 import SkuDrillDown from './inventario/SkuDrillDown';
 import ResumenSecundario from './inventario/ResumenSecundario';
@@ -81,7 +82,9 @@ function agregarSkus(filas, { descripciones, transito, leadTime, demanda }) {
     const riesgo = transitoPz > 0 && (agotado || (critico && diasEta != null && coberturaDias < Math.max(diasEta, 0)));
     const row = {
       ...it,
-      descripcion: d.descripcion || '', marca: d.marca || '', familia: d.familia || '', rdmp: d.rdmp || '', categoria: d.categoria || '',
+      // Si roadmap_sku aún no trae la marca (SKU nuevo: los AV-* de Audive llegan primero
+      // en embarques_compras), se infiere del prefijo para que la faceta Marca la liste.
+      descripcion: d.descripcion || '', marca: normalizarMarca(d.marca) || marcaDeSku(it.sku) || '', familia: d.familia || '', rdmp: d.rdmp || '', categoria: d.categoria || '',
       transito: tr, transitoPz, transitoPos: tr ? tr.pos.length : 0, transitoEta: tr?.eta || null, transitoValor: transitoPz * costo, costo,
       leadTime: lt, demandaMes, coberturaDias, agotado, critico, sobrestock, riesgo, tieneStock,
     };

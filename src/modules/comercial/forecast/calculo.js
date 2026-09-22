@@ -11,6 +11,7 @@
 
 // Buffer de inventario de seguridad (meses de demanda) · compat, ya no interviene en el sugerido.
 export const BUFFER_MESES = 1;
+import { marcaDeSku, normalizarMarca } from '../../../lib/marcas.js';
 
 // ────────── Cálculo del forecast ──────────
 export function calcularForecast(data, horizonteMeses) {
@@ -523,7 +524,7 @@ export function calcularForecast(data, horizonteMeses) {
       descripcion,
       supplier:    meta.supplier || lt?.supplier_principal || '',
       familia:     meta.familia || lt?.familia || '',
-      marca:       meta.marca || '',
+      marca:       normalizarMarca(meta.marca) || marcaDeSku(sku) || '',
       roadmapEstado,
       costoUnitMxn: Number(meta.costo_promedio_mxn || 0),
       costoUnitUsd: Number(meta.unit_price_usd_ultima || 0),

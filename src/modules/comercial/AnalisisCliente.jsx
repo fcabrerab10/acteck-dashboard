@@ -9,6 +9,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { fetchAllQ } from '../../lib/queries';
 import { disponibilidadDeCampos } from '../../lib/disponibilidad';
 import { GraficaLineas } from '../../components/kit';
+import { normalizarMarca, marcaDeSku } from '../../lib/marcas';
 
 export default function AnalisisCliente({ cliente, clienteKey }) {
   var perfil = usePerfil();
@@ -87,10 +88,10 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   // —— Sell-through by month ——
   // ── Comparativa por Marca / Categoría (movido desde Estrategia de Producto) ──
   // Agregamos sell-in, sell-out e inventario por marca y por categoría.
-  // Spectrum se consolida en "Balam Rush" (es modelo, no marca).
+  // Spectrum se consolida en "Balam Rush" (es modelo, no marca) · src/lib/marcas.js.
   var aggsByMarcaCat = React.useMemo(function() {
     var esPcel = clienteKey === 'pcel';
-    var consolidaMarca = function(m) { return m === 'Balam Rush Spectrum' ? 'Balam Rush' : m; };
+    var consolidaMarca = function(m) { return normalizarMarca(m); };
     var normLabel = function(s) { return (s || '').toString().trim(); };
 
     // Index por SKU (productos_cliente) para mapear marca+categoría
@@ -140,7 +141,8 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
 
     skusAll.forEach(function(sku) {
       var p = prodBySku[sku] || {};
-      var marca = consolidaMarca(normLabel(p.marca)) || 'Sin Marca';
+      // Sin marca en el catálogo (SKU nuevo, p. ej. los AV-* de Audive) → se infiere del prefijo.
+      var marca = consolidaMarca(normLabel(p.marca)) || marcaDeSku(p.sku) || 'Sin Marca';
       var cat = normLabel(p.categoria) || 'Sin Categoría';
       var inv = invBySku[sku] || { stock: 0, valor: 0 };
 

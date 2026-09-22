@@ -14,6 +14,7 @@ import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
 import { Cargando, GraficaLineas } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
+import { colorMarca, normalizarMarca, MARCAS_CASA_LABEL } from '../../lib/marcas';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -39,7 +40,7 @@ const CLIENTES_META = {
   },
   digitalife: {
     nombre: 'Digitalife',
-    marca: 'Acteck / Balam Rush',
+    marca: MARCAS_CASA_LABEL,
     accent: '#8B5CF6',
     vistaMensual: 'v_sellout_digitalife_mensual',
     vistaSkuMes: 'v_sellout_digitalife_sku_mes',
@@ -909,14 +910,13 @@ function KPI({ label, badge, badgeTone, value, sub }) {
 }
 
 // ── Bloque de sucursales ──
-// ── Bloque de marcas: dos tarjetas grandes (Acteck / Balam Rush) con % share,
-//    YoY y sparkline. Se usa en clientes que venden mezcla de marcas (Digitalife).
+// ── Bloque de marcas: una tarjeta grande por marca presente en los datos (Acteck,
+//    Balam Rush, Audive…) con % share, YoY y sparkline. Se usa en clientes que venden
+//    mezcla de marcas (Digitalife). Una marca nueva aparece sola en cuanto vende: la
+//    lista sale de `marcas` (datos), y el color de src/lib/marcas.js.
 function BloqueMarca({ marcas, matriz, mesActual, anioActual, anioPrev, meta }) {
-  const MARCA_COLOR = {
-    'ACTECK': '#0EA5E9',
-    'BALAM RUSH': '#DC2626',
-  };
-  const MARCA_ACCENT = (m) => MARCA_COLOR[m] || meta.accent || '#6366F1';
+  const MARCA_ACCENT = (m) => colorMarca(m, meta.accent || '#6366F1');
+  const MARCA_LABEL = (m) => normalizarMarca(m) || m;
 
   const totalMonto = marcas.reduce((s, m) => s + m.monto, 0);
   const totalPz    = marcas.reduce((s, m) => s + m.piezas, 0);
@@ -930,7 +930,7 @@ function BloqueMarca({ marcas, matriz, mesActual, anioActual, anioPrev, meta }) 
         </div>
       </div>
 
-      <div className={`grid gap-3 ${marcas.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
+      <div className={`grid gap-3 ${marcas.length === 1 ? 'grid-cols-1' : marcas.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
         {marcas.map((m) => {
           const color = MARCA_ACCENT(m.name);
           const share = totalMonto > 0 ? (m.monto / totalMonto * 100) : 0;
@@ -942,7 +942,7 @@ function BloqueMarca({ marcas, matriz, mesActual, anioActual, anioPrev, meta }) 
               style={{ background: `${color}12`, borderColor: `${color}55` }}>
               <div className="flex justify-between items-baseline gap-2 mb-1">
                 <div>
-                  <div className="text-[16px] font-bold" style={{ color, filter: 'brightness(0.7)' }}>{m.name}</div>
+                  <div className="text-[16px] font-bold" style={{ color, filter: 'brightness(0.7)' }}>{MARCA_LABEL(m.name)}</div>
                   <div className="text-[10.5px] text-gray-500">{fmtInt(m.skus)} SKUs distintos · {fmtInt(m.tx)} líneas de venta</div>
                 </div>
                 {m.yoy != null && (

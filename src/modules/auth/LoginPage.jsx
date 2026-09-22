@@ -2,6 +2,7 @@
 // labels flotantes, spring animations, botón con press haptic-like.
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from '../../lib/supabase';
+import { MARCAS_CASA_LABEL } from '../../lib/marcas';
 
 // Apple standard easing curves
 const APPLE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
@@ -140,7 +141,7 @@ export default function LoginPage({ onLogin }) {
                 width: 6, height: 6, borderRadius: 999, background: '#30D158',
                 animation: 'pulse 2.4s ease-in-out infinite',
               }} />
-              Balam Rush · Acteck
+              {MARCAS_CASA_LABEL}
             </div>
             <h1 style={{
               fontFamily: '-apple-system, "SF Pro Display", sans-serif',

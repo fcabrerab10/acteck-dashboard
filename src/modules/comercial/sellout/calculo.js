@@ -16,6 +16,8 @@
 // e-commerce, que vienen de facturación mensual). Esas filas SIEMPRE entran, de modo que el
 // YoY compara mes completo contra mes completo para ellas y día a día para las demás.
 
+import { marcaDeSku, normalizarMarca } from '../../../lib/marcas.js';
+
 export const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 export const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -546,7 +548,7 @@ export function skusDeCuenta(skuMes = [], inv = [], anio, mes, modo = 'importe')
     if (i == null) continue;
     const k = String(r.sku || '').toUpperCase();
     let f = filas.get(k);
-    if (!f) { f = { sku: k, marca: r.marca, categoria: r.categoria, meses: Array(12).fill(0), total: 0, piezas: 0 }; filas.set(k, f); }
+    if (!f) { f = { sku: k, marca: normalizarMarca(r.marca) || marcaDeSku(k) || '', categoria: r.categoria, meses: Array(12).fill(0), total: 0, piezas: 0 }; filas.set(k, f); }
     f.meses[i] += N(r[campo]);
     f.total += N(r[campo]);
     f.piezas += N(r.cantidad);

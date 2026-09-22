@@ -15,6 +15,7 @@ import {
   Plus, Check, X, Trash2, Archive,
 } from 'lucide-react';
 import { ROADMAP_ORDER, roadmapStyle, roadmapInfo } from '../../../lib/roadmapColors';
+import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
 
 const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
 const MES_NOMBRE = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -22,24 +23,10 @@ const MES_NOMBRE = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct',
 const fmtFechaCorta = (d) => d ? `${d.getDate()} ${MES_NOMBRE[d.getMonth()]} ${String(d.getFullYear()).slice(2)}` : '—';
 
 // Marca derivada del prefijo del SKU + fallback a metadata.
-// Prefijos confirmados:
-//   · AC-*, ES-*       → Acteck
-//   · BR-*             → Balam Rush
-//   · MG-*, ZM-*, TG-* → DXT Gaming
-//   · NA-*, RR-*       → Xtreme PC
-const MARCA_POR_PREFIJO = {
-  AC: 'Acteck',
-  ES: 'Acteck',
-  BR: 'Balam Rush',
-  MG: 'DXT Gaming',
-  ZM: 'DXT Gaming',
-  TG: 'DXT Gaming',
-  NA: 'Xtreme PC',
-  RR: 'Xtreme PC',
-};
+// El mapa de prefijos (AC/ES → Acteck · BR → Balam Rush · AV → Audive · MG/ZM/TG → DXT Gaming
+// · NA/RR → Xtreme PC) vive en src/lib/marcas.js.
 function inferirMarca(sku, meta) {
-  const prefix = (sku || '').split('-')[0]?.toUpperCase();
-  return MARCA_POR_PREFIJO[prefix] || meta?.marca || '';
+  return marcaDeSku(sku) || normalizarMarca(meta?.marca) || '';
 }
 
 const llegoAlCedis = (arribos) =>

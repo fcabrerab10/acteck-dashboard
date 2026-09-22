@@ -1,6 +1,8 @@
 // Estrategia de Precios · constantes, formatos y texto de WhatsApp ("Compartir precio").
 // Reutiliza la búsqueda sin acentos y los formatos del Sell In consolidado (sellin/textos.js).
 // El texto de precio NUNCA nombra la lista ni lleva costo/margen (regla de src/lib/whatsapp.js, que no se modifica).
+import { esMarcaPropia, normalizarMarca } from '../../../lib/marcas.js';
+
 import { precio as fmtPrecioWA, fechaHora, nombreCorto } from '../../../lib/whatsapp';
 import { TYPO } from '../../../lib/themeTokens';
 
@@ -96,4 +98,6 @@ export function textoPrecio({ sku, descripcion, precio, marca = 'Acteck', fecha 
     `Precio + IVA: ${fmtPrecioWA(conIva)} (sin IVA ${fmtPrecioWA(sinIva)})`,
   ].join('\n');
 }
-export const marcaDe = (marca) => (/balam/i.test(String(marca || '')) ? 'Balam Rush' : 'Acteck');
+// Marca para los textos de WhatsApp: si es una de la casa (Acteck · Balam Rush · Audive)
+// se usa su etiqueta oficial; cualquier otra cosa se firma como Acteck, como hasta hoy.
+export const marcaDe = (marca) => (esMarcaPropia(marca) ? normalizarMarca(marca) : 'Acteck');

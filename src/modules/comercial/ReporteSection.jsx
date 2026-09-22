@@ -12,6 +12,7 @@ import {
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 import { EAN_SAT_DATA } from '../../lib/eanSatData';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
+import { marcaDeSku, normalizarMarca, MARCAS_PROPIAS } from '../../lib/marcas';
 
 /**
  * ReporteSection — sección colapsable dentro de Resumen Clientes
@@ -89,7 +90,7 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
         (q) => q.neq('articulo', '__TEST__')),
       supabase.from('v_sku_metadata').select('*'),
       supabase.from('precios_sku_actual').select('sku, precio_aaa, descuento, precio_descuento'),
-      supabase.from('roadmap_sku').select('sku, rdmp, descripcion'),
+      supabase.from('roadmap_sku').select('sku, rdmp, descripcion, marca'),
     ]);
     setData({
       loading: false,
@@ -151,7 +152,7 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
       const rdmp  = rdmpBySku[s.sku]  || {};
       const roadmap = s.roadmap_manual || rdmp.rdmp || '';
       const desc    = s.descripcion_manual || rdmp.descripcion || meta.descripcion || '';
-      const marca   = s.sku.startsWith('BR') ? 'Balam Rush' : s.sku.startsWith('AC') ? 'Acteck' : (s.sku.startsWith('SW') ? 'Swann' : 'Otra');
+      const marca   = normalizarMarca(rdmp.marca) || marcaDeSku(s.sku) || 'Otra';
       // Precios: manual override > precios_sku > null
       const precioAaaBase = Number(pre.precio_aaa || 0) || null;
       const descuentoBase = Number(pre.descuento || 0) || null;
@@ -489,8 +490,7 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
                 <select value={filtroMarca} onChange={(e) => setFiltroMarca(e.target.value)}
                   className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
                   <option value="todas">Marca: todas</option>
-                  <option value="Acteck">Acteck</option>
-                  <option value="Balam Rush">Balam Rush</option>
+                  {MARCAS_PROPIAS.map((m) => <option key={m.key} value={m.label}>{m.label}</option>)}
                   <option value="Swann">Swann</option>
                 </select>
 

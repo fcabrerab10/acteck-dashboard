@@ -6,6 +6,7 @@ import { moneyCompact as $c, money as $, int, fecha, fechaCorta } from '../../..
 import { Panel, TablaCompacta, HeatCell, Pill, Boton, GraficaLineas, SelectorTrimestres, etiquetaTrimestres } from '../../../components/kit';
 import { MESES, META_INV_DIAS } from './config';
 import { useMinutasCliente } from '../../agenda/datos';
+import { normalizarMarca, toneMarca } from '../../../lib/marcas';
 
 const signo = (v, d = 1) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneRatio = (v) => (v == null ? 'gray' : v >= 80 ? 'green' : v >= 60 ? 'orange' : 'red');
@@ -76,7 +77,7 @@ export function TopSkusTabla({ top, onNavegar }) {
   const conMonto = top.filas.some((f) => f.monto > 0);
   const cols = [
     { key: 'sku', label: 'SKU', align: 'left', mono: true, bold: true },
-    { key: 'marca', label: 'Marca', align: 'left', render: (f) => <Pill size="xs" tone={f.marca === 'Balam Rush' ? 'purple' : f.marca === 'Acteck' ? 'blue' : 'gray'}>{f.marca}</Pill> },
+    { key: 'marca', label: 'Marca', align: 'left', render: (f) => <Pill size="xs" tone={toneMarca(f.marca)}>{normalizarMarca(f.marca) || f.marca}</Pill> },
     ...top.meses.map((m) => ({ key: `m${m}`, label: MESES[m - 1], render: (f) => <HeatCell v={f[`m${m}`]} max={max} /> })),
     { key: 'total', label: 'Pzs', bold: true, render: (f) => int(f.total) },
     ...(conMonto ? [{ key: 'monto', label: 'Monto', render: (f) => $c(f.monto) }] : []),

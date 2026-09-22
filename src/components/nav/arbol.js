@@ -13,12 +13,13 @@ import {
   Shield, Users, Briefcase, Landmark, Store, CalendarCheck,
 } from 'lucide-react';
 import { puedeVerPaginaGlobal, puedeVerCliente, puedeVerPestanaCliente } from '../../lib/permisos';
+import { MARCAS_CASA_LABEL } from '../../lib/marcas';
 
 // ─── Clientes propios ───
 export const CLIENTES_NAV = {
-  digitalife: { key: 'digitalife', label: 'Digitalife', marca: 'Acteck / Balam Rush', color: '#FF3B30' },
-  pcel:       { key: 'pcel',       label: 'PCEL',       marca: 'Acteck',              color: '#FF9500' },
-  dicotech:   { key: 'dicotech',   label: 'Dicotech',   marca: 'Acteck / Balam Rush', color: '#0EA5E9' },
+  digitalife: { key: 'digitalife', label: 'Digitalife', marca: MARCAS_CASA_LABEL, color: '#FF3B30' },
+  pcel:       { key: 'pcel',       label: 'PCEL',       marca: 'Acteck',          color: '#FF9500' },
+  dicotech:   { key: 'dicotech',   label: 'Dicotech',   marca: MARCAS_CASA_LABEL, color: '#0EA5E9' },
 };
 export const CLIENTES_ORDEN = ['digitalife', 'pcel', 'dicotech'];
 

@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { queryClient } from '../../../lib/queryClient';
 import { fetchAll } from '../../../lib/queries';
+import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
 
 const KEY_PROYECTOS = ['proyectos'];
 const KEY_ABASTO = ['proyectos', 'abasto'];
@@ -42,13 +43,19 @@ export function useAbasto() {
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const opcional = (p) => p.catch(() => []);
-      const [inventario, transito, leadTimes, leadProveedor, roadmap, catalogo] = await Promise.all([
+      const hoyISO = new Date().toISOString().slice(0, 10);
+      const [inventario, transito, leadTimes, leadProveedor, roadmap, catalogo, embarques] = await Promise.all([
         fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
         fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,embarques,embarques_detalle'),
         opcional(fetchAll('v_lead_time_sku', 'sku,dias_promedio,muestras,supplier_principal,familia')),
         opcional(fetchAll('v_lead_time_supplier', 'supplier,dias_promedio,muestras')),
         opcional(fetchAll('roadmap_sku', 'sku,descripcion,marca,categoria')),
         opcional(fetchAll('catalogo_articulos', 'articulo,descripcion')),
+        // Mercancía en camino: es la ÚNICA fuente de un SKU estrenado (marca nueva o
+        // producto nuevo) antes de que el ERP lo facture y de que entre al roadmap.
+        // Es el caso de Audive (AV-*): 19 SKUs en producción con arribo a CEDIS.
+        opcional(fetchAll('embarques_compras', 'codigo,descripcion,arribo_cedis,estatus',
+          (q) => q.or(`arribo_cedis.gte.${hoyISO},arribo_cedis.is.null`))),
       ]);
       const descripciones = new Map();
       for (const c of catalogo) if (c.articulo) descripciones.set(c.articulo, c.descripcion || '');
@@ -59,12 +66,34 @@ export function useAbasto() {
       for (const r of roadmap) {
         if (!r.sku || vistos.has(r.sku)) continue;
         vistos.add(r.sku);
-        catalogoSkus.push({ sku: r.sku, descripcion: r.descripcion || '', marca: r.marca || null, enRoadmap: true });
+        catalogoSkus.push({ sku: r.sku, descripcion: r.descripcion || '', marca: normalizarMarca(r.marca) || marcaDeSku(r.sku), enRoadmap: true });
       }
       for (const c of catalogo) {
         if (!c.articulo || vistos.has(c.articulo)) continue;
         vistos.add(c.articulo);
-        catalogoSkus.push({ sku: c.articulo, descripcion: c.descripcion || '', marca: null, enRoadmap: false });
+        catalogoSkus.push({ sku: c.articulo, descripcion: c.descripcion || '', marca: marcaDeSku(c.articulo), enRoadmap: false });
+      }
+      // Tercera fuente: lo que viene en camino. Se queda con el arribo MÁS CERCANO por SKU
+      // y se marca `enTransito` para que el buscador lo distinga con la píldora del ETA.
+      const enCamino = new Map();
+      for (const e of embarques) {
+        const sku = String(e.codigo || '').trim();
+        if (!sku) continue;
+        if (String(e.estatus || '').toUpperCase().includes('ENTREG')) continue;
+        const prev = enCamino.get(sku);
+        const eta = e.arribo_cedis || null;
+        if (!prev) enCamino.set(sku, { descripcion: e.descripcion || '', eta, estatus: e.estatus || '' });
+        else if (eta && (!prev.eta || eta < prev.eta)) { prev.eta = eta; prev.estatus = e.estatus || prev.estatus; }
+      }
+      for (const [sku, info] of enCamino) {
+        if (!descripciones.has(sku) && info.descripcion) descripciones.set(sku, info.descripcion);
+        const ya = vistos.has(sku) ? catalogoSkus.find((c) => c.sku === sku) : null;
+        if (ya) { ya.enTransito = true; ya.etaTransito = info.eta; continue; }
+        vistos.add(sku);
+        catalogoSkus.push({
+          sku, descripcion: info.descripcion || '', marca: marcaDeSku(sku),
+          enRoadmap: false, enTransito: true, etaTransito: info.eta, estatusTransito: info.estatus,
+        });
       }
       return { inventario, transito, leadTimes, leadProveedor, descripciones, catalogoSkus };
     },

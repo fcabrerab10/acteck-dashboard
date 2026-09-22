@@ -2,6 +2,7 @@
 // Los hex de TIPOS/MARCAS/REDES son la única excepción al "todo desde theme.*":
 // se usan para puntos, tiles de icono (`${color}22`) y nada más. Los pills usan `tone`.
 import { Mail, Video, Image as ImageIcon, Smartphone, Search, PartyPopper, Megaphone } from 'lucide-react';
+import { colorMarca } from '../../../lib/marcas';
 
 export const TIPOS = {
   mailing:    { label: 'Mailing',    color: '#34C759', tone: 'green',  Icon: Mail,        metricas: [
@@ -45,9 +46,12 @@ export const TIPOS = {
   ]},
 };
 
+// Las etiquetas y colores oficiales viven en src/lib/marcas.js; aquí sólo se les
+// añade el `tone` del kit (los pills de marketing se pintan con tone, no con hex).
 export const MARCAS = {
-  acteck:     { label: 'Acteck',     color: '#007AFF', tone: 'blue' },
-  balam_rush: { label: 'Balam Rush', color: '#AF52DE', tone: 'purple' },
+  acteck:     { label: 'Acteck',     color: colorMarca('Acteck'),     tone: 'blue' },
+  balam_rush: { label: 'Balam Rush', color: colorMarca('Balam Rush'), tone: 'purple' },
+  audive:     { label: 'Audive',     color: colorMarca('Audive'),     tone: 'orange' },
 };
 
 export const REDES_SOCIALES = {

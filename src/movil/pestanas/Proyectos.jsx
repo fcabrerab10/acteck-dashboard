@@ -310,7 +310,10 @@ function FormNuevo({ abierto, horizonte, catalogoSkus, onCerrar, onCrear }) {
         {sugerencias.length > 0 && (
           <ListaAgrupada titulo="Resultados" style={{ padding: 0 }}>
             {sugerencias.map((s) => (
-              <Fila key={s.sku} titulo={s.sku} sub={s.descripcion || 'sin descripción'} onClick={() => agregar(s)} />
+              <Fila key={s.sku} titulo={s.sku} sub={s.descripcion || 'sin descripción'} onClick={() => agregar(s)}
+                pill={s.enTransito && !s.enRoadmap
+                  ? { tone: 'orange', label: s.etaTransito ? `en tránsito · llega ${fechaCortaISO(s.etaTransito)}` : 'en tránsito' }
+                  : null} />
             ))}
           </ListaAgrupada>
         )}

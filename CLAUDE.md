@@ -56,9 +56,9 @@ acteck-dashboard/
 
 | ID interno | Nombre display | Marca | Nombre en ERP (`facturacion_clientes.cliente_nombre`) |
 |------------|---------------|-------|-------------------------------------------------------|
-| `digitalife` | Digitalife | Acteck / Balam Rush | `API GLOBAL` / `CAJADL01` |
+| `digitalife` | Digitalife | Acteck / Balam Rush / Audive | `API GLOBAL` / `CAJADL01` |
 | `pcel` | PCEL | Acteck | `PC ONLINE` |
-| `dicotech` | Dicotech | Acteck / Balam Rush | `DICOTECH` (REVKO) |
+| `dicotech` | Dicotech | Acteck / Balam Rush / Audive | `DICOTECH` (REVKO) |
 
 Los demás clientes del ERP (CVA, CT, PCH, Amazon, Mercado Libre, Cyberpuerta…) no tienen tab propio: caen a `cliente_key` = slug del canal (`mayoreo`, `distribuidor`, `e_commerce`, `mostrador`, `retail_*`). Sell In tiene un toggle "Todos los canales" para verlos consolidados.
 
@@ -126,6 +126,10 @@ Pendientes conocidos de rendimiento: agregar en Postgres (vistas/RPC) lo que hoy
 - **Comparador de periodos:** `src/modules/comercial/ComparadorPeriodos.jsx` (`clienteKey` null = global). Fuentes: `v_fact_cliente_mes` / `v_facturacion_global_mensual`, medidas de `v_erp_medidas_*`, movers por SKU lazy. Montado en Sell In (V2 y global).
 - **Historial de cambios:** tabla `auditoria_cambios` + trigger `fn_auditoria()` en 36 tablas que la app escribe (migración `20260910_auditoria_cambios.sql`; no audita `sellout_sku`, `inventario_cliente`, `eventos_usuario`). Pantalla `src/modules/interno/HistorialCambios.jsx`, permiso global `historial_cambios` (super admin lo ve siempre). Retención: `purgar_auditoria(dias)`.
 - **Alertas:** tabla `alertas` + task `generar-alertas` en `api/cron.js` (diaria) + `src/lib/alertas.js` (`useAlertas`, resolver/posponer) + `src/components/BandejaAlertas.jsx` (bandeja "Qué atender hoy" y `BadgeAlertas` del Topbar). Reglas: stock vs tránsito, cuota en riesgo, devoluciones anormales, rebate por generar, datos sin actualizar.
+- **Marcas propias: `src/lib/marcas.js`** es la fuente única de las tres marcas de la casa — **Acteck** (`AC-`, iOS blue), **Balam Rush** (`BR-`, morado) y **Audive** (`AV-`, naranja, alta 2026-09-21) — con `marcaDeSku()` (marca por prefijo del SKU, incluye los prefijos de terceros que ya se usaban: ES, SW, MG/ZM/TG, NA/RR), `normalizarMarca()` (ACTECK/Acteck y BALAM RUSH/Balam Rush Spectrum colapsan), `esMarcaPropia` · `colorMarca` · `toneMarca` · `etiquetaMarcasCliente` y `MARCAS_CASA_LABEL` ("Acteck · Balam Rush · Audive"). Tests: `node --test scripts/test-marcas.mjs`.
+  Regla: ninguna pantalla vuelve a escribir `sku.startsWith('AC')`, un mapa de prefijos ni un hex de marca; donde la marca viene de los datos (`roadmap_sku.marca`, `erp_ventas.marca`, sell out) se usa `normalizarMarca(r.marca) || marcaDeSku(r.sku)` para que un SKU nuevo no caiga en "—".
+  Audive existe hoy sólo en `embarques_compras` (19 SKUs de bocinas, PO ABT278, arribo a CEDIS 2026-11-06) y en `compras_oc`: no hay ventas en `erp_ventas` ni filas en `roadmap_sku`/`inventario_acteck`/`precios_sku`, así que aparecerá sola en Sell In, Sell Out, Inventario y rentabilidad en cuanto lleguen esos datos.
+
 - **Ferruteck 2 (aprobado 2026-09-10: hero negro en todas, radios 12).** Kit en `src/components/kit/` (Hero/HeroStat, KpiCard, Pill/DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Skeleton, toast/ToastHost) + `src/lib/motion.js` (EASE iOS, DUR tap 140 / state 220 / content 260 / page 340 / exit 160). `PageTransition` ya hace salida + entrada; hijos de `<div data-stagger>` entran con desfase 60 ms. Plantilla obligatoria por pantalla: Hero narrativo → 3-4 KpiCard → detalle → secundario en Panel plegable. **Pantallas migradas:** Pagos (`PagosCliente.jsx` + `pagos/`), Marketing (`MarketingCliente.jsx` + `marketing/`; `MarketingClienteV2.jsx` queda como respaldo sin uso), Inventario global (+ `inventario/`), Crédito y Cobranza V2, Visión General (tokens y radios, misma estructura Bento). Pendientes: Estado de Resultados, Configuración, móviles y el resto según `node scripts/auditar-colores.mjs` (reporte en `docs/AUDITORIA_COLORES.md`). Regla: pantalla nueva o migrada se arma sólo con el kit; nada de Tailwind de color ni hex fuera de constantes de paleta; `alert()` de éxito → `toast.ok()`.
 
 ## V3 (2026-09-11) · estado

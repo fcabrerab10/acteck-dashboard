@@ -136,6 +136,11 @@ export default function HojaProyecto({
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 0, background: 'transparent', color: theme.text, fontFamily: TYPO.fontText, fontSize: 11.5, cursor: 'pointer' }}>
                       <strong style={{ fontFamily: TYPO.fontDisplay }}>{s.sku}</strong>
                       <span style={{ color: theme.textMuted }}> · {s.descripcion || 'sin descripción'}</span>
+                      {s.enTransito && !s.enRoadmap && (
+                        <Pill tone="orange" size="xs" style={{ marginLeft: 6 }}>
+                          {s.etaTransito ? `en tránsito · llega ${fechaCortaISO(s.etaTransito)}` : 'en tránsito'}
+                        </Pill>
+                      )}
                     </button>
                   ))}
                 </div>

@@ -4,11 +4,12 @@
 //   calcularTendencia(data, filtro, periodo)     → 12 meses del año del periodo (sell in · cuotas · año anterior)
 //   estatusCliente(resumen)                      → 'bad' | 'warn' | 'neutral' | 'good'
 import { PCEL_REAL } from '../../../lib/constants';
+import { MARCAS_CASA_LABEL } from '../../../lib/marcas';
 
 export const CLIENTES = [
-  { key: 'digitalife', nombre: 'Digitalife', marca: 'Acteck · Balam Rush', letter: 'D' },
+  { key: 'digitalife', nombre: 'Digitalife', marca: MARCAS_CASA_LABEL, letter: 'D' },
   { key: 'pcel',       nombre: 'PCEL',       marca: 'Acteck',              letter: 'P' },
-  { key: 'dicotech',   nombre: 'Dicotech',   marca: 'Acteck · Balam Rush', letter: 'Di' },
+  { key: 'dicotech',   nombre: 'Dicotech',   marca: MARCAS_CASA_LABEL, letter: 'Di' },
 ];
 export const CLIENTE_KEYS = CLIENTES.map((c) => c.key);
 export const MESES_CORTO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];

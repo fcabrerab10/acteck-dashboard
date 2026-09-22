@@ -5,6 +5,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 import { PCEL_REAL } from '../../lib/constants';
+import { marcaDeSku, normalizarMarca, esSkuPropio } from '../../lib/marcas';
 
 export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete, vista = 'sellOut' }) {
   // vista: 'sellOut' (default — piezas vendidas al mercado, fuente: sellout_sku)
@@ -708,13 +709,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
-  // Keys en Title Case porque aggs normaliza las marcas (ACTECK/Acteck → "Acteck",
-  // BALAM RUSH/Balam Rush → "Balam Rush"). "Balam Rush Spectrum" se consolida
-  // en "Balam Rush" en la comparativa por marca (Spectrum es modelo, no marca).
-  const MARCA_COLORES = {
-    "Acteck": "#3B82F6",
-    "Balam Rush": "#8B5CF6",
-  };
+  // Los colores y la normalización de marcas viven en src/lib/marcas.js
+  // (ACTECK/Acteck → "Acteck", BALAM RUSH → "Balam Rush", AUDIVE → "Audive";
+  // "Balam Rush Spectrum" se consolida en "Balam Rush": Spectrum es modelo, no marca).
 
   // Normaliza un modelo Acteck para matchear entre Digitalife (sku="AC-XXXXXX")
   // y PCEL (modelo="XXXXXX"). Quita prefijo "AC-" y uniforma mayúsculas.
@@ -995,7 +992,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 meses: {},
               };
 
-              prod.marca = sku.startsWith("AC-") ? "ACTECK" : sku.startsWith("BR-") ? "Balam Rush" : "Otro";
+              prod.marca = marcaDeSku(sku) || "Otro";
 
               // Extract monthly 2026 data
               let colOffset = 22;
@@ -1056,7 +1053,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             estado: "D",
             costo_promedio: 0,
             precio_venta: 0,
-            marca: p.sku.startsWith("AC-") ? "ACTECK" : "Balam Rush",
+            marca: marcaDeSku(p.sku) || "Otro",
           }));
           counts.productos += await upsertData("productos_cliente", rows, "cliente,sku");
 
@@ -1350,9 +1347,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       return t.replace(/\b([a-záéíóúñ])/g, (m) => m.toUpperCase());
     };
 
-    // Colapsa "Balam Rush Spectrum" → "Balam Rush" sólo para la comparativa.
-    // Spectrum es un modelo, nunca fue una marca. Se aplica sólo en byMarca.
-    const consolidaMarca = (m) => (m === "Balam Rush Spectrum" ? "Balam Rush" : m);
+    // Colapsa las variantes de escritura y "Balam Rush Spectrum" → "Balam Rush"
+    // (Spectrum es un modelo, nunca fue una marca). Fuente: src/lib/marcas.js.
+    const consolidaMarca = (m) => normalizarMarca(m);
 
     const esPcel = clienteKey === "pcel";
     // Índices pre-agregados (evita O(N*M) re-filtrando en cada iter).
@@ -1395,7 +1392,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     // By marca (normalizada + Spectrum consolidado)
     const byMarca = {};
     datos.productos.forEach(p => {
-      const marca = consolidaMarca(normLabel(p.marca)) || "Sin Marca";
+      // Si el producto aún no trae marca (SKU nuevo que todavía no está en el roadmap,
+      // p. ej. los AV-* de Audive en tránsito), se infiere del prefijo del SKU.
+      const marca = consolidaMarca(normLabel(p.marca)) || marcaDeSku(p.sku) || "Sin Marca";
       if (!byMarca[marca]) byMarca[marca] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
       const sik = sellInKey(p), sok = sellOutKey(p);
       byMarca[marca].siPiezas += siByKey[sik] || 0;
@@ -1688,14 +1687,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const skusOcultosEnPropuesta = React.useMemo(() => skusEnPropuestasPendientes.size, [skusEnPropuestasPendientes]);
 
   // Roadmap + Tránsito cruce: identifica productos nuevos (en tránsito sin roadmap)
-  // Solo considera SKUs que empiezan con "AC" o "BR"
+  // Solo considera SKUs de marca propia (AC-, BR-, AV-) · src/lib/marcas.js
   const roadmapCruce = React.useMemo(() => {
     if (!datos || !datos.roadmap || !datos.transito) return null;
-    const isAcBr = (sku) => {
-      if (!sku) return false;
-      const s = String(sku).toUpperCase();
-      return s.startsWith("AC-") || s.startsWith("BR-") || s.startsWith("AC") || s.startsWith("BR");
-    };
+    const isAcBr = (sku) => esSkuPropio(sku);
     const roadmapFiltered = datos.roadmap.filter(r => isAcBr(r.sku));
     const transitoFiltered = datos.transito.filter(t => isAcBr(t.sku));
     const roadmapSet = new Set(roadmapFiltered.map(r => r.sku));

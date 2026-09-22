@@ -17,6 +17,7 @@ import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestre
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { colorMarca } from '../../lib/marcas';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, X, ChevronRight } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
@@ -51,13 +52,12 @@ function roadmapChipStyle(rdmp, P, theme) {
   return map[key] || { bg: `${theme.text}0F`, color: theme.textMuted };
 }
 
-// Color de marca (como Digitalife: Acteck iOS blue · Balam Rush morado · Vorago naranja)
+// Color de marca. Las propias (Acteck · Balam Rush · Audive) salen de src/lib/marcas.js;
+// las de terceros que Dicotech mezcla en su sell out conservan su color de la paleta.
 function marcaColor(marca, P) {
   const key = String(marca || '').trim().toLowerCase();
-  if (key === 'balam rush' || key === 'balam') return P.purple;
   if (key === 'vorago') return P.orange;
-  if (key === 'acteck') return P.accent;
-  return P.accent;
+  return colorMarca(marca, P.accent);
 }
 
 function paletteFromTheme(theme) {
