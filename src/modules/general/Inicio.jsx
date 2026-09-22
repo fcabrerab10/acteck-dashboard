@@ -56,7 +56,15 @@ export default function Inicio({ onNavegar }) {
   const c = r.cur, cart = r.cartera, inv = r.inv;
   const diaTxt = fmtDia.format(hoy).replace(',', '');
 
-  const stats = [
+  // La facturación de TODA la empresa es información sensible (Fernando, 2026-09-21): sin el permiso, el hero
+  // no muestra Fact Neta ni margen ni la gráfica de ventas de la empresa; sólo lo de sus clientes y su día.
+  const veEmpresa = sensible;
+  const statsSinEmpresa = [
+    { k: 'Clientes que ves', v: String(r.clientes.length), sub: r.clientes.map((c) => c.nombre || c.clienteKey || c.key).filter(Boolean).slice(0, 3).join(' · ') || 'ninguno' },
+    { k: 'Avisos', v: String(r.decision.length), sub: 'que atender hoy' },
+    { k: 'Fact Neta · mis clientes', v: $c(r.clientes.reduce((a, c) => a + (Number(c.fact) || 0), 0)), sub: `${labelPeriodo} · sólo los clientes que ves` },
+  ];
+  const stats = veEmpresa ? [
     { k: `Fact Neta · ${labelPeriodo}`, medida: tooltip('fact_neta', labelPeriodo), v: $c(c.fact_neta), sub: r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota${r.yoy != null ? ` · ${signo(r.yoy)} ${r.yoyLabel}` : ''}` : r.yoy != null ? `${signo(r.yoy)} ${r.yoyLabel}` : 'sin cuota' },
     ...(sensible ? [
       { k: 'Margen al momento', medida: tooltip('pct_mc'), v: c.mc != null ? pct(c.mc) : '—', sub: c.muc != null ? `MUC ${pct(c.muc)}${r.dMc != null ? ` · ${pp(r.dMc)} YoY` : ''}` : 'MC sobre Fact Neta' },
@@ -65,7 +73,7 @@ export default function Inicio({ onNavegar }) {
       { k: `Fact Neta · ${labelOtro}`, medida: tooltip('fact_neta', labelOtro), v: $c(r.otro.fact_neta), sub: r.pctOtro != null ? `${Math.round(r.pctOtro)}% de cuota` : r.yoyOtro != null ? `${signo(r.yoyOtro)} YoY` : 'sin cuota' },
       { k: 'Piezas netas', medida: tooltip('piezas_venta_neta'), v: int(c.piezas), sub: c.ticket != null ? `ticket promedio ${$c(c.ticket)}` : labelPeriodo },
     ]),
-  ];
+  ] : statsSinEmpresa;
 
   const lostTxt = `lost profit ${$c(c.lost)}${c.lostPct != null ? ` (${pct(c.lostPct)} de la bruta)` : ''}`;
   const coberturaTone = inv.cobertura == null ? 'gray' : inv.cobertura > 120 ? 'orange' : inv.cobertura < 30 ? 'red' : 'green';
@@ -79,7 +87,7 @@ export default function Inicio({ onNavegar }) {
 
       <Hero
         eyebrow={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>Inicio · {diaTxt}<span style={{ textTransform: 'none', letterSpacing: 0 }}><FrescuraPill fuentes={FUENTES_INICIO} inverso /></span></span>}
-        titulo={r.titulo} sub={r.sub} dot={r.decision.some((a) => a.severidad === 'critica')} stats={stats}>
+        titulo={veEmpresa ? r.titulo : `Hoy tienes ${r.decision.length} aviso${r.decision.length === 1 ? '' : 's'} que atender.`} sub={veEmpresa ? r.sub : `Tus clientes: ${r.clientes.map((c) => c.nombre || c.label || c.key).filter(Boolean).join(' · ') || 'ninguno'}.`} dot={r.decision.some((a) => a.severidad === 'critica')} stats={stats}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {r.decision.slice(0, 3).map((a) => <Pill key={a.id} tone={a.severidad === 'critica' ? 'red' : 'orange'} dot title={a.detalle || ''}>{a.titulo}</Pill>)}
           {r.cuota.fuente && <Pill tone="inverse" size="xs" title="Origen de la cuota total">cuota {r.cuota.fuente === 'cuotas_canales' ? 'anual (canales)' : 'Σ clientes'} {$c(r.cuota.anual)}</Pill>}
@@ -90,7 +98,7 @@ export default function Inicio({ onNavegar }) {
       <HoyPanel onNavegar={onNavegar} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8 }}>
-        {(sensible || ve.visionGeneral) && <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`Fact Neta · ${labelOtro}`} badge={r.yoyOtro != null ? { l: `${signo(r.yoyOtro)} ${esMes ? 'YoY' : 'YoY a mismo día'}`, tone: toneDe(r.yoyOtro) } : undefined}
+        {veEmpresa && <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`Fact Neta · ${labelOtro}`} badge={r.yoyOtro != null ? { l: `${signo(r.yoyOtro)} ${esMes ? 'YoY' : 'YoY a mismo día'}`, tone: toneDe(r.yoyOtro) } : undefined}
           big={$c(r.otro.fact_neta)} bigSmall={r.cuotaOtro ? `de ${$c(r.cuotaOtro)}` : ''}
           sub={[r.pctOtro != null ? `${Math.round(r.pctOtro)}% de cuota ${esMes ? 'YTD' : 'del mes'}` : 'sin cuota', r.pctAnual != null ? `${Math.round(r.pctAnual)}% de la anual ${$c(r.cuota.anual)}` : null].filter(Boolean).join(' · ')}
           progress={r.pctOtro ?? undefined} onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
@@ -113,10 +121,10 @@ export default function Inicio({ onNavegar }) {
           onClick={ir(null, PAGINAS.inventario)} />}
       </div>
 
-      <GraficaVentas r={r} onNavegar={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />
+      {veEmpresa && <GraficaVentas r={r} onNavegar={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
       <DecisionPanel r={r} onNavegar={onNavegar} onNotificaciones={() => abrirNotificaciones(onNavegar, perfil)} max={MAX_ALERTAS} />
       {r.clientes.length > 0 && <ClientesGrid r={r} onNavegar={onNavegar} />}
-      {ve.sellIn && <CanalesPanel r={r} onNavegar={ir(null, PAGINAS.sellIn)} />}
+      {veEmpresa && ve.sellIn && <CanalesPanel r={r} onNavegar={ir(null, PAGINAS.sellIn)} />}
       <AgendaPanel r={r} frescuraErp={porFuente.erp_ventas} onNavegar={onNavegar} />
     </div>
   );

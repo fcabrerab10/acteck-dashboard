@@ -87,8 +87,9 @@ export default function Inicio() {
     <>
       <TituloGrande titulo={titulo} sub={sub} />
 
-      <HeroM eyebrow={`Dirección general · ${r.mesL} ${anio}`} frase={r.titulo} sub={r.sub}
-        stats={[
+      {/* La facturación de toda la empresa es sensible: sin el permiso, el hero es de sus clientes y su día. */}
+      <HeroM eyebrow={sensible ? `Dirección general · ${r.mesL} ${anio}` : `Mis clientes · ${r.mesL} ${anio}`} frase={sensible ? r.titulo : `Hoy tienes ${decision.length} aviso${decision.length === 1 ? '' : 's'} que atender.`} sub={sensible ? r.sub : `Tus clientes: ${r.clientes.map((c) => c.nombre || c.label || c.key).filter(Boolean).join(' · ') || 'ninguno'}.`}
+        stats={sensible ? [
           { k: 'Fact Neta MTD', v: fmtM(r.cur.fact_neta), sub: r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota` : 'sin cuota' },
           ...(sensible ? [
             { k: 'Margen MC', v: r.cur.mc != null ? pct(r.cur.mc) : '—', sub: r.dMc != null ? `${r.dMc >= 0 ? '+' : ''}${r.dMc.toFixed(1)} pp` : undefined },
@@ -97,10 +98,13 @@ export default function Inicio() {
             { k: 'YoY', v: r.yoy != null ? deltaPct(r.yoy) : '—', sub: r.yoyLabel },
             { k: 'Piezas netas', v: Math.round(r.cur.piezas).toLocaleString('es-MX'), sub: 'del mes' },
           ]),
+        ] : [
+          { k: 'Clientes', v: String(r.clientes.length), sub: 'que ves' },
+          { k: 'Avisos', v: String(decision.length), sub: 'hoy' },
         ]} />
 
       <KpiGrid style={{ marginTop: 12 }}>
-        <KpiM eyebrow={`Fact Neta YTD ${anio}`} big={fmtM(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1}` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />
+        {sensible && <KpiM eyebrow={`Fact Neta YTD ${anio}`} big={fmtM(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1}` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />}
         {veCobranza && <KpiM eyebrow="Cartera vencida" big={fmtM(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${fmtM(r.cartera.saldo)}` : 'sin saldo'} onClick={() => nav.navegar({ pagina: 'cobranzaGlobal' })} />}
         {veInventario && <KpiM eyebrow="Inventario comercial" big={sensible ? fmtM(r.inv.valor) : `${Math.round(r.inv.piezas).toLocaleString('es-MX')} pz`} sub={r.inv.cobertura != null ? `${r.inv.cobertura} d de cobertura` : `${r.inv.skus} SKUs con stock`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={abrirFicha} />}
         <KpiM eyebrow={`Sell-out ${soMes ? MESES[soMes - 1] : 'últ. mes'}`} big={soTotal > 0 ? fmtM(soTotal) : '—'} sub={soUltimo.length ? `${soUltimo.length} clientes · último mes cerrado` : 'sin sell-out cargado'} />
