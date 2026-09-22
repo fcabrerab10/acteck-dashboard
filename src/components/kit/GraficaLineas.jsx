@@ -15,7 +15,7 @@
 // Cabecera de valores: pastillas con el mes bajo el cursor (o mesActivo, o el último con dato): principal (azul),
 // anterior (gris), cuota (verde), las demás series (gris) y Δ % vs anterior (DeltaPill). No hay tooltip flotante:
 // el cursor es una guía vertical punteada y la cabecera hace de lectura del mes.
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid, LabelList, useXAxisScale, usePlotArea, useActiveTooltipLabel } from 'recharts';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -74,6 +74,60 @@ function MideBandas({ indices, etiquetas, onMedir }) {
   return null;
 }
 
+/** Cursor continuo (2026-09-22, Fernando: «el cursor salta mes a mes»). En vez del cursor de Recharts,
+ *  que brinca al mes más cercano, esta capa sigue al puntero píxel a píxel: hairline vertical y un punto
+ *  que se desliza SOBRE cada curva ya dibujada (se muestrea el `<path>` real con getPointAtLength, así el
+ *  punto nunca se separa del trazo). Sólo esta capa se vuelve a pintar al mover el mouse; la gráfica no. */
+function CursorFluido({ contRef, theme, alto }) {
+  const [c, setC] = useState(null);
+  useEffect(() => {
+    const cont = contRef.current;
+    if (!cont) return undefined;
+    let raf = 0, ultimoX = null;
+    const puntoEnX = (path, x) => {
+      const L = path.getTotalLength(); if (!L) return null;
+      let a = 0, b = L, pa = path.getPointAtLength(0), pb = path.getPointAtLength(L);
+      if (x < pa.x - 0.5 || x > pb.x + 0.5) return null;
+      for (let i = 0; i < 22; i++) { const m = (a + b) / 2; const pm = path.getPointAtLength(m); if (pm.x < x) { a = m; pa = pm; } else { b = m; pb = pm; } }
+      return pa;
+    };
+    const medir = () => {
+      raf = 0;
+      if (ultimoX == null) { setC(null); return; }
+      const svg = cont.querySelector('svg.recharts-surface'); if (!svg) return;
+      const rs = svg.getBoundingClientRect(), rc = cont.getBoundingClientRect();
+      const x = ultimoX - rs.left;
+      const paths = [...svg.querySelectorAll('path.recharts-area-curve, path.recharts-line-curve')];
+      if (!paths.length) return;
+      // Rango horizontal del trazo principal (el área); si no hay, el de todos.
+      const area = paths.find((p) => p.classList.contains('recharts-area-curve')) || paths[0];
+      const b0 = area.getPointAtLength(0).x, b1 = area.getPointAtLength(area.getTotalLength()).x;
+      const xs = Math.min(Math.max(x, Math.min(b0, b1)), Math.max(b0, b1));
+      const puntos = paths.map((p) => { const pt = puntoEnX(p, xs); if (!pt) return null; return { y: pt.y, color: p.getAttribute('stroke') || theme.accent, principal: p.classList.contains('recharts-area-curve') }; }).filter(Boolean);
+      const grid = svg.querySelectorAll('.recharts-cartesian-grid-horizontal line');
+      const ys = [...grid].map((l) => Number(l.getAttribute('y1'))).filter((v) => !Number.isNaN(v));
+      const top = ys.length ? Math.min(...ys) : 0, bottom = ys.length ? Math.max(...ys) : alto - 22;
+      setC({ x: xs + (rs.left - rc.left), top: top + (rs.top - rc.top), bottom: bottom + (rs.top - rc.top), puntos: puntos.map((q) => ({ ...q, y: q.y + (rs.top - rc.top) })) });
+    };
+    const pedir = () => { if (!raf) raf = requestAnimationFrame(medir); };
+    const onMove = (e) => { ultimoX = e.clientX; pedir(); };
+    const onTouch = (e) => { const t = e.touches?.[0]; if (t) { ultimoX = t.clientX; pedir(); } };
+    const onOut = () => { ultimoX = null; pedir(); };
+    cont.addEventListener('mousemove', onMove); cont.addEventListener('mouseleave', onOut);
+    cont.addEventListener('touchstart', onTouch, { passive: true }); cont.addEventListener('touchmove', onTouch, { passive: true }); cont.addEventListener('touchend', onOut);
+    return () => { cancelAnimationFrame(raf); cont.removeEventListener('mousemove', onMove); cont.removeEventListener('mouseleave', onOut); cont.removeEventListener('touchstart', onTouch); cont.removeEventListener('touchmove', onTouch); cont.removeEventListener('touchend', onOut); };
+  }, [contRef, theme.accent, alto]);
+  if (!c) return null;
+  return (
+    <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
+      <line x1={c.x} x2={c.x} y1={c.top} y2={c.bottom} stroke={theme.text} strokeOpacity={0.45} strokeWidth={1} strokeDasharray="3 3" />
+      {c.puntos.map((p, i) => (
+        <circle key={i} cx={c.x} cy={p.y} r={p.principal ? 5.5 : 4} fill={p.color} stroke={theme.surface} strokeWidth={p.principal ? 2 : 1.5} />
+      ))}
+    </svg>
+  );
+}
+
 export default function GraficaLineas({
   datos = [], series = [], formato = moneyCompact, alto = 240, mesActivo = null, mesesAtenuados = null, onClickMes,
   compacto = false, mostrarMinMax = true, puntos, titulo, meta, acciones, desdeCero = true, leyenda, cabecera, style,
@@ -83,6 +137,7 @@ export default function GraficaLineas({
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [etiquetaHover, setEtiquetaHover] = useState(null);
   const [velo, setVelo] = useState([]);
+  const contRef = useRef(null);
 
   const principal = series.find((s) => s.tipo === 'principal') || series[0];
   const anterior = series.find((s) => s.tipo === 'anterior');
@@ -154,11 +209,6 @@ export default function GraficaLineas({
         opacity={atenuados.has(index) ? OPACIDAD_ATENUADO : 1} />
     );
   };
-  const puntoActivo = (color) => (p) => {
-    const { cx, cy, index, value } = p;
-    if (cx == null || cy == null || value == null) return <g key={`a-${index}`} />;
-    return <circle key={`a-${index}`} cx={cx} cy={cy} r={5.5} fill={color} stroke={theme.surface} strokeWidth={2} />;
-  };
 
   // Anotación máx / mín sobre la serie principal (LabelList con contenido propio).
   const etiquetaMinMax = (p) => {
@@ -187,7 +237,7 @@ export default function GraficaLineas({
 
   const margen = mini ? { top: 3, right: 4, left: 2, bottom: 2 } : compacto ? { top: 6, right: 8, left: 8, bottom: 0 } : { top: mostrarMinMax ? 18 : 8, right: 12, left: 0, bottom: 0 };
   const grafica = (
-    <div style={{ position: 'relative', width: '100%', height: alto, minWidth: 0, fontFamily: TYPO.fontText }}>
+    <div ref={contRef} style={{ position: 'relative', width: '100%', height: alto, minWidth: 0, fontFamily: TYPO.fontText }}>
       <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height: alto }}>
         <ComposedChart data={datos} margin={margen} onMouseLeave={() => setEtiquetaHover(null)} onClick={onClick}
           style={{ cursor: onClickMes ? 'pointer' : 'default' }}>
@@ -208,7 +258,7 @@ export default function GraficaLineas({
           <YAxis yAxisId="izq" hide={compacto} tickFormatter={ejeYFmt} tick={tick} axisLine={false} tickLine={false} width={compacto ? 0 : 40}
             tickCount={4} domain={desdeCero ? [0, 'auto'] : ['auto', 'auto']} />
           {conEjeDer && <YAxis yAxisId="der" orientation="right" hide domain={[0, 'auto']} />}
-          {!mini && <Tooltip cursor={{ stroke: theme.text, strokeOpacity: 0.5, strokeDasharray: '3 3', strokeWidth: 1 }} content={() => null} isAnimationActive={false} />}
+          {!mini && <Tooltip cursor={false} content={() => null} isAnimationActive={false} />}
           {series.map((s, i) => {
             const { color, width, dash } = estiloSerie(theme, s, i);
             const eje = s.eje === 'der' ? 'der' : 'izq';
@@ -216,14 +266,14 @@ export default function GraficaLineas({
               return (
                 <Area key={s.key} yAxisId={eje} type="monotone" dataKey={s.key} name={s.label} stroke={color} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round"
                   strokeDasharray={dash} fill={`url(#gl-${uid}-${s.key})`} fillOpacity={1} isAnimationActive={false} connectNulls={false}
-                  dot={conPuntos ? puntoPrincipal(color) : mini ? ((pr) => (pr.index === ultimo ? <circle key={pr.index} cx={pr.cx} cy={pr.cy} r={2.6} fill={color} stroke={theme.surface} strokeWidth={1.2} /> : null)) : false} activeDot={mini ? false : puntoActivo(color)}>
+                  dot={conPuntos ? puntoPrincipal(color) : mini ? ((pr) => (pr.index === ultimo ? <circle key={pr.index} cx={pr.cx} cy={pr.cy} r={2.6} fill={color} stroke={theme.surface} strokeWidth={1.2} /> : null)) : false} activeDot={false}>
                   {!compacto && mostrarMinMax && <LabelList dataKey={s.key} content={etiquetaMinMax} />}
                 </Area>
               );
             }
             return (
               <Line key={s.key} yAxisId={eje} type="monotone" dataKey={s.key} name={s.label} stroke={color} strokeWidth={width} strokeDasharray={dash}
-                strokeOpacity={s.tipo === 'anterior' ? 0.9 : 1} dot={false} activeDot={{ r: 4, fill: color, stroke: theme.surface, strokeWidth: 1.5 }}
+                strokeOpacity={s.tipo === 'anterior' ? 0.9 : 1} dot={false} activeDot={false}
                 isAnimationActive={false} connectNulls />
             );
           })}
@@ -231,6 +281,7 @@ export default function GraficaLineas({
           {atenuados.size > 0 && <MideBandas indices={[...atenuados]} etiquetas={etiquetas} onMedir={setVelo} />}
         </ComposedChart>
       </ResponsiveContainer>
+      {!mini && <CursorFluido contRef={contRef} theme={theme} alto={alto} />}
       {atenuados.size > 0 && velo.map((r, i) => (
         <div key={i} aria-hidden style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h,
           background: theme.surface, opacity: 1 - OPACIDAD_ATENUADO, pointerEvents: 'none' }} />
