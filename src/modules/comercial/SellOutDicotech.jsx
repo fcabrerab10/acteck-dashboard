@@ -150,7 +150,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
             (q) => q.in('anio', [anioPrev, anio])),
           fetchAll('v_sellout_dicotech_sucursal_mes', 'sucursal,anio,mes,piezas,monto,tx,clientes_distintos',
             (q) => q.eq('anio', anio)),
-          fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
+          fetchAll('v_inventario_cliente_sucursal_ultimo', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
             (q) => q.eq('cliente', clienteKey)),
           // FIX audit #3: ilike en vez de eq strict. La columna 'mayorista' puede
           // guardar 'DICOTECH', 'Dicotech', 'dicotech', 'DICO'… El eq('DICOTECH')

@@ -127,7 +127,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
         fetchAll('v_sellout_pcel_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas,skus_sin_mapear,piezas_sin_mapear'),
         fetchAll('v_sellout_pcel_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
-        fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
+        fetchAll('v_inventario_cliente_sucursal_ultimo', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
         fetchAll('v_sellout_pcel_marca_mes', 'marca,anio,mes,piezas,monto,tx,skus_distintos',
           (q) => q.in('anio', [anioPrev, anio])),

@@ -38,13 +38,18 @@ export function Avatar({ persona, size = 22 }) {
 }
 
 /** Palomita circular (14 px) · hecha = verde. */
-export function Palomita({ hecha, onClick, title, size = 15, disabled }) {
+export function Palomita({ hecha, onClick, title, size = 15, disabled, area = 30 }) {
+  // Área de toque de 30 px (iPad/dedo; Fernando 2026-09-22: «no detecta el botón») con el círculo
+  // visual de `size` px dentro; el margen negativo conserva la alineación de siempre.
   const { theme } = useTheme();
   const green = theme.green || '#34C759';
+  const m = Math.max(0, (area - size) / 2);
   return (
     <button type="button" onClick={(e) => { e.stopPropagation(); if (!disabled) onClick?.(); }} title={title || (hecha ? 'Reabrir' : 'Marcar como hecha')} aria-pressed={hecha} disabled={disabled}
-      style={{ width: size, height: size, borderRadius: 999, flexShrink: 0, padding: 0, cursor: disabled ? 'default' : 'pointer', border: `1.5px solid ${hecha ? green : theme.borderStrong || theme.border}`, background: hecha ? green : 'transparent', color: '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: `background ${DUR.tap}ms ${EASE}, border-color ${DUR.tap}ms ${EASE}` }}>
-      {hecha && <svg width={size - 6} height={size - 6} viewBox="0 0 10 10" fill="none"><path d="M2 5.2 4.2 7.4 8 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+      style={{ width: area, height: area, margin: -m, borderRadius: 999, flexShrink: 0, padding: 0, border: 0, background: 'transparent', cursor: disabled ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent' }}>
+      <span aria-hidden style={{ width: size, height: size, borderRadius: 999, boxSizing: 'border-box', border: `1.5px solid ${hecha ? green : theme.borderStrong || theme.border}`, background: hecha ? green : 'transparent', color: '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: `background ${DUR.tap}ms ${EASE}, border-color ${DUR.tap}ms ${EASE}` }}>
+        {hecha && <svg width={size - 6} height={size - 6} viewBox="0 0 10 10" fill="none"><path d="M2 5.2 4.2 7.4 8 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+      </span>
     </button>
   );
 }

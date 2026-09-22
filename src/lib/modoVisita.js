@@ -89,10 +89,10 @@ export function pasosDeVisita(clienteKey, { anio = new Date().getFullYear() } = 
     run: () => Promise.all([
       queryClient.fetchQuery({
         queryKey: ['inventario_cliente', clienteKey],
-        queryFn: () => fetchAll('inventario_cliente', '*', (q) => q.eq('cliente', clienteKey)),
+        queryFn: () => fetchAll('v_inventario_cliente_ultimo', 'sku,marca,titulo,stock,valor,costo_convenio,precio_venta,fecha_ultima_venta,dias_sin_venta,anio,semana', (q) => q.eq('cliente', clienteKey)),
         gcTime: SIETE_DIAS,
       }),
-      fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana', (q) => q.eq('cliente', clienteKey)),
+      fetchAll('v_inventario_cliente_sucursal_ultimo', 'sku,sucursal,stock,valor,costo_convenio,anio,semana', (q) => q.eq('cliente', clienteKey)),
       fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
       fetchAll('v_transito_sku', 'sku,cantidad,eta_mas_cercana,embarques_detalle', (q) => q.gt('cantidad', 0)),
     ]),

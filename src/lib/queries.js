@@ -316,7 +316,9 @@ export function useInventarioCliente(clienteKey) {
     queryKey: ['inventario_cliente', clienteKey],
     enabled: !!clienteKey,
     queryFn: () =>
-      fetchAll('inventario_cliente', '*', (q) => q.eq('cliente', clienteKey)),
+      // Sólo la última foto semanal (v_inventario_cliente_ultimo): las pantallas se quedaban con ella
+      // y tiraban las otras 21 (Digitalife: 28 K filas → 1.3 K; 2026-09-22).
+      fetchAll('v_inventario_cliente_ultimo', 'sku,marca,titulo,stock,valor,costo_convenio,precio_venta,fecha_ultima_venta,dias_sin_venta,anio,semana', (q) => q.eq('cliente', clienteKey)),
   });
 }
 

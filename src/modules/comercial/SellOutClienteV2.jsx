@@ -121,7 +121,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
         fetchAll('v_sellout_digitalife_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll('v_sellout_digitalife_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
-        fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
+        fetchAll('v_inventario_cliente_sucursal_ultimo', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
         fetchAll('v_sellout_digitalife_marca_mes', 'marca,anio,mes,piezas,monto,tx,skus_distintos',
           (q) => q.in('anio', [anioPrev, anio])),
