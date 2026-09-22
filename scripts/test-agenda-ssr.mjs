@@ -62,6 +62,7 @@ test('cargan todos los módulos que toca la Agenda V4 (web y móvil)', async () 
     '/src/modules/agenda/Semana.jsx', '/src/modules/agenda/Pendientes.jsx', '/src/modules/agenda/Cuentas.jsx',
     '/src/modules/agenda/Archivados.jsx', '/src/modules/agenda/Subtareas.jsx', '/src/modules/agenda/HojaItem.jsx',
     '/src/modules/agenda/Reuniones.jsx', '/src/modules/agenda/Minuta.jsx', '/src/modules/agenda/FormReunion.jsx',
+    '/src/modules/agenda/HojaReparto.jsx', '/src/movil/pestanas/agenda/Reparto.jsx', '/src/movil/pestanas/agenda/Minuta.jsx',
     '/src/movil/pestanas/agenda/Agenda.jsx', '/src/movil/pestanas/agenda/Pendientes.jsx',
     '/src/movil/pestanas/agenda/Cuentas.jsx', '/src/movil/pestanas/agenda/Archivados.jsx',
     '/src/movil/pestanas/agenda/Semana.jsx', '/src/movil/pestanas/agenda/Captura.jsx',
@@ -74,7 +75,7 @@ test('cargan todos los módulos que toca la Agenda V4 (web y móvil)', async () 
   const datos = await vite.ssrLoadModule('/src/modules/agenda/datos.js');
   for (const h of ['useAgendaV4', 'useSubtareas', 'useCuentas', 'useMinutasCliente', 'crearSubtarea', 'marcarSubtarea',
     'borrarSubtarea', 'moverSubtarea', 'crearCuenta', 'actualizarCuenta', 'borrarCuenta', 'agregarNotaCuenta',
-    'registrarContactoCuenta', 'crearPendienteDeCuenta']) {
+    'registrarContactoCuenta', 'crearPendienteDeCuenta', 'repartirAcuerdos']) {
     assert.equal(typeof datos[h], 'function', `datos.js debe exportar ${h}`);
   }
   const bloques = await vite.ssrLoadModule('/src/modules/comercial/home/bloques.jsx');
@@ -215,4 +216,28 @@ test('los crones de la Agenda están declarados en vercel.json', async () => {
   assert.equal(v.crons.some((c) => c.path.includes('agenda-hoy')), false, 'agenda-hoy se reemplazó por agenda-correo');
   // Plan Hobby: 12 funciones serverless; los crones no cuentan, pero conviene no dispararse.
   assert.ok(v.crons.length <= 20, 'demasiadas entradas de cron');
+});
+
+test('el reparto de la minuta pinta una fila por acuerdo y sabe cerrar', async () => {
+  const { default: Reparto } = await vite.ssrLoadModule('/src/modules/agenda/HojaReparto.jsx');
+  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
+  const { detectarAcuerdos } = await vite.ssrLoadModule('/src/modules/agenda/reparto.js');
+  const notas = [
+    'Revisamos el avance del trimestre con Karolina.',
+    '- Mandar la cotización actualizada',
+    'Confirmar el POP @karolina el viernes',
+    '- Confirmar rebate Q3',
+  ].join('\n');
+  const filas = detectarAcuerdos(notas, { clienteKey: 'pcel', personas: PERSONAS, hoy: HOY, yo: 'u-fer', existentes: [{ titulo: 'Confirmar rebate Q3' }] });
+  assert.equal(filas.length, 3, 'tres líneas son acuerdo; el contexto no');
+  assert.equal(filas[2].incluir, false, 'lo que ya existe no se vuelve a crear');
+  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Reparto, {
+    abierto: true, reunion: REUNIONES[0], filas, personas: PERSONAS, hoy: HOY, onClose: () => {}, onListo: () => {},
+  })));
+  sano(html, 'Reparto');
+  assert.ok(html.includes('Mandar la cotización actualizada'), 'el acuerdo con viñeta sale');
+  assert.ok(html.includes('Confirmar el POP'), 'el acuerdo con @ y fecha sale');
+  assert.ok(html.includes('Crear 2 pendientes y cerrar minuta'), 'el pie cuenta sólo lo incluido');
+  assert.ok(html.includes('Sólo guardar notas'), 'la salida sin crear nada está a la mano');
+  assert.ok(html.includes('ya está en la minuta'), 'lo duplicado se avisa');
 });

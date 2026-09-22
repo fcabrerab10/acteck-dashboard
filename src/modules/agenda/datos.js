@@ -21,6 +21,7 @@ import { frescuraManual } from '../settings/importador/frescura';
 import { GRUPOS } from '../settings/importador/config';
 import { parsearEtiquetas, conHandles, asignables } from './etiquetas';
 import { bandeja as calcBandeja, avisosSistema, isoDia, sumarDias, progresoPorItem, registrarContacto } from './calculo';
+import { filasAItems } from './reparto';
 
 export const KEY_AGENDA = ['agenda', 'datos'];
 export const KEY_PERSONAS = ['agenda', 'personas'];
@@ -215,6 +216,23 @@ export async function guardarPunto({ id, reunion, texto, orden, estado, fecha_li
   const data = lanzar(await supabase.from('agenda_items').update(campos).eq('id', id).select('*').single());
   parcharItemLocal(id, data);
   return data;
+}
+
+/**
+ * Reparto de la minuta ("Anota y reparte al cerrar", 2026-09-21): crea un punto por cada acuerdo
+ * detectado en las notas y, si `cerrar`, cierra la reunión con el mismo RPC de siempre
+ * (`agenda_cerrar_reunion`). Las filas vienen de `reparto.js#detectarAcuerdos`; las que ya existían
+ * como punto de la reunión llegan con `incluir: false`, así que no se duplican.
+ *   → { creados, cierre }
+ */
+export async function repartirAcuerdos({ reunion, filas, orden0 = 0, cerrar = true }, personas = []) {
+  if (!reunion?.id) throw new Error('Sin reunión');
+  const rows = filasAItems(filas, reunion, { orden0 });
+  let creados = 0;
+  for (const r of rows) { await crearItem(r, personas); creados += 1; }
+  const cierre = cerrar ? await cerrarReunion(reunion.id) : null;
+  await recargarAgenda();
+  return { creados, cierre };
 }
 
 // ─── Fuentes del sistema → avisos ───

@@ -105,6 +105,8 @@ Archivadas en `src/_archivo/agenda-v3/`: `Bandeja.jsx`, `Tablero.jsx`, `Equipo.j
 Reuniones · Cuentas · Archivados**; captura en una línea; swipe → hecho / ← posponer (`FilaGesto`);
 la hoja del pendiente trae el checklist; Cuentas con «Registrar contacto», llamar y WhatsApp.
 Archivadas en `src/_archivo/agenda-v3-movil/`: `Hoy.jsx`, `Tablero.jsx`, `Clientes.jsx`.
+El Calendario del celular tiene **Mes | Semana** (`Semana.jsx`): la rejilla del mes pinta un punto por
+fuente (viajes incluidos) y al tocar un día se abre su lista debajo.
 
 **Minutas por cliente.** El Resumen de Digitalife / PCEL / Dicotech trae el Panel **«Últimas minutas
 y acuerdos»** (`home/bloques.jsx` → `MinutasCliente`, hook `useMinutasCliente`): las últimas 5
@@ -117,6 +119,40 @@ migradas a `agenda_*` y por eso mostraba datos congelados.
 línea por área** (`agruparAvisos`): «90 avisos del sistema · 3 urgentes → ver».
 
 ---
+
+### 3.1 Minuta · «Anota y reparte al cerrar» (2026-09-21, aprobado por Fernando)
+
+En el celular la minuta ya no obliga a capturar punto por punto: hay un **área de notas libre** que se
+guarda sola cada 800 ms en `agenda_reuniones.notas` (la misma columna que usa la web, así que las dos
+pantallas ven lo mismo). Detrás del texto se resaltan las líneas que parecen acuerdo y arriba del botón
+sale el contador «N acuerdos detectados».
+
+**Qué cuenta como acuerdo** (`src/modules/agenda/reparto.js`, pruebas en `scripts/test-agenda-reparto.mjs`):
+una línea que empieza con viñeta (`-` `•` `*` `·` `1.` `1)`), o que menciona `@persona`, o `#cliente`, o
+trae una fecha en lenguaje natural (hoy · mañana · el viernes · 24/09 · la próxima semana…). Todo lo demás
+es contexto y no se reparte. Los parsers son los de `etiquetas.js` (`parsearEtiquetas`, `fechaNatural`), así
+que la gramática es la misma que la de la captura en una línea.
+
+**Repartir** abre una hoja con una fila por acuerdo: palomita para incluirlo, responsable (por omisión quien
+mencionó `@`, si no quien anota), fecha (chips hoy · mañana · viernes · próxima semana · fecha…) y `#cliente`
+(el de la línea o el de la reunión). El pie: **«Crear N pendientes y cerrar minuta»** →
+`repartirAcuerdos()` en `datos.js` crea un `agenda_items` `tipo='punto'` por fila (con `reunion_id`,
+`responsables`, `fecha_limite`, `origen = {fuente:'reparto'}`) y cierra con el RPC de siempre
+`agenda_cerrar_reunion`; **«Sólo guardar notas»** no crea nada. El dedupe es por título dentro de la reunión:
+lo que ya existe como punto llega marcado «ya está en la minuta» y sin palomita.
+
+| Archivo | Papel |
+|---|---|
+| `src/modules/agenda/reparto.js` | Lógica pura: `detectarAcuerdos`, `esAcuerdo`, `analizarLinea`, `lineasMarcadas`, `opcionesFecha`, `filasAItems`, `textoReparto`. |
+| `src/modules/agenda/datos.js` | `repartirAcuerdos({ reunion, filas, orden0, cerrar }, personas)`. |
+| `src/modules/agenda/HojaReparto.jsx` | La hoja lateral de la web (el nombre lleva "Hoja" porque `Reparto.jsx` chocaría con `reparto.js` en macOS). |
+| `src/movil/pestanas/agenda/Reparto.jsx` | La hoja `HojaM` del celular. |
+| `src/movil/pestanas/agenda/Minuta.jsx` | Notas con resaltado (`NotasMinuta`), contador y botón **Repartir**. |
+| `src/modules/agenda/Minuta.jsx` | El mismo contador y botón junto a «Cerrar reunión». |
+
+Los asistentes externos de una reunión (`agenda_reuniones.asistentes` sin `user_id`) **no** pueden ser
+responsables: `agenda_items.responsables` es `uuid[]`, así que el selector sólo ofrece a los internos con
+Agenda (Fernando y Karolina).
 
 ## 4. Correos (`api/cron.js`)
 
@@ -153,7 +189,8 @@ activa cuyo `proximo_seguimiento` ya llegó; severidad alta pasados 7 días de r
 
 ```bash
 node --test scripts/test-agenda-calculo.mjs scripts/test-agenda-etiquetas.mjs   # 27
-node --test scripts/test-agenda-ssr.mjs                                        # 9 (render con datos sembrados)
+node --test scripts/test-agenda-reparto.mjs                                     # 12 (reparto de la minuta)
+node --test scripts/test-agenda-ssr.mjs                                        # 10 (render con datos sembrados)
 node --test scripts/test-pantallas-ssr.mjs                                     # 479 módulos
 node scripts/verificar-deploy.mjs && npm run build
 ```

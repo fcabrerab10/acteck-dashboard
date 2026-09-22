@@ -198,7 +198,7 @@ export default function Agenda({ onNavegar, inicial }) {
 
       {hojaItem && <HojaItem item={porId.get(hojaItem.id) || hojaItem} personas={personas} personasPorId={personasPorId} porId={porId} reuniones={reuniones} hoy={hoy}
         subtareas={subtareas} puedeEditar={puedeEditar} onClose={() => setHojaItem(null)} onAbrirMinuta={(rid) => { setHojaItem(null); setVista('reuniones'); setMinutaId(rid); }} />}
-      {minuta && <Minuta reunion={minuta} items={items} personas={personas} personasPorId={personasPorId} porId={porId} reuniones={reuniones} hoy={hoy}
+      {minuta && <Minuta reunion={minuta} items={items} personas={personas} personasPorId={personasPorId} porId={porId} reuniones={reuniones} hoy={hoy} uid={uid}
         puedeEditar={puedeEditar} onClose={() => setMinutaId(null)} onEditar={() => setFormReunion({ reunion: minuta })} google={comunes.google} />}
       {formReunion && <FormReunion inicial={formReunion} personas={personas} google={comunes.google} onClose={() => setFormReunion(null)}
         onCreada={(r) => { setFormReunion(null); if (r?.tipo === 'reunion') { setVista('reuniones'); setMinutaId(r.id); } }} />}

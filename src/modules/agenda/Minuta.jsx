@@ -2,7 +2,7 @@
 // guardado al momento (debounce 600 ms por punto + "guardado hace N s"), asistentes, notas; Cerrar reunión
 // (avisos a responsables + arrastre a la siguiente del mismo cliente); compartir por WhatsApp y PDF.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Share2, Check, Play, Lock, Pencil } from 'lucide-react';
+import { Trash2, Share2, Check, Play, Lock, Pencil, Split } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { HojaLateral, Campo } from '../../components/perfil/comun';
@@ -14,10 +14,12 @@ import { resumenReunion, vecesArrastrado, ordinal, cuando, isoDia } from './calc
 import { textoConEtiquetas, CATEGORIAS, nombreClienteAgenda } from './etiquetas';
 import { textoMinuta, subReunion, ESTADO_REUNION_LABEL } from './textos';
 import { CampoEtiquetas, Palomita, TagPersona, CatPill, TagCliente, Avatar } from './comun';
+import { detectarAcuerdos } from './reparto';
+import HojaReparto from './HojaReparto';
 
 const DEBOUNCE_MS = 600;
 
-export default function Minuta({ reunion, items, personas, personasPorId, porId, hoy, puedeEditar, onClose, onEditar, google }) {
+export default function Minuta({ reunion, items, personas, personasPorId, porId, hoy, uid = null, puedeEditar, onClose, onEditar, google }) {
   const { theme } = useTheme();
   const res = useMemo(() => resumenReunion(reunion, items, porId), [reunion, items, porId]);
   const cerrada = reunion.estado === 'cerrada';
@@ -28,6 +30,7 @@ export default function Minuta({ reunion, items, personas, personasPorId, porId,
   const [nuevo, setNuevo] = useState('');
   const [notas, setNotas] = useState(reunion.notas || '');
   const [cerrando, setCerrando] = useState(false);
+  const [verReparto, setVerReparto] = useState(false);
   const rootRef = useRef(null);
   const timers = useRef(new Map());
   const pendientes = useRef(new Map());
@@ -76,6 +79,9 @@ export default function Minuta({ reunion, items, personas, personasPorId, porId,
     setCerrando(false);
   };
   const compartirWa = () => compartir(textoMinuta(reunion, res.puntos, { personasPorId, porId }), { titulo: `Minuta ${nombreClienteAgenda(reunion.cliente_key)}` });
+  // Acuerdos escritos en las Notas (mismo detector que el celular).
+  const acuerdos = useMemo(() => detectarAcuerdos(notas, { clienteKey: reunion.cliente_key, personas, hoy, yo: uid, existentes: res.puntos }), [notas, reunion.cliente_key, personas, hoy, uid, res.puntos]);
+
   const seg = guardadoAt ? Math.max(0, Math.round((Date.now() - guardadoAt) / 1000)) : null;
   const indicador = guardando > 0 ? 'guardando…' : seg == null ? (editable ? 'se guarda al momento' : '') : seg < 3 ? '● guardado' : `● guardado hace ${seg < 60 ? `${seg} s` : `${Math.round(seg / 60)} min`}`;
   void tick;
@@ -96,6 +102,7 @@ export default function Minuta({ reunion, items, personas, personasPorId, porId,
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             {puedeEditar && <Boton icon={Pencil} onClick={onEditar} title="Editar fecha, lugar, asistentes">Editar</Boton>}
             {editable && reunion.estado === 'programada' && <Boton icon={Play} onClick={iniciar}>Iniciar</Boton>}
+            {editable && acuerdos.length > 0 && <Boton icon={Split} onClick={() => setVerReparto(true)} title="Convertir las líneas de las Notas en pendientes">Repartir {acuerdos.length}</Boton>}
             {editable && <Boton icon={Lock} primario onClick={cerrar} disabled={cerrando}>Cerrar reunión</Boton>}
           </span>
         </div>
@@ -120,12 +127,22 @@ export default function Minuta({ reunion, items, personas, personasPorId, porId,
           </div>
         </Bloque>
 
-        <Bloque theme={theme} titulo="Notas" sub={cerrada ? '' : 'texto libre · se guarda al momento'}>
+        <Bloque theme={theme} titulo="Notas" sub={cerrada ? '' : 'texto libre · se guarda al momento · «-», @alguien o una fecha = acuerdo'}>
           <textarea value={notas} onChange={(e) => guardarNotas(e.target.value)} readOnly={!editable} placeholder="Contexto, acuerdos generales, próximos pasos…" rows={Math.min(14, Math.max(4, String(notas).split('\n').length + 1))}
             style={{ width: '100%', boxSizing: 'border-box', borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 12.5, padding: 10, outline: 'none', resize: 'vertical', lineHeight: 1.45 }} />
+          {(editable || acuerdos.length > 0) && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+              <span style={{ fontSize: 11, fontFamily: TYPO.fontDisplay, fontWeight: 600, color: acuerdos.length ? theme.accent : theme.textMuted }}>
+                {acuerdos.length ? `${acuerdos.length} acuerdo${acuerdos.length === 1 ? '' : 's'} detectado${acuerdos.length === 1 ? '' : 's'}` : 'Sin acuerdos detectados'}
+              </span>
+              {editable && <Boton icon={Split} disabled={!acuerdos.length} onClick={() => setVerReparto(true)}>Repartir</Boton>}
+            </div>
+          )}
         </Bloque>
         {reunion.migrado_de && <div style={{ fontSize: 10.5, color: theme.textMuted }}>Migrada de {reunion.migrado_de.tabla} · {reunion.migrado_de.fuente ? `fuente ${reunion.migrado_de.fuente}` : ''}</div>}
       </div>
+      <HojaReparto abierto={verReparto} onClose={() => setVerReparto(false)} reunion={reunion} filas={acuerdos} personas={personas} hoy={hoy}
+        orden0={(res.puntos.at(-1)?.orden ?? -1) + 1} onListo={onClose} />
     </HojaLateral>
   );
 }

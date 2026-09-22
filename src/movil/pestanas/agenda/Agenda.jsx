@@ -1,7 +1,7 @@
 // Agenda móvil V4 (2026-09-21) · push (nodo `agenda`). Mismo modelo que la web (src/modules/agenda):
 // Segmented Pendientes · Calendario · Reuniones · Cuentas · Archivados.
 //   Pendientes  captura en una línea + bloques por horizonte, gestos (→ hecho · ← posponer)
-//   Calendario  la semana de siempre con Google, reuniones, viajes, pendientes, arribos y cargas
+//   Calendario  Mes o Semana con Google, reuniones, viajes, pendientes, arribos y cargas
 //   Reuniones   línea del tiempo + minuta en vivo
 //   Cuentas     cuentas que Fernando sigue, con "Registrar contacto", llamar y WhatsApp
 //   Archivados  lo hecho y lo cancelado, con desarchivar

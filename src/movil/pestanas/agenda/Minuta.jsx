@@ -2,24 +2,30 @@
 // Hero compacto (asistentes, abiertos/arrastrados/resueltos) · secciones Arrastrados / Puntos de hoy: cada punto con
 // palomita, texto con etiquetas editable en línea (guardado al momento: debounce 600 ms por punto, "● hace N s"),
 // categoría, responsable y fecha (tocar "…" abre la edición completa) · línea "Nuevo punto…" con micrófono ·
-// pie fijo con Compartir (textos.js → WhatsApp) y Cerrar reunión (RPC, confirmación, toast con lo generado).
+// pie fijo con Compartir (textos.js → WhatsApp), Repartir y Cerrar reunión (RPC, confirmación, toast con lo generado).
+// Notas de la reunión (2026-09-21, propuesta A «Anota y reparte al cerrar»): área de texto libre que se guarda
+// sola cada 800 ms en agenda_reuniones.notas (la misma columna que usa la web), con las líneas que parecen
+// acuerdo resaltadas detrás del texto y el contador «N acuerdos detectados» → botón Repartir (hoja Reparto.jsx).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Share2, Lock, Play, MoreHorizontal, Plus, Check } from 'lucide-react';
+import { Share2, Lock, Play, MoreHorizontal, Plus, Check, Split } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Cargando } from '../../../components/kit';
 import { compartir } from '../../../lib/whatsapp';
 import { useAgendaDatos, guardarPunto, actualizarReunion, cerrarReunion, recargarAgenda } from '../../../modules/agenda/datos';
+import { detectarAcuerdos, lineasMarcadas } from '../../../modules/agenda/reparto';
 import { resumenReunion, vecesArrastrado, ordinal, cuando, isoDia, fmtHora } from '../../../modules/agenda/calculo';
 import { textoConEtiquetas, nombreClienteAgenda, fechaNatural } from '../../../modules/agenda/etiquetas';
 import { textoMinuta, subReunion, ESTADO_REUNION_LABEL } from '../../../modules/agenda/textos';
 import { useNav, ALTO_BARRA } from '../../nav';
-import { Cabecera, HeroM, Pill, Vacio, toast } from '../../piezas';
+import { Cabecera, HeroM, Pill, Vacio, BotonGrande, toast } from '../../piezas';
 import { MONO } from '../../util';
 import { PalomitaM, TagPersona, CatPill, BotonMic, SeccionM, ChipM, useReloj, primerNombre } from './comun';
 import CapturaHoja from './Captura';
+import Reparto from './Reparto';
 
 const DEBOUNCE_MS = 600;
+const NOTAS_MS = 800;   // las notas son un texto largo: un respiro más que los puntos
 
 export default function Minuta({ reunionId }) {
   const { theme } = useTheme();
@@ -39,11 +45,16 @@ export default function Minuta({ reunionId }) {
   const [cerrando, setCerrando] = useState(false);
   const [cap, setCap] = useState(null);
   const [verAsistentes, setVerAsistentes] = useState(false);
+  const [notas, setNotas] = useState('');
+  const [verReparto, setVerReparto] = useState(false);
+  const notaDe = useRef(null);
   const timers = useRef(new Map());
   const pendientes = useRef(new Map());
   const baseDictado = useRef('');
   useReloj(true);
   useEffect(() => () => { for (const t of timers.current.values()) clearTimeout(t); recargarAgenda(); }, []);
+  // Las notas se cargan una vez por reunión (después manda lo que se escribe en el celular).
+  useEffect(() => { if (reunion?.id && notaDe.current !== reunion.id) { notaDe.current = reunion.id; setNotas(reunion.notas || ''); } }, [reunion?.id, reunion?.notas]);
 
   const marcarGuardado = () => { setGuardadoAt(Date.now()); setGuardando((n) => Math.max(0, n - 1)); };
   const guardarAhora = useCallback(async (id, campos) => {
@@ -57,6 +68,17 @@ export default function Minuta({ reunionId }) {
     if (timers.current.has(id)) clearTimeout(timers.current.get(id));
     timers.current.set(id, setTimeout(() => { const c = pendientes.current.get(id); pendientes.current.delete(id); timers.current.delete(id); guardarAhora(id, c); }, DEBOUNCE_MS));
   }, [guardarAhora]);
+
+  const guardarNotas = (v) => {
+    setNotas(v);
+    if (timers.current.has('__notas')) clearTimeout(timers.current.get('__notas'));
+    timers.current.set('__notas', setTimeout(async () => {
+      timers.current.delete('__notas');
+      setGuardando((n) => n + 1);
+      try { await actualizarReunion(reunion.id, { notas: v }); marcarGuardado(); }
+      catch (e) { setGuardando((n) => Math.max(0, n - 1)); toast.error(e.message); }
+    }, NOTAS_MS));
+  };
 
   const crear = async () => {
     const t = nuevo.trim(); if (!t || !reunion) return;
@@ -78,7 +100,7 @@ export default function Minuta({ reunionId }) {
     if (!window.confirm(`¿Cerrar la reunión? ${n ? `${n} punto${n === 1 ? '' : 's'} abierto${n === 1 ? '' : 's'} se convierten en tareas y se arrastran a la siguiente reunión con ${nombreClienteAgenda(reunion.cliente_key)}; ` : ''}cada responsable recibe aviso.`)) return;
     setCerrando(true);
     try {
-      for (const [id, t] of timers.current) { clearTimeout(t); const c = pendientes.current.get(id); if (c) await guardarAhora(id, c); }
+      for (const [id, t] of timers.current) { clearTimeout(t); if (id === '__notas') { await actualizarReunion(reunion.id, { notas }).catch(() => {}); continue; } const c = pendientes.current.get(id); if (c) await guardarAhora(id, c); }
       timers.current.clear(); pendientes.current.clear();
       const r = await cerrarReunion(reunion.id);
       toast.ok(`Reunión cerrada · ${n} tarea${n === 1 ? '' : 's'} generada${n === 1 ? '' : 's'}${r.siguiente ? ` · ${r.arrastrados ?? n} a la siguiente` : ''} · ${r.avisos ?? 0} aviso${r.avisos === 1 ? '' : 's'}`, { ms: 5000 });
@@ -87,6 +109,11 @@ export default function Minuta({ reunionId }) {
   };
   const compartirWa = () => compartir(textoMinuta(reunion, res.puntos, { personasPorId, porId }), { titulo: `Minuta ${nombreClienteAgenda(reunion.cliente_key)}` });
   const onDictado = (t, final) => { const sep = baseDictado.current && !/\s$/.test(baseDictado.current) ? ' ' : ''; setNuevo(`${baseDictado.current}${sep}${t}`); if (final) baseDictado.current = `${baseDictado.current}${sep}${t}`; };
+
+  // Acuerdos detectados en las notas (reparto.js): alimentan el contador y la hoja Repartir.
+  const acuerdos = useMemo(() => (reunion
+    ? detectarAcuerdos(notas, { clienteKey: reunion.cliente_key, personas, hoy, yo: perfil?.user_id || null, existentes: res?.puntos || [] })
+    : []), [notas, reunion, personas, hoy, perfil, res]);
 
   const seg = guardadoAt ? Math.max(0, Math.round((Date.now() - guardadoAt) / 1000)) : null;
   const indicador = guardando > 0 ? 'guardando…' : seg == null ? (editable ? 'se guarda al momento' : '') : seg < 3 ? '● guardado' : `● hace ${seg < 60 ? `${seg} s` : `${Math.round(seg / 60)} min`}`;
@@ -136,7 +163,17 @@ export default function Minuta({ reunionId }) {
               : <BotonMic size={36} onTexto={onDictado} onEstado={(on) => { if (on) baseDictado.current = nuevo; }} />}
           </div>
         )}
-        {reunion.notas && <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 12, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}><b style={{ color: theme.text }}>Notas · </b>{reunion.notas}</div>}
+        <SeccionM tone={acuerdos.length ? 'blue' : undefined}>Notas de la reunión</SeccionM>
+        <NotasMinuta theme={theme} valor={notas} onChange={guardarNotas} editable={editable} hoy={hoy} />
+        {(editable || acuerdos.length > 0) && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+            <span style={{ fontSize: 12, color: acuerdos.length ? theme.accent : theme.textMuted, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>
+              {acuerdos.length ? `${acuerdos.length} acuerdo${acuerdos.length === 1 ? '' : 's'} detectado${acuerdos.length === 1 ? '' : 's'}` : 'Sin acuerdos detectados'}
+            </span>
+            <span style={{ flex: 1, fontSize: 11, color: theme.textMuted }}>Empieza con «-», menciona @alguien o pon una fecha.</span>
+          </div>
+        )}
+        {editable && <div style={{ marginTop: 10 }}><BotonGrande primario icon={Split} disabled={!acuerdos.length} onClick={() => setVerReparto(true)}>Repartir{acuerdos.length ? ` ${acuerdos.length}` : ''}</BotonGrande></div>}
         <div style={{ height: 96 }} />
       </div>
 
@@ -147,6 +184,8 @@ export default function Minuta({ reunionId }) {
       </div>
 
       <CapturaHoja cfg={cap} personas={personas} reuniones={reuniones} hoy={hoy} onClose={() => setCap(null)} onGuardado={() => setGuardadoAt(Date.now())} />
+      <Reparto abierto={verReparto} onClose={() => setVerReparto(false)} reunion={reunion} filas={acuerdos} personas={personas} hoy={hoy}
+        orden0={(res.puntos.at(-1)?.orden ?? -1) + 1} onListo={() => nav.pop()} />
     </>
   );
 }
@@ -179,6 +218,41 @@ function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, o
         </div>
       </div>
       <button type="button" onClick={onMas} aria-label="Más opciones" style={{ width: 32, height: 32, margin: '-4px -6px 0 0', border: 0, background: 'transparent', color: theme.textMuted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><MoreHorizontal size={18} /></button>
+    </div>
+  );
+}
+
+/**
+ * Área de notas con resaltado por línea: detrás del textarea va una copia del texto donde las
+ * líneas que `reparto.js` reconoce como acuerdo llevan fondo. Mismo tipo, tamaño, interlineado y
+ * padding en las dos capas, o el resaltado se desalinea.
+ */
+function NotasMinuta({ theme, valor, onChange, editable, hoy }) {
+  const marcas = useMemo(() => lineasMarcadas(valor, { hoy }), [valor, hoy]);
+  const fondo = useRef(null);
+  const dark = theme.mode === 'dark';
+  const caja = { fontFamily: TYPO.fontText, fontSize: 15, lineHeight: 1.5, padding: '10px 12px', margin: 0, border: '1px solid transparent', borderRadius: 12, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', boxSizing: 'border-box', width: '100%' };
+  const filas = Math.min(18, Math.max(5, marcas.length + 1));
+  const resalte = dark ? 'rgba(10,132,255,0.22)' : 'rgba(0,122,255,0.12)';
+  if (!editable) {
+    return (
+      <div style={{ ...caja, border: `1px solid ${theme.border}`, background: dark ? 'rgba(255,255,255,0.04)' : theme.surface, color: valor ? theme.text : theme.textMuted, minHeight: 60 }}>
+        {valor || 'Sin notas.'}
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: 'relative', border: `1px solid ${theme.border}`, borderRadius: 12, background: dark ? 'rgba(255,255,255,0.04)' : theme.surface }}>
+      <div ref={fondo} aria-hidden style={{ ...caja, position: 'absolute', inset: 0, color: 'transparent', overflow: 'hidden', pointerEvents: 'none' }}>
+        {marcas.map((l) => (
+          <React.Fragment key={l.i}>
+            <span style={l.acuerdo ? { background: resalte, borderRadius: 4, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone' } : undefined}>{l.texto || ' '}</span>{'\n'}
+          </React.Fragment>
+        ))}
+      </div>
+      <textarea value={valor} onChange={(e) => onChange(e.target.value)} rows={filas} placeholder="Anota la reunión. Las líneas con «-», @alguien, #cliente o una fecha se reparten al cerrar."
+        autoCapitalize="sentences" onScroll={(e) => { if (fondo.current) fondo.current.scrollTop = e.target.scrollTop; }}
+        style={{ ...caja, position: 'relative', background: 'transparent', color: theme.text, caretColor: theme.accent, outline: 'none', resize: 'none', display: 'block' }} />
     </div>
   );
 }

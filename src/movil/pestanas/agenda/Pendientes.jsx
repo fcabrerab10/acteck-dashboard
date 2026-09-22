@@ -23,9 +23,12 @@ export default function Pendientes() {
   const [texto, setTexto] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Míos · Karolina · Todos (David Millán no entra a la Agenda: `personas` ya viene sin él, ver
+  // CORREOS_SIN_AGENDA en etiquetas.js). El orden lo pidió Fernando: primero yo, luego el equipo.
   const opciones = useMemo(() => [
-    { id: 'mios', label: 'Míos' }, { id: 'todos', label: 'Todos' },
+    { id: 'mios', label: 'Míos' },
     ...personas.filter((p) => p.user_id !== uid).map((p) => ({ id: p.user_id, label: (p.nombre || '').split(' ')[0] })),
+    { id: 'todos', label: 'Todos' },
   ], [personas, uid]);
 
   const abiertos = useMemo(() => items.filter((i) => i.estado === 'abierta'), [items]);
