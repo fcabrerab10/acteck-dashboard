@@ -2,7 +2,7 @@
 //   Izquierda: modo "cajón" → "☰ Menú" (abre el cajón) · modo "barra" → logotipo "acteck."
 //   Derecha:   Buscar (lupa) · Alertas (campana con contador de pilas) · avatar (sólo en "cajón": abre la hoja de perfil).
 // La lupa y la campana quedan resaltadas mientras su pestaña está al frente; tocarlas de nuevo vuelve a la anterior.
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Menu, Search, Bell } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -10,6 +10,8 @@ import { EASE, DUR } from '../../lib/motion';
 import { AvatarImg } from '../../lib/avatar';
 import { vidrio, hairline, suaveBg, Logotipo } from '../../components/nav/comun';
 import { ALTO_BARRA_SUP } from '../nav';
+// Buzón de salida, perezoso: no pesa en el arranque de la app móvil.
+const BuzonPill = lazy(() => import('../../components/BuzonPill'));
 
 export default function BarraSuperior({ modo, tab, badge = 0, badgeCritica = false, perfil, onMenu, onBuscar, onAlertas, onAvatar }) {
   const { theme } = useTheme();
@@ -30,6 +32,8 @@ export default function BarraSuperior({ modo, tab, badge = 0, badgeCritica = fal
           <div style={{ paddingLeft: 10 }}><Logotipo theme={theme} size={18} title="Acteck Dashboard" /></div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {/* Buzón de salida: "Sin conexión · 3 por sincronizar" (se esconde con señal y cola vacía). */}
+          <Suspense fallback={null}><BuzonPill /></Suspense>
           <BotonIcono theme={theme} label="Buscar" activo={tab === 'buscar'} onClick={onBuscar}><Search size={20} strokeWidth={2} /></BotonIcono>
           <BotonIcono theme={theme} label="Alertas" activo={tab === 'alertas'} onClick={onAlertas}>
             <Bell size={20} strokeWidth={2} />

@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, DB_CONFIGURED } from '../../../lib/supabase';
 import { cachedQuery, invalidateDataCache } from '../../../lib/queries';
+// Buzón de salida: avanzar un pago desde el celular del cliente no puede depender de la señal.
+import { escribir } from '../../../lib/buzon';
 import { puedeVerPestanaCliente, puedeEditarPestanaCliente } from '../../../lib/permisos';
 import { CLIENTES } from './reglas';
 import M from './motor';
@@ -134,9 +136,12 @@ const ahora = () => new Date().toISOString();
 const nombreDe = (perfil) => perfil?.nombre || perfil?.email || 'Sistema';
 
 async function bitacora(pagoId, anterior, nuevo, perfil, nota, meta) {
-  await supabase.from('pagos_bitacora').insert({
-    pago_id: pagoId, estado_anterior: anterior, estado_nuevo: nuevo,
-    usuario: nombreDe(perfil), nota: nota || null, meta: meta || {},
+  await escribir({
+    tabla: 'pagos_bitacora', op: 'insert', origen: 'Pagos', titulo: `${anterior || '—'} → ${nuevo}`,
+    filas: {
+      pago_id: pagoId, estado_anterior: anterior, estado_nuevo: nuevo,
+      usuario: nombreDe(perfil), nota: nota || null, meta: meta || {},
+    },
   });
 }
 
@@ -153,11 +158,11 @@ export async function cambiarEstado({ pago, hacia, perfil, extra = {}, nota }) {
   }
   if (hacia === 'rechazado') { parche.estatus = 'pendiente'; }
   if (hacia === 'cancelado') { parche.estatus = 'cancelado'; parche.monto = 0; }
-  const { data, error } = await supabase.from('pagos').update(parche).eq('id', pago.id).select().single();
-  if (error) throw error;
+  const { data, offline } = await escribir({ tabla: 'pagos', op: 'update', filas: parche, match: { id: pago.id }, origen: 'Pagos', titulo: pago.concepto });
   await bitacora(pago.id, pago.estado, hacia, perfil, nota, extra.meta);
-  invalidateDataCache();
-  return data;
+  if (!offline) invalidateDataCache();
+  // Sin señal la fila real no volvió: se devuelve el pago con el parche aplicado para que la pantalla avance.
+  return data && data.id ? data : { ...pago, ...parche };
 }
 
 /** Devuelve un pago rechazado al inicio del flujo. */

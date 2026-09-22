@@ -10,6 +10,8 @@ import { supabase } from '../../../lib/supabase';
 import { queryClient } from '../../../lib/queryClient';
 import { fetchAll } from '../../../lib/queries';
 import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
+// Buzón de salida: los proyectos se capturan en la visita, muchas veces sin señal.
+import { escribir } from '../../../lib/buzon';
 
 const KEY_PROYECTOS = ['proyectos'];
 const KEY_ABASTO = ['proyectos', 'abasto'];
@@ -132,29 +134,27 @@ export async function crearProyecto(campos, perfil) {
     notas: campos.notas || null,
     creado_por: perfil?.email || perfil?.nombre || null,
   };
-  const { data, error } = await supabase.from('proyectos').insert(payload).select().single();
-  if (error) throw error;
+  const { data, offline } = await escribir({ tabla: 'proyectos', op: 'insert', filas: payload, origen: 'Proyectos', titulo: payload.nombre });
   const lineas = (campos.lineas || []).filter((l) => l.sku && Number(l.piezas) > 0);
   if (lineas.length) {
-    const { error: e2 } = await supabase.from('proyecto_lineas').insert(
-      lineas.map((l) => ({ proyecto_id: data.id, sku: l.sku, piezas: Math.round(Number(l.piezas)) || 0, reservado: Math.round(Number(l.reservado)) || 0, notas: l.notas || null })),
-    );
-    if (e2) throw e2;
+    // `data.id` puede ser un id temporal (tmp_…): el buzón lo sustituye por el real al sincronizar.
+    await escribir({
+      tabla: 'proyecto_lineas', op: 'insert', origen: 'Proyectos', titulo: payload.nombre,
+      filas: lineas.map((l) => ({ proyecto_id: data.id, sku: l.sku, piezas: Math.round(Number(l.piezas)) || 0, reservado: Math.round(Number(l.reservado)) || 0, notas: l.notas || null })),
+    });
   }
-  await invalidarProyectos();
+  if (!offline) await invalidarProyectos();
   return data;
 }
 
 export async function actualizarProyecto(id, cambios) {
-  const { error } = await supabase.from('proyectos').update(cambios).eq('id', id);
-  if (error) throw error;
-  await invalidarProyectos();
+  const { offline } = await escribir({ tabla: 'proyectos', op: 'update', filas: cambios, match: { id }, origen: 'Proyectos' });
+  if (!offline) await invalidarProyectos();
 }
 
 export async function eliminarProyecto(id) {
-  const { error } = await supabase.from('proyectos').delete().eq('id', id);
-  if (error) throw error;
-  await invalidarProyectos();
+  const { offline } = await escribir({ tabla: 'proyectos', op: 'delete', match: { id }, origen: 'Proyectos' });
+  if (!offline) await invalidarProyectos();
 }
 
 /** Alta o edición de una línea (unique proyecto_id + sku). */
@@ -166,22 +166,19 @@ export async function guardarLinea(proyectoId, linea) {
     reservado: Math.round(Number(linea.reservado)) || 0,
     notas: linea.notas || null,
   };
-  const { error } = await supabase.from('proyecto_lineas').upsert(payload, { onConflict: 'proyecto_id,sku' });
-  if (error) throw error;
-  await invalidarProyectos();
+  const { offline } = await escribir({ tabla: 'proyecto_lineas', op: 'upsert', filas: payload, onConflict: 'proyecto_id,sku', origen: 'Proyectos', titulo: linea.sku });
+  if (!offline) await invalidarProyectos();
 }
 
 export async function eliminarLinea(id) {
-  const { error } = await supabase.from('proyecto_lineas').delete().eq('id', id);
-  if (error) throw error;
-  await invalidarProyectos();
+  const { offline } = await escribir({ tabla: 'proyecto_lineas', op: 'delete', match: { id }, origen: 'Proyectos' });
+  if (!offline) await invalidarProyectos();
 }
 
 /** "Reservar": marca piezas ya apartadas en Acteck para esa línea. */
 export async function reservarLinea(id, reservado) {
-  const { error } = await supabase.from('proyecto_lineas').update({ reservado: Math.max(0, Math.round(Number(reservado)) || 0) }).eq('id', id);
-  if (error) throw error;
-  await invalidarProyectos();
+  const { offline } = await escribir({ tabla: 'proyecto_lineas', op: 'update', filas: { reservado: Math.max(0, Math.round(Number(reservado)) || 0) }, match: { id }, origen: 'Proyectos' });
+  if (!offline) await invalidarProyectos();
 }
 
 // ─── "Mandar al S&OP" ───

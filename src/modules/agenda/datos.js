@@ -12,6 +12,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { queryClient } from '../../lib/queryClient';
 import { fetchAll, fetchPaged, invalidateDataCache } from '../../lib/queries';
+// Buzón de salida: en visita sin señal la captura se guarda en el dispositivo y se sube después.
+import { escribir } from '../../lib/buzon';
 import { useAlertas } from '../../lib/alertas';
 import { useTrackingDatos } from '../comercial/tracking/datos';
 import { calcularTodo } from '../comercial/tracking/calculo';
@@ -107,9 +109,10 @@ export async function crearItem({ texto, titulo, ...campos }, personas = []) {
     // aviso a los responsables distintos de quien crea (el cron lo vuelve alerta agenda_asignado)
     notificar_a: responsables.filter((u) => u !== creado_por), notificar_motivo: responsables.some((u) => u !== creado_por) ? 'asignado' : null,
   });
-  const data = lanzar(await supabase.from('agenda_items').insert(row).select('*').single());
+  const { data, offline } = await escribir({ tabla: 'agenda_items', op: 'insert', filas: row, origen: 'Agenda', titulo: row.titulo });
   queryClient.setQueryData(KEY_AGENDA, (prev) => prev ? { ...prev, items: [...prev.items, data] } : prev);
-  await recargarAgenda();
+  // Sin señal NO se refetchea: el refetch fallido borraría la fila optimista de la pantalla.
+  if (!offline) await recargarAgenda();
   return data;
 }
 
@@ -124,9 +127,10 @@ export async function actualizarItem(id, cambios, { prevResponsables = null } = 
   if (c.estado === 'hecha' && c.completado_en === undefined) c.completado_en = new Date().toISOString();
   if (c.estado === 'abierta' && c.completado_en === undefined) c.completado_en = null;
   parcharItemLocal(id, c);
-  try { lanzar(await supabase.from('agenda_items').update(c).eq('id', id)); }
+  let offline = false;
+  try { ({ offline } = await escribir({ tabla: 'agenda_items', op: 'update', filas: c, match: { id }, origen: 'Agenda' })); }
   catch (e) { await recargarAgenda(); throw e; }
-  await recargarAgenda();
+  if (!offline) await recargarAgenda();
 }
 
 /** Palomita: alterna abierta ↔ hecha. */
@@ -142,8 +146,10 @@ export function guardarItemDesdeTexto(item, texto, personas, extra = {}) {
 
 export async function borrarItem(id) {
   queryClient.setQueryData(KEY_AGENDA, (prev) => prev ? { ...prev, items: prev.items.filter((i) => i.id !== id) } : prev);
-  try { lanzar(await supabase.from('agenda_items').delete().eq('id', id)); }
-  finally { await recargarAgenda(); }
+  let offline = false;
+  try { ({ offline } = await escribir({ tabla: 'agenda_items', op: 'delete', match: { id }, origen: 'Agenda' })); }
+  catch (e) { await recargarAgenda(); throw e; }
+  if (!offline) await recargarAgenda();
 }
 
 // ─── Reuniones ───
@@ -151,20 +157,23 @@ export async function borrarItem(id) {
 export async function crearReunion(r) {
   const creado_por = await uid();
   const row = limpio({ tipo: r.tipo || 'reunion', titulo: r.titulo || 'Reunión', cliente_key: r.cliente_key || 'interno', fecha: r.fecha, fecha_fin: r.fecha_fin || null, duracion_min: r.duracion_min || 60, lugar: r.lugar || null, asistentes: r.asistentes || [], notas: r.notas || null, google_event_id: r.google_event_id || null, estado: 'programada', creado_por });
-  const data = lanzar(await supabase.from('agenda_reuniones').insert(row).select('*').single());
+  const { data, offline } = await escribir({ tabla: 'agenda_reuniones', op: 'insert', filas: row, origen: 'Agenda', titulo: row.titulo });
+  queryClient.setQueryData(KEY_AGENDA, (prev) => prev ? { ...prev, reuniones: [...prev.reuniones, data] } : prev);
   // Al crear una reunión, los puntos abiertos de reuniones cerradas del mismo cliente se arrastran a ésta.
+  // Sin señal el arrastre no se encola: se hace al abrir la reunión con "Preparar".
   let arrastrados = 0;
-  if (data.tipo === 'reunion') { try { arrastrados = lanzar(await supabase.rpc('agenda_arrastrar_pendientes', { p_reunion: data.id })) || 0; } catch (e) { console.warn('[agenda] arrastrar:', e.message); } }
-  await recargarAgenda();
+  if (!offline && data.tipo === 'reunion') { try { arrastrados = lanzar(await supabase.rpc('agenda_arrastrar_pendientes', { p_reunion: data.id })) || 0; } catch (e) { console.warn('[agenda] arrastrar:', e.message); } }
+  if (!offline) await recargarAgenda();
   return { ...data, arrastrados };
 }
 
 export async function actualizarReunion(id, cambios) {
   const c = limpio(cambios);
   parcharReunionLocal(id, c);
-  try { lanzar(await supabase.from('agenda_reuniones').update(c).eq('id', id)); }
+  let offline = false;
+  try { ({ offline } = await escribir({ tabla: 'agenda_reuniones', op: 'update', filas: c, match: { id }, origen: 'Agenda' })); }
   catch (e) { await recargarAgenda(); throw e; }
-  await recargarAgenda();
+  if (!offline) await recargarAgenda();
 }
 
 export async function borrarReunion(id) {
@@ -175,9 +184,12 @@ export async function borrarReunion(id) {
 
 /** Cierra la reunión (RPC): avisos a responsables + arrastre a la siguiente del mismo cliente. → { cerrada, avisos, arrastrados, siguiente } */
 export async function cerrarReunion(id) {
-  const r = lanzar(await supabase.rpc('agenda_cerrar_reunion', { p_reunion: id }));
+  // RPC por el buzón: si la reunión se cierra en la sala del cliente sin señal, el cierre
+  // (avisos + arrastre a la siguiente) queda en cola y corre en cuanto vuelve el internet.
+  const { data, offline } = await escribir({ tabla: 'agenda_cerrar_reunion', op: 'rpc', filas: { p_reunion: id }, origen: 'Agenda', titulo: 'cerrar reunión' });
+  if (offline) { parcharReunionLocal(id, { estado: 'cerrada' }); return { cerrada: true, pendiente: true }; }
   await recargarAgenda();
-  return r || {};
+  return data || {};
 }
 /** "Preparar": trae a esta reunión los puntos abiertos de las anteriores cerradas del mismo cliente. → n */
 export async function prepararReunion(id) {
@@ -201,7 +213,7 @@ export async function guardarPunto({ id, reunion, texto, orden, estado, fecha_li
   if (!id) {
     const creado_por = await uid();
     const row = { tipo: 'punto', reunion_id: reunion.id, estado: 'abierta', prioridad: 'media', ...campos, responsables: campos.responsables || [], creado_por, notificar_a: (campos.responsables || []).filter((u) => u !== creado_por), notificar_motivo: (campos.responsables || []).some((u) => u !== creado_por) ? 'asignado' : null };
-    const data = lanzar(await supabase.from('agenda_items').insert(row).select('*').single());
+    const { data } = await escribir({ tabla: 'agenda_items', op: 'insert', filas: row, origen: 'Minuta', titulo: row.titulo });
     queryClient.setQueryData(KEY_AGENDA, (pv) => pv ? { ...pv, items: [...pv.items, data] } : pv);
     return data;
   }
@@ -213,8 +225,8 @@ export async function guardarPunto({ id, reunion, texto, orden, estado, fecha_li
   if (campos.estado === 'hecha' && !prev?.completado_en) campos.completado_en = new Date().toISOString();
   if (campos.estado === 'abierta') campos.completado_en = null;
   parcharItemLocal(id, campos);
-  const data = lanzar(await supabase.from('agenda_items').update(campos).eq('id', id).select('*').single());
-  parcharItemLocal(id, data);
+  const { data } = await escribir({ tabla: 'agenda_items', op: 'update', filas: campos, match: { id }, origen: 'Minuta', titulo: campos.titulo });
+  if (data) parcharItemLocal(id, data);
   return data;
 }
 
@@ -481,9 +493,9 @@ export async function crearComentario({ itemId, texto, tipo = 'seguimiento', reu
   if (!t) throw new Error('Escribe el comentario');
   if (!itemId) throw new Error('Sin punto');
   const row = limpio({ item_id: itemId, texto: t, tipo, reunion_id: reunionId || undefined, autor: await uid() });
-  const data = lanzar(await supabase.from('agenda_item_comentarios').insert(row).select('*').single());
+  const { data, offline } = await escribir({ tabla: 'agenda_item_comentarios', op: 'insert', filas: row, origen: 'Minuta', titulo: t });
   parcharComentarios((prev) => [...prev, data]);
-  await recargarAgenda();
+  if (!offline) await recargarAgenda();
   return data;
 }
 

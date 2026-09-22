@@ -17,7 +17,9 @@ const TONO_MOTIVO = {
   'Producción': 'purple',
 };
 
-export default function FueraDeVenta({ filas, descripciones, sensible = false }) {
+// `onAbrir` avisa a la pantalla para que baje los almacenes NO comerciales (el detalle por SKU
+// de este panel vive justo ahí, y el primer viaje ya no los trae).
+export default function FueraDeVenta({ filas, descripciones, sensible = false, onAbrir }) {
   const { theme } = useTheme();
   const { filas: almacenes, cargando } = useFueraDeVenta();
   const [abierta, setAbierta] = useState(null);
@@ -68,7 +70,8 @@ export default function FueraDeVenta({ filas, descripciones, sensible = false })
       : `${fmtInt(tot.almacenes)} almacenes · ${fmtInt(tot.piezas)} pz${sensible ? ` · ${fmtCompact(tot.valor)} a costo` : ''} · click en una fila abre sus SKUs`;
 
   return (
-    <Panel titulo="Fuera de venta" meta={meta} plegable abiertoInicial={false} padding={0}>
+    <Panel titulo="Fuera de venta" meta={meta} plegable abiertoInicial={false} padding={0}
+      onToggle={(abierto) => { if (abierto) onAbrir?.(); }}>
       <div style={{ padding: '8px 12px 0', fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted }}>
         Almacenes que la medida [Inv Actual] deja fuera por ser exclusivos de inventario: destrucción, paqueterías, reparaciones, centro de servicio, producción, refacturación… No es stock vendible, pero es dinero parado.
       </div>

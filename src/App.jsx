@@ -48,7 +48,7 @@ import PaginaContenido from './components/PaginaContenido';
 const Paneles = lazy(() => import('./components/nav/Paneles'));
 // MobileNav y MobileShell (legacy) ya no se montan: los sustituyó MovilApp (V3).
 const MovilApp = lazy(() => import('./movil/MovilApp'));
-import { ToastHost } from './components/kit';
+import { ToastHost, toast as toastKit } from './components/kit';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -274,6 +274,37 @@ export default function App() {
   const prefsDisp = usePrefsDispositivo();
   // Densidad → variables CSS que leen Panel / KpiCard / TablaCompacta del kit. 'comoda' = como siempre.
   useEffect(() => { aplicarDensidad(prefsDisp.densidad); }, [prefsDisp.densidad]);
+
+  // ── Buzón de salida ──
+  // Sincroniza al volver la señal / al foco / cada 60 s, refresca la cache al subir algo
+  // y deja un toast persistente si un cambio se atora (la pastilla del chrome abre el detalle).
+  // Buzón de salida (visitas sin señal). Import dinámico: el módulo entra en el primer
+  // ralentí, no en el chunk de arranque. Arranca la sincronización (online · foco · 60 s),
+  // refresca la cache al subir algo y deja un toast persistente si un cambio se atora.
+  useEffect(() => {
+    let limpiar = () => {};
+    let vivo = true;
+    import('./lib/buzon').then(({ arrancarBuzon, suscribir, configurarAviso }) => {
+      if (!vivo) return;
+      configurarAviso((m) => toastKit.info(m));
+      const parar = arrancarBuzon({
+        onSincronizado: async (n) => {
+          const { invalidateDataCache } = await import('./lib/queries');
+          await invalidateDataCache();
+          toastKit.ok(n === 1 ? 'Se sincronizó 1 cambio guardado sin conexión' : `Se sincronizaron ${n} cambios guardados sin conexión`);
+        },
+      });
+      let anterior = null;
+      const off = suscribir((st) => {
+        if (st.ultimoError && st.ultimoError !== anterior) {
+          toastKit.error(st.pendientes === 1 ? '1 cambio no se pudo sincronizar' : `${st.pendientes} cambios no se pudieron sincronizar`, { ms: 0 });
+        }
+        anterior = st.ultimoError;
+      });
+      limpiar = () => { parar(); off(); };
+    }).catch(() => {});
+    return () => { vivo = false; limpiar(); };
+  }, []);
   // Ancho máximo del contenido: 1600 de toda la vida; sólo el panorámico lo puede cambiar.
   const anchoMax = disp.modo === 'panoramico' ? (Number(prefsDisp.anchoMax) || 0) : 1600;
 

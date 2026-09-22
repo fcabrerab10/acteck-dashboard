@@ -193,14 +193,21 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          // Supabase REST → NetworkFirst con fallback a cache
+          // Supabase REST → NetworkFirst con fallback a cache.
+          // Ésta es la capa que sostiene el "Modo visita" (src/lib/modoVisita.js): al preparar
+          // la visita se lanzan de verdad las consultas del cliente y sus respuestas quedan aquí
+          // 7 días, así que al llegar sin señal las pantallas abren igual aunque se recargue la app.
+          // maxEntries 500 (antes 100): una sola visita mete ~40 respuestas y 100 se quedaba corto
+          // en cuanto se navegaba un rato; el LRU de Workbox las poda igual.
+          // OJO: workbox sólo enruta GET, así que los RPC (POST /rest/v1/rpc/*) NO se cachean
+          // — ver docs/SIN_CONEXION.md. Ninguna pantalla de cliente depende de un RPC de lectura.
           {
             urlPattern: /^https:\/\/hrhccvuhnedahznewgaj\.supabase\.co\/rest\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'supabase-rest',
               networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 7, purgeOnQuotaError: true },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

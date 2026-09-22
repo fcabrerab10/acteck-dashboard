@@ -7,6 +7,8 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
+// Modo visita: baja todo lo del cliente para poder verlo sin señal (src/lib/modoVisita.js).
+import BotonPrepararVisita from '../../components/BotonPrepararVisita';
 import { moneyCompact as $c, fecha } from '../../lib/format';
 import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, usePersistTrimestres, mesesDeTrimestres } from '../../components/kit';
 import { configDe, MESES, qDe, META_INV_DIAS } from './home/config';
@@ -63,6 +65,7 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
       <Hero eyebrow={`Resumen · ${cfg.nombre} · ${MESES[mesActual - 1]} ${anio}`} titulo={r.titulo} sub={r.sub} dot={r.recos.some((x) => x.tone === 'red')} stats={stats}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {r.recos.slice(0, 4).map((x, i) => <Pill key={i} tone={x.tone} dot title={x.s}>{x.t}</Pill>)}
+          <BotonPrepararVisita clienteKey={clienteKey} nombre={cfg.nombre} anio={anio} />
           <Pill tone="inverse" size="xs" title="Última actualización de cada fuente">
             SI {r.mesSiUlt ? MESES[r.mesSiUlt - 1] : '—'} · SO {r.ultimaFechaSo ? fecha(r.ultimaFechaSo) : r.mesSoUlt ? MESES[r.mesSoUlt - 1] : '—'} · Inv {r.inv.semana ? `S${r.inv.semana}` : '—'} · Cartera {r.cartera.semana ? `S${r.cartera.semana}` : '—'}
           </Pill>

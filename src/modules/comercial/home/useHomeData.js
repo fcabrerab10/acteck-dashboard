@@ -69,6 +69,31 @@ async function cargarMarcas(ck, cfg) {
   return map;
 }
 
+/**
+ * Todo lo que el Resumen baja, como función suelta (sin React). La usa el hook de abajo y
+ * también el "Modo visita" (src/lib/modoVisita.js) para dejarlo en cache antes de salir.
+ */
+export async function cargarHomeData(ck, cfg, anio) {
+  const [ec, pend, min, mkt, pagos, invActeck, so, inv, marcas] = await Promise.all([
+    cachedQuery(supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,saldo_a_vencer,notas_credito,dso').eq('cliente', ck).order('fecha_corte', { ascending: true })),
+    supabase.from('pendientes').select('id,titulo,descripcion,responsable,fecha_entrega,estado,tipo').eq('cliente', ck).eq('archivado', false).order('fecha_entrega', { ascending: true, nullsFirst: false }),
+    supabase.from('minutas').select('id,fecha_reunion,titulo,fuente,contenido').eq('cliente', ck).order('fecha_reunion', { ascending: false }).limit(5),
+    supabase.from('marketing_actividades').select('id,nombre,tipo,estatus,fecha,mes,anio,inversion,semana').eq('cliente', ck).eq('anio', anio),
+    supabase.from('pagos').select('id,concepto,categoria,monto,estatus,fecha_compromiso').eq('cliente', ck).in('estatus', ['pendiente', 'en_proceso']),
+    fetchAll('v_inventario_comercial', 'sku,inventario'),
+    cargarSellOut(ck, cfg, anio),
+    cargarInventario(ck, cfg),
+    cargarMarcas(ck, cfg),
+  ]);
+  const estados = ec.data || [];
+  const ultimoId = estados[estados.length - 1]?.id;
+  const det = ultimoId ? await cachedQuery(supabase.from('estados_cuenta_detalle').select('movimiento,referencia,vencimiento,saldo_actual').eq('estado_cuenta_id', ultimoId)) : { data: [] };
+  return {
+    estados, detalle: det.data || [], pendientes: pend.data || [], minutas: min.data || [], marketing: mkt.data || [],
+    pagos: pagos.data || [], invActeck, so, inv, marcas,
+  };
+}
+
 export function useHomeData(ck, cfg, anio) {
   const fac = useFacturacion(ck, [anio - 1, anio], 'sku,anio,mes,piezas,monto');
   const cuo = useCuotasMensuales(ck, anio);
@@ -79,25 +104,9 @@ export function useHomeData(ck, cfg, anio) {
     setSt({ loading: true, error: null, data: null });
     (async () => {
       try {
-        const [ec, pend, min, mkt, pagos, invActeck, so, inv, marcas] = await Promise.all([
-          cachedQuery(supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,saldo_a_vencer,notas_credito,dso').eq('cliente', ck).order('fecha_corte', { ascending: true })),
-          supabase.from('pendientes').select('id,titulo,descripcion,responsable,fecha_entrega,estado,tipo').eq('cliente', ck).eq('archivado', false).order('fecha_entrega', { ascending: true, nullsFirst: false }),
-          supabase.from('minutas').select('id,fecha_reunion,titulo,fuente,contenido').eq('cliente', ck).order('fecha_reunion', { ascending: false }).limit(5),
-          supabase.from('marketing_actividades').select('id,nombre,tipo,estatus,fecha,mes,anio,inversion,semana').eq('cliente', ck).eq('anio', anio),
-          supabase.from('pagos').select('id,concepto,categoria,monto,estatus,fecha_compromiso').eq('cliente', ck).in('estatus', ['pendiente', 'en_proceso']),
-          fetchAll('v_inventario_comercial', 'sku,inventario'),
-          cargarSellOut(ck, cfg, anio),
-          cargarInventario(ck, cfg),
-          cargarMarcas(ck, cfg),
-        ]);
-        const estados = ec.data || [];
-        const ultimoId = estados[estados.length - 1]?.id;
-        const det = ultimoId ? await cachedQuery(supabase.from('estados_cuenta_detalle').select('movimiento,referencia,vencimiento,saldo_actual').eq('estado_cuenta_id', ultimoId)) : { data: [] };
+        const data = await cargarHomeData(ck, cfg, anio);
         if (cancel) return;
-        setSt({ loading: false, error: null, data: {
-          estados, detalle: det.data || [], pendientes: pend.data || [], minutas: min.data || [], marketing: mkt.data || [],
-          pagos: pagos.data || [], invActeck, so, inv, marcas,
-        } });
+        setSt({ loading: false, error: null, data });
       } catch (e) {
         if (!cancel) setSt({ loading: false, error: e?.message || String(e), data: null });
       }

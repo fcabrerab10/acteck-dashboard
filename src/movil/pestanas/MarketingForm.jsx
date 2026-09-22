@@ -7,6 +7,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Camera, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { escribir } from '../../lib/buzon';   // buzón de salida: captura en tienda sin señal
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Segmented, Pill, BotonGrande, toast } from '../piezas';
@@ -108,13 +109,15 @@ export default function MarketingForm({ clienteKey, actividad = null, fechaInici
         if (pub?.publicUrl) payload.notas = [payload.notas, `Foto: ${pub.publicUrl}`].filter(Boolean).join('\n');
       } catch (e) { toast.error('No se pudo subir la foto: ' + (e.message || e)); }
     }
-    const q = editId
-      ? supabase.from('marketing_actividades').update(payload).eq('id', editId).select().single()
-      : supabase.from('marketing_actividades').insert(payload).select().single();
-    const { data, error } = await q;
+    let data = null, offline = false;
+    try {
+      const r = editId
+        ? await escribir({ tabla: 'marketing_actividades', op: 'update', filas: payload, match: { id: editId }, origen: 'Marketing', titulo: payload.nombre })
+        : await escribir({ tabla: 'marketing_actividades', op: 'insert', filas: payload, origen: 'Marketing', titulo: payload.nombre });
+      data = r.data; offline = r.offline;
+    } catch (error) { setSaving(false); toast.error('Error guardando: ' + (error.message || error)); return; }
     setSaving(false);
-    if (error) { toast.error('Error guardando: ' + error.message); return; }
-    toast.ok(editId ? 'Actividad actualizada' : 'Actividad creada');
+    if (!offline) toast.ok(editId ? 'Actividad actualizada' : 'Actividad creada');
     onGuardado?.(data);
   };
 

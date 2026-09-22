@@ -16,6 +16,9 @@ import PanelAvatar from './perfil/PanelAvatar';
 // Control "Paneles": sólo existe en monitores ≥ 1900 px, así que va perezoso (no pesa en el arranque).
 import { useDispositivo } from '../lib/dispositivo';
 const ControlPaneles = lazy(() => import('./nav/ControlPaneles'));
+// Buzón de salida (offline): la pastilla sólo se pinta si falta señal o hay algo en cola.
+// Perezosa a propósito: estática, buzon.js + la pastilla pesaban 3.5 KB gz en el arranque.
+const BuzonPill = lazy(() => import('./BuzonPill'));
 
 // ═════════ Chrome derecho (reutilizable) ═════════
 export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPresent, onToggleModoPresent, oscuro = false, onAbrirPaleta, mostrarBuscar = false }) {
@@ -24,6 +27,8 @@ export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPr
   const { modo } = useDispositivo();
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, pointerEvents: 'auto' }}>
+      <Suspense fallback={null}><BuzonPill oscuro={oscuro} /></Suspense>
+
       {mostrarBuscar && (
         <button type="button" onClick={onAbrirPaleta} title="Buscar (⌘K)" style={{
           height: 28, padding: '0 8px 0 9px', border: 0, borderRadius: 999, cursor: 'pointer',

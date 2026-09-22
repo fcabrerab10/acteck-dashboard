@@ -11,3 +11,4 @@ export { default as Topbar } from './Topbar';
 // Loader de pantalla: usar `Cargando` del kit (src/components/kit). El alias de abajo es compat TEMPORAL
 export { default as InstallPrompt } from './InstallPrompt';
 export { default as OfflineBadge } from './OfflineBadge';
+export { default as BuzonPill } from './BuzonPill';

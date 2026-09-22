@@ -98,7 +98,7 @@ function agregarSkus(filas, { descripciones, transito, leadTime, demanda }) {
 function InventarioGlobalPantalla({ sensible }) {
   const { theme } = useTheme();
   const rootRef = useRef(null); // raíz para exportar PDF
-  const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, medidas, mesesRef } = useInventarioDatos();
+  const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, medidas, mesesRef, cargarTodas, cargandoTodas } = useInventarioDatos();
   // Medidas oficiales del director: Inv Actual, Dias de Inv, Inv Total, Costo Promedio.
   // Mandan en el hero; el resto de la pantalla (facetas por CEDIS/almacén, cobertura
   // por SKU en piezas) sigue calculándose sobre el detalle, ya filtrado con la MISMA
@@ -430,8 +430,11 @@ function InventarioGlobalPantalla({ sensible }) {
           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>Dirección Comercial · Snapshot actual</span>
           {enriqueciendo && <Pill tone="gray" size="xs" dot>cargando tránsito, lead time y demanda…</Pill>}
         </div>
-        <Segmented value={soloComerciales ? 'com' : 'todos'} onChange={(v) => setSoloComerciales(v === 'com')}
-          options={[{ id: 'com', label: 'Sólo comerciales' }, { id: 'todos', label: 'Todos los almacenes' }]} />
+        {/* El primer viaje sólo trae el universo de [Inv Actual]; el resto de almacenes se
+            baja aquí, la primera vez que alguien los pide (useInventarioDatos.cargarTodas). */}
+        <Segmented value={soloComerciales ? 'com' : 'todos'}
+          onChange={(v) => { if (v !== 'com') cargarTodas(); setSoloComerciales(v === 'com'); }}
+          options={[{ id: 'com', label: 'Sólo comerciales' }, { id: 'todos', label: cargandoTodas ? 'Todos los almacenes…' : 'Todos los almacenes' }]} />
       </div>
 
       {/* Hero narrativo */}
@@ -529,7 +532,7 @@ function InventarioGlobalPantalla({ sensible }) {
       {/* Inventario comprometido (apartado) y fuera de venta · dos cifras que no se veían */}
       <ApartadoPanel skuRows={universo} sensible={sensible}
         onVerSku={(sku) => { setFiltros(FILTROS_VACIOS()); setBusqueda(sku); setSkuAbierto(sku); }} />
-      <FueraDeVenta filas={filas} descripciones={descripciones} sensible={sensible} />
+      <FueraDeVenta filas={filas} descripciones={descripciones} sensible={sensible} onAbrir={cargarTodas} />
 
       {/* Tendencia (histórico diario) */}
       <HistoricoPanel historico={historico} demandaDia={resumen.demDia} sensible={sensible} />

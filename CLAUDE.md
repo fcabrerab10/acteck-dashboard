@@ -295,6 +295,13 @@ de mapa plegable. Montos siempre **sin IVA**.
 - Lógica pura en `sellout/calculo.js` y hooks en `sellout/datos.js`, sin dependencias de layout.
   Textos en `sellout/textos.js` (`src/lib/whatsapp.js` no se tocó).
 
+### Sin conexión · visitas (2026-09-22)
+
+- **Buzón de salida** (`src/lib/buzon.js`): toda escritura de campo pasa por `escribir({ tabla, op, filas, match })` — red con tope de 6 s y, si falla o no hay señal, cola FIFO en IndexedDB con id temporal `tmp_…`, resuelto optimista. Enganchados: agenda/minutas, proyectos, marketing (web y móvil) y `cambiarEstado` de pagos. Sincroniza al evento `online`, al foco y cada 60 s; para en el primer fallo. Pastilla en Topbar y barra móvil (`BuzonPill`) + hoja con Reintentar/Descartar. Pruebas: `node --test scripts/test-buzon.mjs`.
+- **Modo visita** (`src/lib/modoVisita.js` + `BotonPrepararVisita`): "Preparar visita" en el Resumen del cliente (web) y en la ficha del móvil baja Resumen, Sell In, Sell Out, inventario del cliente, listas de precios, propuestas y minutas; calienta React Query (gcTime 7 d en las llaves del cliente) y, sobre todo, el runtime cache del SW (`supabase-rest`, NetworkFirst, 7 d, `maxEntries` 500).
+- **No se puede precachear**: los RPC (`POST /rest/v1/rpc`) — Workbox sólo enruta GET; el único de lectura es `inicio_datos` (Inicio de dirección general). Storage y auth siguen NetworkOnly.
+- **Inventario global**: el primer viaje trae sólo `en_inv_actual = true` (2 603 de 10 066 filas, −74 %); el resto con `cargarTodas()` al pasar a "Todos los almacenes" o al abrir "Fuera de venta". Detalle completo en `docs/SIN_CONEXION.md`.
+
 ## Convenciones de código
 
 - `formatMXN(n)` — Intl.NumberFormat es-MX, MXN, sin decimales · `formatFecha(str)` — 'YYYY-MM-DD' → 'DD Mes YYYY'

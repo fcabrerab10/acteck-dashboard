@@ -8,6 +8,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Lock, X } from 'lucide-react';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
+// Buzón de salida: la captura de marketing se hace en la tienda, con o sin señal.
+import { escribir } from '../../lib/buzon';
 import { cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -196,41 +198,43 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       temporalidad: form.fecha || '',
       producto: '',
     };
-    let err = null, saved = null;
-    if (editId) {
-      const { data, error } = await supabase.from('marketing_actividades').update(payload).eq('id', editId).select().single();
-      err = error; saved = data;
-    } else {
-      const { data, error } = await supabase.from('marketing_actividades').insert(payload).select().single();
-      err = error; saved = data;
-    }
+    let err = null, saved = null, offline = false;
+    try {
+      const r = editId
+        ? await escribir({ tabla: 'marketing_actividades', op: 'update', filas: payload, match: { id: editId }, origen: 'Marketing', titulo: payload.nombre })
+        : await escribir({ tabla: 'marketing_actividades', op: 'insert', filas: payload, origen: 'Marketing', titulo: payload.nombre });
+      saved = r.data; offline = r.offline;
+    } catch (e) { err = e; }
     setSaving(false);
-    if (err) { toast.error('Error guardando: ' + err.message); return; }
+    if (err) { toast.error('Error guardando: ' + (err.message || err)); return; }
     // Actualizar estado local de inmediato (no depender solo de realtime)
     if (saved) {
       if (editId) setActividades((p) => p.map((a) => (a.id === editId ? saved : a)));
       else setActividades((p) => [...p.filter((a) => a.id !== saved.id), saved]);
     }
-    toast.ok(editId ? 'Actividad actualizada' : 'Actividad creada');
+    if (!offline) toast.ok(editId ? 'Actividad actualizada' : 'Actividad creada');
     closeForm();
   };
   const deleteAct = async (id) => {
     if (!canEdit) return;
     if (!window.confirm('¿Eliminar esta actividad?')) return;
     setActividades((p) => p.filter((a) => a.id !== id)); // optimista
-    const { error } = await supabase.from('marketing_actividades').delete().eq('id', id);
-    if (error) {
-      toast.error('Error al eliminar: ' + error.message);
+    try {
+      const { offline } = await escribir({ tabla: 'marketing_actividades', op: 'delete', match: { id }, origen: 'Marketing' });
+      if (!offline) toast.ok('Actividad eliminada');
+    } catch (error) {
+      toast.error('Error al eliminar: ' + (error.message || error));
       const { data } = await supabase.from('marketing_actividades').select('*').eq('cliente', ck).eq('anio', anio);
       setActividades(data || []);
-    } else toast.ok('Actividad eliminada');
+    }
   };
   const cambiarEstatus = async (a, nuevoEstatus, okMsg) => {
     if (!canEdit) return;
     setActividades((p) => p.map((x) => (x.id === a.id ? { ...x, estatus: nuevoEstatus } : x))); // optimista
-    const { error } = await supabase.from('marketing_actividades').update({ estatus: nuevoEstatus }).eq('id', a.id);
-    if (error) { toast.error('Error al cambiar estatus: ' + error.message); setActividades((p) => p.map((x) => (x.id === a.id ? a : x))); }
-    else toast.ok(okMsg);
+    try {
+      const { offline } = await escribir({ tabla: 'marketing_actividades', op: 'update', filas: { estatus: nuevoEstatus }, match: { id: a.id }, origen: 'Marketing', titulo: a.nombre });
+      if (!offline) toast.ok(okMsg);
+    } catch (error) { toast.error('Error al cambiar estatus: ' + (error.message || error)); setActividades((p) => p.map((x) => (x.id === a.id ? a : x))); }
   };
   const toggleCompletada = (a) => (esCerrada(a) ? cambiarEstatus(a, 'activo', 'Actividad reactivada') : cambiarEstatus(a, 'completado', 'Actividad completada'));
   const archivar = (a) => { if (a.estatus !== 'archivado') cambiarEstatus(a, 'archivado', 'Actividad archivada'); };

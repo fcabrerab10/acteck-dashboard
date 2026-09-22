@@ -9,6 +9,7 @@ import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skel
 import { useClientesMes, useSelloutMensual, PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { money, moneyCompact, deltaPct, tonoCuota, MESES, N } from '../util';
 import SellInCliente from './SellInCliente';
+import BotonPrepararVisita from '../../components/BotonPrepararVisita';
 
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
@@ -87,6 +88,14 @@ export default function FichaCliente({ clienteKey, tipo, label }) {
             <KpiM eyebrow={`YTD vs ${anio - 1}`} big={r.yoyYtd != null ? deltaPct(r.yoyYtd, 1) : '—'} bigColor={r.yoyYtd == null ? undefined : r.yoyYtd >= 0 ? theme.green : theme.red} sub={`${moneyCompact(r.ytdPrev)} el año pasado`} />
           </KpiGrid>
         </>
+      )}
+      {propio && (
+        <div style={{ padding: '14px 16px 0' }}>
+          <BotonPrepararVisita clienteKey={clienteKey} nombre={nombre} anio={anio} variante="bloque" />
+          <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 6, textAlign: 'center' }}>
+            Baja Resumen, Sell In, Sell Out, inventario, precios, propuestas y minutas para verlos sin internet.
+          </div>
+        </div>
       )}
       <ListaAgrupada titulo="Pestañas" style={{ marginTop: 18 }} pie={propio ? 'Sell In y Sell Out son de consulta; lo que todavía se edita desde la computadora se marca como Próximamente.' : undefined}>
         {pestanas.map((p) => <Fila key={p.id} icon={p.icon} color={color} titulo={p.label} sub={p.sub} onClick={p.onClick} />)}

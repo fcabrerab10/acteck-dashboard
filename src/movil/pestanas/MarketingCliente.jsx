@@ -8,6 +8,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Plus, Check, RotateCcw, Pencil, Archive, Lock } from 'lucide-react';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
+import { escribir } from '../../lib/buzon';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
@@ -52,8 +53,10 @@ async function cambiarEstatus(qc, ck, anio, a, nuevo, okMsg) {
   const key = claveQ(ck, anio);
   const prev = qc.getQueryData(key);
   qc.setQueryData(key, (p) => (p || []).map((x) => (x.id === a.id ? { ...x, estatus: nuevo } : x)));
-  const { error } = await supabase.from('marketing_actividades').update({ estatus: nuevo }).eq('id', a.id);
-  if (error) { qc.setQueryData(key, prev); toast.error('Error al cambiar estatus: ' + error.message); return false; }
+  let offline = false;
+  try { ({ offline } = await escribir({ tabla: 'marketing_actividades', op: 'update', filas: { estatus: nuevo }, match: { id: a.id }, origen: 'Marketing', titulo: a.nombre })); }
+  catch (error) { qc.setQueryData(key, prev); toast.error('Error al cambiar estatus: ' + (error.message || error)); return false; }
+  if (offline) return true;                    // el toast del buzón ya avisó
   toast.ok(okMsg);
   qc.invalidateQueries({ queryKey: key });
   return true;

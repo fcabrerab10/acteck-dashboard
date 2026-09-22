@@ -1,12 +1,17 @@
 // Carga de datos de Inventario global · una sola fuente para la pantalla.
 // 1) v_inventario_almacen_medida (bloquea el render) — inventario_acteck + la
 //    bandera `en_inv_actual` de la medida [Inv Actual] del director, para que la
-//    pantalla NO vuelva a mantener su propia lista de almacenes comerciales. · 2) enriquecimientos en paralelo,
+//    pantalla NO vuelva a mantener su propia lista de almacenes comerciales.
+//    2026-09-22 · el primer viaje trae SÓLO `en_inv_actual = true` (2.6 K de 10.1 K filas): es
+//    lo único que pinta la pantalla al abrir ("Sólo comerciales" es el estado por omisión).
+//    El resto se baja cuando hace falta: al pasar a "Todos los almacenes" o al abrir el panel
+//    "Fuera de venta" (`cargarTodas()`). En visita sin señal eso es 74 % menos datos. ·
+//    2) enriquecimientos en paralelo,
 // sin bloquear: descripciones (roadmap_sku), tránsito (v_transito_sku),
 // lead time (v_lead_time_sku), demanda ERP (facturacion_clientes, 3 meses
 // cerrados) e histórico diario (v_inventario_historico_dia). Todo pasa por lib/queries.js salvo roadmap_sku (la app la
 // escribe → sin cache).
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { N } from './constantes';
 
@@ -20,9 +25,14 @@ export function mesesCerrados(hoy = new Date()) {
   });
 }
 
+const SELECT_INV = 'articulo, no_almacen, cedis, disponible, inventario, costopromedio, costodisponible, costoinventario, en_inv_actual, rama, exclusivo, comercial';
+
 export default function useInventarioDatos() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [todasCargadas, setTodasCargadas] = useState(false);
+  const [cargandoTodas, setCargandoTodas] = useState(false);
+  const pidiendoTodas = useRef(null);
   const [descripciones, setDescripciones] = useState(() => new Map());
   const [transito, setTransito] = useState(() => new Map());
   const [leadTime, setLeadTime] = useState(() => new Map());
@@ -38,9 +48,10 @@ export default function useInventarioDatos() {
       const { fetchAll, fetchAllQ } = await import('../../../lib/queries');
       let acc = [];
       try {
+        // Sólo el universo de [Inv Actual]: es lo que pinta la pantalla al abrir.
         acc = await fetchAllQ(
-          () => supabase.from('v_inventario_almacen_medida').select('articulo, no_almacen, cedis, disponible, inventario, costopromedio, costodisponible, costoinventario, en_inv_actual, rama, exclusivo, comercial'),
-          { pageSize: 5000, orderCol: 'articulo', label: 'v_inventario_almacen_medida' },
+          () => supabase.from('v_inventario_almacen_medida').select(SELECT_INV).eq('en_inv_actual', true),
+          { pageSize: 5000, orderCol: 'articulo', label: 'v_inventario_almacen_medida·comercial' },
         );
       } catch (e) {
         console.error('[InventarioGlobal] v_inventario_almacen_medida', e);
@@ -135,5 +146,32 @@ export default function useInventarioDatos() {
     return () => { cancel = true; };
   }, []);
 
-  return { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, medidas, mesesRef: mesesCerrados() };
+  /**
+   * Trae también los almacenes que [Inv Actual] deja fuera ("Todos los almacenes" y el panel
+   * "Fuera de venta"). Idempotente: si ya están, o si ya se están pidiendo, no repite el viaje.
+   */
+  const cargarTodas = useCallback(async () => {
+    if (todasCargadas) return;
+    if (pidiendoTodas.current) return pidiendoTodas.current;
+    setCargandoTodas(true);
+    pidiendoTodas.current = (async () => {
+      try {
+        const { fetchAllQ } = await import('../../../lib/queries');
+        const resto = await fetchAllQ(
+          () => supabase.from('v_inventario_almacen_medida').select(SELECT_INV).not('en_inv_actual', 'is', true),
+          { pageSize: 5000, orderCol: 'articulo', label: 'v_inventario_almacen_medida·resto' },
+        );
+        setFilas((prev) => [...prev, ...(resto || [])]);
+        setTodasCargadas(true);
+      } catch (e) {
+        console.error('[InventarioGlobal] resto de almacenes', e);
+      } finally {
+        setCargandoTodas(false);
+        pidiendoTodas.current = null;
+      }
+    })();
+    return pidiendoTodas.current;
+  }, [todasCargadas]);
+
+  return { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, medidas, mesesRef: mesesCerrados(), cargarTodas, todasCargadas, cargandoTodas };
 }
