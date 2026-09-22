@@ -237,7 +237,7 @@ export const PESTANAS_GLOBALES = [
   { id: "cobranza_global",    label: "Cobranza",              desc: "Aging y DSO consolidados de los 3 clientes" },
   { id: "forecast_clientes",  label: "S&OP",                  desc: "Planeación de compras cross-cliente (Sales & Operations Planning)" },
   { id: "estrategia_precios", label: "Estrategia de Precios", desc: "Pricing por cliente y por SKU" },
-  { id: "forecast_reservas",  label: "Forecast",   desc: "Reservas de arribos por cliente (preventa)" },
+  { id: "forecast_reservas",  label: "Proyectos y abasto",   desc: "Proyectos por mes, reserva de inventario y compras sugeridas" },
   { id: "ordenes_compra",     label: "Tracking Pedidos",      desc: "Gestión de OCs, fill rate y cruce con ERP" },
   { id: "agenda",             label: "Agenda",                 desc: "Tareas, reuniones con minuta, calendario y avisos del dashboard (antes Pendientes & Calendario)" },
   { id: "historial_cambios",  label: "Historial de cambios",   desc: "Quién cambió qué y cuándo en lo que la app escribe" },
