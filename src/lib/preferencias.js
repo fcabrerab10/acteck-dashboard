@@ -23,15 +23,12 @@ export const MODOS_MENU_MOVIL = [
   { id: 'barra', label: 'Barra', desc: 'Barra inferior: Inicio · General · Comercial · Clientes · Interno.' },
 ];
 
-// Agenda: disposición de la pestaña (A Bandeja Hoy · C Tablero por etiqueta). Se elige en Preferencias como el menú.
-export const MODOS_AGENDA = [
-  { id: 'bandeja', label: 'Bandeja', desc: 'Lista de hoy: vencidas, hoy y próximos; calendario y equipo al lado.' },
-  { id: 'tablero', label: 'Tablero', desc: 'Columnas por cliente, persona, categoría o estado; tarjetas que se arrastran.' },
-];
+// Agenda V4 (2026-09-21): ya no hay dos disposiciones (Bandeja / Tablero). La pestaña es una sola —
+// calendario arriba y lista por horizonte debajo — así que `agenda.modo` se retiró de Preferencias.
+// La llave que quedó guardada en perfiles.preferencias de quien la eligió se ignora sin romper nada.
 
 export const PREFS_DEFAULT = {
   menu: { modo: 'sidebar', modoMovil: 'cajon', favoritos: ['inicio'], densidad: 'comoda', inicio: 'inicio' },
-  agenda: { modo: 'bandeja' },
 };
 
 const LS_KEY = 'prefs_ui_v1';

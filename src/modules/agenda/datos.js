@@ -19,8 +19,8 @@ import { useFuentesConfig } from '../settings/importador/fuentesConfig';
 import { useEstadoImportador } from '../settings/importador/useImportadorData';
 import { frescuraManual } from '../settings/importador/frescura';
 import { GRUPOS } from '../settings/importador/config';
-import { parsearEtiquetas, conHandles } from './etiquetas';
-import { bandeja as calcBandeja, avisosSistema, isoDia, sumarDias } from './calculo';
+import { parsearEtiquetas, conHandles, asignables } from './etiquetas';
+import { bandeja as calcBandeja, avisosSistema, isoDia, sumarDias, progresoPorItem, registrarContacto } from './calculo';
 
 export const KEY_AGENDA = ['agenda', 'datos'];
 export const KEY_PERSONAS = ['agenda', 'personas'];
@@ -39,7 +39,8 @@ export async function fetchPersonas() {
   if (!DB_CONFIGURED) return [];
   const { data, error } = await supabase.from('perfiles').select('user_id,nombre,email,puesto,tipo,activo,es_super_admin,avatar_url').eq('activo', true).eq('tipo', 'interno').order('nombre');
   if (error) throw error;
-  return conHandles(data || []);
+  // V4: David Millán no entra a la Agenda (ver CORREOS_SIN_AGENDA en etiquetas.js).
+  return conHandles(asignables(data || []));
 }
 export function usePersonas() {
   const q = useQuery({ queryKey: KEY_PERSONAS, queryFn: fetchPersonas, staleTime: 5 * 60 * 1000 });
@@ -248,4 +249,184 @@ export function useBandejaHoy({ ligero = false, enabled = true } = {}) {
   const avisos = useMemo(() => avisosSistema({ alertas: alertasQ.data || [], transito: transitoQ.data || [], fuentesManuales, tracking, hoy }), [alertasQ.data, transitoQ.data, fuentesManuales, tracking, hoy]);
   const b = useMemo(() => calcBandeja(ag.items, hoy), [ag.items, hoy]);
   return { ...ag, bandeja: b, avisos, alertas: alertasQ.data || [], transito: transitoQ.data || [], fuentesManuales, tracking, hoy, cargando: ag.cargando, cargandoAvisos: alertasQ.isLoading || (!ligero && trackingQ.isLoading) };
+}
+
+// ═══════════════════ V4 · 2026-09-21 ═══════════════════════════════════════════
+// agenda_subtareas y cuentas_seguimiento(+_notas) las ESCRIBE la app → nunca con cachedQuery;
+// tras cada escritura: recargarAgenda() (invalidateDataCache + invalidateQueries(['agenda'])).
+
+export const KEY_SUBTAREAS = ['agenda', 'subtareas'];
+export const KEY_CUENTAS   = ['agenda', 'cuentas'];
+export const KEY_NOTAS     = ['agenda', 'cuentas', 'notas'];
+
+// ─── Subtareas ───
+export async function fetchSubtareas() {
+  if (!DB_CONFIGURED) return [];
+  return leer('agenda_subtareas', '*', (q) => q, 'created_at');
+}
+export function useSubtareas({ enabled = true } = {}) {
+  const q = useQuery({ queryKey: KEY_SUBTAREAS, queryFn: fetchSubtareas, staleTime: STALE_MS, enabled });
+  const subtareas = q.data || [];
+  const progreso = useMemo(() => progresoPorItem(subtareas), [subtareas]);
+  return { subtareas, progreso, cargando: q.isLoading, error: q.error || null };
+}
+
+const parcharSubtareas = (fn) => queryClient.setQueryData(KEY_SUBTAREAS, (prev) => (Array.isArray(prev) ? fn(prev) : prev));
+
+export async function crearSubtarea(itemId, titulo, orden = 0) {
+  const t = String(titulo || '').trim();
+  if (!t) throw new Error('Escribe la subtarea');
+  const row = { item_id: itemId, titulo: t, hecha: false, orden, creado_por: await uid() };
+  const data = lanzar(await supabase.from('agenda_subtareas').insert(row).select('*').single());
+  parcharSubtareas((prev) => [...prev, data]);
+  await recargarAgenda();
+  return data;
+}
+export async function actualizarSubtarea(id, cambios) {
+  const c = limpio(cambios);
+  parcharSubtareas((prev) => prev.map((s) => (s.id === id ? { ...s, ...c } : s)));
+  try { lanzar(await supabase.from('agenda_subtareas').update(c).eq('id', id)); }
+  finally { await recargarAgenda(); }
+}
+export const marcarSubtarea = (s, hecha) => actualizarSubtarea(s.id, { hecha: !!hecha });
+export async function borrarSubtarea(id) {
+  parcharSubtareas((prev) => prev.filter((s) => s.id !== id));
+  try { lanzar(await supabase.from('agenda_subtareas').delete().eq('id', id)); }
+  finally { await recargarAgenda(); }
+}
+/** Sube o baja una subtarea dentro de su ítem (reescribe `orden` de la lista completa). */
+export async function moverSubtarea(lista, id, delta) {
+  const i = lista.findIndex((s) => s.id === id);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= lista.length) return;
+  const arr = [...lista];
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  parcharSubtareas((prev) => prev.map((s) => { const k = arr.findIndex((x) => x.id === s.id); return k >= 0 ? { ...s, orden: k } : s; }));
+  try { await Promise.all(arr.map((s, k) => supabase.from('agenda_subtareas').update({ orden: k }).eq('id', s.id))); }
+  finally { await recargarAgenda(); }
+}
+
+// ─── Cuentas que sigo ───
+export async function fetchCuentas() {
+  if (!DB_CONFIGURED) return { cuentas: [], notas: [] };
+  const [cuentas, notas] = await Promise.all([
+    leer('cuentas_seguimiento', '*', (q) => q, 'created_at'),
+    leer('cuentas_seguimiento_notas', '*', (q) => q, 'created_at'),
+  ]);
+  return { cuentas, notas };
+}
+export function useCuentas({ enabled = true } = {}) {
+  const q = useQuery({ queryKey: KEY_CUENTAS, queryFn: fetchCuentas, staleTime: STALE_MS, enabled });
+  const cuentas = q.data?.cuentas || [];
+  const notas = q.data?.notas || [];
+  const notasPorCuenta = useMemo(() => {
+    const m = new Map();
+    for (const n of [...notas].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.created_at || '').localeCompare(String(a.created_at || '')))) {
+      if (!m.has(n.cuenta_id)) m.set(n.cuenta_id, []);
+      m.get(n.cuenta_id).push(n);
+    }
+    return m;
+  }, [notas]);
+  return { cuentas, notas, notasPorCuenta, cargando: q.isLoading, error: q.error || null };
+}
+
+const parcharCuentas = (fn) => queryClient.setQueryData(KEY_CUENTAS, (prev) => (prev ? { ...prev, cuentas: fn(prev.cuentas) } : prev));
+
+export async function crearCuenta(c) {
+  const row = limpio({
+    nombre: String(c.nombre || '').trim(), contacto: c.contacto || null, telefono: c.telefono || null, email: c.email || null,
+    empresa: c.empresa || null, tipo: c.tipo === 'mayorista' ? 'mayorista' : 'directa', mayorista: c.mayorista || null,
+    vendedor: c.vendedor || null, cliente_erp: c.cliente_erp || null, notas: c.notas || null,
+    proximo_seguimiento: c.proximo_seguimiento || null, recordar_cada_dias: Number(c.recordar_cada_dias) || 14,
+    ultimo_contacto: c.ultimo_contacto || null, estado: c.estado || 'activa', creado_por: await uid(),
+  });
+  if (!row.nombre) throw new Error('La cuenta necesita un nombre');
+  const data = lanzar(await supabase.from('cuentas_seguimiento').insert(row).select('*').single());
+  parcharCuentas((prev) => [...prev, data]);
+  await recargarAgenda();
+  return data;
+}
+export async function actualizarCuenta(id, cambios) {
+  const c = limpio(cambios);
+  parcharCuentas((prev) => prev.map((x) => (x.id === id ? { ...x, ...c } : x)));
+  try { lanzar(await supabase.from('cuentas_seguimiento').update(c).eq('id', id)); }
+  catch (e) { await recargarAgenda(); throw e; }
+  await recargarAgenda();
+}
+export async function borrarCuenta(id) {
+  parcharCuentas((prev) => prev.filter((x) => x.id !== id));
+  try { lanzar(await supabase.from('cuentas_seguimiento').delete().eq('id', id)); }
+  finally { await recargarAgenda(); }
+}
+/** Nota de la bitácora. Si `avanzar`, además corre el seguimiento (último = hoy, próximo = hoy + cadencia). */
+export async function agregarNotaCuenta(cuenta, texto, { avanzar = false, hoy = new Date() } = {}) {
+  const t = String(texto || '').trim();
+  if (!t) throw new Error('Escribe qué pasó');
+  const row = { cuenta_id: cuenta.id, fecha: isoDia(hoy), texto: t, creado_por: await uid() };
+  const data = lanzar(await supabase.from('cuentas_seguimiento_notas').insert(row).select('*').single());
+  queryClient.setQueryData(KEY_CUENTAS, (prev) => (prev ? { ...prev, notas: [...prev.notas, data] } : prev));
+  if (avanzar) await actualizarCuenta(cuenta.id, registrarContacto(cuenta, hoy));
+  else await recargarAgenda();
+  return data;
+}
+/** "Registrar contacto": mueve las fechas y deja la nota (si la hay) en la bitácora. */
+export async function registrarContactoCuenta(cuenta, texto = '', hoy = new Date()) {
+  if (String(texto || '').trim()) return agregarNotaCuenta(cuenta, texto, { avanzar: true, hoy });
+  return actualizarCuenta(cuenta.id, registrarContacto(cuenta, hoy));
+}
+/** Crea un pendiente ligado a una cuenta (origen.cuenta_id, igual que la semilla de la migración). */
+export function crearPendienteDeCuenta(cuenta, { texto, fecha_limite, responsables } = {}, personas = []) {
+  return crearItem({
+    texto: texto || `Seguimiento: ${cuenta.nombre}${cuenta.empresa ? ` (${cuenta.empresa})` : ''}`,
+    tipo: 'tarea', categoria: 'comercial', cliente_key: null,
+    fecha_limite: fecha_limite || cuenta.proximo_seguimiento || null,
+    responsables: responsables?.length ? responsables : undefined,
+    origen: { fuente: 'cuentas_seguimiento', cuenta_id: cuenta.id },
+  }, personas);
+}
+
+// ─── Todo lo que necesita la pestaña Agenda V4 ───
+/**
+ * Datos de la Agenda V4: ítems + reuniones + subtareas + cuentas (+ Google lo pide la pantalla).
+ * A diferencia de useBandejaHoy NO trae las alertas de SKUs: esas viven en la campana
+ * (decisión de Fernando 2026-09-21). Los avisos del calendario (arribos, cargas) tampoco:
+ * el calendario los sigue pintando desde sus propias fuentes si la pantalla las pasa.
+ */
+export function useAgendaV4({ enabled = true } = {}) {
+  const ag = useAgendaDatos({ enabled });
+  const sub = useSubtareas({ enabled });
+  const cta = useCuentas({ enabled });
+  const hoy = useMemo(() => new Date(), []);
+  return {
+    ...ag, ...sub, ...cta, hoy,
+    cargando: ag.cargando || sub.cargando || cta.cargando,
+    error: ag.error || sub.error || cta.error || null,
+  };
+}
+
+/**
+ * Últimas reuniones con minuta de UN cliente (Resumen del cliente → "Últimas minutas y acuerdos").
+ * Consulta acotada: no arrastra toda la agenda a la portada del cliente.
+ *   → [{ id, titulo, fecha, estado, abiertos, total }]
+ */
+export function useMinutasCliente(clienteKey, { limite = 5, enabled = true } = {}) {
+  const q = useQuery({
+    queryKey: ['agenda', 'minutas-cliente', clienteKey, limite],
+    enabled: !!clienteKey && !!enabled && DB_CONFIGURED,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const reu = lanzar(await supabase.from('agenda_reuniones')
+        .select('id,titulo,fecha,estado,cliente_key,tipo')
+        .eq('cliente_key', clienteKey).eq('tipo', 'reunion')
+        .order('fecha', { ascending: false }).limit(limite)) || [];
+      if (!reu.length) return [];
+      const puntos = lanzar(await supabase.from('agenda_items')
+        .select('id,reunion_id,estado').eq('tipo', 'punto').in('reunion_id', reu.map((r) => r.id))) || [];
+      return reu.map((r) => {
+        const mios = puntos.filter((p) => p.reunion_id === r.id);
+        return { ...r, total: mios.length, abiertos: mios.filter((p) => p.estado === 'abierta').length };
+      });
+    },
+  });
+  return { minutas: q.data || [], cargando: q.isLoading, error: q.error || null };
 }

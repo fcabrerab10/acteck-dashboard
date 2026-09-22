@@ -72,15 +72,12 @@ export const SILUETAS = {
   resumenClientes: [fila(2, 90), grid('minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)', [hero(3), [kpis(1, '1fr'), kpis(1, '1fr')], [kpis(1, '1fr'), kpis(1, '1fr')]]), fila(4, 28), chart(240), grid('repeat(3, minmax(0,1fr))', [panel(10, { alto: 430 }), panel(10, { alto: 430 }), panel(10, { alto: 430 })])],
   ordenesCompra: [hero(3), grid('repeat(5, minmax(0,1fr))', [panel(2, { alto: 96 }), panel(2, { alto: 96 }), panel(2, { alto: 96 }), panel(2, { alto: 96 }), panel(2, { alto: 96 })]), kpis(4), fila(3, 30), fila(6, 24), tabla(12, 10), grid('minmax(0,1.2fr) minmax(0,1fr)', [tabla(6, 7, { alto: 220 }), tabla(6, 6, { alto: 220 })]), grid('minmax(0,1fr) minmax(0,1.2fr)', [tabla(3, 6, { alto: 150 }), tabla(4, 6, { alto: 150 })])],
   trackingDrill: [fila(5, 44), fila(1, 34), fila(3, 28), tabla(4, 8, { alto: 150 }), tabla(2, 8, { alto: 90 })],
-  // Agenda V3 · A Bandeja: segmented · hero 3 stats · 4 KPIs · lista Hoy + (Semana, Equipo) · Reuniones (línea del tiempo)
-  agenda: [fila(1, 30), hero(3), kpis(4), grid('minmax(0,1.35fr) minmax(300px,1fr)', [panel(12, { alto: 460 }), [panel(6, { alto: 240 }), panel(3, { alto: 140 })]]), panel(8, { alto: 360 })],
-  // Agenda V3 · C Tablero: segmented · hero 2 stats · 4 KPIs · tablero 4 columnas · tira de reuniones · Semana + Equipo
-  agendaTablero: [fila(1, 30), hero(2), kpis(4), panel(2, { alto: 60 }), grid('repeat(4, minmax(0,1fr))', [panel(6, { alto: 300 }), panel(5, { alto: 260 }), panel(5, { alto: 260 }), panel(3, { alto: 180 })]), fila(6, 90), grid('1fr 1fr', [panel(6, { alto: 240 }), panel(3, { alto: 140 })])],
+  // Agenda V4 · hero 3 stats · 4 KPIs · calendario del mes de ancho completo · segmented · lista por horizonte
+  agenda: [hero(3), kpis(4), panel(2, { alto: 560 }), fila(1, 34), panel(12, { alto: 460 })],
   // Agenda V3 · Minuta (hoja lateral): pills · asistentes · editor de puntos · notas
   agendaMinuta: [fila(4, 26), fila(4, 30), panel(8, { alto: 300 }), panel(4, { alto: 140 })],
-  // Móvil · Agenda A (hero 3 stats · segmented · lista), C tablero (segmented · una columna) y Minuta (título · hero · puntos · pie)
-  movilAgenda: [hero(3), fila(1, 34), panel(6, { alto: 250 }), panel(4, { alto: 170 })],
-  movilAgendaTablero: [fila(1, 34), panel(8, { alto: 420 }), fila(1, 16)],
+  // Móvil · Agenda V4 (segmented de 5 · hero 3 stats · captura · lista por horizonte) y Minuta (título · hero · puntos · pie)
+  movilAgenda: [fila(1, 34), hero(3), fila(1, 40), panel(6, { alto: 250 }), panel(4, { alto: 170 })],
   // Móvil · Sell In consolidado: hero (3 stats + barra + pills) · 4 KPIs en 2×2 · lista de canales · buscador · composición · Top 10
   movilSellInGlobal: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), panel(7, { alto: 320 }), fila(1, 38), panel(6, { alto: 240 }), panel(10, { alto: 420 })],
   // Móvil · Sell Out consolidado: hero (3 stats + pills de canal) · 4 KPIs en 2×2 · gráfica 12 m ·

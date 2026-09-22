@@ -167,3 +167,117 @@ test('hero y texto de bandeja', () => {
   assert.match(t, /\*Vencidas\* \(2\)/);
   assert.match(t, /☐ Confirmar rebate Q3 · @Fernando · 8 sep/);
 });
+
+// ═══════════════════ V4 · 2026-09-21 ═══════════════════════════════════════════
+import {
+  HORIZONTES, horizonteDe, porHorizonte, archivados, progresoSubtareas, progresoPorItem, subtareasDe,
+  estadoSeguimiento, cuentasOrdenadas, cuentasPendientes, registrarContacto, enlacesContacto, fraseAgenda,
+} from '../src/modules/agenda/calculo.js';
+import { asignables, CORREOS_SIN_AGENDA, buscarCliente } from '../src/modules/agenda/etiquetas.js';
+
+test('V4 · horizonteDe: vencido / hoy / esta semana / más adelante / sin fecha', () => {
+  // HOY = jueves 10 sep 2026 → la semana corre lun 7 … dom 13.
+  assert.equal(horizonteDe({ fecha_limite: '2026-09-08' }, HOY), 'vencidos');
+  assert.equal(horizonteDe({ fecha_limite: '2026-09-10' }, HOY), 'hoy');
+  assert.equal(horizonteDe({ fecha_limite: '2026-09-11' }, HOY), 'semana');
+  assert.equal(horizonteDe({ fecha_limite: '2026-09-13' }, HOY), 'semana');  // domingo, último día
+  assert.equal(horizonteDe({ fecha_limite: '2026-09-14' }, HOY), 'adelante'); // lunes siguiente
+  assert.equal(horizonteDe({ fecha_limite: null }, HOY), 'sinfecha');
+});
+
+test('V4 · porHorizonte agrupa sólo lo abierto y mantiene "Hoy" aunque esté vacío', () => {
+  const b = porHorizonte(ITEMS, HOY);
+  const por = Object.fromEntries(b.map((x) => [x.id, x.items.map((i) => i.id)]));
+  assert.deepEqual(por.vencidos, ['b', 'a']);       // 8 sep (alta) antes que 9 sep
+  assert.deepEqual(por.hoy, ['d']);                  // 'c' está hecha: no entra
+  // No hay nada entre el 11 y el domingo 13 → el bloque "Esta semana" ni siquiera aparece.
+  assert.equal(por.semana, undefined);
+  assert.deepEqual(por.adelante, ['e', 'h']);        // 15 sep (ya es semana siguiente) y 30 oct
+  assert.deepEqual(por.sinfecha, ['f']);
+  assert.equal(b.every((x) => HORIZONTES.some((h) => h.id === x.id)), true);
+  // Sin nada abierto, el bloque "Hoy" sigue presente (para poder decir "nada con fecha de hoy").
+  const vacio = porHorizonte([], HOY);
+  assert.deepEqual(vacio.map((x) => x.id), ['hoy']);
+});
+
+test('V4 · archivados: hechos y cancelados, más recientes primero, con búsqueda', () => {
+  const a = archivados(ITEMS);
+  assert.deepEqual(a.map((x) => x.id), ['c', 'g']);   // c cerró el 10 sep, g el 25 ago
+  assert.deepEqual(archivados(ITEMS, { q: 'p&l' }).map((x) => x.id), ['c']);
+  assert.deepEqual(archivados(ITEMS, { q: 'no existe' }), []);
+  // Un ítem abierto nunca está archivado.
+  assert.equal(a.some((x) => x.estado === 'abierta'), false);
+});
+
+test('V4 · subtareas: progreso, agrupación por ítem y orden', () => {
+  const S = [
+    { id: 's3', item_id: 'a', titulo: 'tercera', hecha: false, orden: 2, created_at: '2026-09-03' },
+    { id: 's1', item_id: 'a', titulo: 'primera', hecha: true, orden: 0, created_at: '2026-09-01' },
+    { id: 's2', item_id: 'a', titulo: 'segunda', hecha: true, orden: 1, created_at: '2026-09-02' },
+    { id: 's4', item_id: 'b', titulo: 'única', hecha: true, orden: 0, created_at: '2026-09-01' },
+  ];
+  assert.deepEqual(subtareasDe(S, 'a').map((x) => x.id), ['s1', 's2', 's3']);
+  assert.deepEqual(progresoSubtareas(subtareasDe(S, 'a')), { total: 3, hechas: 2, pct: 67, completo: false });
+  assert.deepEqual(progresoSubtareas(subtareasDe(S, 'b')), { total: 1, hechas: 1, pct: 100, completo: true });
+  assert.deepEqual(progresoSubtareas([]), { total: 0, hechas: 0, pct: 0, completo: false });
+  const m = progresoPorItem(S);
+  assert.equal(m.get('a').hechas, 2);
+  assert.equal(m.get('b').completo, true);
+  assert.equal(m.get('zzz'), undefined);
+});
+
+test('V4 · cuentas: semáforo del próximo seguimiento y orden por urgencia', () => {
+  const c = (o) => ({ id: o.id, nombre: o.id, estado: 'activa', recordar_cada_dias: 14, ...o });
+  const CUENTAS = [
+    c({ id: 'tarde', proximo_seguimiento: '2026-10-30' }),
+    c({ id: 'vencida', proximo_seguimiento: '2026-09-05' }),
+    c({ id: 'hoy', proximo_seguimiento: '2026-09-10' }),
+    c({ id: 'semana', proximo_seguimiento: '2026-09-12' }),
+    c({ id: 'sinfecha', proximo_seguimiento: null }),
+    c({ id: 'pausada', proximo_seguimiento: '2026-09-01', estado: 'pausada' }),
+  ];
+  assert.equal(estadoSeguimiento(CUENTAS[1], HOY).nivel, 'vencido');
+  assert.equal(estadoSeguimiento(CUENTAS[1], HOY).tone, 'red');
+  assert.equal(estadoSeguimiento(CUENTAS[2], HOY).nivel, 'vencido');   // hoy ya toca
+  assert.equal(estadoSeguimiento(CUENTAS[3], HOY).nivel, 'semana');
+  assert.equal(estadoSeguimiento(CUENTAS[3], HOY).tone, 'orange');
+  assert.equal(estadoSeguimiento(CUENTAS[0], HOY).nivel, 'despues');
+  assert.equal(estadoSeguimiento(CUENTAS[4], HOY).nivel, 'sinfecha');
+  assert.equal(estadoSeguimiento(CUENTAS[5], HOY).label, 'pausada');   // pausada nunca urge
+
+  assert.deepEqual(cuentasOrdenadas(CUENTAS, { hoy: HOY }).map((x) => x.id), ['vencida', 'hoy', 'semana', 'tarde', 'sinfecha']);
+  assert.deepEqual(cuentasOrdenadas(CUENTAS, { hoy: HOY, estado: 'pausada' }).map((x) => x.id), ['pausada']);
+  assert.deepEqual(cuentasPendientes(CUENTAS, HOY).map((x) => x.id), ['vencida', 'hoy']);
+});
+
+test('V4 · cuentas: registrar contacto mueve las fechas y los enlaces normalizan el teléfono', () => {
+  assert.deepEqual(registrarContacto({ recordar_cada_dias: 14 }, HOY), { ultimo_contacto: '2026-09-10', proximo_seguimiento: '2026-09-24' });
+  assert.deepEqual(registrarContacto({ recordar_cada_dias: 0 }, HOY).proximo_seguimiento, '2026-09-24'); // 0 → default 14
+  const e = enlacesContacto('+52 55 1053 6205');
+  assert.equal(e.whatsapp, 'https://wa.me/525510536205');
+  assert.equal(e.tel, 'tel:+525510536205');
+  assert.equal(enlacesContacto('5510536205').e164, '+525510536205');   // sin lada → se añade 52
+  assert.deepEqual(enlacesContacto(''), { tel: null, whatsapp: null, e164: null });
+});
+
+test('V4 · fraseAgenda no habla de alertas de SKUs y prioriza lo vencido', () => {
+  const b = porHorizonte(ITEMS, HOY);
+  const h = fraseAgenda({ bloques: b, reunionesHoy: [{ cliente_key: 'pcel', fecha: '2026-09-10T17:00:00Z' }], cuentasHoy: [{ id: 1 }], hoy: HOY, quien: 'Fernando' });
+  assert.match(h.titulo, /^Fernando, tienes 2 vencidos, 1 para hoy, 1 cuenta por contactar y una reunión con PCEL/);
+  assert.match(h.sub, /Lo vencido primero/);
+  assert.equal(h.venc, 2);
+  const limpio = fraseAgenda({ bloques: porHorizonte([], HOY), hoy: HOY });
+  assert.match(limpio.titulo, /Nada pendiente para hoy/);
+});
+
+test('V4 · David Millán no es asignable y #cliente acepta las cuentas del ERP', () => {
+  const equipo = [{ user_id: 'u-fer', nombre: 'Fernando Cabrera', email: 'fernando.cabrera@acteck.com' },
+    { user_id: 'u-kar', nombre: 'Karolina Veliz', email: 'karolina.veliz@acteck.com' },
+    { user_id: 'u-dav', nombre: 'David Millan', email: 'dmillan@acteck.com' }];
+  assert.deepEqual(asignables(equipo).map((p) => p.user_id), ['u-fer', 'u-kar']);
+  assert.ok(CORREOS_SIN_AGENDA.includes('dmillan@acteck.com'));
+  assert.equal(buscarCliente('ct'), 'ct');
+  assert.equal(buscarCliente('CVA'), 'cva');
+  assert.equal(buscarCliente('meli'), 'mercadolibre');
+  assert.equal(buscarCliente('pcel'), 'pcel');
+});

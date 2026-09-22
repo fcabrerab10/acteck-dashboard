@@ -13,18 +13,19 @@ import { parsearEtiquetas, fechaNatural, textoConEtiquetas, CLIENTES_AGENDA, CAT
 import { cuando, isoDia, sumarDias, fmtHora, proximaReunion } from '../../../modules/agenda/calculo';
 import { PRIORIDAD_LABEL } from '../../../modules/agenda/textos';
 import { ChipM, BotonMic, CampoM, lbl, primerNombre } from './comun';
+import Subtareas from '../../../modules/agenda/Subtareas';
 
 const TIPOS = [{ id: 'tarea', label: 'Tarea' }, { id: 'punto', label: 'Punto de reunión' }];
 
-export default function CapturaHoja({ cfg, personas = [], reuniones = [], hoy = new Date(), onClose, onGuardado, onAbrirMinuta }) {
+export default function CapturaHoja({ cfg, personas = [], reuniones = [], hoy = new Date(), onClose, onGuardado, onAbrirMinuta, subtareas = [], puedeEditar = true }) {
   return (
     <HojaM abierto={!!cfg} onClose={onClose} titulo={cfg?.item ? (cfg.item.tipo === 'punto' ? 'Punto de reunión' : 'Tarea') : 'Nueva'} sub={cfg?.item ? `${cfg.item.estado === 'hecha' ? 'Resuelta' : 'Abierta'}${cfg.item.fecha_limite ? ` · ${cuando(cfg.item.fecha_limite, hoy)}` : ''}` : 'se guarda al tocar Guardar'} alto="92vh">
-      {cfg && <Captura key={cfg.item?.id || 'nueva'} cfg={cfg} personas={personas} reuniones={reuniones} hoy={hoy} onClose={onClose} onGuardado={onGuardado} onAbrirMinuta={onAbrirMinuta} />}
+      {cfg && <Captura key={cfg.item?.id || 'nueva'} cfg={cfg} personas={personas} reuniones={reuniones} hoy={hoy} onClose={onClose} onGuardado={onGuardado} onAbrirMinuta={onAbrirMinuta} subtareas={subtareas} puedeEditar={puedeEditar} />}
     </HojaM>
   );
 }
 
-function Captura({ cfg, personas, reuniones, hoy, onClose, onGuardado, onAbrirMinuta }) {
+function Captura({ cfg, personas, reuniones, hoy, onClose, onGuardado, onAbrirMinuta, subtareas = [], puedeEditar = true }) {
   const { theme } = useTheme();
   const item = cfg.item || null;
   const [texto, setTexto] = useState(() => (item ? textoConEtiquetas(item, personas) : cfg.texto || ''));
@@ -159,6 +160,9 @@ function Captura({ cfg, personas, reuniones, hoy, onClose, onGuardado, onAbrirMi
           <span style={{ flex: 1 }}>Reunión · {reuniones.find((r) => r.id === item.reunion_id)?.titulo || 'ver minuta'}</span><ChevronRight size={16} color={theme.textMuted} />
         </button>
       )}
+
+      {/* V4 · subtareas del pendiente. Marcarlas todas NO lo tacha: sólo lo sugiere. */}
+      {item && <Subtareas item={item} subtareas={subtareas} puedeEditar={puedeEditar} compacto onMarcarHecho={toggleHecha} />}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
         <BotonMic onTexto={onDictado} onEstado={onEstadoMic} />

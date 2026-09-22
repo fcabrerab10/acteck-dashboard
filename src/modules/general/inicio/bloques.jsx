@@ -5,7 +5,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, pct, pp, fechaCorta, relativo } from '../../../lib/format';
 import { Panel, TablaCompacta, Pill, Boton, toast, GraficaLineas } from '../../../components/kit';
 import { useBandejaHoy, completarItem } from '../../agenda/datos';
-import { FilaItem, FilaAviso } from '../../agenda/comun';
+import { FilaItem } from '../../agenda/comun';
 import { isoDia as isoDiaAgenda } from '../../agenda/calculo';
 import { accionAlerta, ejecutarAccion, SEV_LABEL } from '../../../lib/alertas';
 import { formatFrescura } from '../../../lib/frescura';
@@ -220,29 +220,51 @@ export function AgendaPanel({ r, frescuraErp, onNavegar }) {
   );
 }
 
-// ── "Hoy" (Agenda V3) · bandeja compacta arriba de las cifras: máx. MAX ítems (vencidas → hoy → avisos) + "Ver Agenda".
-// Comparte useBandejaHoy (modo ligero: sin tracking ni /api/status) con la pestaña Agenda. Se oculta si no hay nada.
+// ── "Hoy" · bandeja compacta arriba de las cifras + "Ver Agenda".
+// V4 (2026-09-21): los pendientes van uno a uno, pero los avisos del sistema por SKU (inventario,
+// ventas, forecast…) se AGRUPAN en una sola línea por área: Karolina veía 90 alertas de SKUs de la
+// empresa aquí. El detalle sigue completo en la campana, que es su lugar.
+const AREA_AVISO = { Alertas: 'del sistema', Tracking: 'de pedidos y arribos', Importador: 'de cargas de datos', Calendario: 'del calendario', Google: 'de Google' };
+const PAGINA_AREA = { Alertas: 'inicio', Tracking: 'ordenesCompra', Importador: 'actualizacion', Calendario: 'visionGeneral', Google: 'agenda' };
+
+/** Avisos del sistema agrupados por fuente: [{ fuente, n, criticos, pagina }]. Lógica pura (se prueba). */
+export function agruparAvisos(avisos = []) {
+  const m = new Map();
+  for (const a of avisos) {
+    const k = a.fuente || 'Alertas';
+    if (!m.has(k)) m.set(k, { fuente: k, n: 0, criticos: 0, pagina: PAGINA_AREA[k] || 'inicio' });
+    const g = m.get(k);
+    g.n += 1;
+    if (a.severidad === 'critica' || a.severidad === 'alta') g.criticos += 1;
+  }
+  return [...m.values()].sort((a, b) => b.criticos - a.criticos || b.n - a.n);
+}
+
 export function HoyPanel({ onNavegar, max = 6 }) {
   const { theme } = useTheme();
   const { bandeja: b, avisos, personasPorId, porId, hoy, cargando } = useBandejaHoy({ ligero: true });
   const hoyIso = isoDiaAgenda(hoy);
-  const filas = useMemo(() => {
-    const out = [];
-    for (const it of b.vencidas) out.push({ k: `i:${it.id}`, item: it });
-    for (const it of b.hoy) out.push({ k: `i:${it.id}`, item: it });
-    for (const a of avisos.filter((x) => x.fecha === hoyIso || x.severidad === 'critica' || x.severidad === 'alta')) out.push({ k: a.id, aviso: a });
-    return out;
-  }, [b, avisos, hoyIso]);
-  if (cargando || !filas.length) return null;
+  const pendientes = useMemo(() => [...b.vencidas, ...b.hoy], [b]);
+  const grupos = useMemo(() => agruparAvisos(avisos.filter((x) => x.fecha === hoyIso || x.severidad === 'critica' || x.severidad === 'alta')), [avisos, hoyIso]);
+  const nAvisos = grupos.reduce((n, g) => n + g.n, 0);
+  if (cargando || (!pendientes.length && !nAvisos)) return null;
   const ir = () => onNavegar?.(null, 'agenda');
   const toggle = async (item, hecha) => { try { await completarItem(item, hecha); } catch (e) { toast.error(e.message); } };
   return (
-    <Panel titulo="Hoy" meta={`${b.vencidas.length ? `${b.vencidas.length} vencida${b.vencidas.length === 1 ? '' : 's'} · ` : ''}${b.hoy.length} para hoy · ${avisos.length} aviso${avisos.length === 1 ? '' : 's'} del sistema`} padding="0"
+    <Panel titulo="Hoy" meta={`${b.vencidas.length ? `${b.vencidas.length} vencido${b.vencidas.length === 1 ? '' : 's'} · ` : ''}${b.hoy.length} para hoy${nAvisos ? ` · ${nAvisos} aviso${nAvisos === 1 ? '' : 's'} del sistema` : ''}`} padding="0"
       acciones={<Boton onClick={ir}>Ver Agenda</Boton>}>
-      {filas.slice(0, max).map((f) => f.item
-        ? <FilaItem key={f.k} item={f.item} personasPorId={personasPorId} porId={porId} hoy={hoy} onToggle={toggle} onAbrir={ir} compacta />
-        : <FilaAviso key={f.k} aviso={f.aviso} onNavegar={onNavegar} hoy={hoy} compacta />)}
-      {filas.length > max && <div onClick={ir} style={{ padding: '6px 12px', fontSize: 11, color: theme.accent, cursor: 'pointer' }}>+{filas.length - max} más en la Agenda</div>}
+      {pendientes.slice(0, max).map((it) => (
+        <FilaItem key={it.id} item={it} personasPorId={personasPorId} porId={porId} hoy={hoy} onToggle={toggle} onAbrir={ir} compacta />
+      ))}
+      {pendientes.length > max && <div onClick={ir} style={{ padding: '6px 12px', fontSize: 11, color: theme.accent, cursor: 'pointer' }}>+{pendientes.length - max} pendientes más en la Agenda</div>}
+      {grupos.map((g) => (
+        <div key={g.fuente} onClick={() => onNavegar?.(null, g.pagina)} role="button"
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderTop: `1px solid ${theme.border}`, cursor: 'pointer', fontSize: 12 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: g.criticos ? theme.red : theme.orange }} />
+          <span style={{ flex: 1, color: theme.text }}>{g.n} aviso{g.n === 1 ? '' : 's'} {AREA_AVISO[g.fuente] || g.fuente.toLowerCase()}{g.criticos ? ` · ${g.criticos} urgente${g.criticos === 1 ? '' : 's'}` : ''}</span>
+          <span style={{ fontSize: 11, color: theme.accent }}>ver ›</span>
+        </div>
+      ))}
     </Panel>
   );
 }

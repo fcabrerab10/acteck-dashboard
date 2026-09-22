@@ -33,16 +33,20 @@
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron?task=agenda-hoy",
-      "schedule": "30 14 * * 1-6"
-    },
-    {
       "path": "/api/cron?task=pagos-calcular",
       "schedule": "0 14 2 * *"
     },
     {
       "path": "/api/cron?task=inventario-foto",
       "schedule": "30 1 * * *"
+    },
+    {
+      "path": "/api/cron?task=agenda-correo",
+      "schedule": "15,30 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron?task=agenda-correo",
+      "schedule": "0 21,23 * * 1-5"
     }
   ],
   "rewrites": [

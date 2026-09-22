@@ -11,6 +11,15 @@ export const CLIENTES_AGENDA = [
   { key: 'pcel',       label: 'PCEL',       alias: ['pc'] },
   { key: 'dicotech',   label: 'Dicotech',   alias: ['dt', 'dico', 'revko'] },
   { key: 'interno',    label: 'Interno',    alias: ['int', 'acteck', 'nosotros'] },
+  // V4 (2026-09-21): además de los 3 clientes con pestaña propia, #cliente sugiere las cuentas del
+  // ERP que Fernando sigue como gerente de ventas. No crean pestaña: son sólo etiqueta.
+  { key: 'ct',           label: 'CT Internacional', alias: ['ct'] },
+  { key: 'cva',          label: 'CVA',              alias: ['cva'] },
+  { key: 'ingram',       label: 'Ingram Micro',     alias: ['ingram'] },
+  { key: 'pch',          label: 'PCH',              alias: ['pch'] },
+  { key: 'cyberpuerta',  label: 'Cyberpuerta',      alias: ['cyber', 'cp'] },
+  { key: 'amazon',       label: 'Amazon',           alias: ['amz'] },
+  { key: 'mercadolibre', label: 'Mercado Libre',    alias: ['ml', 'meli'] },
 ];
 export const CLIENTE_LABEL = Object.fromEntries(CLIENTES_AGENDA.map((c) => [c.key, c.label]));
 export const nombreClienteAgenda = (k) => (k ? CLIENTE_LABEL[k] || (k === 'mercadolibre' ? 'Mercado Libre' : k[0].toUpperCase() + k.slice(1)) : '—');
@@ -213,3 +222,14 @@ export function fechaNatural(texto, hoy = new Date()) {
   out.texto = t.replace(/\s{2,}/g, ' ').trim();
   return out;
 }
+
+// ─── V4 · quién puede llevar un pendiente (2026-09-21) ───────────────────────
+// Decisión de Fernando: la Agenda es de él y de Karolina. David Millán ve el dashboard pero no
+// entra a la Agenda: no se le asignan pendientes, no sale en @persona ni en los filtros, y el cron
+// no le manda correos de agenda. Se excluye por correo (no por nombre) para que no falle si alguien
+// se llama parecido; el mismo Set lo lee api/cron.js.
+export const CORREOS_SIN_AGENDA = ['dmillan@acteck.com'];
+const excluida = (p) => CORREOS_SIN_AGENDA.includes(String(p?.email || '').toLowerCase());
+
+/** Personas a las que SÍ se les puede asignar un pendiente (internas, activas, no excluidas). */
+export const asignables = (personas = []) => personas.filter((p) => !excluida(p));

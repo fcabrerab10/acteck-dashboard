@@ -12,8 +12,9 @@ import { vecesArrastrado, ordinal, cuando, isoDia } from './calculo';
 import { PRIORIDAD_LABEL, ESTADO_LABEL } from './textos';
 import { CampoEtiquetas, TagCliente, TagPersona, CatPill } from './comun';
 import { relativo } from '../../lib/format';
+import Subtareas from './Subtareas';
 
-export default function HojaItem({ item, personas, personasPorId, porId, reuniones, hoy, puedeEditar, onClose, onAbrirMinuta }) {
+export default function HojaItem({ item, personas, personasPorId, porId, reuniones, hoy, puedeEditar, onClose, onAbrirMinuta, subtareas = [] }) {
   const { theme } = useTheme();
   const [texto, setTexto] = useState(() => textoConEtiquetas(item, personas));
   const [notas, setNotas] = useState(item.notas || '');
@@ -59,6 +60,9 @@ export default function HojaItem({ item, personas, personasPorId, porId, reunion
           <span style={lbl}>En qué quedó</span>
           <input value={quedo} readOnly={!puedeEditar} onChange={(e) => setQuedo(e.target.value)} onBlur={() => quedo !== (item.resolucion || '') && guardar({ resolucion: quedo || null })} placeholder="nota corta al resolver" style={{ ...campo, width: '100%', boxSizing: 'border-box' }} />
         </div>
+        {/* V4 · checklist. Terminar todas las subtareas NO cierra el pendiente: sólo lo sugiere. */}
+        <Subtareas item={item} subtareas={subtareas} puedeEditar={puedeEditar} onMarcarHecho={() => guardar({ estado: 'hecha', completado_en: new Date().toISOString() })} />
+
         <div>
           <span style={lbl}>Notas</span>
           <textarea value={notas} readOnly={!puedeEditar} onChange={(e) => setNotas(e.target.value)} onBlur={() => notas !== (item.notas || '') && guardar({ notas: notas || null })} rows={5} style={{ ...campo, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.45 }} />

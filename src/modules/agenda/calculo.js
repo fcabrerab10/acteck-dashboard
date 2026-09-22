@@ -278,10 +278,11 @@ export function cambioAlSoltar(modo, colId, item) {
 export const FUENTES_CALENDARIO = [
   { id: 'google',     label: 'Google',      tone: 'blue' },
   { id: 'reuniones',  label: 'Reuniones',   tone: 'purple' },
-  { id: 'tareas',     label: 'Tareas',      tone: 'green' },
+  { id: 'viajes',     label: 'Viajes',      tone: 'red' },      // V4: agenda_reuniones.tipo = 'viaje'
+  { id: 'tareas',     label: 'Pendientes',  tone: 'green' },
   { id: 'arribos',    label: 'Arribos PO',  tone: 'orange' },
   { id: 'cargas',     label: 'Cargas',      tone: 'yellow' },
-  { id: 'cotizaciones', label: 'Cotizaciones', tone: 'red' },
+  { id: 'cotizaciones', label: 'Cotizaciones', tone: 'gray' },
 ];
 
 /**
@@ -294,9 +295,13 @@ export function eventosCalendario({ reuniones = [], items = [], google = [], tra
   const dentro = (iso) => { const d = parseISO(iso); return d && d >= d0 && d <= d1; };
   const mapa = new Map();
   const push = (iso, ev) => { if (!dentro(iso)) return; if (!mapa.has(iso)) mapa.set(iso, []); mapa.get(iso).push(ev); };
-  if (on('reuniones')) for (const r of reuniones) {
+  // Reuniones, eventos y viajes. Un viaje/ausencia ocupa todos sus días y se pinta en su propia fuente.
+  for (const r of reuniones) {
+    const fuente = r.tipo === 'viaje' ? 'viajes' : 'reuniones';
+    if (!on(fuente)) continue;
     const f = new Date(r.fecha); const fin = r.fecha_fin ? new Date(r.fecha_fin) : f;
-    for (let d = inicioDia(f); d <= fin; d = sumarDias(d, 1)) push(isoDia(d), { id: `r:${r.id}`, fuente: 'reuniones', titulo: r.titulo, hora: r.tipo === 'evento' && r.fecha_fin ? null : fmtHora(f), todoElDia: r.tipo === 'evento' && !!r.fecha_fin, cliente_key: r.cliente_key, ref: r, minutos: r.duracion_min, orden: f.getHours() * 60 + f.getMinutes() });
+    const variosDias = r.tipo !== 'reunion' && !!r.fecha_fin;
+    for (let d = inicioDia(f); d <= fin; d = sumarDias(d, 1)) push(isoDia(d), { id: `r:${r.id}:${isoDia(d)}`, fuente, titulo: r.titulo, hora: variosDias ? null : fmtHora(f), todoElDia: variosDias, cliente_key: r.cliente_key, ref: r, minutos: r.duracion_min, orden: variosDias ? -4 : f.getHours() * 60 + f.getMinutes() });
   }
   if (on('tareas')) for (const it of items) if (abierto(it) && it.fecha_limite) push(it.fecha_limite, { id: `i:${it.id}`, fuente: 'tareas', titulo: it.titulo, hora: it.hora ? String(it.hora).slice(0, 5) : null, todoElDia: !it.hora, cliente_key: it.cliente_key, ref: it, orden: it.hora ? Number(String(it.hora).slice(0, 2)) * 60 + Number(String(it.hora).slice(3, 5)) : 9999 });
   if (on('google')) for (const g of google) {
@@ -336,4 +341,138 @@ export function fraseHero({ b, avisos = [], reunionesHoy = [], equipoRes = [], p
   const arrastrado = b.abiertos.filter((it) => it.tipo === 'punto').map((it) => ({ it, n: vecesArrastrado(it, porId) })).sort((a, b2) => b2.n - a.n)[0];
   const sub = [top.join(', '), arrastrado?.n >= 2 ? `«${arrastrado.it.titulo.slice(0, 48)}» lleva ${arrastrado.n + 1} reuniones sin cerrarse.` : null].filter(Boolean).join('. ');
   return { titulo, sub, nHoy, nVenc };
+}
+
+// ═══════════════════ V4 · 2026-09-21 ═══════════════════════════════════════════
+// La Agenda ya NO mezcla las alertas de SKUs (ésas viven en la campana). Aquí va lo que
+// necesitan las cuatro pestañas nuevas: horizontes, subtareas, archivados y cuentas.
+
+// ── Horizontes (lista estilo A "Por horizonte") ──
+export const HORIZONTES = [
+  { id: 'vencidos',  label: 'Vencidos',      tone: 'red' },
+  { id: 'hoy',       label: 'Hoy',           tone: null },
+  { id: 'semana',    label: 'Esta semana',   tone: null },
+  { id: 'adelante',  label: 'Más adelante',  tone: null },
+  { id: 'sinfecha',  label: 'Sin fecha',     tone: null },
+];
+
+/** A qué bloque pertenece un ítem abierto. `semana` = de mañana al domingo de esta semana. */
+export function horizonteDe(it, hoy = new Date()) {
+  if (!it.fecha_limite) return 'sinfecha';
+  const n = diasEntre(hoy, it.fecha_limite);
+  if (n < 0) return 'vencidos';
+  if (n === 0) return 'hoy';
+  return parseISO(it.fecha_limite) <= sumarDias(inicioSemana(hoy), 6) ? 'semana' : 'adelante';
+}
+
+/**
+ * Agrupa los ítems ABIERTOS en los cinco bloques. Devuelve [{ id, label, tone, items }] sin los
+ * bloques vacíos salvo 'hoy' (que siempre se muestra, aunque sea para decir que no hay nada).
+ * `arrastrada` no es "abierta": ese punto ya vive en la reunión siguiente.
+ */
+export function porHorizonte(items, hoy = new Date()) {
+  const orden = (a, b) => String(a.fecha_limite || '9999').localeCompare(String(b.fecha_limite || '9999'))
+    || prioridadN(b) - prioridadN(a)
+    || String(a.titulo || '').localeCompare(String(b.titulo || ''), 'es');
+  const por = new Map(HORIZONTES.map((h) => [h.id, []]));
+  for (const it of (items || []).filter(abierto)) por.get(horizonteDe(it, hoy)).push(it);
+  return HORIZONTES.map((h) => ({ ...h, items: por.get(h.id).sort(orden) })).filter((h) => h.items.length || h.id === 'hoy');
+}
+
+/** Ítems archivados (hechos o cancelados), más recientes primero. `q` filtra por texto. */
+export function archivados(items, { q = '', personasPorId } = {}) {
+  const fin = (it) => it.completado_en || it.updated_at || it.created_at || '';
+  return (items || [])
+    .filter((it) => it.estado === 'hecha' || it.estado === 'cancelada')
+    .filter((it) => !q || coincide(textoBusqueda(it, personasPorId), q))
+    .sort((a, b) => String(fin(b)).localeCompare(String(fin(a))));
+}
+
+// ── Subtareas ──
+/** { total, hechas, pct, completo } de la lista de subtareas de UN ítem. */
+export function progresoSubtareas(subtareas = []) {
+  const total = subtareas.length;
+  const hechas = subtareas.filter((s) => s.hecha).length;
+  return { total, hechas, pct: total ? Math.round((hechas / total) * 100) : 0, completo: total > 0 && hechas === total };
+}
+/** Map(item_id → { total, hechas, pct, completo }) a partir de TODAS las subtareas. */
+export function progresoPorItem(subtareas = []) {
+  const por = new Map();
+  for (const s of subtareas) { if (!por.has(s.item_id)) por.set(s.item_id, []); por.get(s.item_id).push(s); }
+  return new Map([...por.entries()].map(([id, arr]) => [id, progresoSubtareas(arr)]));
+}
+/** Subtareas de un ítem ordenadas (orden, luego creación). */
+export const subtareasDe = (subtareas = [], itemId) => subtareas
+  .filter((s) => s.item_id === itemId)
+  .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+
+// ── Cuentas que sigo ──
+export const ESTADOS_CUENTA = [
+  { id: 'activa',  label: 'Activas',  tone: 'green' },
+  { id: 'pausada', label: 'Pausadas', tone: 'yellow' },
+  { id: 'cerrada', label: 'Cerradas', tone: 'gray' },
+];
+
+/**
+ * Semáforo del próximo seguimiento: 'vencido' (rojo) · 'semana' (naranja) · 'despues' · 'sinfecha'.
+ * Sólo las cuentas 'activa' generan urgencia; las pausadas/cerradas siempre 'despues'.
+ */
+export function estadoSeguimiento(c, hoy = new Date()) {
+  if (c?.estado !== 'activa') return { nivel: 'despues', tone: 'gray', dias: null, label: c?.estado === 'pausada' ? 'pausada' : 'cerrada' };
+  if (!c.proximo_seguimiento) return { nivel: 'sinfecha', tone: 'gray', dias: null, label: 'sin fecha' };
+  const dias = diasEntre(hoy, c.proximo_seguimiento);
+  if (dias < 0) return { nivel: 'vencido', tone: 'red', dias, label: `vencido ${-dias} d` };
+  if (dias === 0) return { nivel: 'vencido', tone: 'red', dias, label: 'hoy' };
+  if (parseISO(c.proximo_seguimiento) <= sumarDias(inicioSemana(hoy), 6)) return { nivel: 'semana', tone: 'orange', dias, label: cuando(c.proximo_seguimiento, hoy) };
+  return { nivel: 'despues', tone: 'gray', dias, label: cuando(c.proximo_seguimiento, hoy) };
+}
+
+const NIVEL_ORDEN = { vencido: 0, semana: 1, despues: 2, sinfecha: 3 };
+/** Cuentas ordenadas por urgencia y filtradas por estado / texto / mayorista. */
+export function cuentasOrdenadas(cuentas, { hoy = new Date(), estado = 'activa', q = '', mayorista = null } = {}) {
+  return (cuentas || [])
+    .filter((c) => (!estado || c.estado === estado)
+      && (!mayorista || c.mayorista === mayorista)
+      && (!q || coincide(normalizar([c.nombre, c.empresa, c.mayorista, c.vendedor, c.contacto, c.notas].filter(Boolean).join(' ')), q)))
+    .map((c) => ({ ...c, seg: estadoSeguimiento(c, hoy) }))
+    .sort((a, b) => (NIVEL_ORDEN[a.seg.nivel] - NIVEL_ORDEN[b.seg.nivel])
+      || String(a.proximo_seguimiento || '9999').localeCompare(String(b.proximo_seguimiento || '9999'))
+      || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+}
+
+/** Cuentas cuyo seguimiento ya toca (las que aparecen en la bandeja y en el correo de la mañana). */
+export const cuentasPendientes = (cuentas, hoy = new Date()) =>
+  (cuentas || []).filter((c) => c.estado === 'activa' && c.proximo_seguimiento && diasEntre(hoy, c.proximo_seguimiento) <= 0);
+
+/** Al registrar un contacto: último = hoy, próximo = hoy + recordar_cada_dias. */
+export function registrarContacto(cuenta, hoy = new Date()) {
+  const dias = Number(cuenta?.recordar_cada_dias) > 0 ? Number(cuenta.recordar_cada_dias) : 14;
+  return { ultimo_contacto: isoDia(hoy), proximo_seguimiento: isoDia(sumarDias(hoy, dias)) };
+}
+
+/** Enlaces de contacto: tel: y wa.me (número normalizado a dígitos con lada de México). */
+export function enlacesContacto(telefono) {
+  const d = String(telefono || '').replace(/\D/g, '');
+  if (!d) return { tel: null, whatsapp: null, e164: null };
+  const e164 = d.startsWith('52') ? d : `52${d.replace(/^0+/, '')}`;
+  return { tel: `tel:+${e164}`, whatsapp: `https://wa.me/${e164}`, e164: `+${e164}` };
+}
+
+/** Frase del hero de la Agenda V4 (sin alertas de SKUs: sólo pendientes, reuniones y cuentas). */
+export function fraseAgenda({ bloques = [], reunionesHoy = [], cuentasHoy = [], hoy = new Date(), quien = '' } = {}) {
+  const n = (id) => bloques.find((b) => b.id === id)?.items.length || 0;
+  const venc = n('vencidos'), hoyN = n('hoy');
+  const partes = [];
+  if (venc) partes.push(`${venc} vencid${venc === 1 ? 'o' : 'os'}`);
+  partes.push(`${hoyN} para hoy`);
+  if (cuentasHoy.length) partes.push(`${cuentasHoy.length} cuenta${cuentasHoy.length === 1 ? '' : 's'} por contactar`);
+  const r = reunionesHoy[0];
+  const cola = r ? ` y ${reunionesHoy.length === 1 ? 'una reunión' : `${reunionesHoy.length} reuniones`}${r.cliente_key && r.cliente_key !== 'interno' ? ` con ${nombreClienteAgenda(r.cliente_key)}` : ''} a las ${fmtHora(new Date(r.fecha))}` : '';
+  const titulo = venc || hoyN || cuentasHoy.length || r
+    ? `${quien ? `${quien}, t` : 'T'}ienes ${partes.join(', ')}${cola}`
+    : `${quien ? `${quien}, n` : 'N'}ada pendiente para hoy`;
+  const sub = venc
+    ? `Lo vencido primero: «${bloques.find((b) => b.id === 'vencidos').items[0].titulo.slice(0, 60)}».`
+    : 'Captura arriba en una línea: «Mandar propuesta a CT mañana @karolina #ct».';
+  return { titulo, sub, venc, hoy: hoyN };
 }

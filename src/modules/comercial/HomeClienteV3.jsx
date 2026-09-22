@@ -12,7 +12,7 @@ import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, usePersistTrimestres, mes
 import { configDe, MESES, qDe, META_INV_DIAS } from './home/config';
 import { useHomeData } from './home/useHomeData';
 import { calcular, serieMensual, splitPor, topSkus } from './home/calc';
-import { GraficaSiSo, SplitTabla, TopSkusTabla, InventarioPanel, CobranzaPanel, PendientesMinutas, MarketingPanel, Secundario } from './home/bloques';
+import { GraficaSiSo, SplitTabla, TopSkusTabla, InventarioPanel, CobranzaPanel, PendientesMinutas, MinutasCliente, MarketingPanel, Secundario } from './home/bloques';
 
 const signo = (v, d = 0) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneDe = (v) => (v == null ? 'gray' : v >= 0 ? 'green' : 'red');
@@ -53,7 +53,8 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
     top_skus: <TopSkusTabla key="top" top={top} onNavegar={ir('estrategia')} />,
     inventario: <InventarioPanel key="inv" r={r} onNavegar={ir('estrategia')} />,
     cobranza: <CobranzaPanel key="cob" r={r} onNavegar={ir('cartera')} />,
-    pendientes: <PendientesMinutas key="pen" d={data} />,
+    pendientes: <PendientesMinutas key="pen" d={data} />,   // legacy (tablas viejas), fuera de BLOQUES_BASE
+    minutas: <MinutasCliente key="min" clienteKey={clienteKey} />,
     marketing: <MarketingPanel key="mkt" r={r} anio={anio} onNavegar={ir('marketing')} />,
   };
 

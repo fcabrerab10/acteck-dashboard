@@ -1116,6 +1116,39 @@ async function reglaAgendaAsignado(hoy) {
   }
   return out;
 }
+// ── V4 (2026-09-21) ────────────────────────────────────────────────────────────
+// Quién recibe agenda: sólo Fernando y Karolina. David Millán ve el dashboard pero NO la Agenda
+// (permisos.globales.agenda = 'oculto' y RLS agenda_puede_ver), así que tampoco recibe correos ni
+// alertas de agenda. Mismo criterio que CORREOS_SIN_AGENDA en src/modules/agenda/etiquetas.js.
+const CORREOS_SIN_AGENDA = ['dmillan@acteck.com'];
+const conAgenda = (p) => p && !CORREOS_SIN_AGENDA.includes(String(p.email || '').toLowerCase());
+
+// Cuentas que Fernando sigue como gerente de ventas (cuentas_seguimiento). Una alerta dirigida a él
+// por cada cuenta activa cuyo proximo_seguimiento ya llegó. Las mismas filas alimentan el correo
+// de la mañana ("Lo que dejaste").
+const ACCION_CUENTAS = { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Ver cuentas' };
+async function cuentasParaHoy(hoy) {
+  try {
+    const filas = await sbGetAll(`cuentas_seguimiento?select=id,nombre,empresa,telefono,mayorista,vendedor,estado,proximo_seguimiento,ultimo_contacto,recordar_cada_dias&estado=eq.activa&proximo_seguimiento=lte.${hoy.iso}&order=proximo_seguimiento.asc`, 500);
+    return filas;
+  } catch (e) { console.warn('[cuentas_seguimiento]', e.message); return []; }
+}
+async function reglaCuentaSeguimiento(hoy) {
+  const [cuentas, perfiles] = await Promise.all([cuentasParaHoy(hoy), sbGetAll('perfiles?select=user_id,email,activo&activo=eq.true&email=eq.fernando.cabrera@acteck.com')]);
+  const fer = perfiles[0]?.user_id || null;
+  if (!fer || !cuentas.length) return [];
+  return cuentas.map((c) => {
+    const dias = Math.round((new Date(hoy.iso) - new Date(c.proximo_seguimiento)) / 86400000);
+    return {
+      tipo: 'cuenta_seguimiento', severidad: dias > 7 ? 'alta' : 'media', clave: `cuenta_seguimiento|${c.id}|${c.proximo_seguimiento}`, para_usuario: fer,
+      titulo: `Toca dar seguimiento: ${c.nombre}${c.empresa ? ` (${c.empresa})` : ''}${dias > 0 ? ` · ${dias} d de retraso` : ''}`,
+      detalle: `${c.mayorista ? `vía ${c.mayorista} · ` : 'cuenta directa · '}${c.vendedor ? `vendedor ${c.vendedor} · ` : ''}${c.ultimo_contacto ? `último contacto ${c.ultimo_contacto}` : 'sin contacto registrado'}${c.telefono ? ` · ${c.telefono}` : ''}. Registra el contacto en Agenda › Cuentas.`,
+      cliente_key: null, sku: null, area: 'agenda', accion: ACCION_CUENTAS, caduca_at: null, valor: dias,
+      meta: { cuenta_id: c.id, nombre: c.nombre, telefono: c.telefono || null, dias },
+    };
+  });
+}
+
 // Resumen del día por persona (task agenda-hoy). Devuelve las alertas agenda_hoy y manda correo.
 // ── Tipo de cambio oficial (FIX Banxico publicado en el DOF, serie SF43718) → tabla tipo_cambio ──
 // Corre dentro de generar-alertas (diario 07:00 CDMX) y también con ?task=tipo-cambio. Trae los últimos
@@ -1173,7 +1206,7 @@ async function taskAgendaHoy({ dryRun = esDryRun() } = {}) {
   const caduca = finDelDiaCDMX(hoy);
   const alertas = [], correos = [], omitidos = [];
   const transporte = dryRun ? null : await crearTransporte().catch(() => null);
-  for (const p of perfiles.filter((x) => x.tipo === 'interno' && (x.estado == null || x.estado === 'activo'))) {
+  for (const p of perfiles.filter((x) => x.tipo === 'interno' && (x.estado == null || x.estado === 'activo') && conAgenda(x))) {
     const mios = items.filter((it) => it.estado === 'abierta' && (it.responsables || []).includes(p.user_id));
     const venc = mios.filter((it) => it.fecha_limite && it.fecha_limite < hoy.iso).sort((a, b) => a.fecha_limite.localeCompare(b.fecha_limite));
     const deHoy = mios.filter((it) => it.fecha_limite === hoy.iso);
@@ -1201,6 +1234,129 @@ async function taskAgendaHoy({ dryRun = esDryRun() } = {}) {
     upsert = r.ok ? 'ok' : `HTTP ${r.status} ${(await r.text()).slice(0, 200)}`;
   }
   return { ok: !upsert || upsert === 'ok', dryRun, hoy: hoy.iso, alertas: alertas.length, upsert, correos, omitidos };
+}
+
+// ═══ Agenda V4 · correos de la mañana y de la tarde (task agenda-correo) ══════
+// Dos envíos al día y sólo a quien usa la Agenda (Fernando y Karolina; David no la tiene):
+//   · mañana  "Lo que dejaste": vencidos, hoy, lo que te asignaron desde ayer y las cuentas
+//                               con seguimiento vencido.
+//   · tarde   "Lo que tienes":  mañana — reuniones, pendientes con fecha de mañana, cargas de
+//                               datos de mañana y viajes que empiezan o siguen mañana.
+// Si no hay nada que contar NO se manda correo.
+//
+// Horarios (CDMX). En vercel.json hay DOS entradas de cron que cubren los cuatro momentos —
+// el plan Hobby no da para una entrada por persona y por momento:
+//     "15,30 14 * * 1-5"  → 08:15 Karolina (mañana) · 08:30 Fernando (mañana)
+//     "0 21,23 * * 1-5"   → 15:00 Karolina (tarde)  · 17:00 Fernando (tarde)
+// La task mira la hora CDMX y manda lo que toca. `?momento=` y `?para=` fuerzan un envío (pruebas).
+const AGENDA_CORREOS = [
+  { email: 'karolina.veliz@acteck.com', manana: '08:15', tarde: '15:00' },
+  { email: 'fernando.cabrera@acteck.com', manana: '08:30', tarde: '17:00' },
+];
+// Ventana alrededor de la hora exacta (el cron de Vercel no dispara al minuto). Tiene que ser
+// menor a la mitad de la distancia entre dos horarios (08:15 y 08:30 están a 15 min).
+const TOLERANCIA_MIN = 7;
+
+function hhmmCDMX(d = new Date()) {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+}
+const enMinutos = (hhmm) => Number(String(hhmm).slice(0, 2)) * 60 + Number(String(hhmm).slice(3, 5));
+
+/** A quién le toca correo ahora mismo: [{ email, momento }]. Pura: se prueba con `ahora` fijo. */
+export function destinatariosAhora(ahoraHHMM, { momento = null, para = null } = {}) {
+  if (momento) return AGENDA_CORREOS.filter((c) => !para || c.email === para).map((c) => ({ email: c.email, momento }));
+  const m = enMinutos(ahoraHHMM);
+  const out = [];
+  for (const c of AGENDA_CORREOS) {
+    if (para && c.email !== para) continue;
+    if (Math.abs(enMinutos(c.manana) - m) <= TOLERANCIA_MIN) out.push({ email: c.email, momento: 'manana' });
+    else if (Math.abs(enMinutos(c.tarde) - m) <= TOLERANCIA_MIN) out.push({ email: c.email, momento: 'tarde' });
+  }
+  return out;
+}
+
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const masDias = (isoStr, n) => { const d = new Date(`${isoStr}T12:00:00`); d.setDate(d.getDate() + n); return iso(d); };
+const diaCDMX = (ts) => new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+const horaCorta = (ts) => new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' });
+
+/**
+ * Arma lo que va en el correo de una persona. Devuelve { titulo, secciones:[{ titulo, filas }] } o
+ * null si no hay nada. Separado del envío para poder probarlo.
+ */
+export function armarCorreoAgenda({ momento, userId, items, reuniones, cuentas, fuentes = [], hoy }) {
+  const manana = masDias(hoy, 1);
+  const mios = items.filter((it) => it.estado === 'abierta' && (it.responsables || []).includes(userId));
+  const sec = [];
+  if (momento === 'manana') {
+    const venc = mios.filter((it) => it.fecha_limite && it.fecha_limite < hoy).sort((a, b) => a.fecha_limite.localeCompare(b.fecha_limite));
+    const deHoy = mios.filter((it) => it.fecha_limite === hoy);
+    const ayer = masDias(hoy, -1);
+    const nuevos = mios.filter((it) => it.creado_por && it.creado_por !== userId && String(it.created_at || '').slice(0, 10) >= ayer);
+    if (venc.length) sec.push({ titulo: 'Vencidos', sub: `${venc.length}`, filas: venc.map((i) => ({ severidad: 'alta', titulo: i.titulo, detalle: `límite ${i.fecha_limite}${i.cliente_key && i.cliente_key !== 'interno' ? ` · #${i.cliente_key}` : ''}`, accion: ACCION_AGENDA })) });
+    if (deHoy.length) sec.push({ titulo: 'Hoy', sub: `${deHoy.length}`, filas: deHoy.map((i) => ({ severidad: 'info', titulo: i.titulo, detalle: i.cliente_key && i.cliente_key !== 'interno' ? nombreCliente(i.cliente_key) : null, accion: ACCION_AGENDA })) });
+    if (nuevos.length) sec.push({ titulo: 'Te asignaron', sub: `${nuevos.length} desde ayer`, filas: nuevos.map((i) => ({ severidad: 'media', titulo: i.titulo, detalle: i.fecha_limite ? `límite ${i.fecha_limite}` : 'sin fecha', accion: ACCION_AGENDA })) });
+    if (cuentas.length) sec.push({ titulo: 'Cuentas por contactar', sub: `${cuentas.length}`, filas: cuentas.map((c) => ({ severidad: 'media', titulo: `${c.nombre}${c.empresa ? ` · ${c.empresa}` : ''}`, detalle: `${c.mayorista ? `vía ${c.mayorista} · ` : ''}desde ${c.proximo_seguimiento}${c.telefono ? ` · ${c.telefono}` : ''}`, accion: ACCION_CUENTAS })) });
+    if (!sec.length) return null;
+    const n = (sec.find((x) => x.titulo === 'Vencidos')?.filas.length || 0);
+    return { titulo: 'Lo que dejaste', intro: `${n ? `${n} vencido${n === 1 ? '' : 's'} · ` : ''}${(sec.find((x) => x.titulo === 'Hoy')?.filas.length || 0)} para hoy${cuentas.length ? ` · ${cuentas.length} cuenta${cuentas.length === 1 ? '' : 's'} por contactar` : ''}`, secciones: sec };
+  }
+  // ── tarde: lo de mañana ──
+  const reus = reuniones.filter((r) => r.tipo === 'reunion' && r.estado !== 'cerrada' && diaCDMX(r.fecha) === manana).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+  const tareas = mios.filter((it) => it.fecha_limite === manana);
+  const viajes = reuniones.filter((r) => r.tipo === 'viaje' && diaCDMX(r.fecha) <= manana && diaCDMX(r.fecha_fin || r.fecha) >= manana);
+  const cargas = fuentes.filter((f) => f.vence === manana);
+  if (reus.length) sec.push({ titulo: 'Reuniones de mañana', sub: `${reus.length}`, filas: reus.map((r) => ({ severidad: 'info', titulo: `${horaCorta(r.fecha)} · ${r.titulo}`, detalle: nombreCliente(r.cliente_key || 'interno'), accion: ACCION_AGENDA })) });
+  if (tareas.length) sec.push({ titulo: 'Pendientes de mañana', sub: `${tareas.length}`, filas: tareas.map((i) => ({ severidad: 'info', titulo: i.titulo, detalle: i.cliente_key && i.cliente_key !== 'interno' ? nombreCliente(i.cliente_key) : null, accion: ACCION_AGENDA })) });
+  if (viajes.length) sec.push({ titulo: 'Viajes y ausencias', sub: `${viajes.length}`, filas: viajes.map((r) => ({ severidad: 'media', titulo: r.titulo, detalle: `${diaCDMX(r.fecha)} → ${diaCDMX(r.fecha_fin || r.fecha)}`, accion: ACCION_AGENDA })) });
+  if (cargas.length) sec.push({ titulo: 'Cargas de datos de mañana', sub: `${cargas.length}`, filas: cargas.map((f) => ({ severidad: 'media', titulo: f.titulo, detalle: 'súbela en Configuración › Actualización de datos', accion: { tipo: 'navegar', pagina: 'actualizacion', label: 'Ir al importador' } })) });
+  if (!sec.length) return null;
+  return { titulo: 'Lo que tienes mañana', intro: [reus.length ? `${reus.length} reunión${reus.length === 1 ? '' : 'es'}` : null, tareas.length ? `${tareas.length} pendiente${tareas.length === 1 ? '' : 's'}` : null, viajes.length ? `${viajes.length} viaje${viajes.length === 1 ? '' : 's'}` : null, cargas.length ? `${cargas.length} carga${cargas.length === 1 ? '' : 's'}` : null].filter(Boolean).join(' · '), secciones: sec };
+}
+
+/** Cargas manuales que vencen en los próximos días (v_fuentes_frescura). Si falla, devuelve []. */
+async function cargasProximas() {
+  try {
+    const filas = await sbGetAll('v_fuentes_frescura?select=fuente,etiqueta,ultima_carga,dias,umbral_dias', 200);
+    return filas.map((f) => ({ titulo: f.etiqueta || f.fuente, vence: f.ultima_carga && f.umbral_dias ? masDias(String(f.ultima_carga).slice(0, 10), Number(f.umbral_dias)) : null })).filter((f) => f.vence);
+  } catch { return []; }
+}
+
+async function taskAgendaCorreo({ dryRun = esDryRun(), momento = null, para = null } = {}) {
+  const hoy = hoyCDMX();
+  const ahora = hhmmCDMX();
+  const destinos = destinatariosAhora(ahora, { momento, para });
+  if (!destinos.length) return { ok: true, skip: `nada programado a las ${ahora} CDMX`, ahora };
+
+  const correosObjetivo = [...new Set(destinos.map((d) => d.email))];
+  const [perfiles, items, reuniones, cuentas, fuentes] = await Promise.all([
+    sbGetAll(`perfiles?select=user_id,nombre,email,tipo,activo,estado,preferencias&activo=eq.true&email=in.(${correosObjetivo.join(',')})`),
+    sbGetAll('agenda_items?select=id,tipo,titulo,estado,cliente_key,fecha_limite,responsables,creado_por,created_at&estado=eq.abierta', 2000),
+    sbGetAll('agenda_reuniones?select=id,titulo,cliente_key,fecha,fecha_fin,tipo,estado&estado=neq.cerrada', 500),
+    cuentasParaHoy(hoy),
+    destinos.some((d) => d.momento === 'tarde') ? cargasProximas() : Promise.resolve([]),
+  ]);
+  const porEmail = new Map(perfiles.map((p) => [String(p.email).toLowerCase(), p]));
+  const transporte = dryRun ? null : await crearTransporte();
+  const enviados = [], omitidos = [];
+
+  for (const dst of destinos) {
+    const p = porEmail.get(dst.email.toLowerCase());
+    if (!p || !conAgenda(p)) { omitidos.push({ to: dst.email, motivo: 'sin perfil activo o sin Agenda' }); continue; }
+    if (prefsNotif(p).areas.agenda === 'silencio') { omitidos.push({ to: dst.email, motivo: 'agenda en silencio' }); continue; }
+    // Las cuentas que sigo son de Fernando: no se le mandan a nadie más.
+    const suyas = dst.email === 'fernando.cabrera@acteck.com' ? cuentas : [];
+    const c = armarCorreoAgenda({ momento: dst.momento, userId: p.user_id, items, reuniones, cuentas: suyas, fuentes, hoy: hoy.iso });
+    if (!c) { omitidos.push({ to: dst.email, momento: dst.momento, motivo: 'nada que contar' }); continue; }
+    const cuerpo = c.secciones.map((sec) => htmlSeccion(sec.titulo, sec.sub, sec.filas)).join('');
+    const html = htmlCorreo({ titulo: c.titulo, intro: c.intro, cuerpo });
+    const text = `${c.titulo}\n${c.intro}\n\n${c.secciones.map((sec) => `${sec.titulo.toUpperCase()} (${sec.filas.length})\n${sec.filas.map((f) => `• ${f.titulo}${f.detalle ? ` — ${f.detalle}` : ''}`).join('\n')}`).join('\n\n')}\n\n${APP_URL}`;
+    const subject = `${c.titulo}: ${c.intro} · Agenda Acteck`;
+    if (dryRun || !transporte) { enviados.push({ to: dst.email, momento: dst.momento, subject, dryRun: true }); continue; }
+    try { const info = await transporte.transporter.sendMail({ from: transporte.from, to: dst.email, subject, text, html }); enviados.push({ to: dst.email, momento: dst.momento, subject, msg_id: info.messageId }); }
+    catch (e) { enviados.push({ to: dst.email, momento: dst.momento, subject, error: e.message }); }
+  }
+  return { ok: true, dryRun, ahora, hoy: hoy.iso, destinos, enviados, omitidos };
 }
 
 // ═══ Actividad del equipo · equipo_inactivo (2026-09-11) ═══════════════════════
@@ -1280,7 +1436,7 @@ async function reglaEquipoInactivo(hoy) {
 }
 // ═══ /equipo_inactivo ═══════════════════════════════════════════════════════════
 
-export { taskResumenProgramado, enviarCriticasNuevas, taskAgendaHoy };
+export { taskResumenProgramado, enviarCriticasNuevas, taskAgendaHoy, taskAgendaCorreo };
 export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
   const REGLAS = [
@@ -1299,6 +1455,7 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['factura_sin_oc',         () => reglaFacturaSinOc(hoy)],
     ['agenda_vencida',         () => reglaAgendaVencida(hoy)],
     ['agenda_asignado',        () => reglaAgendaAsignado(hoy)],
+    ['cuenta_seguimiento',     () => reglaCuentaSeguimiento(hoy)],   // V4 · cuentas que Fernando sigue
     ['equipo_inactivo',        () => reglaEquipoInactivo(hoy)],   // Actividad del equipo (bloque al final de las reglas)
     // Pagos V3 · pago_por_solicitar · pago_sin_autorizar_5d · pago_sin_folio · pago_vence_7d · fondo_negativo
     ['pagos_v3',               () => reglasAlertasPagos({ sbGetAll, hoy })],
@@ -1442,7 +1599,7 @@ function prefsNotif(perfil) {
     criticas_correo: n.criticas_correo !== false,
   };
 }
-const areaDe = (a) => a.area || ({ agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion' })[a.tipo] || 'operacion';
+const areaDe = (a) => a.area || ({ agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', cuenta_seguimiento: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion' })[a.tipo] || 'operacion';
 const aplicaCliente = (a, prefs) => !prefs.clientes || !a.cliente_key || prefs.clientes.includes(a.cliente_key);
 // Alertas dirigidas (Agenda): sólo a su destinatario.
 const aplicaPersona = (a, p) => !a.para_usuario || a.para_usuario === p.user_id;
@@ -1648,13 +1805,18 @@ export default async function handler(req, res) {
     } else if (task === 'inventario-foto') {
       // Foto diaria de inventario (vercel.json: 30 1 * * * UTC = 19:30 CDMX). Idempotente.
       result = await taskInventarioFoto();
+    } else if (task === 'agenda-correo') {
+      // Agenda V4: correo de la mañana ("Lo que dejaste") y de la tarde ("Lo que tienes"),
+      // sólo para Fernando y Karolina. Sin ?momento la task deduce cuál toca por la hora CDMX.
+      const q = req.query || {};
+      result = await taskAgendaCorreo({ dryRun: esDryRun() || q.dryRun === '1', momento: ['manana', 'tarde'].includes(q.momento) ? q.momento : null, para: q.para || null });
     } else if (task === 'agenda-hoy') {
       // Agenda (V3): resumen diario por persona a las 08:30 CDMX (vercel.json: 30 14 * * 1-6 UTC)
       result = await taskAgendaHoy({ dryRun: esDryRun() || req.query?.dryRun === '1' });
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | tipo-cambio | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1] | pagos-calcular[&dryRun=1] | inventario-foto',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas | tipo-cambio | resumen-programado[&dryRun=1&hora=13] | agenda-hoy[&dryRun=1] | agenda-correo[&momento=manana|tarde&para=correo&dryRun=1] | pagos-calcular[&dryRun=1] | inventario-foto',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

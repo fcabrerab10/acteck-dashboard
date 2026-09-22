@@ -471,7 +471,11 @@ export default function App() {
   };
 
   // Sidebar navigation bridge
-  const handleNavegar = (clienteId, paginaId) => {
+  // `extra` viaja a la pantalla destino como prop `inicial` (hoy sólo lo usa Agenda: abrir una
+  // minuta concreta desde el Resumen del cliente → "Últimas minutas y acuerdos").
+  const [paginaExtra, setPaginaExtra] = React.useState(null);
+  const handleNavegar = (clienteId, paginaId, extra = null) => {
+    setPaginaExtra(extra);
     if (paginaId === 'adminInterna') paginaId = 'agenda'; // página vieja "Pendientes & Calendario" → Agenda
     // Pagos ya no es pestaña de cliente: cualquier enlace "cliente › Pagos" abre la pestaña global con ese cliente elegido.
     if (paginaId === 'pagos') { setPagosCliente(clienteId || null); setVistaActual(null); setClienteActivo(null); setPaginaActiva('pagos'); return; }
@@ -488,7 +492,7 @@ export default function App() {
 
   // Navegación desde componentes sin acceso a handleNavegar (FrescuraPill, móvil): evento global.
   React.useEffect(() => {
-    const on = (e) => { const d = e.detail || {}; if (d.pagina) handleNavegar(d.clienteKey || null, d.pagina); };
+    const on = (e) => { const d = e.detail || {}; if (d.pagina) handleNavegar(d.clienteKey || null, d.pagina, d.extra || null); };
     window.addEventListener('acteck:navegar', on);
     return () => window.removeEventListener('acteck:navegar', on);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -661,7 +665,7 @@ export default function App() {
           {paginaActiva === "agenda" && (
             // Agenda (V3): permiso global `agenda` (migrado de admin_interna); internos y super admin siempre.
             puedeVerPaginaGlobal(perfil, "agenda")
-              ? <Agenda onNavegar={handleNavegar} />
+              ? <Agenda onNavegar={handleNavegar} inicial={paginaExtra} />
               : <SinAcceso motivo="No tienes acceso a la Agenda. Pídele a Fernando que te la habilite desde Administración." />
           )}
           {paginaActiva === "telemetria" && (

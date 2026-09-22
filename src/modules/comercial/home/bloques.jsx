@@ -5,6 +5,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, fecha, fechaCorta } from '../../../lib/format';
 import { Panel, TablaCompacta, HeatCell, Pill, Boton, GraficaLineas, SelectorTrimestres, etiquetaTrimestres } from '../../../components/kit';
 import { MESES, META_INV_DIAS } from './config';
+import { useMinutasCliente } from '../../agenda/datos';
 
 const signo = (v, d = 1) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneRatio = (v) => (v == null ? 'gray' : v >= 80 ? 'green' : v >= 60 ? 'orange' : 'red');
@@ -220,6 +221,33 @@ export function Secundario({ r, anio, mesActual }) {
         <Stat k="Brecha YTD vs ideal" v={`${brechaIdeal >= 0 ? '+' : ''}${$c(brechaIdeal)}`} sub={`cuota ideal YTD ${$c(r.cuotaYtd)}`} color={brechaIdeal >= 0 ? theme.green : theme.red} />
         <Stat k="Sugerido reposición" v={$c(r.sugerido.monto)} sub={`${int(r.sugerido.piezas)} pzs en ${r.sugerido.skus} SKUs · rotación 3m × 3 − stock, topado a disponible Acteck`} color={r.sugerido.monto > 0 ? theme.accent : theme.textMuted} />
       </FilaStats>
+    </Panel>
+  );
+}
+
+// ── Últimas minutas y acuerdos (Agenda V4 · 2026-09-21) ──────────────────────
+// Las últimas 5 reuniones con minuta de ESTE cliente (agenda_reuniones) con sus acuerdos abiertos.
+// Al tocar una se abre la Agenda con esa minuta: evento global `acteck:navegar`
+// { pagina:'agenda', extra:{ reunionId } } → App.jsx lo pasa como `inicial` a Agenda.jsx.
+export function MinutasCliente({ clienteKey }) {
+  const { theme } = useTheme();
+  const { minutas, cargando } = useMinutasCliente(clienteKey);
+  const abrir = (r) => window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: { pagina: 'agenda', clienteKey: null, extra: { reunionId: r.id, vista: 'reuniones' } } }));
+  const abiertos = minutas.reduce((n, r) => n + r.abiertos, 0);
+  return (
+    <Panel titulo="Últimas minutas y acuerdos" meta={cargando ? 'cargando…' : `${minutas.length} reunión${minutas.length === 1 ? '' : 'es'}${abiertos ? ` · ${abiertos} acuerdo${abiertos === 1 ? '' : 's'} abierto${abiertos === 1 ? '' : 's'}` : ' · todo cerrado'}`}>
+      {!cargando && !minutas.length && <div style={{ fontSize: 11.5, color: theme.textMuted, padding: '4px 0' }}>Sin reuniones registradas para este cliente. Créalas en la Agenda.</div>}
+      {minutas.map((r) => (
+        <div key={r.id} onClick={() => abrir(r)} role="button"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, color: theme.textMuted, width: 58, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{fechaCorta(r.fecha)}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.titulo}</span>
+          {r.abiertos > 0
+            ? <Pill size="xs" tone="orange">{r.abiertos} abierto{r.abiertos === 1 ? '' : 's'}</Pill>
+            : <Pill size="xs" tone="green">cerrada</Pill>}
+          <span style={{ fontSize: 10, color: theme.textMuted, whiteSpace: 'nowrap' }}>{r.total} punto{r.total === 1 ? '' : 's'}</span>
+        </div>
+      ))}
     </Panel>
   );
 }

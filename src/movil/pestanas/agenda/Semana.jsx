@@ -1,4 +1,4 @@
-// Agenda móvil · Semana (sólo lectura): lista por día (lun–dom) con Google + reuniones + tareas + arribos + cargas +
+// Agenda móvil · vista Calendario (semana, sólo lectura): lista por día (lun–dom) con Google + reuniones + tareas + arribos + cargas +
 // cotizaciones (eventosCalendario de calculo.js) y toggles por fuente; ‹ Hoy › para cambiar de semana.
 // Tocar: tarea → abre el ítem · reunión → minuta · Google → enlace. Google se conecta desde la computadora.
 import React, { useMemo, useState } from 'react';
@@ -29,7 +29,7 @@ export default function Semana() {
   const dias = Array.from({ length: 7 }, (_, i) => sumarDias(ini, i));
   const hoyIso = isoDia(hoy);
   const toggleF = (id) => setToggles((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const abrir = (ev) => { if (ev.fuente === 'tareas') abrirItem(ev.ref); else if (ev.fuente === 'reuniones' && ev.ref.tipo === 'reunion') abrirMinuta(ev.ref); else if (ev.fuente === 'google' && ev.url) window.open(ev.url, '_blank', 'noopener'); };
+  const abrir = (ev) => { if (ev.fuente === 'tareas') abrirItem(ev.ref); else if ((ev.fuente === 'reuniones' || ev.fuente === 'viajes') && ev.ref.tipo === 'reunion') abrirMinuta(ev.ref); else if (ev.fuente === 'google' && ev.url) window.open(ev.url, '_blank', 'noopener'); };
   const navBtn = (Icon, onClick, label) => <button type="button" onClick={onClick} aria-label={label} style={{ width: 36, height: 36, borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><Icon size={16} /></button>;
   const fin = sumarDias(ini, 6);
 
@@ -60,7 +60,7 @@ export default function Semana() {
             <div style={{ minHeight: 44, borderBottom: `1px solid ${theme.border}`, padding: '4px 0 8px', display: 'flex', flexDirection: 'column', gap: 5 }}>
               {evs.map((ev) => {
                 const [bg, col] = toneColors(theme, TONE[ev.fuente] || 'gray');
-                const abrible = ev.fuente === 'tareas' || (ev.fuente === 'reuniones' && ev.ref?.tipo === 'reunion') || (ev.fuente === 'google' && ev.url);
+                const abrible = ev.fuente === 'tareas' || ((ev.fuente === 'reuniones' || ev.fuente === 'viajes') && ev.ref?.tipo === 'reunion') || (ev.fuente === 'google' && ev.url);
                 return (
                   <div key={ev.id} onClick={abrible ? () => abrir(ev) : undefined} role={abrible ? 'button' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 10, background: bg, borderLeft: `3px solid ${col}`, fontFamily: TYPO.fontText, fontSize: 13.5, color: theme.text, cursor: abrible ? 'pointer' : 'default' }}>
                     <span style={{ fontFamily: MONO, fontSize: 11.5, color: col, fontWeight: 600, minWidth: 38 }}>{ev.hora || (ev.todoElDia ? 'día' : '')}</span>

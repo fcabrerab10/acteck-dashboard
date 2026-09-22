@@ -1,4 +1,6 @@
-// Agenda · crear / editar reunión o evento (Modal). Si Google está conectado, "Crear también en Google Calendar"
+// Agenda · crear / editar reunión, evento o VIAJE/ausencia (Modal). V4 (2026-09-21): el viaje es una
+// agenda_reuniones con tipo='viaje' y fecha_fin, así ocupa varios días en el calendario sin otra tabla.
+// (antes decía: crear / editar reunión o evento) Si Google está conectado, "Crear también en Google Calendar"
 // (guarda google_event_id; al editar/borrar se sincroniza). Al crear una reunión, los puntos abiertos de las
 // anteriores cerradas del mismo cliente se arrastran (RPC agenda_arrastrar_pendientes, ver datos.js).
 import React, { useState } from 'react';
@@ -36,7 +38,10 @@ export default function FormReunion({ inicial = {}, personas, google, onClose, o
   const [notas, setNotas] = useState(r?.notas || '');
   const [enGoogle, setEnGoogle] = useState(!!r?.google_event_id || (!r && !!google?.conectado));
   const [busy, setBusy] = useState(false);
-  const esEvento = tipo === 'evento';
+  const esViaje = tipo === 'viaje';
+  // Evento y viaje ocupan un rango de días (fecha → fecha_fin); la reunión es de una hora.
+  const esEvento = tipo === 'evento' || esViaje;
+  const nombreTipo = esViaje ? 'viaje' : tipo === 'evento' ? 'evento' : 'reunión';
   const campo = { border: `1px solid ${theme.border}`, borderRadius: 8, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 13, padding: '6px 9px', outline: 'none', width: '100%', boxSizing: 'border-box' };
   const lbl = { fontFamily: TYPO.fontDisplay, fontSize: 10.5, letterSpacing: '0.07em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, marginBottom: 5, display: 'block' };
 
@@ -44,7 +49,7 @@ export default function FormReunion({ inicial = {}, personas, google, onClose, o
     const inicio = new Date(`${fecha}T${hora || '10:00'}:00`);
     const fin = esEvento && fechaFin ? new Date(`${fechaFin}T18:00:00`) : null;
     const lista = [...asistentes.map((u) => { const p = personas.find((x) => x.user_id === u); return { user_id: u, nombre: p?.nombre || '', email: p?.email || null }; }), ...externos.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean).map((nombre) => ({ nombre, email: /@/.test(nombre) ? nombre : null }))];
-    return { tipo, titulo: titulo.trim() || (esEvento ? 'Evento' : `Reunión ${CLIENTES_AGENDA.find((c) => c.key === cliente)?.label || cliente}`), cliente_key: cliente, fecha: inicio.toISOString(), fecha_fin: fin ? fin.toISOString() : null, duracion_min: Number(duracion) || 60, lugar: lugar.trim() || null, asistentes: lista, notas: notas.trim() || null };
+    return { tipo, titulo: titulo.trim() || (esViaje ? 'Viaje' : esEvento ? 'Evento' : `Reunión ${CLIENTES_AGENDA.find((c) => c.key === cliente)?.label || cliente}`), cliente_key: cliente, fecha: inicio.toISOString(), fecha_fin: fin ? fin.toISOString() : null, duracion_min: Number(duracion) || 60, lugar: lugar.trim() || null, asistentes: lista, notas: notas.trim() || null };
   };
   const evGoogle = (d, id) => ({ id, titulo: d.titulo, descripcion: [d.cliente_key && d.cliente_key !== 'interno' ? `Cliente: ${d.cliente_key}` : null, d.notas].filter(Boolean).join('\n'), inicio: d.fecha, fin: d.fecha_fin || new Date(new Date(d.fecha).getTime() + d.duracion_min * 60000).toISOString(), lugar: d.lugar, asistentes: d.asistentes.map((a) => a.email).filter(Boolean) });
 
@@ -67,7 +72,7 @@ export default function FormReunion({ inicial = {}, personas, google, onClose, o
           catch (e) { toast.error(`Se creó aquí pero no en Google: ${MENSAJES_GOOGLE[e.codigo] || e.message}`, { ms: 5000 }); }
         }
         const nueva = await crearReunion({ ...d, google_event_id });
-        toast.ok(nueva.arrastrados ? `${esEvento ? 'Evento' : 'Reunión'} creada · ${nueva.arrastrados} punto${nueva.arrastrados === 1 ? '' : 's'} arrastrado${nueva.arrastrados === 1 ? '' : 's'} de reuniones anteriores` : `${esEvento ? 'Evento creado' : 'Reunión creada'}${google_event_id ? ' · también en Google' : ''}`);
+        toast.ok(nueva.arrastrados ? `${esViaje ? 'Viaje' : esEvento ? 'Evento' : 'Reunión'} creada · ${nueva.arrastrados} punto${nueva.arrastrados === 1 ? '' : 's'} arrastrado${nueva.arrastrados === 1 ? '' : 's'} de reuniones anteriores` : `${esViaje ? 'Viaje creado' : esEvento ? 'Evento creado' : 'Reunión creada'}${google_event_id ? ' · también en Google' : ''}`);
         onCreada?.(nueva);
       }
     } catch (e) { toast.error(e.message); }
@@ -82,11 +87,11 @@ export default function FormReunion({ inicial = {}, personas, google, onClose, o
   };
 
   return (
-    <Modal abierto onClose={onClose} theme={theme} titulo={r ? `Editar ${esEvento ? 'evento' : 'reunión'}` : esEvento ? 'Nuevo evento' : 'Nueva reunión'} sub={esEvento ? 'salida, feria, visita… sin minuta' : 'con minuta en vivo y puntos que se arrastran'} ancho={520}
+    <Modal abierto onClose={onClose} theme={theme} titulo={r ? `Editar ${nombreTipo}` : esViaje ? 'Nuevo viaje o ausencia' : tipo === 'evento' ? 'Nuevo evento' : 'Nueva reunión'} sub={esViaje ? 'ocupa todos sus días en el calendario · «Viaje a Monterrey 24–26 sep»' : esEvento ? 'salida, feria, visita… sin minuta' : 'con minuta en vivo y puntos que se arrastran'} ancho={520}
       pie={<>{r && <Boton icon={Trash2} peligro onClick={borrar} disabled={busy} style={{ marginRight: 'auto' }}>Eliminar</Boton>}<Boton onClick={onClose}>Cancelar</Boton><Boton primario onClick={guardar} disabled={busy}>{r ? 'Guardar' : 'Crear'}</Boton></>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontFamily: TYPO.fontText }}>
-        {!r && <Segmented value={tipo} onChange={setTipo} options={[{ id: 'reunion', label: 'Reunión' }, { id: 'evento', label: 'Evento' }]} />}
-        <div><span style={lbl}>Título</span><input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder={esEvento ? 'Feria, salida, visita…' : 'Revisión de sell-out y promos'} autoFocus style={campo} /></div>
+        {!r && <Segmented value={tipo} onChange={setTipo} options={[{ id: 'reunion', label: 'Reunión' }, { id: 'evento', label: 'Evento' }, { id: 'viaje', label: 'Viaje / ausencia' }]} />}
+        <div><span style={lbl}>Título</span><input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder={esViaje ? 'Viaje a Monterrey' : esEvento ? 'Feria, salida, visita…' : 'Revisión de sell-out y promos'} autoFocus style={campo} /></div>
         <div><span style={lbl}>Cliente</span>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{CLIENTES_AGENDA.map((c) => <Pill key={c.key} tone={cliente === c.key ? 'inverse' : 'gray'} onClick={() => setCliente(c.key)} style={{ cursor: 'pointer', border: `1px solid ${theme.border}` }}>#{c.key}</Pill>)}</div>
         </div>

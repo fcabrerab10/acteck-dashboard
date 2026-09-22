@@ -1,7 +1,7 @@
 // Agenda · piezas compartidas por Bandeja y Tablero (sólo kit + theme.*).
 // TagCliente · TagPersona · CatPill · FuenteLabel · Palomita · FilaItem · FilaAviso · Filtros · CampoEtiquetas
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, ChevronRight, ExternalLink } from 'lucide-react';
+import { Search, X, ChevronRight, ExternalLink, CalendarClock, CalendarPlus } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Pill, toneColors, Boton, EASE, DUR } from '../../components/kit';
@@ -199,4 +199,82 @@ export function CampoEtiquetas({ value, onChange, personas = [], placeholder, on
 export function EnlaceExterno({ href, children }) {
   const { theme } = useTheme();
   return <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: theme.accent, fontSize: 10.5, display: 'inline-flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}>{children}<ExternalLink size={10} /></a>;
+}
+
+// ═══════════════════ V4 · 2026-09-21 ═══════════════════════════════════════════
+
+/** Pastilla de progreso de subtareas ("3/10"). Verde cuando están todas. */
+export function ProgresoPill({ progreso, size = 'xs' }) {
+  if (!progreso || !progreso.total) return null;
+  return <Pill tone={progreso.completo ? 'green' : 'gray'} size={size} title={`${progreso.hechas} de ${progreso.total} subtareas`} style={{ fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>{`${progreso.hechas}/${progreso.total}`}</Pill>;
+}
+
+/** Botón redondo discreto (posponer, abrir…). */
+export function IconBtn({ icon: Icon, onClick, title, tone }) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(false);
+  return (
+    <button type="button" title={title} aria-label={title}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
+      style={{ width: 24, height: 24, borderRadius: 999, flexShrink: 0, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        border: `1px solid ${hover ? (tone === 'red' ? theme.red : theme.accent) : theme.border}`, background: hover ? (theme.surfaceHover || 'rgba(0,0,0,0.03)') : 'transparent',
+        color: hover ? (tone === 'red' ? theme.red : theme.accent) : theme.textMuted, transition: `color ${DUR.tap}ms ${EASE}, border-color ${DUR.tap}ms ${EASE}` }}>
+      <Icon size={12} />
+    </button>
+  );
+}
+
+/**
+ * Fila de pendiente de la lista por horizonte (V4).
+ * Palomita · título · sub (fecha · #cliente · asignado por X) · progreso de subtareas · avatar del
+ * responsable · posponer (mañana / próxima semana) · abrir la hoja.
+ */
+export function FilaPendiente({ item, personasPorId, porId, hoy, progreso, reunion, puedeEditar, onToggle, onAbrir, onPosponer, onFiltrarCliente }) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(false);
+  const hecha = item.estado === 'hecha';
+  const venc = vencido(item, hoy);
+  const n = vecesArrastrado(item, porId);
+  const w = cuando(item.fecha_limite, hoy);
+  const resp = (item.responsables || []).map((u) => personasPorId?.get(u)).filter(Boolean);
+  const creador = item.creado_por && !(item.responsables || []).includes(item.creado_por) ? personasPorId?.get(item.creado_por) : null;
+  const sub = [
+    item.fecha_limite ? (venc ? `vencido ${w}` : w) : 'sin fecha',
+    item.cliente_key && item.cliente_key !== 'interno' ? `#${item.cliente_key}` : null,
+    creador ? `asignado por ${String(creador.nombre || '').split(' ')[0]}` : null,
+    reunion ? `de la reunión ${cuando(reunion.fecha?.slice?.(0, 10), hoy)}` : null,
+  ].filter(Boolean).join(' · ');
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={() => onAbrir?.(item)}
+      style={{ ...fila(theme), background: hover ? (theme.surfaceHover || 'rgba(0,0,0,0.02)') : 'transparent', opacity: hecha ? 0.55 : 1, alignItems: 'center' }}>
+      <Palomita hecha={hecha} disabled={!puedeEditar} onClick={() => onToggle?.(item, !hecha)} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 500, color: theme.text, textDecoration: hecha ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.titulo}</div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 2, fontSize: 10.5, color: venc ? theme.red : theme.textMuted }}>
+          <span>{sub}</span>
+          {item.cliente_key && item.cliente_key !== 'interno' && onFiltrarCliente && <TagCliente clienteKey={item.cliente_key} onClick={(e) => { e.stopPropagation(); onFiltrarCliente(item.cliente_key); }} />}
+          <CatPill categoria={item.categoria} />
+          {item.prioridad === 'alta' && !hecha && <Pill tone="red" size="xs" dot>alta</Pill>}
+          {n > 0 && <Pill tone="orange" size="xs" title="Veces que se ha arrastrado de reunión en reunión">{ordinal(n)}</Pill>}
+        </div>
+      </div>
+      <ProgresoPill progreso={progreso} />
+      <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexShrink: 0 }}>
+        {resp.map((p) => <Avatar key={p.user_id} persona={p} size={20} />)}
+        {!resp.length && <span title="Sin responsable" style={{ width: 20, height: 20, borderRadius: 999, border: `1px dashed ${theme.border}`, display: 'inline-block' }} />}
+      </div>
+      {puedeEditar && !hecha && onPosponer && (
+        <div style={{ display: 'flex', gap: 4, opacity: hover ? 1 : 0, transition: `opacity ${DUR.state}ms ${EASE}`, flexShrink: 0 }}>
+          <IconBtn icon={CalendarClock} title="Posponer a mañana" onClick={() => onPosponer(item, 1)} />
+          <IconBtn icon={CalendarPlus} title="Posponer a la próxima semana" onClick={() => onPosponer(item, 7)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Encabezado de un bloque de horizonte con su conteo. */
+export function BloqueHorizonte({ bloque, children }) {
+  return (<><Seccion tone={bloque.tone} n={bloque.items.length}>{bloque.label}</Seccion>{children}</>);
 }

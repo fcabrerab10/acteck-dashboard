@@ -138,8 +138,10 @@ export const puedeVerPaginaGlobal = (perfil, paginaId) => {
   if (!perfil) return false;
   if (perfil.es_super_admin) return true;
   if (paginaId === "inicio") return puedeVerInicio(perfil);
-  // Agenda: los internos la ven siempre (misma regla que RLS agenda_puede_ver); los demás con el permiso.
-  if ((paginaId === "agenda" || paginaId === "adminInterna") && perfil.tipo === "interno") return true;
+  // Agenda (V4 · 2026-09-21): ya NO basta con ser interno. Hace falta el permiso explícito
+  // `globales.agenda` en 'ver' o 'edit' (o ser super admin), igual que la función RLS
+  // agenda_puede_ver() de la migración 20260921_agenda_v4.sql. Decisión de Fernando:
+  // David Millán queda en 'oculto' y no ve la pestaña ni puede leer agenda_items por PostgREST.
   const permiso = PAGINA_A_PERMISO_GLOBAL[paginaId];
   if (permiso === "__super_admin_only__") return false;
   if (!permiso) return false;
