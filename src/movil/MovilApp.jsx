@@ -10,6 +10,7 @@
 //
 //   <MovilApp perfil={perfil} onCerrarSesion={handleLogout} />   (App monta <ToastHost/> aparte)
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { puedeVerInicio } from '../lib/permisos';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 import { DUR, reduceMotion } from '../lib/motion';
@@ -58,10 +59,12 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const modo = menu.modoMovil === 'barra' ? 'barra' : 'cajon';
   const arbol = useMemo(() => { try { return construirArbol(perfil, { movil: true }); } catch { return []; } }, [perfil]);
 
-  const [tab, setTab] = useState('inicio');
-  const [visitadas, setVisitadas] = useState(() => new Set(['inicio']));
+  // Un externo (o quien no tenga Visión General / Resumen de Clientes) no ve Inicio: arranca en Clientes.
+  const veInicio = puedeVerInicio(perfil);
+  const [tab, setTab] = useState(veInicio ? 'inicio' : 'clientes');
+  const [visitadas, setVisitadas] = useState(() => new Set([veInicio ? 'inicio' : 'clientes']));
   const [pilas, setPilas] = useState(() => Object.fromEntries(TABS_RAIZ.map((t) => [t, []]))); // tab → [{ key, el, fase }]
-  const [activoId, setActivoId] = useState('inicio');   // nodo del árbol resaltado en los menús
+  const [activoId, setActivoId] = useState(veInicio ? 'inicio' : 'clientesPropios');   // nodo del árbol resaltado en los menús
   const [hoja, setHoja] = useState(null);               // { titulo, sub, alto, contenido, acciones, grupo? }
   const [hojaAbierta, setHojaAbierta] = useState(false);
   const [perfilAbierto, setPerfilAbierto] = useState(false);
@@ -105,7 +108,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const popTodo = useCallback((t = tab) => { setPilas((p) => ({ ...p, [t]: [] })); if (TAB_A_NODO[t]) setActivoId(TAB_A_NODO[t]); }, [tab]);
 
   const tabRef = useRef(tab); tabRef.current = tab;
-  const tabPrev = useRef('inicio');
+  const tabPrev = useRef(veInicio ? 'inicio' : 'clientes');
   const irATab = useCallback((id) => {
     if (!RAIZ[id]) return;
     setVisitadas((v) => (v.has(id) ? v : new Set(v).add(id)));
@@ -118,7 +121,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     setTab(id);
   }, [popTodo]);
   // Lupa / campana: tocarlas con su pestaña al frente vuelve a la pestaña anterior.
-  const alternarTab = useCallback((id) => { if (tabRef.current === id) irATab(tabPrev.current || 'inicio'); else irATab(id); }, [irATab]);
+  const alternarTab = useCallback((id) => { if (tabRef.current === id) irATab(tabPrev.current || (veInicio ? 'inicio' : 'clientes')); else irATab(id); }, [irATab]);
 
   // ── Hoja ──
   const abrirHoja = useCallback((opts) => { setHoja(opts); setHojaAbierta(true); }, []);

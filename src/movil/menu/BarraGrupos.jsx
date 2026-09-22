@@ -23,7 +23,8 @@ const ENTRADAS = [
 /** Entradas visibles para este árbol (Inicio siempre). */
 export function entradasBarra(arbol) {
   const tiene = (id) => { const g = arbol.find((x) => x.id === id); return !!g && (g.nodos.length > 0 || (g.clientes || []).length > 0); };
-  return ENTRADAS.filter((e) => e.id === 'inicio' || e.grupos.some(tiene));
+  // 'inicio' sólo si el árbol trae el grupo inicio con nodos (construirArbol ya aplica puedeVerInicio).
+  return ENTRADAS.filter((e) => e.grupos.some(tiene));
 }
 
 export default function BarraGrupos({ arbol, activo, onEntrada, perfil }) {

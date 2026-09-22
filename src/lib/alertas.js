@@ -7,6 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { queryClient } from './queryClient';
 import { usePreferencias, setPreferencia } from './preferencias';
+import { usePerfil } from './perfilContext';
+import { puedeVerCliente, puedeVerPestanaCliente, puedeVerPestanaGlobal } from './permisos';
 
 export const SEVERIDADES = ['critica', 'alta', 'media', 'info'];
 export const SEV_ORDEN = { critica: 0, alta: 1, media: 2, info: 3 };
@@ -107,14 +109,50 @@ async function fetchAlertas(clienteKey) {
 }
 
 /** Alertas activas (no resueltas, sin snooze vigente). clienteKey null = todas. */
+/**
+ * Qué alertas puede ver un perfil (2026-09-21, tras ver que un usuario externo veía las alertas de
+ * inventario de toda la empresa). La tabla `alertas` es legible para cualquier autenticado, así que el
+ * recorte va aquí, en el único punto por el que pasan todas las lecturas (web, móvil, campana, Inicio).
+ *  - super admin: todo.
+ *  - dirigidas a una persona (para_usuario): sólo esa persona (ya lo filtra la consulta).
+ *  - con cliente: sólo si ve ese cliente y, según el área, la pestaña correspondiente de ese cliente.
+ *  - sin cliente (empresa): sólo internos, y sólo si ven la pestaña global del área.
+ */
+const AREA_A_PESTANA_CLIENTE = { ventas: 'sellIn', pagos: 'pagos', cobranza: 'cartera', inventario: 'estrategia', forecast: 'sellIn', tracking: 'sellIn' };
+const AREA_A_PERMISO_GLOBAL = { inventario: 'inventario_global', ventas: 'sell_in', cobranza: 'cobranza_global', forecast: 'forecast_reservas', tracking: 'ordenes_compra', datos: 'resumen_clientes', operacion: 'resumen_clientes', pagos: 'resumen_clientes' };
+export function filtrarAlertasPorPerfil(alertas, perfil) {
+  if (!perfil) return [];
+  if (perfil.es_super_admin) return alertas || [];
+  const interno = perfil.tipo === 'interno';
+  return (alertas || []).filter((a) => {
+    if (a.para_usuario) return true; // ya vino filtrada a esta persona
+    const area = a.area || AREA_POR_TIPO[a.tipo] || 'operacion';
+    if (a.cliente_key) {
+      if (!puedeVerCliente(perfil, a.cliente_key)) return false;
+      const pest = AREA_A_PESTANA_CLIENTE[area];
+      if (pest && !puedeVerPestanaCliente(perfil, a.cliente_key, pest)) return false;
+      if (!interno && ['inventario', 'forecast', 'tracking', 'datos', 'equipo', 'agenda'].includes(area)) return false;
+      return true;
+    }
+    if (!interno) return false;
+    if (area === 'equipo') return false;
+    if (area === 'agenda') return true;
+    const g = AREA_A_PERMISO_GLOBAL[area];
+    return g ? puedeVerPestanaGlobal(perfil, g) : false;
+  });
+}
+
 export function useAlertas({ clienteKey = null, enabled = true } = {}) {
-  return useQuery({
+  const perfil = usePerfil();
+  const q = useQuery({
     queryKey: ['alertas', clienteKey || 'global'],
     queryFn: () => fetchAlertas(clienteKey),
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
     enabled,
   });
+  const data = useMemo(() => (q.data ? filtrarAlertasPorPerfil(q.data, perfil) : q.data), [q.data, perfil]);
+  return { ...q, data };
 }
 
 function invalidar() {

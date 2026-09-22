@@ -14,7 +14,7 @@ import { useNav } from '../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Skeleton, Vacio } from '../piezas';
 import { idNodo } from '../../components/nav/arbol';
 import { useHoyExtra, nombreCliente, colorCliente } from '../datos';
-import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente } from '../../lib/permisos';
+import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente, puedeVerInicio } from '../../lib/permisos';
 import { saludo, diaLargo, nombreCorto, hoyISO, moneyCompact, money, pct, deltaPct, tonoCuota, MESES, N } from '../util';
 import FichaCliente from './FichaCliente';
 import FichaProducto from '../FichaProducto';
@@ -30,6 +30,7 @@ export default function Inicio() {
   const { data: alertas = [] } = useAlertas();
   const { data: extra } = useHoyExtra();
   const perfil = nav.perfil;
+  const veInicio = puedeVerInicio(perfil);
   const sensible = puedeVerSensible(perfil);
   const veCobranza = puedeVerPestanaGlobal(perfil, 'cobranza_global'), veInventario = puedeVerPestanaGlobal(perfil, 'inventario_global');
   const clientesVisibles = useMemo(() => ['digitalife', 'pcel', 'dicotech'].filter((k) => puedeVerCliente(perfil, k)), [perfil]);
@@ -65,6 +66,7 @@ export default function Inicio() {
   if (error) {
     return (<><TituloGrande titulo={titulo} sub={sub} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudieron cargar los datos" sub={error} /></>);
   }
+  if (!veInicio) return <Vacio titulo="Sin acceso a Inicio" sub="Entra por Clientes para ver tu información." style={{ padding: '40px 16px' }} />;
   if (loading || !r) {
     return (
       <>
