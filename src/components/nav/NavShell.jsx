@@ -88,6 +88,8 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
         if (n) { e.preventDefault(); irANodo(n, navegar); }
         return;
       }
+      // ⌘\ · colapsar/expandir el menú lateral (lo atiende SidebarIpad).
+      if (mod && !e.shiftKey && !e.altKey && e.key === '\\') { e.preventDefault(); window.dispatchEvent(new CustomEvent('acteck:sidebar-toggle')); return; }
       if (e.key === '?' && !mod && !enCampoDeTexto(e.target)) { e.preventDefault(); setPaleta(false); mostrarAtajos(!abiertoRef.current.atajos); }
     };
     window.addEventListener('keydown', onKey);

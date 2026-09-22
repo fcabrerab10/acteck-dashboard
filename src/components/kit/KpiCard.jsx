@@ -18,7 +18,7 @@ export default function KpiCard({ eyebrow, badge, titulo, big, bigSmall, bigColo
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={onClick} title={medida || undefined}
       style={{
-        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px',
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 'var(--dens-kpi-pad, 12px 14px)',
         cursor: onClick ? 'pointer' : 'default', position: 'relative', minWidth: 0, fontFamily: TYPO.fontText,
         transition: `transform ${DUR.state}ms ${EASE}, box-shadow ${DUR.state}ms ${EASE}`,
         transform: hover && onClick ? 'translateY(-1px)' : 'none',

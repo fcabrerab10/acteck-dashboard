@@ -19,44 +19,8 @@ import {
 // Cada pantalla es su propio chunk. Antes todas viajaban en index.js
 // (2.2 MB / 527 KB gz) aunque el usuario usara 2 o 3. El shell (Topbar,
 // MobileShell, Login, loaders) sigue estático porque se necesita siempre.
-const HomeClienteV3          = lazy(() => import('./modules/comercial/HomeClienteV3')); // V3: un solo Resumen por cliente (config en home/config.js)
-const CreditoCobranza        = lazy(() => import('./modules/comercial/CreditoCobranza'));
-const CreditoCobranzaV2      = lazy(() => import('./modules/comercial/CreditoCobranzaV2'));
-// Pagos V3: una sola pantalla para los tres clientes (global y por cliente). PagosCliente queda como respaldo sin uso.
-const PagosUnificados        = lazy(() => import('./modules/comercial/PagosUnificados'));
-const EstrategiaProducto     = lazy(() => import('./modules/comercial/EstrategiaProducto'));
-const MarketingCliente       = lazy(() => import('./modules/comercial/MarketingCliente'));
-const AnalisisCliente        = lazy(() => import('./modules/comercial/AnalisisCliente'));
-const AnalisisClientesGlobal = lazy(() => import('./modules/comercial/AnalisisClientesGlobal'));
-const SellOutGlobal          = lazy(() => import('./modules/comercial/SellOutGlobal')); // Sell Out consolidado (V3 · 2026-09-12)
-const InventarioGlobal       = lazy(() => import('./modules/comercial/InventarioGlobal'));
-const EstrategiaPrecios      = lazy(() => import('./modules/comercial/EstrategiaPrecios'));
-const ForecastCliente        = lazy(() => import('./modules/comercial/ForecastCliente'));
-// Proyectos y abasto (V3 · 2026-09-21): sustituye a ForecastReservas en la página `forecastReservas`.
-// El archivo viejo (ForecastReservas.jsx) se queda en el repo sin uso, por si hay que consultarlo.
-const ProyectosAbasto        = lazy(() => import('./modules/comercial/ProyectosAbasto'));
-const SellInCliente          = lazy(() => import('./modules/comercial/SellInCliente'));
-const SellInClienteV2        = lazy(() => import('./modules/comercial/SellInClienteV2'));
-const SellInDicotech         = lazy(() => import('./modules/comercial/SellInDicotech'));
-const SellInPcel             = lazy(() => import('./modules/comercial/SellInPcel'));
-const TrackingPedidos        = lazy(() => import('./modules/comercial/TrackingPedidos'));
-const SellOutCliente         = lazy(() => import('./modules/comercial/SellOutCliente'));
-const SellOutClienteV2       = lazy(() => import('./modules/comercial/SellOutClienteV2'));
-const SellOutDicotech        = lazy(() => import('./modules/comercial/SellOutDicotech'));
-const SellOutPcel            = lazy(() => import('./modules/comercial/SellOutPcel'));
-const EstadoResultados       = lazy(() => import('./modules/general/EstadoResultados'));
-const Inicio                 = lazy(() => import('./modules/general/Inicio')); // pestaña por defecto (V3 · 2026-09-11)
-const VisionGeneral          = lazy(() => import('./modules/comercial/VisionGeneral'));
-const ReporteTab             = lazy(() => import('./modules/comercial/ReporteTab'));
-const ResumenClientesTab     = lazy(() => import('./modules/comercial/ResumenClientesTab'));
-const PropuestasTab          = lazy(() => import('./modules/comercial/PropuestasTab'));
-const ForecastClientesTab    = lazy(() => import('./modules/comercial/ForecastClientesTab'));
-const TelemetriaPanel        = lazy(() => import('./modules/interno/TelemetriaPanel'));
-const HistorialCambios       = lazy(() => import('./modules/interno/HistorialCambios'));
-const AxonMexico             = lazy(() => import('./modules/interno/AxonMexico'));
-const Configuracion          = lazy(() => import('./modules/configuracion/Configuracion'));
-const ActualizacionDatos     = lazy(() => import('./modules/settings/ActualizacionDatos'));
-const Agenda                 = lazy(() => import('./modules/agenda/Agenda')); // Agenda (V3 · 2026-09-11): sustituye a Pendientes & Calendario (adminInterna → agenda)
+// Las pantallas viven ahora en src/components/PaginaContenido.jsx (mismo React.lazy por pantalla),
+// para que las pueda montar también el modo Paneles del monitor panorámico.
 // Auth y shell: estáticos (se necesitan antes de cualquier pantalla).
 import LoginPage from './modules/auth/LoginPage';
 const SetPasswordPage = lazy(() => import('./modules/auth/SetPasswordPage')); // sólo en #/set-password
@@ -77,33 +41,14 @@ import { PageTransition } from './components/apple/AppleLoader';
 import { Cargando, prefetchGraficas } from './components/kit';
 import { precargarEnCola, siguientesPantallas } from './lib/prefetch';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
+// Responsive por dispositivo (2026-09-21): modo por ancho+táctil, preferencias por máquina
+// (densidad, sidebar, ancho máximo, paneles) y el modo Paneles del monitor panorámico.
+import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, aplicarDensidad, maxColumnas, normalizarPaneles } from './lib/dispositivo';
+import PaginaContenido from './components/PaginaContenido';
+const Paneles = lazy(() => import('./components/nav/Paneles'));
 // MobileNav y MobileShell (legacy) ya no se montan: los sustituyó MovilApp (V3).
 const MovilApp = lazy(() => import('./movil/MovilApp'));
-// BandejaAlertas sólo sale en Resumen (super admin) y en el Home de cliente: perezosa,
-// para que no viaje en el chunk de arranque junto con lib/alertas.
-const BandejaAlertas = lazy(() => import('./components/BandejaAlertas'));
 import { ToastHost } from './components/kit';
-// Pantallas mobile: lazy (sólo se descargan en iPhone/iPad, y sólo la que se abre).
-const MobileHome              = lazy(() => import('./components/MobileHome'));
-const MobileEquipo            = lazy(() => import('./components/MobileEquipo'));
-const MobileYo                = lazy(() => import('./components/MobileYo'));
-const MobileSellIn            = lazy(() => import('./components/MobileSellIn'));
-const MobileSellOut           = lazy(() => import('./components/MobileSellOut'));
-const MobileCartera           = lazy(() => import('./components/MobileCartera'));
-const MobileMarketing         = lazy(() => import('./components/MobileMarketing'));
-const MobileHomeCliente       = lazy(() => import('./components/MobileHomeCliente'));
-const MobileBuscar            = lazy(() => import('./components/MobileBuscar'));
-const MobileEdR               = lazy(() => import('./components/MobileEdR'));
-const MobileVisionGeneral     = lazy(() => import('./components/MobileVisionGeneral'));
-const MobileAnalisisClientes  = lazy(() => import('./components/MobileAnalisisClientes'));
-const MobileSellInGlobal      = lazy(() => import('./components/MobileSellInGlobal'));
-const MobileSellOutGlobal     = lazy(() => import('./components/MobileSellOutGlobal'));
-const MobileInventarioGlobal  = lazy(() => import('./components/MobileInventarioGlobal'));
-const MobileCobranzaGlobal    = lazy(() => import('./components/MobileCobranzaGlobal'));
-const MobileSOP               = lazy(() => import('./components/MobileSOP'));
-const MobilePropuestas        = lazy(() => import('./components/MobilePropuestas'));
-const MobileEstrategiaPrecios = lazy(() => import('./components/MobileEstrategiaPrecios'));
-const MobileTrackingPedidos   = lazy(() => import('./components/MobileTrackingPedidos'));
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -324,6 +269,13 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const bp = useBreakpoint();
   const mobile = useMobileShell();
+  // Dispositivo + preferencias de esta máquina (localStorage, por modo).
+  const disp = useDispositivo();
+  const prefsDisp = usePrefsDispositivo();
+  // Densidad → variables CSS que leen Panel / KpiCard / TablaCompacta del kit. 'comoda' = como siempre.
+  useEffect(() => { aplicarDensidad(prefsDisp.densidad); }, [prefsDisp.densidad]);
+  // Ancho máximo del contenido: 1600 de toda la vida; sólo el panorámico lo puede cambiar.
+  const anchoMax = disp.modo === 'panoramico' ? (Number(prefsDisp.anchoMax) || 0) : 1600;
 
   useEffect(() => {
     // Check existing session
@@ -423,46 +375,8 @@ export default function App() {
   const [showUpload, setShowUpload] = useState(false);
   const [clienteKey, setClienteKey] = useState(null);
 
-  //  DATOS DESDE SUPABASE (ventas_mensuales) 
-  const [ventasDB, setVentasDB] = React.useState(null);
-  const [ventasVer, setVentasVer] = React.useState(0);
-
-  React.useEffect(() => {
-    if (!DB_CONFIGURED) return;
-    supabase.from("ventas_mensuales").select("*")
-      .eq("cliente", clienteActivo).eq("anio", 2026).order("mes")
-      .then(({ data }) => setVentasDB(data || []));
-  }, [clienteActivo, ventasVer]);
-
-  const c = React.useMemo(() => {
-    const base = clientesDinamicos[clienteActivo];
-    if (!base) return { kpis: {}, pagos: [], promociones: [], minuta: [], pendientes: [], nombre: '', ventas: {} };
-    if (!ventasDB || ventasDB.length === 0) return base;
-    const sellInMap = {};
-    const sellOutMap = {};
-    ventasDB.forEach(r => { sellInMap[r.mes] = r.sell_in; sellOutMap[r.mes] = r.sell_out; });
-    const ultimoMes = Math.max(...ventasDB.map(r => r.mes));
-    const lastRow = ventasDB.find(r => r.mes === ultimoMes);
-    const cuotaAcum = Object.entries(DIGITALIFE_REAL.cuota30M)
-      .filter(([m]) => parseInt(m) <= ultimoMes)
-      .reduce((a, [, v]) => a + v, 0);
-    return {
-      ...base,
-      kpis: {
-        ...base.kpis,
-        sellInMes: sellInMap[ultimoMes] || base.kpis.sellInMes,
-        sellOut: sellOutMap[ultimoMes] || base.kpis.sellOut,
-        sellInAcumulado: Object.values(sellInMap).reduce((a, b) => a + b, 0),
-        sellOutAcumulado: Object.values(sellOutMap).reduce((a, b) => a + b, 0),
-        cuotaAcumulada: cuotaAcum || base.kpis.cuotaAcumulada,
-        cuotaMes: DIGITALIFE_REAL.cuota30M[ultimoMes] || base.kpis.cuotaMes,
-        cuotaMes25M: DIGITALIFE_REAL.cuota25M[ultimoMes] || base.kpis.cuotaMes25M,
-        diasInventario: lastRow?.inventario_dias ?? base.kpis.diasInventario,
-        inventarioValor: lastRow?.inventario_valor ?? base.kpis.inventarioValor,
-        ultimoMes: NOMBRES_MES[ultimoMes] || base.kpis.ultimoMes,
-      }
-    };
-  }, [clienteActivo, ventasDB]);
+  // Los datos del cliente activo (ventas_mensuales) los pide ahora PaginaContenido,
+  // para que cada panel del monitor panorámico tenga los suyos.
 
   // Al cambiar de cliente, volver al home
   const handleClienteChange = (key) => {
@@ -498,6 +412,19 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Paneles (monitor panorámico) ──────────────────────────────────────
+  // La primera columna es SIEMPRE la pestaña activa; las demás salen de las preferencias
+  // de esta máquina y el ancho real limita cuántas caben (900 px por columna).
+  const arbolNav = React.useMemo(() => { try { return construirArbol(perfil); } catch { return []; } }, [perfil]);
+  const panelesActivos = React.useMemo(() => {
+    if (disp.modo !== 'panoramico' || mobile) return [];
+    const n = Math.min(maxColumnas(disp.ancho), (prefsDisp.paneles || []).length);
+    if (n < 2) return [];
+    const cols = normalizarPaneles(prefsDisp.paneles, n);
+    cols[0] = { pagina: vistaActual === 'configuracion' ? 'configuracion' : paginaActiva, clienteKey: clienteActivo };
+    return cols;
+  }, [disp.modo, disp.ancho, mobile, prefsDisp.paneles, paginaActiva, clienteActivo, vistaActual]);
+
   const puedeActualizar = puedeActualizarDatos(perfil);
   const puedeVerConfig  = puedeConfigurar(perfil);
   const navItems = [
@@ -520,240 +447,41 @@ export default function App() {
   if (authLoading) return <Cargando fullscreen label="Cargando…" sub="Iniciando el dashboard" />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
 
-  // Contenido de la pantalla activa (mismo bloque para móvil y desktop; el chrome lo pone MobileShell o NavShell).
-  const contenido = (
+  // Contenido de la pantalla activa. TODO pasa por <PaginaContenido>: con una columna
+  // (lo normal) y con 2-4 columnas en un monitor panorámico (modo Paneles).
+  const paginaHoy = vistaActual === 'configuracion' ? 'configuracion' : paginaActiva;
+  const paginaProps = {
+    perfil,
+    authUser,
+    mobile,
+    onNavegar: handleNavegar,
+    onCerrarSesion: handleLogout,
+    pagosCliente,
+    extra: paginaExtra,
+  };
+
+  const contenido = panelesActivos.length > 1 && !mobile ? (
+    <>
+    <Suspense fallback={<Cargando pantalla={paginaHoy} />}>
+    <Paneles
+      columnas={panelesActivos}
+      onCambiar={(cols) => setPrefDispositivo(disp.modo, 'paneles', cols)}
+      paginaProps={paginaProps}
+      arbol={arbolNav}
+      anchoMax={anchoMax}
+    />
+    </Suspense>
+    <ToastHost />
+    </>
+  ) : (
           <div className="w-full" style={{
             padding: mobile ? '12px 16px' : '4px 24px 16px',
-            maxWidth: mobile ? '100%' : 1600,
+            maxWidth: mobile ? '100%' : (anchoMax > 0 ? anchoMax : '100%'),
             margin: '0 auto',
           }}>
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
-          <Suspense fallback={<Cargando pantalla={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva} />}>
-          {vistaActual === "configuracion" ? (
-            puedeVerConfig
-              ? (mobile
-                  ? <MobileYo perfil={perfil} onCerrarSesion={handleLogout} onOpenConfig={() => { /* placeholder: quedará en la misma vista si necesita ir al detalle */ }} />
-                  : <Configuracion session={{user: authUser, perfil}} />)
-              : <SinAcceso motivo="Solo el Super Admin puede ver Administración." />
-          ) : (
-            <>
-            {/* Banner modo presentaci³n */}
-        { /* Banner removed */ }
-          {paginaActiva === "inicio" && !clienteActivo && (
-            puedeVerInicio(perfil)
-              ? (mobile
-                  ? <MobileHome perfil={perfil} onNavegar={handleNavegar} />
-                  : <Inicio onNavegar={handleNavegar} />)
-              : <SinAcceso motivo="No tienes acceso a Inicio. Pídele a Fernando que te habilite Visión General o Resumen de Clientes." />
-          )}
-          {paginaActiva === "resumen" && (
-            perfil?.es_super_admin
-              ? <>
-                  <div style={{ marginBottom: 16 }}>
-                    <Suspense fallback={null}><BandejaAlertas clienteKey={null} onNavegar={handleNavegar} /></Suspense>
-                  </div>
-                  <ResumenCuentas />
-                </>
-              : <SinAcceso motivo="No tienes acceso al Resumen general." />
-          )}
-          {paginaActiva === "buscar" && mobile && (
-            <MobileBuscar perfil={perfil} onNavegar={handleNavegar} />
-          )}
-          {paginaActiva === "reporte" && (
-            perfil?.es_super_admin
-              ? <ReporteTab />
-              : <SinAcceso motivo="No tienes acceso al Reporte." />
-          )}
-          {paginaActiva === "resumenClientes" && (
-            puedeVerPestanaGlobal(perfil, "resumen_clientes")
-              ? (mobile
-                  ? <MobileHome perfil={perfil} onNavegar={handleNavegar} />
-                  : <ResumenClientesTab
-                      onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
-                    />)
-              : <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />
-          )}
-          {paginaActiva === "propuestas" && (
-            puedeVerPestanaGlobal(perfil, "propuestas")
-              ? (mobile
-                  ? <MobilePropuestas onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <PropuestasTab />)
-              : <SinAcceso motivo="No tienes acceso a Propuestas." />
-          )}
-          {paginaActiva === "estadoResultados" && (
-            puedeVerPestanaGlobal(perfil, "estado_resultados")
-              ? (mobile
-                  ? <MobileEdR onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <EstadoResultados />)
-              : <SinAcceso motivo="No tienes acceso a Estado de Resultados." />
-          )}
-          {paginaActiva === "visionGeneral" && (
-            puedeVerPestanaGlobal(perfil, "vision_general")
-              ? (mobile
-                  ? <MobileVisionGeneral onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <VisionGeneral />)
-              : <SinAcceso motivo="No tienes acceso a Visión General." />
-          )}
-          {paginaActiva === "analisisClientes" && (
-            puedeVerPestanaGlobal(perfil, "analisis_clientes")
-              ? (mobile
-                  ? <MobileAnalisisClientes onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <AnalisisClientesGlobal />)
-              : <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />
-          )}
-          {!clienteActivo && paginaActiva === "sellIn" && (
-            puedeVerPestanaGlobal(perfil, "sell_in")
-              ? (mobile
-                  ? <MobileSellInGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <SellInCliente clienteKey={null} />)
-              : <SinAcceso motivo="No tienes acceso a Sell In." />
-          )}
-          {paginaActiva === "sellOut" && (
-            puedeVerPestanaGlobal(perfil, "sell_out")
-              ? (mobile
-                  ? <MobileSellOutGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <SellOutGlobal />)
-              : <SinAcceso motivo="No tienes acceso a Sell Out." />
-          )}
-          {paginaActiva === "inventarioGlobal" && (
-            puedeVerPestanaGlobal(perfil, "inventario_global")
-              ? (mobile
-                  ? <MobileInventarioGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <InventarioGlobal />)
-              : <SinAcceso motivo="No tienes acceso a Inventario." />
-          )}
-          {paginaActiva === "pagos" && !clienteActivo && <PagosUnificados clienteKey={pagosCliente} />}
-          {paginaActiva === "cobranzaGlobal" && (
-            puedeVerPestanaGlobal(perfil, "cobranza_global")
-              ? (mobile
-                  ? <MobileCobranzaGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : (
-                    <div className="p-12 text-center">
-                      <HandCoins className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                      <h2 className="text-xl font-semibold text-gray-700 mb-2">Cobranza</h2>
-                      <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                    </div>
-                  ))
-              : <SinAcceso motivo="No tienes acceso a Cobranza." />
-          )}
-          {paginaActiva === "forecastClientes" && (
-            puedeVerPestanaGlobal(perfil, "forecast_clientes")
-              ? (mobile
-                  ? <MobileSOP onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <ForecastClientesTab />)
-              : <SinAcceso motivo="No tienes acceso a Forecast / S&OP." />
-          )}
-          {paginaActiva === "estrategiaPrecios" && (
-            puedeVerPestanaGlobal(perfil, "estrategia_precios")
-              ? (mobile
-                  ? <MobileEstrategiaPrecios onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <EstrategiaPrecios />)
-              : <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />
-          )}
-          {paginaActiva === "forecastReservas" && (
-            puedeVerPestanaGlobal(perfil, "forecast_reservas")
-              ? <ProyectosAbasto />
-              : <SinAcceso motivo="No tienes acceso a Proyectos y abasto." />
-          )}
-          {paginaActiva === "ordenesCompra" && (
-            puedeVerPestanaGlobal(perfil, "ordenes_compra")
-              ? (mobile
-                  ? <MobileTrackingPedidos onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
-                  : <TrackingPedidos />)
-              : <SinAcceso motivo="No tienes acceso a Tracking Pedidos." />
-          )}
-          {paginaActiva === "agenda" && (
-            // Agenda (V3): permiso global `agenda` (migrado de admin_interna); internos y super admin siempre.
-            puedeVerPaginaGlobal(perfil, "agenda")
-              ? <Agenda onNavegar={handleNavegar} inicial={paginaExtra} />
-              : <SinAcceso motivo="No tienes acceso a la Agenda. Pídele a Fernando que te la habilite desde Administración." />
-          )}
-          {paginaActiva === "telemetria" && (
-            perfil?.es_super_admin
-              ? (mobile
-                  ? <MobileEquipo perfil={perfil} onNavegar={handleNavegar} />
-                  : <TelemetriaPanel />)
-              : <SinAcceso motivo="Sólo el super admin puede ver la actividad del equipo." />
-          )}
-          {paginaActiva === "historialCambios" && (
-            puedeVerPestanaGlobal(perfil, "historial_cambios")
-              ? <HistorialCambios />
-              : <SinAcceso motivo="No tienes acceso al Historial de cambios. Pídele a Fernando que te lo habilite desde Administración." />
-          )}
-          {paginaActiva === "axonMexico" && (
-            puedeVerPestanaGlobal(perfil, "axon_mexico")
-              ? <AxonMexico />
-              : <SinAcceso motivo="No tienes acceso a Axon de México." />
-          )}
-          <>
-            <>
-        {clienteActivo && !puedeVerCliente(perfil, clienteActivo) ? (
-          <SinAcceso motivo={`No tienes acceso al cliente ${clienteActivo}.`} />
-        ) : clienteActivo && ['home','analisis','sellIn','estrategia','marketing','pagos','cartera'].includes(paginaActiva) && !puedeVerPestanaCliente(perfil, clienteActivo, paginaActiva) ? (
-          // Gate granular por (cliente, pestaña). Bloquea URL directa a una
-          // pestaña oculta para este cliente específico.
-          <SinAcceso motivo={`No tienes acceso a esta pestaña de ${clienteActivo}.`} />
-        ) : (
-          <>
-        {paginaActiva === "home" && (
-          mobile
-            ? <MobileHomeCliente clienteKey={clienteActivo} onBack={() => { setClienteActivo(null); setPaginaActiva('resumenClientes'); }} onNavegar={handleNavegar} />
-            : <>
-                <div style={{ marginBottom: 16 }}>
-                  <Suspense fallback={null}><BandejaAlertas clienteKey={clienteActivo} compacto onNavegar={handleNavegar} /></Suspense>
-                </div>
-                <HomeClienteV3 cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} onNavegar={handleNavegar} />
-              </>
-        )}
-        {clienteActivo && paginaActiva === "sellIn"  && (
-          mobile
-            ? <MobileSellIn clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
-            : clienteActivo === 'digitalife'
-              ? <SellInClienteV2 clienteKey={clienteActivo} />
-              : clienteActivo === 'dicotech'
-                ? <SellInDicotech clienteKey={clienteActivo} />
-                : clienteActivo === 'pcel'
-                  ? <SellInPcel clienteKey={clienteActivo} />
-                  : <SellInCliente clienteKey={clienteActivo} />
-        )}
-        {paginaActiva === "cartera" && (
-          mobile
-            ? <MobileCartera clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
-            : (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel')
-              ? <CreditoCobranzaV2 cliente={c?.nombre || clienteActivo} clienteKey={clienteActivo} />
-              : <CreditoCobranza cliente={c} clienteKey={clienteActivo} />
-        )}
-          {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
-            {paginaActiva === "estrategia" && (
-              mobile
-                ? <MobileSellOut clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
-                : clienteActivo === 'digitalife'
-                  ? <SellOutClienteV2 clienteKey={clienteActivo} />
-                  : clienteActivo === 'dicotech'
-                    ? <SellOutDicotech clienteKey={clienteActivo} />
-                    : clienteActivo === 'pcel'
-                      ? <SellOutPcel clienteKey={clienteActivo} />
-                      : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
-            )}
-        {paginaActiva === "marketing" && (
-          mobile
-            ? <MobileMarketing clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
-            : React.createElement(
-                // V3 (2026-09-10): MarketingCliente rediseñado con el kit es la única versión;
-                // MarketingClienteV2 queda como respaldo hasta que Fernando valide en producción.
-                MarketingCliente,
-                { cliente: clienteActivo, clienteKey: clienteActivo }
-              )
-        )}
-                    {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
-          </>
-        )}
-            {paginaActiva === "actualizacion" && puedeActualizar && <ActualizacionDatos perfil={perfil} />}
-            {paginaActiva === "actualizacion" && !puedeActualizar && <SinAcceso motivo="Solo el Super Admin puede actualizar datos." />}
-</>
-          </>
-            </>
-          )}
+          <Suspense fallback={<Cargando pantalla={paginaHoy} />}>
+            <PaginaContenido {...paginaProps} pagina={paginaHoy} clienteKey={clienteActivo} />
           </Suspense>
           </PageTransition>
           <ToastHost />

@@ -16,6 +16,7 @@ import { abrirPanelAvatar } from '../perfil/PanelAvatar';
 import { esNodoActivo, idActivo, irANodo, resolverFavoritos, CLIENTES_NAV } from './arbol';
 import { Kbd, BotonFav, PuntoCliente, TituloSeccion, Logotipo, Monograma, vidrio, hoverBg, hairline, esMidnight } from './comun';
 import { useResaltadoDeslizante } from './Resaltado';
+import { usePrefsDispositivo } from '../../lib/dispositivo';
 
 export const SIDEBAR_ANCHO = 232;
 export const SIDEBAR_COLAPSADA = 56;
@@ -36,8 +37,23 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
     mq.addEventListener ? mq.addEventListener('change', fn) : mq.addListener(fn);
     return () => { mq.removeEventListener ? mq.removeEventListener('change', fn) : mq.removeListener(fn); };
   }, []);
-  const colapsada = manual == null ? angosto : manual;
-  const toggleColapso = () => { const v = !colapsada; setManual(v); try { localStorage.setItem(LS_COLAPSO, v ? '1' : '0'); } catch {} };
+  // Preferencia de esta máquina: en tableta el menú arranca en iconos; en laptop, completo (como siempre).
+  const prefsDisp = usePrefsDispositivo();
+  const colapsada = manual == null ? (angosto || prefsDisp.sidebar === 'iconos') : manual;
+  const toggleColapso = React.useCallback(() => {
+    setManual((prev) => {
+      const actual = prev == null ? (angosto || prefsDisp.sidebar === 'iconos') : prev;
+      const v = !actual;
+      try { localStorage.setItem(LS_COLAPSO, v ? '1' : '0'); } catch {}
+      return v;
+    });
+  }, [angosto, prefsDisp.sidebar]);
+  // ⌘\ (lo dispara NavShell) colapsa/expande el menú.
+  useEffect(() => {
+    const on = () => toggleColapso();
+    window.addEventListener('acteck:sidebar-toggle', on);
+    return () => window.removeEventListener('acteck:sidebar-toggle', on);
+  }, [toggleColapso]);
 
   // Cliente expandido: el activo por defecto; se puede abrir otro
   const [clienteAbierto, setClienteAbierto] = useState(estado.clienteActivo || null);

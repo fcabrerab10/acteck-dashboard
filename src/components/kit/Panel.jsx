@@ -8,7 +8,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { elevation } from '../../lib/elevation';
 
-export default function Panel({ titulo, meta, acciones, children, plegable = false, abiertoInicial = true, elevable = false, padding = '10px 12px', style, id, onToggle }) {
+export default function Panel({ titulo, meta, acciones, children, plegable = false, abiertoInicial = true, elevable = false, padding = 'var(--dens-panel-pad, 10px 12px)', style, id, onToggle }) {
   const { theme } = useTheme();
   const [abierto, setAbierto] = useState(abiertoInicial);
   const [hover, setHover] = useState(false);

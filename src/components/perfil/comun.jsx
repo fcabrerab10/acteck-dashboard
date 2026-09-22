@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR, reduceMotion } from '../../lib/motion';
 import { elevation, bordeFlotante } from '../../lib/elevation';
+import { useDispositivo } from '../../lib/dispositivo';
 
 export const esOscuro = (theme) => theme?.mode === 'dark';
 export const hoverBg = (theme) => (esOscuro(theme) ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.045)');
@@ -86,11 +87,16 @@ export function Modal({ abierto, onClose, titulo, sub, ancho = 480, children, pi
 /** Hoja lateral derecha (desliza 340 ms); en pantallas angostas ocupa todo el ancho. */
 export function HojaLateral({ abierto, onClose, titulo, sub, ancho = 440, children, theme, zIndex = 80, acciones }) {
   const visible = useVisible(abierto);
+  // En tableta (iPad) la hoja ocupa la mitad de la pantalla; en laptop y monitor, el ancho de siempre.
+  const { modo } = useDispositivo();
+  const anchoCSS = (modo === 'tableta' || modo === 'tabletaCompacta')
+    ? `min(100vw, max(${ancho}px, 50vw))`
+    : `min(100vw, ${ancho}px)`;
   return (
     <Overlay abierto={abierto} onClose={onClose} zIndex={zIndex} alinear="stretch" justificar="flex-end">
       <div role="dialog" aria-modal="true" aria-label={titulo} style={{
         ...vidrio(theme, 0), background: esOscuro(theme) ? 'rgba(30,30,32,0.97)' : theme?.key === 'marfil' ? 'rgba(252,249,243,0.98)' : 'rgba(250,250,252,0.98)',
-        borderRadius: '16px 0 0 16px', borderRight: 0, width: `min(100vw, ${ancho}px)`, height: '100%', display: 'flex', flexDirection: 'column',
+        borderRadius: '16px 0 0 16px', borderRight: 0, width: anchoCSS, height: '100%', display: 'flex', flexDirection: 'column',
         transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: `transform ${DUR.page}ms ${EASE}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 10px' }}>

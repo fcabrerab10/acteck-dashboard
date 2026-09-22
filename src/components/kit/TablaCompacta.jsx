@@ -28,7 +28,7 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
     return () => ro.disconnect();
   }, [renderExpandido]);
   const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, background: theme.surface, zIndex: 1, whiteSpace: 'nowrap' };
-  const td = { padding: dense ? '3px 6px' : '5px 8px', borderBottom: `1px solid ${theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
+  const td = { padding: dense ? '3px 6px' : 'var(--dens-fila-pad, 5px 8px)', borderBottom: `1px solid ${theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
   const alignOf = (c) => c.align || 'right';
   const tot = totales === undefined && columnas.some((c) => c.sum)
     ? Object.fromEntries(columnas.filter((c) => c.sum).map((c) => [c.key, filas.reduce((s, r) => s + (Number(r[c.key]) || 0), 0)]))

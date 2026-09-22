@@ -4,7 +4,7 @@
 //   de refrescar ni campana: todo vive dentro del panel del avatar.
 // ─ Topbar (default): fila sticky con ChromeDerecho a la derecha; la usan los modos Sidebar e iPhone.
 //   El modo Barra embebe <ChromeDerecho oscuro /> dentro de su barra.
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Search } from 'lucide-react';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
@@ -13,11 +13,15 @@ import { elevation } from '../lib/elevation';
 // PreferenciasHoja (31 KB) al chunk de arranque aunque PanelAvatar ya los cargue
 // en perezoso (rollup no poda los re-exports de módulos locales).
 import PanelAvatar from './perfil/PanelAvatar';
+// Control "Paneles": sólo existe en monitores ≥ 1900 px, así que va perezoso (no pesa en el arranque).
+import { useDispositivo } from '../lib/dispositivo';
+const ControlPaneles = lazy(() => import('./nav/ControlPaneles'));
 
 // ═════════ Chrome derecho (reutilizable) ═════════
 export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPresent, onToggleModoPresent, oscuro = false, onAbrirPaleta, mostrarBuscar = false }) {
   const { theme } = useTheme();
   const isMidnight = theme.key === 'midnight';
+  const { modo } = useDispositivo();
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, pointerEvents: 'auto' }}>
       {mostrarBuscar && (
@@ -30,6 +34,10 @@ export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPr
           <Search size={12} /> <span>Buscar</span>
           <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9, padding: '1px 5px', borderRadius: 4, background: oscuro || isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)' }}>⌘K</span>
         </button>
+      )}
+
+      {modo === 'panoramico' && (
+        <Suspense fallback={null}><ControlPaneles oscuro={oscuro} /></Suspense>
       )}
 
       {/* Avatar con contador → PanelAvatar (Avisos · Datos · Yo) */}

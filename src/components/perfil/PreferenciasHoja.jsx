@@ -8,6 +8,9 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { usePreferencias, setPreferencia, getPath, MODOS_MENU, MODOS_MENU_MOVIL } from '../../lib/preferencias';
+// Preferencias de ESTA pantalla (por máquina, no por usuario): densidad del contenido, menú lateral,
+// ancho máximo y paneles. Ver src/lib/dispositivo.js.
+import { useDispositivo, usePrefsDispositivo, setPrefDispositivo, ANCHOS_MAX, maxColumnas, normalizarPaneles } from '../../lib/dispositivo';
 import { puedeConfigurar } from '../../lib/permisos';
 import { versionLabel, APP_VERSION } from '../../lib/version';
 import { AvatarImg, usePerfilVivo, aplicarPerfilLocal, quitarAvatar } from '../../lib/avatar';
@@ -32,6 +35,7 @@ const ATAJOS = [
   { teclas: ['⌘', 'K'], que: 'Buscar y saltar a cualquier pantalla' },
   { teclas: ['?'], que: 'Ver atajos de teclado' },
   { teclas: ['Esc'], que: 'Cerrar paneles, hojas y menús' },
+  { teclas: ['⌘', '\\'], que: 'Colapsar o expandir el menú lateral' },
   { teclas: ['⌘', '⇧', 'P'], que: 'Modo presentación' },
 ];
 const CHANGELOG = [
@@ -45,6 +49,11 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
   const { theme, themeKey, setThemeKey } = useTheme();
   const perfil = usePerfilVivo(perfilProp);
   const { menu, favoritos, prefs, toggleFavorito, moverFavorito } = usePreferencias();
+  const disp = useDispositivo();
+  const prefsDisp = usePrefsDispositivo();
+  const ETIQUETA_MODO = { telefono: 'iPhone', tabletaCompacta: 'Tableta', tableta: 'iPad', laptop: 'Laptop', panoramico: 'Monitor panorámico' };
+  const topeColumnas = maxColumnas(disp.ancho);
+  const columnas = Math.max(1, Math.min(topeColumnas, (prefsDisp.paneles || []).length || 1));
   const [foto, setFoto] = useState(false);
   const [sub, setSub] = useState(null); // 'notificaciones' → página anidada con su propio “Atrás”
   const refs = useRef({});
@@ -103,6 +112,28 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
             <Segmented value={menu.densidad || 'comoda'} onChange={(v) => setPreferencia('menu.densidad', v)}
               options={[{ id: 'comoda', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Rows3 size={12} />Cómoda</span> }, { id: 'compacta', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Rows4 size={12} />Compacta</span> }]} />
           </Fila>
+          <Fila theme={theme} icon={Rows4} label="Densidad del contenido" sub={`Paneles, tarjetas y tablas · sólo en ${ETIQUETA_MODO[disp.modo] || 'esta pantalla'} (${disp.ancho} px)`}>
+            <Segmented value={prefsDisp.densidad} onChange={(v) => setPrefDispositivo(disp.modo, 'densidad', v)}
+              options={[{ id: 'comoda', label: 'Cómoda' }, { id: 'compacta', label: 'Compacta' }]} />
+          </Fila>
+          {disp.modo !== 'telefono' && (
+            <Fila theme={theme} icon={LayoutGrid} label="Menú lateral" sub="Cómo arranca la sidebar aquí · ⌘\\ lo cambia al vuelo">
+              <Segmented value={prefsDisp.sidebar} onChange={(v) => setPrefDispositivo(disp.modo, 'sidebar', v)}
+                options={[{ id: 'completa', label: 'Completo' }, { id: 'iconos', label: 'Iconos' }]} />
+            </Fila>
+          )}
+          {disp.modo === 'panoramico' && (
+            <>
+              <Fila theme={theme} icon={Monitor} label="Ancho máximo" sub="Qué tan ancho se pinta el contenido en este monitor">
+                <Segmented value={Number(prefsDisp.anchoMax) || 0} onChange={(v) => setPrefDispositivo(disp.modo, 'anchoMax', Number(v))}
+                  options={ANCHOS_MAX.map((a) => ({ id: a.id, label: a.label }))} />
+              </Fila>
+              <Fila theme={theme} icon={LayoutGrid} label="Paneles" sub={`Pantallas a la vez · caben ${topeColumnas} en ${disp.ancho} px`}>
+                <Segmented value={columnas} onChange={(v) => setPrefDispositivo(disp.modo, 'paneles', Number(v) <= 1 ? [] : normalizarPaneles(prefsDisp.paneles, Number(v)))}
+                  options={[1, 2, 3, 4].filter((n) => n <= topeColumnas).map((n) => ({ id: n, label: String(n) }))} />
+              </Fila>
+            </>
+          )}
           <Fila theme={theme} icon={Sparkles} label="Reducir movimiento" sub="Menos animaciones al navegar">
             <Interruptor theme={theme} on={!!getPath(prefs, 'apariencia.reducirMovimiento', false)} onChange={(v) => setPreferencia('apariencia.reducirMovimiento', v)} />
           </Fila>

@@ -15,6 +15,7 @@ export default function AtajosHoja({ abierto, onClose, favoritos = [] }) {
     { teclas: [`${MOD} K`], desc: 'Buscar pestañas, clientes y SKUs' },
     { teclas: ['?'], desc: 'Esta hoja de atajos' },
     { teclas: ['Esc'], desc: 'Cerrar menús, hojas y la paleta' },
+    { teclas: [`${MOD} \\`], desc: 'Colapsar o expandir el menú lateral' },
     ...favoritos.slice(0, 9).map((n, i) => ({ teclas: [`${MOD} ${i + 1}`], desc: etiquetaNodo(n) })),
   ];
   return (
