@@ -1,6 +1,6 @@
 // PropuestasTab.jsx — Armador de propuestas de venta por cliente (V3, kit).
 // Flujo (2 vistas + hoja): Landing (tarjetas de cliente con "Nueva propuesta" directo + recientes por mes + efectividad
-//   + SPIFFs) → Armar (catálogo con sugeridos + Mi propuesta) → Revisar como HojaLateral sobre Armar (edición en sitio,
+//   + SPIFFs) → Armar (catálogo con sugeridos + Mi propuesta) → Revisar como pantalla completa (edición en sitio,
 //   Excel / PDF / Compartir).
 // Piezas en ./propuestas/: Landing, TarjetaCliente, TarjetaPropuesta, Armar, MiPropuesta, PrecioPicker, Revisar, SpiffPanel,
 //   recientes.js (propuestas_borradores), efectividad.js (ventana + cierre automático), sugeridos.js (cobertura crítica),
@@ -15,7 +15,6 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import SinAcceso from '../../components/SinAcceso';
 import { Cargando, Panel, Pill, Boton, toast } from '../../components/kit';
-import { HojaLateral } from '../../components/perfil/comun';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { compartir } from '../../lib/whatsapp';
@@ -291,17 +290,18 @@ export default function PropuestasTab() {
     );
   }
   const autosave = { guardando, guardadoAt, sucio: hayQueGuardar };
-  return shell(<>
+  // Revisar es una PANTALLA (2026-09-24, Fernando: «prefiero el flujo de ir a una nueva pantalla y que me
+  // muestre los productos con más visibilidad»); antes era una HojaLateral de 820 px sobre el armador.
+  if (revisando) {
+    return shell(
+      <Revisar cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta} nombre={nombre} setNombre={setNombre}
+        vigencia={vigencia} setVigencia={setVigencia} modelo={modelo} sensible={sensible} autosave={autosave}
+        onGuardar={() => guardarBorrador()} onEnviada={marcarEnviadaActual} onBack={() => setRevisando(false)} />,
+    );
+  }
+  return shell(
     <Armar cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta} nombre={nombre} setNombre={setNombre} folio={modelo?.folio}
       memoria={memoria} sensible={sensible} autosave={autosave} onBack={salirGuardando} onGuardar={() => guardarBorrador()}
-      onRevisar={() => { setRevisando(true); if (ultimo.current?.hayQueGuardar) guardarBorrador({ silencioso: true }); }} />
-    <HojaLateral abierto={revisando} onClose={() => setRevisando(false)} ancho={820} theme={theme}
-      titulo={`Revisar · ${cliente.label}`} sub="Edita piezas y precios en sitio; al exportar o compartir la propuesta queda enviada.">
-      {revisando && (
-        <Revisar cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta} nombre={nombre} setNombre={setNombre}
-          vigencia={vigencia} setVigencia={setVigencia} modelo={modelo} sensible={sensible} autosave={autosave}
-          onGuardar={() => guardarBorrador()} onEnviada={marcarEnviadaActual} />
-      )}
-    </HojaLateral>
-  </>);
+      onRevisar={() => { setRevisando(true); if (ultimo.current?.hayQueGuardar) guardarBorrador({ silencioso: true }); }} />,
+  );
 }

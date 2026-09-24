@@ -157,3 +157,7 @@ body {
     transform: none !important;
   }
 }
+
+/* Propuestas · campo de piezas sin las flechas del navegador (2026-09-24) */
+input.prop-piezas { -moz-appearance: textfield; appearance: textfield; }
+input.prop-piezas::-webkit-outer-spin-button, input.prop-piezas::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }

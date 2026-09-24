@@ -46,6 +46,15 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
   // Piezas capturadas en el catálogo ANTES de marcar/aceptar (2026-09-24, Fernando: «quiero modificar la
   // cantidad antes de que se pase a mi propuesta»): sku → piezas; se usan al marcar o al aceptar el sugerido.
   const [piezasPrevias, setPiezasPrevias] = useState({});
+  // Lista de precios para TODA la propuesta (2026-09-24, Fernando: «se me complica elegir lista producto por
+  // producto»): al elegirla se aplica a las líneas que la tengan y queda como default de las nuevas.
+  const [listaGlobal, setListaGlobal] = useState('');
+  const listasDisponibles = useMemo(() => { const c = new Map(); for (const r of skus) for (const k of Object.keys(r.precios || {})) c.set(k, (c.get(k) || 0) + 1); return [...c.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k); }, [skus]);
+  const aplicarLista = (lista) => {
+    setListaGlobal(lista);
+    if (!lista) return;
+    setPropuesta((prev) => { const next = { ...prev }; let n = 0; for (const sku of Object.keys(next)) { const meta = skus.find((r) => r.sku === sku); const p = meta?.precios?.[lista]; if (p != null) { next[sku] = { ...next[sku], listaSel: lista, precio: p }; n++; } } return n ? next : prev; });
+  };
   const [f, setF] = useState(() => ({ ...FILTROS_VACIOS(), soloStock: true }));
   const [orden, setOrden] = useState({ col: 'sellout90', dir: 'desc' });
   const [sombreado, setSombreado] = useState(true);
@@ -84,7 +93,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
   const mesLbl = (k) => { const [, m] = String(k).split('-').map(Number); return MES_LABEL[(m || 1) - 1]; };
 
   const lineaNueva = (meta, piezas) => {
-    const listaDefault = meta ? Object.keys(meta.precios)[0] || '' : '';
+    const listaDefault = meta ? ((listaGlobal && meta.precios?.[listaGlobal] != null) ? listaGlobal : Object.keys(meta.precios)[0] || '') : '';
     return { piezas, precio: meta ? meta.precios[listaDefault] || 0 : 0, listaSel: listaDefault };
   };
   const toggleSku = (sku) => {
@@ -154,13 +163,13 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
     { key: 'piezas', label: 'Piezas', width: 76, render: (r) => (r.sku in propuesta ? (
       <input type="number" min="0" value={propuesta[r.sku].piezas ?? ''} onClick={(e) => e.stopPropagation()}
         onChange={(e) => editarSku(r.sku, { piezas: Number(e.target.value) || 0 })}
-        style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
+        className="prop-piezas" style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: theme.bg, border: `1px solid ${accent}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
     ) : (
       <input type="number" min="0" value={piezasPrevias[r.sku] ?? ''} placeholder={String(int(sugeridos.get(r.sku)?.piezas || Math.max(1, Math.round(r.promSellout || 0)) || ''))}
         onClick={(e) => e.stopPropagation()} onChange={(e) => setPiezasPrevias((prev) => ({ ...prev, [r.sku]: e.target.value }))}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (sugeridos.has(r.sku)) aceptarSugerido(r.sku); else toggleSku(r.sku); } }}
         title="Piezas a proponer: escribe la cantidad y luego Aceptar o marca la fila (Enter también la agrega)"
-        style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: 'transparent', border: `1px dashed ${theme.border}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
+        className="prop-piezas" style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
     )) },
     { key: 'precio', label: 'Precio', align: 'left', width: 168, render: (r) => {
       if (r.sku in propuesta) return <PrecioPicker r={r} val={propuesta[r.sku]} onChange={(patch) => editarSku(r.sku, patch)} />;
@@ -227,7 +236,18 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
         <Panel padding="0" titulo="Catálogo" meta={`${int(filtrados.length)} de ${int(skus.length)} SKUs · ${propuestaLista.length} seleccionados`}
           acciones={<Buscador value={busqueda} onChange={setBusqueda} resultados={int(filtrados.length)} placeholder="Buscar: mouse inalámbrico, AC-93, balam, RMI…" width={300} />}>
           <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}` }}>
-            <Filtros grupos={grupos} toggles={toggles} onToggle={toggleGrupo} onToggleFlag={toggleFlag} onLimpiar={limpiar} activos={nActivos(f) + (busqueda ? 1 : 0)} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <Filtros grupos={grupos} toggles={toggles} onToggle={toggleGrupo} onToggleFlag={toggleFlag} onLimpiar={limpiar} activos={nActivos(f) + (busqueda ? 1 : 0)} />
+              {listasDisponibles.length > 0 && (
+                <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: TYPO.fontDisplay, fontSize: 11, color: theme.textMuted }} title="Se aplica a todas las líneas de la propuesta y a las que agregues después; cada línea puede seguir cambiándola">
+                  Lista para toda la propuesta
+                  <select value={listaGlobal} onChange={(e) => aplicarLista(e.target.value)} style={{ height: 26, borderRadius: 8, border: `1px solid ${listaGlobal ? accent : theme.border}`, background: theme.bg, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 11, padding: '0 8px' }}>
+                    <option value="">Por SKU (primera lista)</option>
+                    {listasDisponibles.map((k) => <option key={k} value={k}>{listaShort(k)} · {k}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
           </div>
           {sugeridosTotales > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${theme.border}`, background: sombreado && pendientesVisibles.length ? `${accent}${theme.mode === 'dark' ? '12' : '08'}` : 'transparent', flexWrap: 'wrap' }}>

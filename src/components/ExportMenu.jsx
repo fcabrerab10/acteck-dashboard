@@ -12,6 +12,7 @@
 //                    función async "propia" que devuelve undefined (export ya existente).
 // `pdf`  : { ref } | { elemento } — la raíz de la pantalla (o bloque) a imprimir.
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
@@ -44,6 +45,8 @@ export default function ExportMenu({
   const [busy, setBusy] = useState(null); // 'excel' | 'pdf' | null
   const [error, setError] = useState(null);
   const wrapRef = useRef(null);
+  const menuRef = useRef(null);
+  const [pos, setPos] = useState(null); // rect del botón: el menú se pinta en body (Panel y HojaLateral lo recortaban, 2026-09-24)
   const errTimer = useRef(null);
 
   const tieneExcel = !!excel;
@@ -54,13 +57,19 @@ export default function ExportMenu({
 
   // Apertura/cierre con animación 160ms
   useEffect(() => {
-    if (open) { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }
+    if (open) {
+      const medir = () => { const r = wrapRef.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, left: r.left, right: window.innerWidth - r.right }); };
+      medir();
+      window.addEventListener('resize', medir); window.addEventListener('scroll', medir, true);
+      const id = requestAnimationFrame(() => setVisible(true));
+      return () => { cancelAnimationFrame(id); window.removeEventListener('resize', medir); window.removeEventListener('scroll', medir, true); };
+    }
     setVisible(false);
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target) && !(menuRef.current && menuRef.current.contains(e.target))) setOpen(false); };
     const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('touchstart', onDown, { passive: true });
@@ -160,11 +169,12 @@ export default function ExportMenu({
         {!busy && <ChevronDown style={{ width: 11, height: 11, opacity: 0.6, transform: open ? 'rotate(180deg)' : 'none', transition: `transform 160ms ${EASE}` }} strokeWidth={2.4} />}
       </button>
 
-      {open && (
+      {open && pos && typeof document !== 'undefined' && createPortal(
         <div
+          ref={menuRef}
           role="menu"
           style={{
-            position: 'absolute', top: h + 6, [align === 'left' ? 'left' : 'right']: 0, zIndex: 60,
+            position: 'fixed', top: pos.top, [align === 'left' ? 'left' : 'right']: align === 'left' ? pos.left : pos.right, zIndex: 120,
             minWidth: 164, padding: 4,
             background: isDark ? (theme.surface || '#1C1C1E') : (theme.surface || '#FFFFFF'),
             border: `1px solid ${theme.borderStrong || theme.border}`,
@@ -188,8 +198,7 @@ export default function ExportMenu({
             <FileText style={{ width: 14, height: 14, color: theme.red }} strokeWidth={2} />
             PDF
           </button>
-        </div>
-      )}
+        </div>, document.body)}
 
       {error && (
         <div role="alert" style={{

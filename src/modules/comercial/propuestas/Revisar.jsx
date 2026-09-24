@@ -6,7 +6,7 @@
 // El Excel y el resumen de WhatsApp NUNCA llevan costo ni margen (excelPropuesta.js sólo escribe sku · descripción ·
 // marca · familia · piezas · precio) y ambos llevan la vigencia.
 import React, { useMemo, useRef, useState } from 'react';
-import { Save, Share2, Copy, X } from 'lucide-react';
+import { Save, Share2, Copy, X, ArrowLeft } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Hero, KpiCard, Panel, Pill, Boton, TablaCompacta, toast } from '../../../components/kit';
@@ -14,6 +14,7 @@ import ExportMenu from '../../../components/ExportMenu';
 import { money, moneyCompact, int, pct } from '../../../lib/format';
 import { compartir, copiar } from '../../../lib/whatsapp';
 import { familiaHoja, MES_FULL, clienteColor, vigenciaPorDefecto } from './constantes';
+import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
 import { exportarPropuestaExcel } from './excelPropuesta';
 import { textoPropuesta, vigenciaTexto } from './textos';
 import { mapaEan } from '../../../lib/ean';
@@ -22,7 +23,7 @@ import PrecioPicker from './PrecioPicker';
 
 const N = (v) => Number(v) || 0;
 
-export default function Revisar({ cliente, contexto, skus, propuesta, setPropuesta, nombre, setNombre, vigencia, setVigencia, modelo, sensible, autosave, onGuardar, onEnviada }) {
+export default function Revisar({ cliente, contexto, skus, propuesta, setPropuesta, nombre, setNombre, vigencia, setVigencia, modelo, sensible, autosave, onGuardar, onEnviada, onBack }) {
   const { theme } = useTheme();
   const rootRef = useRef(null);
   const [ocupado, setOcupado] = useState(false);
@@ -109,7 +110,15 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
   const th = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
   const columnas = [
     { key: 'sku', label: 'SKU', align: 'left', width: 96, mono: true, bold: true },
-    { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 240, render: (r) => <span title={r.descripcion}>{r.descripcion}</span> },
+    { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 420, render: (r) => (
+      <span title={r.descripcion} style={{ display: 'inline-flex', flexDirection: 'column', minWidth: 0 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.descripcion}</span>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>{[r.familia, normalizarMarca(r.marca) || marcaDeSku(r.sku)].filter(Boolean).join(' · ')}{r.rdmp ? ` · ${r.rdmp}` : ''}</span>
+      </span>
+    ) },
+    { key: 'invCliente', label: 'Inv cli', width: 58, render: (r) => <span style={{ color: N(r.invCliente) > 0 ? theme.text : red, fontWeight: 600 }}>{r.invCliente == null ? '—' : int(N(r.invCliente))}</span> },
+    { key: 'promSellout', label: '⌀ 3m', width: 52, render: (r) => <span style={{ color: theme.textMuted }}>{r.promSellout == null ? '—' : int(Math.round(N(r.promSellout)))}</span> },
+    { key: 'invActeck', label: 'Inv Ack', width: 62, render: (r) => <span style={{ color: N(r.invActeck) >= N(r.piezas) ? theme.textMuted : red, fontWeight: N(r.invActeck) >= N(r.piezas) ? 400 : 600 }} title={N(r.invActeck) < N(r.piezas) ? 'Pides más de lo que hay en Acteck' : ''}>{r.invActeck == null ? '—' : int(N(r.invActeck))}</span> },
     { key: 'piezas', label: 'Piezas', width: 72, sum: true, render: (r) => (
       <input type="number" min="0" value={r.piezas ?? ''} onChange={(e) => editarSku(r.sku, { piezas: Number(e.target.value) || 0 })} aria-label={`Piezas de ${r.sku}`}
         style={{ width: 60, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...th, background: theme.bg, border: `1px solid ${N(r.piezas) > 0 ? theme.border : red}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
@@ -118,6 +127,7 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
     { key: 'maaa', label: 'vs MAAA', width: 80, render: (r) => { const m = N(r.precios?.['Mayoreo AAA']); return m > 0 ? <span style={{ color: theme.textMuted }}>{money(m)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>; } },
     { key: 'desc', label: 'Desc.', width: 62, render: (r) => { const m = N(r.precios?.['Mayoreo AAA']), px = N(r.precio); if (!(m > 0 && px > 0)) return '—'; const d = ((m - px) / m) * 100; return <span style={{ fontWeight: 600, color: d > 0 ? green : d < 0 ? red : theme.textMuted }}>{d > 0 ? '-' : d < 0 ? '+' : ''}{Math.abs(d).toFixed(1)}%</span>; } },
     ...(sensible ? [{ key: 'margen', label: 'Margen', width: 70, render: (r) => { const c = N(r.costo), px = N(r.precio); if (!(c > 0 && px > 0)) return <Pill tone="red" size="xs" title="Falta costo_promedio en precios_sku">sin costo</Pill>; const m = ((px - c) / px) * 100; return <Pill tone={m >= 25 ? 'green' : m >= 15 ? 'orange' : 'red'} size="xs">{m.toFixed(0)}%</Pill>; } }] : []),
+    { key: 'spiffCol', label: 'SPIFF', width: 64, render: (r) => (N(r.spiff) > 0 ? <Pill tone="yellow" size="xs" title={`${money(N(r.spiff))} por pieza`}>{money(N(r.spiff) * N(r.piezas))}</Pill> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'total', label: 'Total', width: 96, bold: true, sum: true, render: (r) => money(N(r.piezas) * N(r.precio)), fmt: money },
     { key: 'quitar', label: '', align: 'center', width: 30, render: (r) => (
       <button type="button" title={`Quitar ${r.sku} de la propuesta`} aria-label={`Quitar ${r.sku}`} onClick={() => quitarSku(r.sku)}
@@ -167,6 +177,7 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
             </div>
           </div>
           <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {onBack && <Boton icon={ArrowLeft} onClick={onBack} title="Volver al armador">Armador</Boton>}
             <Boton icon={Save} onClick={onGuardar} disabled={autosave?.guardando}>Guardar</Boton>
             <Boton icon={Copy} onClick={copiarTexto} title="Copia el resumen limpio (sin costos ni márgenes)">Copiar</Boton>
             <Boton icon={Share2} onClick={compartirTexto} title="Resumen limpio por WhatsApp: nombre, vigencia, líneas y total + IVA" disabled={ocupado}>Compartir</Boton>
