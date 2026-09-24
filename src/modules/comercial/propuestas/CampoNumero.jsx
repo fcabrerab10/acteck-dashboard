@@ -25,7 +25,7 @@ export default function CampoNumero({ value, onChange, onEnter, decimales = 0, p
   };
   const salir = (e) => { setFoco(false); const n = Number(texto); onChange?.(texto === '' || Number.isNaN(n) ? 0 : (decimales ? n : Math.round(n))); onBlur?.(e); };
   return (
-    <input ref={ref} type="text" inputMode={decimales ? 'decimal' : 'numeric'} autoComplete="off" autoFocus={autoFocus}
+    <input ref={ref} className="prop-piezas" type="text" inputMode={decimales ? 'decimal' : 'numeric'} autoComplete="off" autoFocus={autoFocus}
       value={foco ? texto : fmt(value, decimales)} placeholder={placeholder} title={title} aria-label={ariaLabel}
       onFocus={(e) => { setFoco(true); setTexto(value == null || value === '' ? '' : String(value)); requestAnimationFrame(() => e.target.select?.()); }}
       onChange={cambiar} onBlur={salir} onClick={(e) => e.stopPropagation()}

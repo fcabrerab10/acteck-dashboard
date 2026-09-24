@@ -1,12 +1,23 @@
 // filtros.js — motor de filtros del catálogo del armador (misma idea que inventario/filtros.js: pills con conteo facetado).
 // f = { tokens: [], marca: Set, familia: Set, roadmap: Set, soloStock, soloSellout, soloSpiff }
 // Cada fila del catálogo trae `indice` (texto normalizado sin acentos: sku · descripción · marca · familia · roadmap).
-import { normalizar, tokens as aTokens, coincide } from '../sellin/textos';
+import { normalizar } from '../sellin/textos.js';
 
-export { normalizar, aTokens as tokens };
+// Búsqueda tolerante (2026-09-24, Fernando: «un buscador bien hecho… que no tenga temas con espacios o
+// caracteres»): sin acentos, minúsculas, cualquier signo (- / + , ( ) · : ; " ') cuenta como espacio y los
+// espacios se colapsan; el punto sólo sobrevive entre dígitos (21.5). El índice lleva además el SKU sin
+// guion, así «ac943338», «AC-943338», «ac 943338» y «943338» encuentran lo mismo.
+export const normalizarBusqueda = (s) => normalizar(s)
+  .replace(/(\d)\.(\d)/g, '$1\u0000$2')   // protege 21.5
+  .replace(/[^a-z0-9\u0000]+/g, ' ')
+  .replace(/\u0000/g, '.')
+  .trim().replace(/\s+/g, ' ');
+export const tokens = (q) => normalizarBusqueda(q).split(' ').filter(Boolean);
+export const coincide = (indice, toks) => toks.every((t) => indice.includes(t));
+export { normalizar };
 export const FILTROS_VACIOS = () => ({ tokens: [], marca: new Set(), familia: new Set(), roadmap: new Set(), soloStock: false, soloSellout: false, soloSpiff: false });
 
-export const indiceDe = (r) => normalizar(`${r.sku} ${r.descripcion || ''} ${r.marca || ''} ${r.familia || ''} ${r.categoria || ''} ${r.rdmp || ''}`);
+export const indiceDe = (r) => ` ${normalizarBusqueda(`${r.sku} ${r.descripcion || ''} ${r.marca || ''} ${r.familia || ''} ${r.categoria || ''} ${r.rdmp || ''}`)} ${normalizar(r.sku).replace(/[^a-z0-9]/g, '')} `;
 export const claveMarca = (r) => String(r.marca || '').trim().toLowerCase();
 export const claveFamilia = (r) => String(r.familia || '').trim().toLowerCase();
 export const claveRoadmap = (r) => String(r.rdmp || '').trim().toUpperCase();
