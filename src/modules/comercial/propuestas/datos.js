@@ -140,7 +140,9 @@ export async function fetchCatalogo(clienteKey) {
     invAckDataP,
     invCliQuery,
     cachedQuery(supabase.from('v_estrategia_precios_lista').select('sku,lista,precio')),
-    supabase.from('precios_sku').select('sku,costo_promedio,anio,mes').gte('anio', anioMax - 1).order('anio', { ascending: false }).order('mes', { ascending: false }),
+    // Costo promedio = medida del director (v_medidas_inventario_sku), la misma que Estrategia de Precios e Inventario.
+    // Antes se pedía precios_sku.costo_promedio, columna que no existe: todo salía «sin costo» (2026-09-24).
+    cachedQuery(supabase.from('v_medidas_inventario_sku').select('articulo,costo_promedio')),
     fetchSellout(clienteKey, mm, anioMin, anioMax),
     fetchSelloutMesActual(clienteKey),
     supabase.from('cuotas_mensuales').select('cuota_min,cuota_meta').eq('cliente', clienteKey).eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
@@ -193,7 +195,7 @@ export async function fetchCatalogo(clienteKey) {
     preciosPorSku.get(r.sku)[r.lista] = Number(r.precio) || 0;
   }
   const costoPorSku = new Map();
-  for (const r of costosRes.data || []) if (!costoPorSku.has(r.sku) && r.costo_promedio) costoPorSku.set(r.sku, Number(r.costo_promedio) || 0);
+  for (const r of costosRes.data || []) { const k = r.articulo ?? r.sku; if (k && !costoPorSku.has(k) && Number(r.costo_promedio) > 0) costoPorSku.set(k, Number(r.costo_promedio)); }
 
   const sellout = new Map(), selloutPorMes = new Map();
   for (const r of sellout90) {
