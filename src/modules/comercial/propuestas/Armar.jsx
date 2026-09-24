@@ -43,6 +43,9 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
   const cliCol = clienteColor(theme, cliente.key);
   const accent = theme.accent || '#007AFF';
   const [busqueda, setBusqueda] = useState('');
+  // Piezas capturadas en el catálogo ANTES de marcar/aceptar (2026-09-24, Fernando: «quiero modificar la
+  // cantidad antes de que se pase a mi propuesta»): sku → piezas; se usan al marcar o al aceptar el sugerido.
+  const [piezasPrevias, setPiezasPrevias] = useState({});
   const [f, setF] = useState(() => ({ ...FILTROS_VACIOS(), soloStock: true }));
   const [orden, setOrden] = useState({ col: 'sellout90', dir: 'desc' });
   const [sombreado, setSombreado] = useState(true);
@@ -90,7 +93,8 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       if (sku in next) { delete next[sku]; return next; }
       const meta = skus.find((r) => r.sku === sku);
       const sug = sugeridos.get(sku);
-      next[sku] = lineaNueva(meta, sug ? sug.piezas : Math.max(1, meta?.promSellout || 1));
+      const previas = Number(piezasPrevias[sku]);
+      next[sku] = lineaNueva(meta, previas > 0 ? previas : (sug ? sug.piezas : Math.max(1, meta?.promSellout || 1)));
       return next;
     });
   };
@@ -99,7 +103,8 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
   const aceptarSugerido = (sku) => {
     const sug = sugeridos.get(sku); if (!sug) return;
     const meta = skus.find((r) => r.sku === sku);
-    setPropuesta((prev) => (sku in prev ? prev : { ...prev, [sku]: lineaNueva(meta, sug.piezas) }));
+    const previas = Number(piezasPrevias[sku]);
+    setPropuesta((prev) => (sku in prev ? prev : { ...prev, [sku]: lineaNueva(meta, previas > 0 ? previas : sug.piezas) }));
   };
   const aceptarTodos = () => {
     const lote = pendientesVisibles;
@@ -150,14 +155,20 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       <input type="number" min="0" value={propuesta[r.sku].piezas ?? ''} onClick={(e) => e.stopPropagation()}
         onChange={(e) => editarSku(r.sku, { piezas: Number(e.target.value) || 0 })}
         style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
-    ) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
+    ) : (
+      <input type="number" min="0" value={piezasPrevias[r.sku] ?? ''} placeholder={String(int(sugeridos.get(r.sku)?.piezas || Math.max(1, Math.round(r.promSellout || 0)) || ''))}
+        onClick={(e) => e.stopPropagation()} onChange={(e) => setPiezasPrevias((prev) => ({ ...prev, [r.sku]: e.target.value }))}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (sugeridos.has(r.sku)) aceptarSugerido(r.sku); else toggleSku(r.sku); } }}
+        title="Piezas a proponer: escribe la cantidad y luego Aceptar o marca la fila (Enter también la agrega)"
+        style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: 'transparent', border: `1px dashed ${theme.border}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
+    )) },
     { key: 'precio', label: 'Precio', align: 'left', width: 168, render: (r) => {
       if (r.sku in propuesta) return <PrecioPicker r={r} val={propuesta[r.sku]} onChange={(patch) => editarSku(r.sku, patch)} />;
       const s = sugeridos.get(r.sku);
       if (!s) return <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Marcar para editar</span>;
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-          <Pill tone="blue" size="xs" dot title={sugTitle(s)}>Sugerido · {int(s.piezas)} pz</Pill>
+          <Pill tone="blue" size="xs" dot title={sugTitle(s)}>Sugerido · {int(s.piezas)} pz{Number(piezasPrevias[r.sku]) > 0 && Number(piezasPrevias[r.sku]) !== s.piezas ? ` → ${int(Number(piezasPrevias[r.sku]))}` : ''}</Pill>
           <Boton onClick={() => aceptarSugerido(r.sku)} title={sugTitle(s)} style={{ height: 22, padding: '0 9px', fontSize: 11 }}>Aceptar</Boton>
         </span>
       );
