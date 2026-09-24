@@ -1,5 +1,6 @@
 // PrecioPicker — chip de precio con popover de listas (v_estrategia_precios_lista) + precio personalizado.
 // r = fila del catálogo ({ precios: { lista → precio } }) · val = { listaSel, precio } · onChange(patch)
+import CampoNumero from './CampoNumero';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -48,9 +49,7 @@ export default function PrecioPicker({ r, val, onChange }) {
           <span style={{ fontSize: 9, color: theme.textMuted }}>▾</span>
         </button>
         {esCustom && customEditing && (
-          <input type="number" min="0" step="0.01" value={val.precio ?? ''} autoFocus
-            onChange={(e) => onChange({ precio: Number(e.target.value) || 0 })} onBlur={() => setCustomEditing(false)}
-            style={{ width: 70, height: 24, padding: '0 6px', textAlign: 'right', fontSize: 11, fontFamily: TYPO.fontDisplay, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
+          <CampoNumero value={val.precio} decimales={2} autoFocus ancho={78} onChange={(n) => onChange({ precio: n ?? 0 })} onBlur={() => setCustomEditing(false)} ariaLabel="Precio personalizado" />
         )}
         {esCustom && !customEditing && <Pill tone="orange" size="xs" onClick={() => setCustomEditing(true)} style={{ cursor: 'pointer' }}>editar</Pill>}
       </div>

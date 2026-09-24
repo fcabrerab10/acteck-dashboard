@@ -11,7 +11,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Hero, KpiCard, Panel, Pill, Boton, TablaCompacta, toast } from '../../../components/kit';
 import ExportMenu from '../../../components/ExportMenu';
-import { money, moneyCompact, int, pct } from '../../../lib/format';
+import { money, moneyCompact, int, pct, fechaCorta } from '../../../lib/format';
 import { compartir, copiar } from '../../../lib/whatsapp';
 import { familiaHoja, MES_FULL, clienteColor, vigenciaPorDefecto } from './constantes';
 import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
@@ -20,6 +20,7 @@ import { textoPropuesta, vigenciaTexto } from './textos';
 import { mapaEan } from '../../../lib/ean';
 import { IndicadorGuardado } from './MiPropuesta';
 import PrecioPicker from './PrecioPicker';
+import CampoNumero from './CampoNumero';
 
 const N = (v) => Number(v) || 0;
 
@@ -119,9 +120,9 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
     { key: 'invCliente', label: 'Inv cli', width: 58, render: (r) => <span style={{ color: N(r.invCliente) > 0 ? theme.text : red, fontWeight: 600 }}>{r.invCliente == null ? '—' : int(N(r.invCliente))}</span> },
     { key: 'promSellout', label: '⌀ 3m', width: 52, render: (r) => <span style={{ color: theme.textMuted }}>{r.promSellout == null ? '—' : int(Math.round(N(r.promSellout)))}</span> },
     { key: 'invActeck', label: 'Inv Ack', width: 62, render: (r) => <span style={{ color: N(r.invActeck) >= N(r.piezas) ? theme.textMuted : red, fontWeight: N(r.invActeck) >= N(r.piezas) ? 400 : 600 }} title={N(r.invActeck) < N(r.piezas) ? 'Pides más de lo que hay en Acteck' : ''}>{r.invActeck == null ? '—' : int(N(r.invActeck))}</span> },
+    { key: 'arribo', label: 'Llega', width: 92, render: (r) => (r.arribo?.fecha ? <span title={`${r.arribo.po ? `${r.arribo.po} · ` : ''}${int(r.arribo.total)} pz en camino`} style={{ ...th, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{fechaCorta(r.arribo.fecha)} · {int(r.arribo.piezas)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'piezas', label: 'Piezas', width: 72, sum: true, render: (r) => (
-      <input type="number" min="0" value={r.piezas ?? ''} onChange={(e) => editarSku(r.sku, { piezas: Number(e.target.value) || 0 })} aria-label={`Piezas de ${r.sku}`}
-        style={{ width: 60, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...th, background: theme.bg, border: `1px solid ${N(r.piezas) > 0 ? theme.border : red}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
+      <CampoNumero value={r.piezas} onChange={(n) => editarSku(r.sku, { piezas: n ?? 0 })} ancho={60} invalido={!(N(r.piezas) > 0)} ariaLabel={`Piezas de ${r.sku}`} />
     ) },
     { key: 'precio', label: 'Precio propuesta', align: 'left', width: 150, render: (r) => <PrecioPicker r={r} val={r} onChange={(patch) => editarSku(r.sku, patch)} /> },
     { key: 'maaa', label: 'vs MAAA', width: 80, render: (r) => { const m = N(r.precios?.['Mayoreo AAA']); return m > 0 ? <span style={{ color: theme.textMuted }}>{money(m)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>; } },

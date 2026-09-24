@@ -7,6 +7,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Pill, Boton } from '../../../components/kit';
 import { money, int, pct, relativo } from '../../../lib/format';
+import CampoNumero from './CampoNumero';
 
 export function IndicadorGuardado({ autosave }) {
   const { guardando, guardadoAt, sucio } = autosave || {};
@@ -62,8 +63,7 @@ export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, p
               {onEditar ? (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }} title="Piezas a proponer">
                   <button type="button" onClick={() => onEditar(r.sku, { piezas: Math.max(0, (Number(r.piezas) || 0) - 5) })} aria-label="5 piezas menos" style={pasoBtn(theme)}><Minus size={11} /></button>
-                  <input type="number" min="0" step="1" value={r.piezas ?? ''} onChange={(e) => onEditar(r.sku, { piezas: Math.max(0, Number(e.target.value) || 0) })} aria-label={`Piezas de ${r.sku}`}
-                    style={{ ...mono, width: 48, height: 24, padding: '0 4px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: theme.accent || '#007AFF', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 7, outline: 'none' }} />
+                  <CampoNumero value={r.piezas} onChange={(n) => onEditar(r.sku, { piezas: n ?? 0 })} ancho={50} ariaLabel={`Piezas de ${r.sku}`} style={{ padding: '0 4px', fontSize: 11, color: theme.accent || '#007AFF' }} />
                   <button type="button" onClick={() => onEditar(r.sku, { piezas: (Number(r.piezas) || 0) + 5 })} aria-label="5 piezas más" style={pasoBtn(theme)}><Plus size={11} /></button>
                 </span>
               ) : <div style={{ ...mono, color: theme.accent || '#007AFF', fontWeight: 600 }}>{int(r.piezas)} pz</div>}

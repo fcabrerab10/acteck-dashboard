@@ -135,7 +135,7 @@ export async function fetchCatalogo(clienteKey) {
     return supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey).eq('anio', ultAnio).eq('semana', ultSemana).limit(5000);
   })();
 
-  const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
+  const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes, transitoRes] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
     invAckDataP,
     invCliQuery,
@@ -145,16 +145,28 @@ export async function fetchCatalogo(clienteKey) {
     fetchSelloutMesActual(clienteKey),
     supabase.from('cuotas_mensuales').select('cuota_min,cuota_meta').eq('cliente', clienteKey).eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
     fetchSpiffsActivos(),
+    cachedQuery(supabase.from('v_transito_sku').select('sku,cantidad,eta_mas_cercana,embarques_detalle')),
   ]);
 
   // INV ACK = Σ inventario sobre almacenes comerciales (misma lista que almacenes_config.comercial / v_inventario_comercial).
   const ALM_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
-  const invAck = new Map();
+  const invAck = new Map(), dispAck = new Map();
   for (const r of invAckData || []) {
     if (!ALM_COMERCIALES.has(Number(r.no_almacen))) continue;
     invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.inventario) || 0));
+    dispAck.set(r.articulo, (dispAck.get(r.articulo) || 0) + (Number(r.disponible ?? r.inventario) || 0));
   }
   for (const [k, v] of invAck.entries()) invAck.set(k, Math.round(v));
+  for (const [k, v] of dispAck.entries()) dispAck.set(k, Math.max(0, Math.round(v)));
+  // Próximo arribo por SKU (v_transito_sku.embarques_detalle: el embarque con la ETA más cercana).
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  const arribo = new Map();
+  for (const t of transitoRes?.data || []) {
+    const det = (Array.isArray(t.embarques_detalle) ? t.embarques_detalle : []).filter((d) => d?.eta).sort((a, b) => String(a.eta).localeCompare(String(b.eta)));
+    const prox = det.find((d) => String(d.eta) >= hoyIso) || det[0];
+    if (prox) arribo.set(t.sku, { fecha: String(prox.eta).slice(0, 10), piezas: Number(prox.cantidad) || 0, po: prox.po || null, estatus: prox.estatus || null, total: Number(t.cantidad) || 0 });
+    else if (t.eta_mas_cercana) arribo.set(t.sku, { fecha: String(t.eta_mas_cercana).slice(0, 10), piezas: Number(t.cantidad) || 0, po: null, estatus: null, total: Number(t.cantidad) || 0 });
+  }
 
   const invCli = new Map(), invCliTitulos = new Map();
   for (const r of invCliRes.data || []) {
@@ -190,7 +202,7 @@ export async function fetchCatalogo(clienteKey) {
     const base = {
       sku: r.sku, marca: r.marca || '', familia: r.familia || '', categoria: r.categoria || '',
       descripcion: r.descripcion || invCliTitulos.get(r.sku) || '', rdmp: r.rdmp || '',
-      invActeck: invAck.get(r.sku) || 0, invCliente: invCli.get(r.sku)?.stock || 0,
+      invActeck: invAck.get(r.sku) || 0, dispActeck: dispAck.get(r.sku) || 0, arribo: arribo.get(r.sku) || null, invCliente: invCli.get(r.sku)?.stock || 0,
       sellout90: sellout.get(r.sku) || 0, promSellout: Math.round((sellout.get(r.sku) || 0) / 3),
       selloutMes: Object.fromEntries(mesesKeys.map((k) => [k, Number(sm[k]) || 0])),
       precios: preciosPorSku.get(r.sku) || {}, costo: costoPorSku.get(r.sku) || 0,

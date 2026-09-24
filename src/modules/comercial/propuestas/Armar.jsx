@@ -16,6 +16,7 @@ import { roadmapTone } from '../sellin/textos';
 import { MES_ACTUAL, MES_LABEL, MES_FULL, clienteColor, listaShort } from './constantes';
 import { FILTROS_VACIOS, tokens as aTokens, pasaTodos, facetas as calcFacetas, nActivos } from './filtros';
 import { calcularSugeridos } from './sugeridos';
+import CampoNumero from './CampoNumero';
 import PrecioPicker from './PrecioPicker';
 import MiPropuesta from './MiPropuesta';
 
@@ -61,7 +62,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
 
   // Sugeridos sólo cuando hay sell-out e inventario del cliente (sin ellos todo parecería "sin stock").
   const sugeridos = useMemo(() => calcularSugeridos(skus, { activo: !!(contexto?.fuentes?.sellout && contexto?.fuentes?.invCliente) }), [skus, contexto]);
-  const esSugeridoPendiente = (r) => sugeridos.has(r.sku) && !(r.sku in propuesta);
+  const esSugeridoPendiente = (r) => sugeridos.has(r.sku) && !sugeridos.get(r.sku).sinStock && !(r.sku in propuesta);
 
   const filtro = useMemo(() => ({ ...f, tokens: aTokens(busqueda) }), [f, busqueda]);
   const facetas = useMemo(() => calcFacetas(skus, filtro), [skus, filtro]);
@@ -137,7 +138,8 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
   const cuotaPct = contexto?.cuota > 0 ? Math.min(100, Math.round((contexto.facturado / contexto.cuota) * 100)) : 0;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
   const muted = (v) => (v ? int(v) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>);
-  const sugTitle = (s) => `Vendió ${int(s.ritmo)} pz/mes en los 3 meses cerrados · stock del cliente ${int(s.stock)} pz (${s.stock ? `${s.dias} días de cobertura` : 'sin stock'}) → sugerido ${int(s.piezas)} pz para 1 mes`;
+  const sugTitle = (s) => `Vendió ${int(s.ritmo)} pz/mes en los 3 meses cerrados · stock del cliente ${int(s.stock)} pz (${s.stock ? `${s.dias} días de cobertura` : 'sin stock'}) → necesita ${int(s.necesarias)} pz para 1 mes · disponible en Acteck ${int(s.disp)} pz${s.sinStock ? ' → sin stock para proponer' : s.piezas < s.necesarias ? ` → se sugiere lo disponible: ${int(s.piezas)} pz` : ''}`;
+  const fmtArribo = (a) => (a?.fecha ? `${fechaCorta(a.fecha)} · ${int(a.piezas)} pz` : '—');
 
   const columnas = [
     { key: 'sku', label: 'SKU', align: 'left', width: 96, sort: true, mono: true, render: (r) => <span style={{ ...mono, fontWeight: 600, color: r.sku in propuesta ? accent : theme.text }}>{r.sku}</span> },
@@ -147,6 +149,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
     ...[2, 1, 0].map((idx) => ({ key: `m${idx}`, label: mesLbl(mesesKeys[idx]), width: 52, render: (r) => <span style={{ color: theme.textMuted }}>{muted(N(r.selloutMes?.[mesesKeys[idx]]))}</span> })),
     { key: 'promSellout', label: '⌀ 3m', width: 56, sort: true, bold: true, render: (r) => muted(r.promSellout) },
     { key: 'invActeck', label: 'Inv Ack', width: 62, sort: true, render: (r) => muted(r.invActeck) },
+    { key: 'arribo', label: 'Llega', width: 96, render: (r) => (r.arribo?.fecha ? <span title={`${r.arribo.po ? `${r.arribo.po} · ` : ''}${r.arribo.estatus ? String(r.arribo.estatus).toLowerCase() + ' · ' : ''}${int(r.arribo.total)} pz en camino en total`} style={{ ...mono, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{fmtArribo(r.arribo)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'spiff', label: 'SPIFF', width: 60, sort: true, render: (r) => (r.spiff > 0 ? <Pill tone="yellow" size="xs">${r.spiff}/pz</Pill> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'ultima', label: 'Últ. vez', align: 'left', width: 118, sort: true, render: (r) => {
       const m = memoria?.get(r.sku);
@@ -161,15 +164,12 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       );
     } },
     { key: 'piezas', label: 'Piezas', width: 76, render: (r) => (r.sku in propuesta ? (
-      <input type="number" min="0" value={propuesta[r.sku].piezas ?? ''} onClick={(e) => e.stopPropagation()}
-        onChange={(e) => editarSku(r.sku, { piezas: Number(e.target.value) || 0 })}
-        className="prop-piezas" style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: theme.bg, border: `1px solid ${accent}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
+      <CampoNumero value={propuesta[r.sku].piezas} onChange={(n) => editarSku(r.sku, { piezas: n ?? 0 })} acento invalido={!(Number(propuesta[r.sku].piezas) > 0)} ariaLabel={`Piezas de ${r.sku}`} />
     ) : (
-      <input type="number" min="0" value={piezasPrevias[r.sku] ?? ''} placeholder={String(int(sugeridos.get(r.sku)?.piezas || Math.max(1, Math.round(r.promSellout || 0)) || ''))}
-        onClick={(e) => e.stopPropagation()} onChange={(e) => setPiezasPrevias((prev) => ({ ...prev, [r.sku]: e.target.value }))}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (sugeridos.has(r.sku)) aceptarSugerido(r.sku); else toggleSku(r.sku); } }}
-        title="Piezas a proponer: escribe la cantidad y luego Aceptar o marca la fila (Enter también la agrega)"
-        className="prop-piezas" style={{ width: 62, height: 24, padding: '0 8px', textAlign: 'right', fontSize: 11, ...mono, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 7, color: theme.text, outline: 'none' }} />
+      <CampoNumero value={piezasPrevias[r.sku] ?? null} placeholder={String(int(sugeridos.get(r.sku)?.piezas || Math.max(1, Math.round(r.promSellout || 0)) || ''))}
+        onChange={(n) => setPiezasPrevias((prev) => ({ ...prev, [r.sku]: n }))}
+        onEnter={() => { if (sugeridos.has(r.sku)) aceptarSugerido(r.sku); else toggleSku(r.sku); }}
+        title="Piezas a proponer: escribe la cantidad y luego Aceptar o marca la fila (Enter también la agrega)" ariaLabel={`Piezas a proponer de ${r.sku}`} />
     )) },
     { key: 'precio', label: 'Precio', align: 'left', width: 168, render: (r) => {
       if (r.sku in propuesta) return <PrecioPicker r={r} val={propuesta[r.sku]} onChange={(patch) => editarSku(r.sku, patch)} />;
@@ -177,8 +177,12 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       if (!s) return <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Marcar para editar</span>;
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-          <Pill tone="blue" size="xs" dot title={sugTitle(s)}>Sugerido · {int(s.piezas)} pz{Number(piezasPrevias[r.sku]) > 0 && Number(piezasPrevias[r.sku]) !== s.piezas ? ` → ${int(Number(piezasPrevias[r.sku]))}` : ''}</Pill>
-          <Boton onClick={() => aceptarSugerido(r.sku)} title={sugTitle(s)} style={{ height: 22, padding: '0 9px', fontSize: 11 }}>Aceptar</Boton>
+          {s.sinStock ? (
+            <Pill tone="red" size="xs" dot title={sugTitle(s)}>Sin stock Acteck{s.arribo?.fecha ? ` · llega ${fechaCorta(s.arribo.fecha)} (${int(s.arribo.piezas)} pz)` : ' · nada en camino'}</Pill>
+          ) : (<>
+            <Pill tone={s.piezas < s.necesarias ? 'orange' : 'blue'} size="xs" dot title={sugTitle(s)}>Sugerido · {int(s.piezas)} pz{s.piezas < s.necesarias ? ` de ${int(s.necesarias)}` : ''}{Number(piezasPrevias[r.sku]) > 0 && Number(piezasPrevias[r.sku]) !== s.piezas ? ` → ${int(Number(piezasPrevias[r.sku]))}` : ''}</Pill>
+            <Boton onClick={() => aceptarSugerido(r.sku)} title={sugTitle(s)} style={{ height: 22, padding: '0 9px', fontSize: 11 }}>Aceptar</Boton>
+          </>)}
         </span>
       );
     } },
@@ -252,7 +256,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
           {sugeridosTotales > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${theme.border}`, background: sombreado && pendientesVisibles.length ? `${accent}${theme.mode === 'dark' ? '12' : '08'}` : 'transparent', flexWrap: 'wrap' }}>
               <Pill tone="blue" dot>Sugeridos · {int(pendientesVisibles.length)}{pendientesVisibles.length !== sugeridosPendientes ? ` de ${int(sugeridosPendientes)}` : ''}</Pill>
-              <span style={{ fontSize: 10.5, color: theme.textMuted }}>vendidos en los 3 meses cerrados y hoy con cobertura &lt; 30 días o sin stock en el cliente · piezas = 1 mes de venta − stock, en múltiplos de 5</span>
+              <span style={{ fontSize: 10.5, color: theme.textMuted }}>vendidos en los 3 meses cerrados y hoy con cobertura &lt; 30 días o sin stock en el cliente · piezas = 1 mes de venta − stock, en múltiplos de 5, nunca más de lo disponible en Acteck</span>
               <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                 <Pill tone={sombreado ? 'blue' : 'gray'} size="xs" onClick={() => setSombreado((v) => !v)} title={sombreado ? 'Ocultar el sombreado de los sugeridos' : 'Mostrar el sombreado de los sugeridos'}>Sombreado {sombreado ? 'on' : 'off'}</Pill>
                 <Boton primario disabled={!pendientesVisibles.length} onClick={aceptarTodos} title="Agrega todos los sugeridos visibles con sus piezas sugeridas">Aceptar todos los sugeridos ({int(pendientesVisibles.length)})</Boton>
