@@ -77,8 +77,10 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
         return (N(a[orden.col]) - N(b[orden.col])) * mult;
       });
     }
-    // Sugeridos pendientes al principio (estable: conservan entre sí el orden de la columna); al aceptarlos vuelven a su sitio.
-    if (sugeridos.size === 0) return arr;
+    // Sugeridos pendientes al principio SÓLO con el orden por defecto (venta 3 m). Si Fernando ordena por otra
+    // columna (2026-09-24: «quiero acomodar por inventario y me salen primero los 0»), manda el orden elegido y los
+    // sugeridos se distinguen por el rojo y el sombreado, no por la posición.
+    if (sugeridos.size === 0 || orden.col !== 'sellout90') return arr;
     const pend = [], resto = [];
     for (const r of arr) (sugeridos.has(r.sku) && !(r.sku in propuesta) ? pend : resto).push(r);
     return pend.length ? [...pend, ...resto] : arr;
@@ -268,7 +270,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
           <div style={{ padding: 0 }}>
             <TablaCompacta dense columnas={columnas} filas={filtrados.slice(0, LIMITE)} rowKey={(r) => r.sku} orden={orden} onSort={onSort}
               onRowClick={(r) => toggleSku(r.sku)} maxHeight="calc(100vh - 330px)" vacio="Ningún SKU coincide con la búsqueda y los filtros."
-              rowStyle={(r) => (r.sku in propuesta ? { background: `${accent}${theme.mode === 'dark' ? '1F' : '0D'}` } : sombreado && esSugeridoPendiente(r) ? { background: `${accent}14` } : null)} />
+              rowStyle={(r) => (r.sku in propuesta ? { background: `${accent}${theme.mode === 'dark' ? '1F' : '0D'}` } : sombreado && sugeridos.has(r.sku) ? { background: `${accent}14` } : null)} />
             {filtrados.length > LIMITE && <div style={{ padding: 10, textAlign: 'center', fontSize: 11, color: theme.textMuted }}>Mostrando {LIMITE} de {int(filtrados.length)} · afina la búsqueda o los filtros</div>}
           </div>
         </Panel>
