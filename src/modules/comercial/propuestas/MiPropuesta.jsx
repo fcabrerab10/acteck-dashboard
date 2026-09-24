@@ -2,7 +2,7 @@
 // Indicador discreto del autoguardado (PropuestasTab guarda solo ~3 s después de cada cambio y al salir):
 //   Guardando… · Guardado hace 10 s · Sin guardar (cambios recién hechos, el timer corre) · Nuevo (nada que guardar).
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, Save, X } from 'lucide-react';
+import { ChevronRight, Save, X, Minus, Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Pill, Boton } from '../../../components/kit';
@@ -22,7 +22,7 @@ export function IndicadorGuardado({ autosave }) {
   return <Pill tone="gray" size="xs" title="Se guarda solo en cuanto marques algo">Nuevo</Pill>;
 }
 
-export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, piezasTotal, spiffTotal, spiffSkusCount, spiffDisponiblesCount, margenProm, sensible, autosave, onGuardar, onRevisar, onQuitar, onVaciar }) {
+export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, piezasTotal, spiffTotal, spiffSkusCount, spiffDisponiblesCount, margenProm, sensible, autosave, onGuardar, onRevisar, onQuitar, onVaciar, onEditar }) {
   const { theme } = useTheme();
   const vacia = propuestaLista.length === 0;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
@@ -53,12 +53,20 @@ export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, p
       ) : (
         <div style={{ maxHeight: 260, overflow: 'auto', margin: '8px 0 4px' }}>
           {propuestaLista.slice(0, 40).map((r) => (
-            <div key={r.sku} style={{ display: 'grid', gridTemplateColumns: onQuitar ? '1fr auto auto auto' : '1fr auto auto', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 10.5 }}>
+            <div key={r.sku} style={{ display: 'grid', gridTemplateColumns: onQuitar ? '1fr auto auto auto' : '1fr auto auto', gap: 6, alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 10.5 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ ...mono, fontWeight: 600, color: theme.text }}>{r.sku}</div>
                 <div style={{ fontSize: 9.5, color: theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.descripcion}</div>
               </div>
-              <div style={{ ...mono, color: theme.accent || '#007AFF', fontWeight: 600 }}>{int(r.piezas)} pz</div>
+              {/* Piezas editables (2026-09-24, Fernando: «quiero poder modificar yo las piezas»): −/+ de 5 en 5 y captura directa. */}
+              {onEditar ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }} title="Piezas a proponer">
+                  <button type="button" onClick={() => onEditar(r.sku, { piezas: Math.max(0, (Number(r.piezas) || 0) - 5) })} aria-label="5 piezas menos" style={pasoBtn(theme)}><Minus size={11} /></button>
+                  <input type="number" min="0" step="1" value={r.piezas ?? ''} onChange={(e) => onEditar(r.sku, { piezas: Math.max(0, Number(e.target.value) || 0) })} aria-label={`Piezas de ${r.sku}`}
+                    style={{ ...mono, width: 48, height: 24, padding: '0 4px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: theme.accent || '#007AFF', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 7, outline: 'none' }} />
+                  <button type="button" onClick={() => onEditar(r.sku, { piezas: (Number(r.piezas) || 0) + 5 })} aria-label="5 piezas más" style={pasoBtn(theme)}><Plus size={11} /></button>
+                </span>
+              ) : <div style={{ ...mono, color: theme.accent || '#007AFF', fontWeight: 600 }}>{int(r.piezas)} pz</div>}
               <div style={{ ...mono, color: theme.text, fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{money((Number(r.piezas) || 0) * (Number(r.precio) || 0))}</div>
               {/* Quitar de la propuesta (2026-09-24, Fernando: «le piqué a algunos productos sin querer y no me deja borrarlos») */}
               {onQuitar && <button type="button" onClick={() => onQuitar(r.sku)} title={`Quitar ${r.sku} de la propuesta`} aria-label={`Quitar ${r.sku}`}
@@ -81,3 +89,5 @@ export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, p
     </Panel>
   );
 }
+
+const pasoBtn = (theme) => ({ width: 22, height: 22, borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 });

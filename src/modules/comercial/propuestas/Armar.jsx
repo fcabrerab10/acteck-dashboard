@@ -237,7 +237,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
         </Panel>
         <MiPropuesta cliente={cliente} propuestaLista={propuestaLista} totalPropuesta={totalPropuesta} piezasTotal={piezasTotal}
           spiffTotal={spiffTotal} spiffSkusCount={spiffSkusCount} spiffDisponiblesCount={spiffDisponiblesCount}
-          margenProm={margenProm} sensible={sensible} autosave={autosave} onGuardar={onGuardar} onRevisar={onRevisar} onQuitar={quitarSku} onVaciar={vaciar} />
+          margenProm={margenProm} sensible={sensible} autosave={autosave} onGuardar={onGuardar} onRevisar={onRevisar} onQuitar={quitarSku} onVaciar={vaciar} onEditar={editarSku} />
       </div>
     </div>
   );
