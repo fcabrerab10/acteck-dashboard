@@ -1,4 +1,6 @@
 // Paleta ⌘K · busca pestañas, clientes propios, SKUs (roadmap_sku) y clientes finales del ERP.
+// Desde 2026-09-24 también PREGUNTA: «cuánto va Digitalife de cuota», «pendientes de hoy», «stock de AC-943253»…
+// (src/lib/preguntas): la respuesta sale arriba con la cifra y el botón para ir; nada se manda fuera.
 // Flotante 520 px, radio 12, ELEV.flotante. Teclado ↑↓ ↵ Esc.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
@@ -10,6 +12,8 @@ import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { cachedQuery, fetchAll } from '../../lib/queries';
 import { nodosPlanos, etiquetaNodo, irANodo, CLIENTES_NAV, CLIENTES_ORDEN } from './arbol';
 import { Kbd, PuntoCliente, Overlay, vidrio, hoverBg, hairline } from './comun';
+import Respuesta, { Sugerencias } from './Respuesta';
+import { interpretar, pareceP, responder, SUGERENCIAS } from '../../lib/preguntas';
 
 const normalizar = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
@@ -36,12 +40,14 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
   const [sel, setSel] = useState(0);
   const [skus, setSkus] = useState([]);
   const [finales, setFinales] = useState([]);
+  const [respuesta, setRespuesta] = useState(null);
+  const [pensando, setPensando] = useState(false);
   const inputRef = useRef(null);
   const listaRef = useRef(null);
 
   useEffect(() => {
     if (!abierto) return;
-    setQ(''); setSel(0); setSkus([]); setFinales([]);
+    setQ(''); setSel(0); setSkus([]); setFinales([]); setRespuesta(null); setPensando(false);
     const t = setTimeout(() => inputRef.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [abierto]);
@@ -83,6 +89,20 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
     return () => { cancel = true; clearTimeout(t); };
   }, [abierto, nq, q, veEmpresa]);
 
+  // Pregunta en lenguaje natural · debounce 350 ms; la intención se calcula sin red y sólo entonces se consulta.
+  const intencion = useMemo(() => (nq.length >= 4 && pareceP(q) ? interpretar(q) : null), [q, nq]);
+  useEffect(() => {
+    if (!abierto || !intencion) { setRespuesta(null); setPensando(false); return; }
+    let cancel = false;
+    setPensando(true);
+    const t = setTimeout(async () => {
+      const r = await responder(intencion, { perfil, uid: perfil?.user_id });
+      if (cancel) return;
+      setRespuesta(r); setPensando(false);
+    }, 350);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [abierto, intencion, perfil]);
+
   // Clientes finales · precarga una vez, filtro local
   useEffect(() => {
     if (!abierto || nq.length < 2 || !veEmpresa) { setFinales([]); return; }
@@ -97,12 +117,13 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
   // Lista unificada
   const items = useMemo(() => {
     const out = [];
+    if (respuesta?.abrir) out.push({ tipo: 'respuesta', key: 'r', label: respuesta.abrir.label, abrir: respuesta.abrir });
     resPestanas.forEach((n) => out.push({ tipo: 'pestana', key: `p:${n.id}`, nodo: n, label: etiquetaNodo(n), sub: n.tipo === 'cliente' ? 'Pestaña de cliente' : n.grupoLabel }));
     resClientes.forEach((c) => out.push({ tipo: 'cliente', key: `c:${c.key}`, cliente: c, label: c.label, sub: `Cliente · ${c.marca}` }));
     skus.forEach((s) => out.push({ tipo: 'sku', key: `s:${s.sku}`, sku: s, label: s.sku, sub: [s.marca, s.descripcion].filter(Boolean).join(' · ') }));
     finales.forEach((f) => out.push({ tipo: 'final', key: `f:${f.nombre}`, final: f, label: f.nombre, sub: `Cliente final · ${f.canal || 'ERP'}` }));
     return out;
-  }, [resPestanas, resClientes, skus, finales]);
+  }, [resPestanas, resClientes, skus, finales, respuesta]);
 
   useEffect(() => { setSel(0); }, [items.length, nq]);
   useEffect(() => {
@@ -110,9 +131,11 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
     el?.scrollIntoView?.({ block: 'nearest' });
   }, [sel]);
 
+  const irA = (d) => { if (!d) return; onClose?.(); if (d.extra?.sku) { try { sessionStorage.setItem('nav_busqueda_sku', d.extra.sku); } catch {} } onNavegar?.(d.clienteKey || null, d.pagina, d.extra || null); };
   const ejecutar = (it) => {
     if (!it) return;
     onClose?.();
+    if (it.tipo === 'respuesta') { irA(it.abrir); return; }
     if (it.tipo === 'pestana') { irANodo(it.nodo, onNavegar); return; }
     if (it.tipo === 'cliente') { onNavegar?.(it.cliente.key, 'home'); return; }
     if (it.tipo === 'sku') {
@@ -150,16 +173,18 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
         <style>{`@keyframes paletaIn { from { opacity: 0; transform: translateY(-6px) scale(0.985); } to { opacity: 1; transform: none; } }`}</style>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: `1px solid ${hairline(theme)}` }}>
           <Search size={16} style={{ color: theme.textMuted, flexShrink: 0 }} />
-          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Pestañas, clientes, SKUs…"
+          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar o preguntar…"
             autoComplete="off" spellCheck={false}
             style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', fontFamily: TYPO.fontText, fontSize: 15, color: theme.text }} />
           <Kbd theme={theme}>esc</Kbd>
         </label>
 
         <div ref={listaRef} style={{ maxHeight: 'min(52vh, 420px)', overflowY: 'auto', padding: 6 }}>
-          {items.length === 0 && (
+          {(pensando || respuesta) && <Respuesta r={respuesta} cargando={pensando} theme={theme} on={items[0]?.tipo === 'respuesta' && sel === 0} onAbrir={irA} onIr={irA} />}
+          {!nq && <Sugerencias lista={SUGERENCIAS} theme={theme} onElegir={(s) => { setQ(s); inputRef.current?.focus(); }} />}
+          {items.length === 0 && !pensando && !respuesta && (
             <div style={{ padding: '26px 12px', textAlign: 'center', color: theme.textMuted, fontSize: 12.5 }}>
-              {nq.length < 2 ? 'Escribe para buscar pestañas, clientes o SKUs' : `Sin resultados para “${q.trim()}”`}
+              {nq.length < 2 ? 'Escribe para buscar pestañas, clientes o SKUs, o pregunta' : `Sin resultados para “${q.trim()}”`}
             </div>
           )}
           {secciones.map((sec) => {
@@ -194,6 +219,7 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', borderTop: `1px solid ${hairline(theme)}`, fontSize: 10.5, color: theme.textMuted }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Kbd theme={theme}><ArrowUp size={9} /></Kbd><Kbd theme={theme}><ArrowDown size={9} /></Kbd> navegar</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Kbd theme={theme}>↵</Kbd> abrir</span>
+          <span style={{ opacity: 0.8 }}>o pregunta: «cuánto va Digitalife de cuota»</span>
           <span style={{ flex: 1 }} />
           {perfil?.nombre && <span style={{ opacity: 0.7 }}>{perfil.nombre.split(' ')[0]}</span>}
         </div>

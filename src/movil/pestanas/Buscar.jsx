@@ -1,6 +1,6 @@
 // Pestaña Buscar · campo con foco automático; resultados: SKUs (roadmap_sku + disponible comercial),
 // clientes (propios y del ERP) y pestañas (árbol de navegación). Recientes en localStorage. SKU → Ficha de producto.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { puedeVerCliente, puedeVerPestanaGlobal } from '../../lib/permisos';
 import { Package, Users, LayoutGrid, Clock } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -13,6 +13,8 @@ import { useCatalogoBusqueda, colorCliente } from '../datos';
 import { leerLS, guardarLS, int, MONO } from '../util';
 import FichaCliente from './FichaCliente';
 import FichaProducto from '../FichaProducto';
+import RespuestaM, { SugerenciasM } from './buscar/RespuestaM';
+import { interpretar, pareceP, responder, SUGERENCIAS } from '../../lib/preguntas';
 
 const LS_RECIENTES = 'movil_buscar_recientes_v1';
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -28,6 +30,17 @@ export default function Buscar() {
   const veErp = !!perfilB?.es_super_admin || puedeVerPestanaGlobal(perfilB, 'resumen_clientes') || puedeVerPestanaGlobal(perfilB, 'sell_in');
   const { data: catalogo, isLoading } = useCatalogoBusqueda(veSkus);
   const nq = norm(q.trim());
+  // «Buscar o preguntar» (2026-09-24): si el texto parece pregunta, se contesta arriba con la cifra.
+  const [respuesta, setRespuesta] = useState(null);
+  const [pensando, setPensando] = useState(false);
+  const intencion = useMemo(() => (nq.length >= 4 && pareceP(q) ? interpretar(q) : null), [q, nq]);
+  useEffect(() => {
+    if (!intencion) { setRespuesta(null); setPensando(false); return undefined; }
+    let cancel = false; setPensando(true);
+    const t = setTimeout(async () => { const r = await responder(intencion, { perfil: perfilB, uid: perfilB?.user_id }); if (!cancel) { setRespuesta(r); setPensando(false); } }, 350);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [intencion, perfilB]);
+  const irRespuesta = (d) => { if (!d) return; if (d.extra?.sku) { nav.agregarSku?.(d.extra.sku); } nav.navegar({ pagina: d.pagina, clienteKey: d.clienteKey || null, label: d.label, extra: d.extra || null }); };
 
   const clientes = useMemo(() => {
     const propios = CLIENTES_ORDEN.map((k) => ({ key: k, label: CLIENTES_NAV[k].label, sub: `Cliente propio · ${CLIENTES_NAV[k].marca}`, tipo: 'propio' }));
@@ -72,11 +85,13 @@ export default function Buscar() {
 
   return (
     <>
-      <TituloGrande titulo="Buscar" sub="SKUs, clientes y pestañas" />
+      <TituloGrande titulo="Buscar o preguntar" sub="SKUs, clientes, pestañas… o una pregunta" />
       <div style={{ padding: '0 16px 14px' }}>
-        <CampoBusqueda value={q} onChange={setQ} placeholder="SKU, descripción, cliente…" autoFocus onSubmit={() => { if (res?.skus?.[0]) abrirSku(res.skus[0].sku, res.skus[0].descripcion); }} />
+        <CampoBusqueda value={q} onChange={setQ} placeholder="Pregunta o busca…" autoFocus onSubmit={() => { if (res?.skus?.[0]) abrirSku(res.skus[0].sku, res.skus[0].descripcion); }} />
       </div>
 
+      {!res && <SugerenciasM lista={SUGERENCIAS} onElegir={setQ} />}
+      {(pensando || respuesta) && <RespuestaM r={respuesta} cargando={pensando} onIr={irRespuesta} />}
       {!res && (
         <>
           {recientes.length > 0 && (
@@ -91,7 +106,7 @@ export default function Buscar() {
 
       {res && (
         <>
-          {res.skus.length + res.clientes.length + res.pestanas.length === 0 && <Vacio icon={null} titulo={`Nada coincide con “${q}”`} sub={isLoading ? 'El catálogo todavía se está cargando…' : 'Prueba con parte del SKU o una palabra de la descripción.'} />}
+          {res.skus.length + res.clientes.length + res.pestanas.length === 0 && !respuesta && !pensando && <Vacio icon={null} titulo={`Nada coincide con “${q}”`} sub={isLoading ? 'El catálogo todavía se está cargando…' : 'Prueba con parte del SKU o una palabra de la descripción.'} />}
           {res.skus.length > 0 && (
             <ListaAgrupada titulo="SKUs" meta={res.skus.length} pie="Toca un SKU para ver disponibilidad, tránsito y precio.">
               {res.skus.map((s) => (
