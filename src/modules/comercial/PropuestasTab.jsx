@@ -296,7 +296,7 @@ export default function PropuestasTab() {
     return shell(
       <Revisar cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta} nombre={nombre} setNombre={setNombre}
         vigencia={vigencia} setVigencia={setVigencia} modelo={modelo} sensible={sensible} autosave={autosave}
-        onGuardar={() => guardarBorrador()} onEnviada={marcarEnviadaActual} onBack={() => setRevisando(false)} />,
+        onGuardar={() => guardarBorrador()} onEnviada={marcarEnviadaActual} onBack={() => setRevisando(false)} onSalir={() => { setRevisando(false); salirGuardando(); }} />,
     );
   }
   return shell(

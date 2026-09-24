@@ -6,7 +6,7 @@
 // El Excel y el resumen de WhatsApp NUNCA llevan costo ni margen (excelPropuesta.js sólo escribe sku · descripción ·
 // marca · familia · piezas · precio) y ambos llevan la vigencia.
 import React, { useMemo, useRef, useState } from 'react';
-import { Save, Share2, Copy, X, ArrowLeft } from 'lucide-react';
+import { Save, Share2, Copy, X, ArrowLeft, LayoutGrid } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Hero, KpiCard, Panel, Pill, Boton, TablaCompacta, toast } from '../../../components/kit';
@@ -24,7 +24,7 @@ import CampoNumero from './CampoNumero';
 
 const N = (v) => Number(v) || 0;
 
-export default function Revisar({ cliente, contexto, skus, propuesta, setPropuesta, nombre, setNombre, vigencia, setVigencia, modelo, sensible, autosave, onGuardar, onEnviada, onBack }) {
+export default function Revisar({ cliente, contexto, skus, propuesta, setPropuesta, nombre, setNombre, vigencia, setVigencia, modelo, sensible, autosave, onGuardar, onEnviada, onBack, onSalir }) {
   const { theme } = useTheme();
   const rootRef = useRef(null);
   const [ocupado, setOcupado] = useState(false);
@@ -179,6 +179,7 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
             </div>
           </div>
           <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {onSalir && <Boton icon={LayoutGrid} onClick={onSalir} title="Guardar y volver a la pestaña principal de Propuestas">Propuestas</Boton>}
             {onBack && <Boton icon={ArrowLeft} onClick={onBack} title="Volver al armador">Armador</Boton>}
             <Boton icon={Save} onClick={onGuardar} disabled={autosave?.guardando}>Guardar</Boton>
             <Boton icon={Copy} onClick={copiarTexto} title="Copia el resumen limpio (sin costos ni márgenes)">Copiar</Boton>
