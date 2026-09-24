@@ -94,6 +94,8 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       return next;
     });
   };
+  const quitarSku = (sku) => setPropuesta((prev) => { if (!(sku in prev)) return prev; const next = { ...prev }; delete next[sku]; return next; });
+  const vaciar = () => setPropuesta({});
   const aceptarSugerido = (sku) => {
     const sug = sugeridos.get(sku); if (!sug) return;
     const meta = skus.find((r) => r.sku === sku);
@@ -235,7 +237,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
         </Panel>
         <MiPropuesta cliente={cliente} propuestaLista={propuestaLista} totalPropuesta={totalPropuesta} piezasTotal={piezasTotal}
           spiffTotal={spiffTotal} spiffSkusCount={spiffSkusCount} spiffDisponiblesCount={spiffDisponiblesCount}
-          margenProm={margenProm} sensible={sensible} autosave={autosave} onGuardar={onGuardar} onRevisar={onRevisar} />
+          margenProm={margenProm} sensible={sensible} autosave={autosave} onGuardar={onGuardar} onRevisar={onRevisar} onQuitar={quitarSku} onVaciar={vaciar} />
       </div>
     </div>
   );

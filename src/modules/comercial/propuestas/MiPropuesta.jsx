@@ -2,7 +2,7 @@
 // Indicador discreto del autoguardado (PropuestasTab guarda solo ~3 s después de cada cambio y al salir):
 //   Guardando… · Guardado hace 10 s · Sin guardar (cambios recién hechos, el timer corre) · Nuevo (nada que guardar).
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, Save } from 'lucide-react';
+import { ChevronRight, Save, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Pill, Boton } from '../../../components/kit';
@@ -22,7 +22,7 @@ export function IndicadorGuardado({ autosave }) {
   return <Pill tone="gray" size="xs" title="Se guarda solo en cuanto marques algo">Nuevo</Pill>;
 }
 
-export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, piezasTotal, spiffTotal, spiffSkusCount, spiffDisponiblesCount, margenProm, sensible, autosave, onGuardar, onRevisar }) {
+export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, piezasTotal, spiffTotal, spiffSkusCount, spiffDisponiblesCount, margenProm, sensible, autosave, onGuardar, onRevisar, onQuitar, onVaciar }) {
   const { theme } = useTheme();
   const vacia = propuestaLista.length === 0;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
@@ -53,16 +53,25 @@ export default function MiPropuesta({ cliente, propuestaLista, totalPropuesta, p
       ) : (
         <div style={{ maxHeight: 260, overflow: 'auto', margin: '8px 0 4px' }}>
           {propuestaLista.slice(0, 40).map((r) => (
-            <div key={r.sku} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 10.5 }}>
+            <div key={r.sku} style={{ display: 'grid', gridTemplateColumns: onQuitar ? '1fr auto auto auto' : '1fr auto auto', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 10.5 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ ...mono, fontWeight: 600, color: theme.text }}>{r.sku}</div>
                 <div style={{ fontSize: 9.5, color: theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.descripcion}</div>
               </div>
               <div style={{ ...mono, color: theme.accent || '#007AFF', fontWeight: 600 }}>{int(r.piezas)} pz</div>
               <div style={{ ...mono, color: theme.text, fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{money((Number(r.piezas) || 0) * (Number(r.precio) || 0))}</div>
+              {/* Quitar de la propuesta (2026-09-24, Fernando: «le piqué a algunos productos sin querer y no me deja borrarlos») */}
+              {onQuitar && <button type="button" onClick={() => onQuitar(r.sku)} title={`Quitar ${r.sku} de la propuesta`} aria-label={`Quitar ${r.sku}`}
+                style={{ width: 26, height: 26, margin: '-4px -6px -4px 0', borderRadius: 999, border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={13} /></button>}
             </div>
           ))}
           {propuestaLista.length > 40 && <div style={{ padding: '8px 0', textAlign: 'center', fontSize: 10, color: theme.textMuted }}>+{propuestaLista.length - 40} más…</div>}
+        </div>
+      )}
+      {!vacia && onVaciar && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button type="button" onClick={() => { if (window.confirm(`¿Vaciar la propuesta? Se quitan los ${propuestaLista.length} SKUs.`)) onVaciar(); }}
+            style={{ border: 0, background: 'transparent', color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 10.5, cursor: 'pointer', padding: '2px 0' }}>Vaciar propuesta</button>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, paddingTop: 8 }}>
