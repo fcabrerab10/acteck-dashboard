@@ -6,7 +6,7 @@
 //   fetchPreciosVigentes(skus)                     → Map sku → { lista → precio } (para Duplicar con lista vigente)
 //   fetchKpisClientes()                            → { clienteKey: { cuota, facturado, gap } } del mes en curso
 import { supabase } from '../../../lib/supabase';
-import { fetchAllQ, cachedQuery } from '../../../lib/queries';
+import { fetchAll, fetchAllQ, cachedQuery } from '../../../lib/queries';
 import { MES_ACTUAL, CLIENTES, mesesCerrados } from './constantes';
 import { indiceDe } from './filtros';
 
@@ -135,7 +135,7 @@ export async function fetchCatalogo(clienteKey) {
     return supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey).eq('anio', ultAnio).eq('semana', ultSemana).limit(5000);
   })();
 
-  const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes, transitoRes] = await Promise.all([
+  const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes, transitoRes, facturas] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
     invAckDataP,
     invCliQuery,
@@ -146,6 +146,7 @@ export async function fetchCatalogo(clienteKey) {
     supabase.from('cuotas_mensuales').select('cuota_min,cuota_meta').eq('cliente', clienteKey).eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
     fetchSpiffsActivos(),
     cachedQuery(supabase.from('v_transito_sku').select('sku,cantidad,eta_mas_cercana,embarques_detalle')),
+    fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto', (q) => q.eq('cliente_key', clienteKey).gt('piezas', 0)),
   ]);
 
   // INV ACK = Σ inventario sobre almacenes comerciales (misma lista que almacenes_config.comercial / v_inventario_comercial).
@@ -158,6 +159,15 @@ export async function fetchCatalogo(clienteKey) {
   }
   for (const [k, v] of invAck.entries()) invAck.set(k, Math.round(v));
   for (const [k, v] of dispAck.entries()) dispAck.set(k, Math.max(0, Math.round(v)));
+  // Última compra del cliente por SKU (2026-09-24, Fernando: «pon última compra con la fecha y las piezas»).
+  // El ERP consolidado va por mes (facturacion_clientes), así que la fecha es el mes: { anio, mes, piezas, monto }.
+  const ultimaCompra = new Map();
+  for (const f of facturas || []) {
+    const k = Number(f.anio) * 100 + Number(f.mes);
+    const prev = ultimaCompra.get(f.sku);
+    if (!prev || k > prev.k) ultimaCompra.set(f.sku, { k, anio: Number(f.anio), mes: Number(f.mes), piezas: Number(f.piezas) || 0, monto: Number(f.monto) || 0 });
+    else if (k === prev.k) { prev.piezas += Number(f.piezas) || 0; prev.monto += Number(f.monto) || 0; }
+  }
   // Próximo arribo por SKU (v_transito_sku.embarques_detalle: el embarque con la ETA más cercana).
   const hoyIso = new Date().toISOString().slice(0, 10);
   const arribo = new Map();
@@ -202,7 +212,7 @@ export async function fetchCatalogo(clienteKey) {
     const base = {
       sku: r.sku, marca: r.marca || '', familia: r.familia || '', categoria: r.categoria || '',
       descripcion: r.descripcion || invCliTitulos.get(r.sku) || '', rdmp: r.rdmp || '',
-      invActeck: invAck.get(r.sku) || 0, dispActeck: dispAck.get(r.sku) || 0, arribo: arribo.get(r.sku) || null, invCliente: invCli.get(r.sku)?.stock || 0,
+      invActeck: invAck.get(r.sku) || 0, dispActeck: dispAck.get(r.sku) || 0, arribo: arribo.get(r.sku) || null, ultimaCompra: ultimaCompra.get(r.sku) || null, invCliente: invCli.get(r.sku)?.stock || 0,
       sellout90: sellout.get(r.sku) || 0, promSellout: Math.round((sellout.get(r.sku) || 0) / 3),
       selloutMes: Object.fromEntries(mesesKeys.map((k) => [k, Number(sm[k]) || 0])),
       precios: preciosPorSku.get(r.sku) || {}, costo: costoPorSku.get(r.sku) || 0,

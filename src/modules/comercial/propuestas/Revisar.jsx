@@ -13,7 +13,7 @@ import { Hero, KpiCard, Panel, Pill, Boton, TablaCompacta, toast } from '../../.
 import ExportMenu from '../../../components/ExportMenu';
 import { money, moneyCompact, int, pct, fechaCorta } from '../../../lib/format';
 import { compartir, copiar } from '../../../lib/whatsapp';
-import { familiaHoja, MES_FULL, clienteColor, vigenciaPorDefecto } from './constantes';
+import { familiaHoja, MES_FULL, MES_LABEL, clienteColor, vigenciaPorDefecto } from './constantes';
 import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
 import { exportarPropuestaExcel } from './excelPropuesta';
 import { textoPropuesta, vigenciaTexto } from './textos';
@@ -120,6 +120,7 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
     { key: 'invCliente', label: 'Inv cli', width: 58, render: (r) => <span style={{ color: N(r.invCliente) > 0 ? theme.text : red, fontWeight: 600 }}>{r.invCliente == null ? '—' : int(N(r.invCliente))}</span> },
     { key: 'promSellout', label: '⌀ 3m', width: 52, render: (r) => <span style={{ color: theme.textMuted }}>{r.promSellout == null ? '—' : int(Math.round(N(r.promSellout)))}</span> },
     { key: 'invActeck', label: 'Inv Ack', width: 62, render: (r) => <span style={{ color: N(r.invActeck) >= N(r.piezas) ? theme.textMuted : red, fontWeight: N(r.invActeck) >= N(r.piezas) ? 400 : 600 }} title={N(r.invActeck) < N(r.piezas) ? 'Pides más de lo que hay en Acteck' : ''}>{r.invActeck == null ? '—' : int(N(r.invActeck))}</span> },
+    { key: 'ultimaCompra', label: 'Últ. compra', width: 92, render: (r) => (r.ultimaCompra ? <span title={`${int(r.ultimaCompra.piezas)} pz · ${money(r.ultimaCompra.monto)}`} style={{ ...th, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{MES_LABEL[r.ultimaCompra.mes - 1]} {String(r.ultimaCompra.anio).slice(2)} · <span style={{ color: theme.text, fontWeight: 600 }}>{int(r.ultimaCompra.piezas)}</span></span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>nunca</span>) },
     { key: 'arribo', label: 'Llega', width: 92, render: (r) => (r.arribo?.fecha ? <span title={`${r.arribo.po ? `${r.arribo.po} · ` : ''}${int(r.arribo.total)} pz en camino`} style={{ ...th, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{fechaCorta(r.arribo.fecha)} · {int(r.arribo.piezas)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'piezas', label: 'Piezas', width: 72, sum: true, render: (r) => (
       <CampoNumero value={r.piezas} onChange={(n) => editarSku(r.sku, { piezas: n ?? 0 })} ancho={60} invalido={!(N(r.piezas) > 0)} ariaLabel={`Piezas de ${r.sku}`} />

@@ -72,7 +72,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       const mult = orden.dir === 'asc' ? 1 : -1;
       const esTexto = ['sku', 'descripcion', 'familia'].includes(orden.col);
       arr.sort((a, b) => {
-        if (orden.col === 'ultima') return ((memoria?.get(a.sku) ? Date.parse(memoria.get(a.sku).fecha) : 0) - (memoria?.get(b.sku) ? Date.parse(memoria.get(b.sku).fecha) : 0)) * mult;
+        if (orden.col === 'ultima') return ((a.ultimaCompra?.k || 0) - (b.ultimaCompra?.k || 0)) * mult;
         if (esTexto) return String(a[orden.col] || '').localeCompare(String(b[orden.col] || ''), 'es') * mult;
         return (N(a[orden.col]) - N(b[orden.col])) * mult;
       });
@@ -151,14 +151,16 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
     { key: 'invActeck', label: 'Inv Ack', width: 62, sort: true, render: (r) => muted(r.invActeck) },
     { key: 'arribo', label: 'Llega', width: 96, render: (r) => (r.arribo?.fecha ? <span title={`${r.arribo.po ? `${r.arribo.po} · ` : ''}${r.arribo.estatus ? String(r.arribo.estatus).toLowerCase() + ' · ' : ''}${int(r.arribo.total)} pz en camino en total`} style={{ ...mono, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{fmtArribo(r.arribo)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'spiff', label: 'SPIFF', width: 60, sort: true, render: (r) => (r.spiff > 0 ? <Pill tone="yellow" size="xs">${r.spiff}/pz</Pill> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
-    { key: 'ultima', label: 'Últ. vez', align: 'left', width: 118, sort: true, render: (r) => {
-      const m = memoria?.get(r.sku);
-      if (!m) return <span style={{ color: theme.textSubtle || theme.textMuted, fontSize: 10 }}>nunca</span>;
+    { key: 'ultima', label: 'Últ. compra', align: 'left', width: 104, sort: true, render: (r) => {
+      // Última compra = último mes con piezas facturadas a este cliente (ERP por mes). La última propuesta enviada va en el tooltip.
+      const u = r.ultimaCompra; const m = memoria?.get(r.sku);
       const sel = propuesta[r.sku];
-      const difiere = sel && N(sel.precio) > 0 && Math.abs(N(sel.precio) - m.precio) > 0.005;
+      const difiere = m && sel && N(sel.precio) > 0 && Math.abs(N(sel.precio) - m.precio) > 0.005;
+      const tip = [u ? `Última compra: ${MES_LABEL[u.mes - 1]} ${u.anio} · ${int(u.piezas)} pz · ${money(u.monto)}` : 'Nunca lo ha comprado', m ? `Última propuesta enviada: ${m.nombre} · ${fechaCorta(m.fecha)} · ${int(m.piezas)} pz · ${money(m.precio)} · ${m.lista || 'sin lista'}` : ''].filter(Boolean).join('\n');
+      if (!u) return <span title={tip} style={{ color: theme.textSubtle || theme.textMuted, fontSize: 10 }}>nunca</span>;
       return (
-        <span title={`Última propuesta enviada: ${m.nombre} · ${fechaCorta(m.fecha)} · ${int(m.piezas)} pz · ${money(m.precio)} · ${m.lista || 'sin lista'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: theme.textMuted, ...mono }}>
-          {fechaCorta(m.fecha)} · {money(m.precio)} <span style={{ fontSize: 9, opacity: 0.8 }}>{listaShort(m.lista)}</span>
+        <span title={tip} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: theme.textMuted, ...mono, whiteSpace: 'nowrap' }}>
+          {MES_LABEL[u.mes - 1]} {String(u.anio).slice(2)} · <span style={{ color: theme.text, fontWeight: 600 }}>{int(u.piezas)} pz</span>
           {difiere && <Pill tone={N(sel.precio) < m.precio ? 'orange' : 'blue'} size="xs" title={`Precio elegido ${N(sel.precio) < m.precio ? 'menor' : 'mayor'} que el último propuesto (${money(m.precio)})`}>≠</Pill>}
         </span>
       );
