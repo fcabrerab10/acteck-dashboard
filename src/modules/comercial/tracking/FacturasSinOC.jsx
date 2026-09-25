@@ -16,7 +16,7 @@ export default function FacturasSinOC({ filas, todas, puedeEditar, email }) {
   const [ligar, setLigar] = useState(null);   // factura elegida para "Ligar a OC"
   const crear = async (f) => {
     setBusy(f.folio);
-    try { await crearOCDesdeFactura(f, email); toast.ok(`OC creada desde ${f.folio} con ${f.n_partidas || (f.partidas || []).length} partidas`); }
+    try { await crearOCDesdeFactura(f, email); toast.ok(`Pedido creado desde ${f.folio} con ${f.n_partidas || (f.partidas || []).length} productos · registra el envío`); }
     catch (e) { toast.error(`No se pudo crear la OC: ${e.message}`); }
     finally { setBusy(null); }
   };
@@ -34,13 +34,13 @@ export default function FacturasSinOC({ filas, todas, puedeEditar, email }) {
     { key: 'piezas', label: 'Pz', render: (r) => fmtInt(r.piezas) },
     ...(puedeEditar ? [{ key: 'acc', label: '', align: 'left', render: (r) => (
       <span style={{ display: 'inline-flex', gap: 4 }}>
-        <Boton icon={Plus} onClick={() => crear(r)} disabled={busy === r.folio} title="Crea la OC con las partidas de la factura como pedido">Crear OC</Boton>
+        <Boton icon={Plus} onClick={() => crear(r)} disabled={busy === r.folio} title="Crea el pedido con los productos de la factura">Crear pedido</Boton>
         <Boton icon={Link2} onClick={() => setLigar(r)} disabled={busy === r.folio}>Ligar</Boton>
       </span>) }] : []),
   ];
   const cand = ligar ? candidatasParaFactura(ligar, todas).slice(0, 40) : [];
   return (
-    <Panel titulo="Facturas sin OC registrada" meta={`ERP · ${VENTANA_FACTURAS_SIN_OC_DIAS} días · un clic crea la OC con sus partidas`}>
+    <Panel titulo="Facturas del ERP sin pedido" meta={`${VENTANA_FACTURAS_SIN_OC_DIAS} días · «Crear pedido» lo arma con los productos de la factura · «Ligar» lo cuelga de un pedido existente`}>
       <TablaCompacta columnas={columnas} filas={filas} rowKey={(r) => r.folio} dense maxHeight={300} vacio="Todas las facturas recientes están ligadas a una OC." />
       <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 6, fontFamily: TYPO.fontText }}>La liga automática usa la referencia de la factura (= número de OC) o los folios capturados en la OC. Lo que no ligue aparece aquí.</div>
       <Modal abierto={!!ligar} onClose={() => setLigar(null)} theme={theme} titulo={`Ligar ${ligar?.folio || ''} a una OC`} sub={ligar ? `${nombreCliente(ligar.cliente_key)} · ref. ${ligar.referencia || '—'} · ${fmtInt(ligar.piezas)} pz` : ''} ancho={560}>

@@ -3,7 +3,7 @@
 // Facturas y guías llegan solas del ERP (RPC oc_sincronizar_erp al cargar); Karolina registra la OC (o la pega del correo),
 // cotizaciones y envíos manuales. Lo manual gana sobre lo automático si difiere.
 import React, { useMemo, useState } from 'react';
-import { Plus, ClipboardPaste, Share2 } from 'lucide-react';
+import { Plus, Share2 } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
@@ -23,6 +23,7 @@ import FacturasSinOC from './tracking/FacturasSinOC';
 import FormOC from './tracking/FormOC';
 import FormEnvio from './tracking/FormEnvio';
 import FormCotizacion from './tracking/FormCotizacion';
+import NuevoPedido from './tracking/NuevoPedido';
 
 export default function TrackingPedidos() {
   const perfil = usePerfil();
@@ -84,9 +85,8 @@ export default function TrackingPedidos() {
               { k: 'Días a entrega', v: fmtDias(res.diasEntrega), sub: `meta ${META_ENTREGA}${deltaDias != null ? ` · ${deltaDias <= 0 ? '↓' : '↑'} ${Math.abs(deltaDias).toFixed(1)} vs 90 d prev.` : ''}`, color: res.diasEntrega != null && res.diasEntrega > META_ENTREGA ? (theme.orange || '#FF9500') : undefined },
             ]}>
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {puedeEditar && <Boton primario icon={Plus} onClick={() => setHoja({ tipo: 'nuevo' })} title="Desde la OC del cliente o desde una factura del ERP">Nuevo pedido</Boton>}
               {puedeEditar && <Boton icon={Plus} onClick={() => setHoja({ tipo: 'cotizacion' })}>Cotización</Boton>}
-              {puedeEditar && <Boton primario icon={Plus} onClick={() => setHoja({ tipo: 'oc' })}>Registrar OC</Boton>}
-              {puedeEditar && <Boton icon={ClipboardPaste} onClick={() => setHoja({ tipo: 'pegar' })}>Pegar correo</Boton>}
               <Boton icon={Share2} onClick={compartirEstatus}>Compartir estatus</Boton>
               <Pill tone="inverse" size="xs" style={{ background: 'transparent', color: theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)' }}>
                 {data?.sync?.error ? `ERP sin sincronizar: ${data.sync.error}` : `ERP al corte de las ${cargadoTxt}${isFetching ? ' · actualizando…' : ''}`}
@@ -132,6 +132,8 @@ export default function TrackingPedidos() {
       <FormOC abierto={hoja?.tipo === 'oc' || hoja?.tipo === 'pegar' || hoja?.tipo === 'folios' || hoja?.tipo === 'convertir'} onClose={() => setHoja(null)}
         modo={hoja?.tipo === 'pegar' ? 'pegar' : hoja?.tipo === 'folios' ? 'folios' : hoja?.tipo === 'convertir' ? 'convertir' : hoja?.oc ? 'editar' : 'nueva'}
         oc={hoja?.oc || null} cotizacion={hoja?.cotizacion || null} roadmap={data?.roadmapRows || []} roadmapMap={data?.roadmap} email={email} erpFacturas={data?.erpFacturas || []} onGuardado={(id) => { if (id) setAbierta(id); }} />
+      <NuevoPedido abierto={hoja?.tipo === 'nuevo'} onClose={() => setHoja(null)} facturasSinPedido={sinOC} email={email}
+        onElegirOC={(tipo) => setHoja({ tipo })} onCreado={(id) => { if (id) irA(id); }} />
       <FormEnvio abierto={hoja?.tipo === 'envio'} onClose={() => setHoja(null)} oc={hoja?.oc || null} envio={hoja?.envio || null} />
       <FormCotizacion abierto={hoja?.tipo === 'cotizacion'} onClose={() => setHoja(null)} cotizacion={hoja?.cotizacion || null} email={email} onConvertir={(c) => setHoja({ tipo: 'convertir', cotizacion: c })} />
     </div>
