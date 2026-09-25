@@ -80,7 +80,14 @@ export default function DetallePago({ pago, abierto, onCerrar, perfil, reglas, p
           {pago.fecha_programada && <Pill tone="gray" size="xs">pago {String(pago.fecha_programada).slice(5, 10).replace('-', '/')}</Pill>}
         </div>
 
-        {(d.filas || []).length > 0 && (
+        {d.kind === 'apoyo_producto' && (
+          <ListaAgrupada titulo="Productos apoyados" pie={d.bonificacion ? `Bonificación ${d.bonificacion.folio} · ${money(d.bonificacion.monto)} · ${d.cuadre === 'cuadra' ? 'cuadra' : d.cuadre === 'difiere' ? 'no cuadra' : ''}` : 'Sin bonificación del ERP todavía'}>
+            {(d.productos || []).map((l) => (
+              <Fila key={l.sku} titulo={<span style={{ fontFamily: MONO }}>{l.sku}</span>} sub={`${l.piezas} pz apoyadas · factura ${money(l.precio_factura)} − ${money(l.apoyo_pz)} = ${money(l.nuevo_costo)}${l.inv_restante != null ? ` · quedan ${l.inv_restante} pz` : ''}`} valor={money(l.monto)} chevron={false} />
+            ))}
+          </ListaAgrupada>
+        )}
+        {d.kind !== 'apoyo_producto' && (d.filas || []).length > 0 && (
           <ListaAgrupada titulo="Cálculo y evidencia"
                          pie={d.alcance != null ? `Alcance ${(d.alcance * 100).toFixed(0)} %${d.nivel ? ` · ${d.nivel}` : ''}` : undefined}>
             {(d.filas || []).map((f, i) => (

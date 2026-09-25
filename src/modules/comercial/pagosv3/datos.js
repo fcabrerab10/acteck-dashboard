@@ -212,7 +212,7 @@ export async function crearPagoManual({ datos, perfil }) {
     cliente: datos.cliente,
     concepto: datos.concepto,
     tipo: datos.tipo || 'otro',
-    categoria: datos.tipo === 'fijo' ? 'pagosFijos' : (datos.tipo === 'proteccion_precio' ? 'promociones' : (datos.tipo || 'otro')),
+    categoria: datos.tipo === 'fijo' ? 'pagosFijos' : (datos.tipo === 'proteccion_precio' || datos.tipo === 'apoyo_producto' ? 'promociones' : (datos.tipo || 'otro')),
     origen: 'manual', estado: 'calculado', estatus: 'pendiente',
     monto: Number(datos.monto) || 0,
     periodo: datos.periodo || null,

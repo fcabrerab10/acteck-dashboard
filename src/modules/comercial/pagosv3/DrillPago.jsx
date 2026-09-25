@@ -8,6 +8,7 @@ import { correoSolicitud, mailto } from './correo';
 import { siguienteEstado, faltaPara, ESTADO_META } from './estados';
 import { LineaTiempo, TablaEvidencia, mxn2, Nota, AreaTexto, Entrada, CampoInline, MONO } from './ui';
 import { leerBitacora, urlPdfNotaCredito } from './datos';
+import TablaApoyo from './TablaApoyo';
 
 export default function DrillPago({ pago, perfil, puedeEditar, reglaDestinatarios, onAccion, onRegistrarPago, onBorrar }) {
   const { theme } = useTheme();
@@ -74,8 +75,8 @@ export default function DrillPago({ pago, perfil, puedeEditar, reglaDestinatario
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 4px', fontFamily: TYPO.fontText }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr)', gap: 10 }}>
         <div style={cajita}>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, marginBottom: 6 }}>Cálculo y evidencia</div>
-          <TablaEvidencia detalle={pago.detalle} />
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, marginBottom: 6 }}>{pago.detalle?.kind === 'apoyo_producto' ? 'Productos apoyados' : 'Cálculo y evidencia'}</div>
+          {pago.detalle?.kind === 'apoyo_producto' ? <TablaApoyo productos={pago.detalle.productos} bonificacion={pago.detalle.bonificacion} /> : <TablaEvidencia detalle={pago.detalle} />}
           {pago.notas && <Nota style={{ marginTop: 6 }}>{pago.notas}</Nota>}
         </div>
         <div style={cajita}>

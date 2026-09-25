@@ -26,6 +26,7 @@ export const TIPO_META = {
   marketing:         { label: 'Marketing',           color: '#FF9500', tone: 'orange' },
   fijo:              { label: 'Fijo',                color: '#FF9500', tone: 'orange' },
   promocion:         { label: 'Promoción',           color: '#34C759', tone: 'green' },
+  apoyo_producto:    { label: 'Apoyo producto',      color: '#34C759', tone: 'green' },
   bonificacion:      { label: 'Bonificación',        color: '#34C759', tone: 'green' },
   otro:              { label: 'Otro',                color: '#8E8E93', tone: 'gray' },
 };

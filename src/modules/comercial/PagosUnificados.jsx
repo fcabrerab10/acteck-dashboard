@@ -40,6 +40,9 @@ import PanelFondos from './pagosv3/PanelFondos';
 import PanelReglas from './pagosv3/PanelReglas';
 import PanelMarketing from './pagosv3/PanelMarketing';
 import FormPagoManual from './pagosv3/FormPagoManual';
+import FormApoyoProducto from './pagosv3/FormApoyoProducto';
+import { PillCuadre } from './pagosv3/TablaApoyo';
+import { cuadreCon } from './pagosv3/apoyos';
 import HojaRegistrarPago from './pagosv3/HojaRegistrarPago';
 
 const hoyISO = () => new Date().toISOString().slice(0, 10);
@@ -60,6 +63,7 @@ export default function PagosUnificados({ clienteKey = null }) {
   const [soloVencidos, setSoloVencidos] = useState(false);
   const [expandido, setExpandido] = useState(null);
   const [formManual, setFormManual] = useState(false);
+  const [formApoyo, setFormApoyo] = useState(false);       // ＋ Apoyo por producto (2026-09-24)
   const [registrando, setRegistrando] = useState(null);
   const [correoLoteTxt, setCorreoLoteTxt] = useState(null);
 
@@ -230,7 +234,9 @@ export default function PagosUnificados({ clienteKey = null }) {
     { key: 'cliente', label: 'Cliente', align: 'left', width: 110, render: (p) => <ClientePill clienteKey={p.cliente} /> },
     { key: 'tipo', label: 'Tipo', align: 'left', width: 150, render: (p) => <TipoPill tipo={p.tipo} origen={p.origen} /> },
     { key: 'monto', label: 'Monto', width: 100, render: (p) => <span style={MONO}>{mxn(p.monto)}</span> },
-    { key: 'base', label: 'Base', align: 'left', render: (p) => (
+    { key: 'base', label: 'Base', align: 'left', render: (p) => p.detalle?.kind === 'apoyo_producto' ? (
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 10.5, color: theme.textMuted }}>{(p.detalle.productos || []).length} producto{(p.detalle.productos || []).length === 1 ? '' : 's'} · {(p.detalle.piezas || 0).toLocaleString('es-MX')} pz<PillCuadre cuadre={cuadreCon(p.detalle.total, p.detalle.bonificacion)} bonificacion={p.detalle.bonificacion} /></span>
+    ) : (
       <span style={{ fontSize: 10.5, color: theme.textMuted }}>
         {p.detalle?.base != null ? `${mxnCorto(p.detalle.base)}${p.detalle?.pct ? ` × ${(p.detalle.pct * 100).toFixed(2)} %` : ''}` : (p.origen === 'manual' ? 'captura manual' : '—')}
       </span>
@@ -314,6 +320,7 @@ export default function PagosUnificados({ clienteKey = null }) {
         ]}
       >
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {puedeAlgo && <Boton icon={Plus} onClick={() => setFormApoyo(true)} title="Apoyo económico a un producto que se alentó; entra al flujo de pagos con sus productos">Apoyo por producto</Boton>}
           {puedeAlgo && <Boton icon={Plus} onClick={() => setFormManual(true)}>Pago manual</Boton>}
           {puedeAlgo && porSolicitar.length > 0 && <Boton icon={Send} onClick={solicitarCalculados}>Solicitar los calculados ({porSolicitar.length})</Boton>}
           <ExportMenu titulo={`Pagos · ${nombreSel} · ${MESES[mes - 1]} ${anio}`} subtitulo={frase} excel={exportarLote} pdf={{ ref: rootRef }} />
@@ -437,6 +444,12 @@ export default function PagosUnificados({ clienteKey = null }) {
         clientes={visibles.filter(puedeEditar)} clienteInicial={clienteSel}
         anio={anio} mes={mes}
         onGuardar={(datos) => recargarTras(() => crearPagoManual({ datos, perfil }), 'Pago manual creado')}
+      />
+
+      <FormApoyoProducto
+        abierto={formApoyo} onCerrar={() => setFormApoyo(false)}
+        clientes={visibles.filter(puedeEditar)} clienteInicial={clienteSel} anio={anio} mes={mes} pagos={d.pagos || []}
+        onGuardar={(datos) => recargarTras(() => crearPagoManual({ datos, perfil }), 'Apoyo por producto creado')}
       />
 
       <HojaRegistrarPago
