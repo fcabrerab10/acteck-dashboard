@@ -59,3 +59,13 @@ export function detalleApoyo(productos, bonificacion) {
     filas: filasEvidencia(c.lineas),
   };
 }
+
+/** Historial de apoyos de un SKU para un cliente a partir de los pagos cargados: [{ fecha, folio, piezas, apoyo_pz, monto, estado }]. */
+export function historialSku(pagos = [], clienteKey, sku) {
+  const out = [];
+  for (const p of pagos || []) {
+    if (p?.cliente !== clienteKey || p?.detalle?.kind !== 'apoyo_producto' || p.estado === 'cancelado') continue;
+    for (const l of p.detalle.productos || []) if (l.sku === sku) out.push({ fecha: p.detalle.bonificacion?.fecha || p.periodo || String(p.created_at || '').slice(0, 10), folio: p.detalle.bonificacion?.folio || null, piezas: N(l.piezas), apoyo_pz: N(l.apoyo_pz), monto: N(l.monto), estado: p.estado, pago_id: p.id });
+  }
+  return out.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+}

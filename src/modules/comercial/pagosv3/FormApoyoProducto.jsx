@@ -11,7 +11,7 @@ import CampoNumero from '../propuestas/CampoNumero';
 import M from './motor';
 import { CLIENTE_LABEL } from './reglas';
 import { mxn, mxn2, MONO, Nota, CampoInline, Selector, AreaTexto, Entrada } from './ui';
-import { calcularApoyo, conceptoApoyo, detalleApoyo } from './apoyos';
+import { calcularApoyo, conceptoApoyo, detalleApoyo, historialSku } from './apoyos';
 import { buscarSkus, datosProducto, bonificacionesErp, bonificacionesLigadas } from './datosApoyos';
 import { PillCuadre } from './TablaApoyo';
 
@@ -112,7 +112,11 @@ export default function FormApoyoProducto({ abierto, onCerrar, clientes, cliente
                 <tbody>
                   {calc.lineas.map((l) => (
                     <tr key={l.sku}>
-                      <td style={{ ...td, textAlign: 'left' }}><span style={{ fontWeight: 600 }}>{l.sku}</span><div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.descripcion}</div></td>
+                      <td style={{ ...td, textAlign: 'left' }}>
+                        <span style={{ fontWeight: 600 }}>{l.sku}</span>
+                        <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.descripcion}</div>
+                        {(() => { const h = historialSku(pagos, cliente, l.sku); if (!h.length) return null; const tot = h.reduce((s, x) => s + x.monto, 0); return <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.orange || '#FF9500' }} title={h.map((x) => `${x.fecha} · ${x.piezas} pz × ${mxn2(x.apoyo_pz)} = ${mxn(x.monto)}${x.folio ? ` · NC ${x.folio}` : ''} · ${x.estado}`).join('\n')}>Ya lleva {h.length} apoyo{h.length === 1 ? '' : 's'} · {mxn(tot)} · último {h[0].fecha}</div>; })()}
+                      </td>
                       <td style={td}><CampoNumero value={l.piezas} onChange={(n) => editar(l.sku, { piezas: n })} ancho={68} invalido={!(l.piezas > 0)} ariaLabel={`Piezas apoyadas de ${l.sku}`} /></td>
                       <td style={td}><CampoNumero value={l.precio_factura} decimales={2} onChange={(n) => editar(l.sku, { precio_factura: n })} ancho={84} title={l.factura_fecha ? `Última factura ${l.factura_fecha}` : 'Sin factura reciente: captúralo'} ariaLabel={`Precio de factura de ${l.sku}`} /></td>
                       <td style={td}><CampoNumero value={l.apoyo_pz} decimales={2} onChange={(n) => editar(l.sku, { apoyo_pz: n })} ancho={76} acento invalido={!(l.apoyo_pz > 0)} ariaLabel={`Apoyo por pieza de ${l.sku}`} /></td>
