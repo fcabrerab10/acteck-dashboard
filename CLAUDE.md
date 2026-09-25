@@ -220,6 +220,10 @@ cifras en dinero) → flujo del mes en pagos (5 etapas, filtran la tabla) → ta
 secundaria a la vez (Segmented Cálculo · Marketing · Fondo · Reglas · Historial). Regla: ninguna cifra se repite en dos
 bloques. Detalle en `docs/PAGOS_V3.md`.
 
+### Apoyos por producto en Pagos (3.43.0 · 2026-09-24 · diseño B)
+
+Cuando un producto ya vendido se alenta en el sell out del cliente se le da un apoyo económico a ESE producto; el ERP lo bonifica en un documento general (p. ej. `BPRM-102` «Promoción general por lento desplazamiento», también `BPRM-101` temporada y `BINC-901` protección de precio) sin detalle por producto. El apoyo entra a Pagos como un pago más (`tipo = 'apoyo_producto'`, categoría `promociones`, mismo flujo) y el detalle vive en `pagos.detalle`: `{ kind:'apoyo_producto', productos:[{ sku, descripcion, piezas (inventario apoyado), precio_factura, apoyo_pz, nuevo_costo, monto, inv_restante }], bonificacion:{ venta_id, folio, fecha, concepto_codigo, concepto, monto }, total, piezas, cuadre, filas }` (`filas` mantiene compatible `TablaEvidencia`, el móvil y el Excel). Código: `pagosv3/apoyos.js` (puro: `calcularApoyo`, `cuadreCon` con tolerancia $1, `conceptoApoyo`, `detalleApoyo`; pruebas `scripts/test-pagos-apoyos.mjs`), `datosApoyos.js` (SKUs del roadmap, precio de la última `Factura` del cliente en `erp_ventas.precio_unidad_pesos`, inventario restante de `v_inventario_cliente_ultimo`, documentos de bonificación = `erp_ventas` rama SERVICIOS · `Bonificacion Venta` agrupados por `venta_id`, y cuáles ya están ligados a un pago), `FormApoyoProducto.jsx` (botón «＋ Apoyo por producto» en `PagosUnificados`), `TablaApoyo.jsx` (drill web + `PillCuadre` en la columna Base). Móvil: `DetallePago.jsx` lista los productos. Regla: Σ monto de productos = bonificación (si difiere, se avisa y se puede guardar; se puede capturar sin bonificación y ligarla después). Pendiente: mostrar el apoyo acumulado por SKU en Sell Out del cliente.
+
 ### Regla de ancho (2026-09-12)
 
 Navegar horizontalmente lo menos posible: lo que va dentro de una tarjeta cabe en su ancho. `TablaCompacta` pinta el
