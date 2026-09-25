@@ -71,11 +71,11 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Acteck Dashboard',
+        name: 'Acteck',
         short_name: 'Acteck',
         description: 'Dashboard de administración de clientes — Acteck y Balam Rush.',
         theme_color: '#000000',
-        background_color: '#F5F5F7',
+        background_color: '#000000',
         display: 'standalone',
         orientation: 'any',
         start_url: '/',
@@ -90,6 +90,12 @@ export default defineConfig({
           {
             src: '/pwa/icon-512.png',
             sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa/icon-1024.png',
+            sizes: '1024x1024',
             type: 'image/png',
             purpose: 'any',
           },

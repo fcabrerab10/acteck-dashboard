@@ -251,4 +251,10 @@ export function applyThemeToRoot(theme) {
     if (typeof v === 'string') root.style.setProperty(`--t-${k}`, v);
   }
   root.setAttribute('data-theme', theme.key);
+  root.style.background = theme.bg;
+  root.style.colorScheme = theme.key === 'claro' || theme.key === 'marfil' ? 'light' : 'dark';
+  // Para el arranque sin destello (index.html lee esto antes del primer paint).
+  try { localStorage.setItem('acteck_tema_v1', JSON.stringify({ key: theme.key, bg: theme.bg, text: theme.text })); } catch { /* privado */ }
+  const m = document.querySelector('meta[name="theme-color"]:not([media])');
+  if (m) m.content = theme.bg;
 }

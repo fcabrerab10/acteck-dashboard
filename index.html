@@ -6,6 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+    <!-- Sin destello claro al arrancar (2026-09-25): el tema vive en el perfil (Supabase) y llega después del
+         primer paint, así que la pantalla nacía blanca y luego se ponía oscura. applyThemeToRoot guarda el último
+         tema en localStorage (acteck_tema_v1) y este script lo pinta ANTES de que cargue React; si no hay nada
+         guardado, sigue al sistema. Es el único script en línea del shell y no bloquea nada. -->
+    <script>
+      (function () {
+        try {
+          var g = null;
+          try { g = JSON.parse(localStorage.getItem('acteck_tema_v1') || 'null'); } catch (e) { g = null; }
+          var osc = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var bg = g && g.bg ? g.bg : (osc ? '#000000' : '#F5F5F7');
+          var tx = g && g.text ? g.text : (osc ? '#F5F5F7' : '#1D1D1F');
+          var key = g && g.key ? g.key : (osc ? 'midnight' : 'claro');
+          var r = document.documentElement;
+          r.setAttribute('data-theme', key);
+          r.style.setProperty('--t-bg', bg);
+          r.style.setProperty('--t-text', tx);
+          r.style.background = bg;
+          r.style.colorScheme = key === 'claro' || key === 'marfil' ? 'light' : 'dark';
+          var m = document.querySelector('meta[name="theme-color"]:not([media])');
+          if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
+          m.content = bg;
+        } catch (e) {}
+      })();
+    </script>
     <!-- iOS · instalar en pantalla de inicio (app móvil V3) -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
