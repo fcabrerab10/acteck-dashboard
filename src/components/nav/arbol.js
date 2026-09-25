@@ -70,7 +70,7 @@ const GRUPOS_BASE = [
         ver: (perfil) => CLIENTES_ORDEN.some((k) => puedeVerPestanaCliente(perfil, k, 'pagos')) },
       { pagina: 'propuestas',        label: 'Propuestas',            icon: ClipboardList },
       { pagina: 'estrategiaPrecios', label: 'Estrategia de Precios', icon: TrendingUp },
-      { pagina: 'forecastReservas',  label: 'Proyectos y abasto',    icon: Target },
+      { pagina: 'forecastReservas',  label: 'Proyectos y forecast',    icon: Target },
       { pagina: 'ordenesCompra',     label: 'Tracking Pedidos',      icon: FileCheck },
     ],
     clientes: true,

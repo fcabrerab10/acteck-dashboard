@@ -11,12 +11,16 @@ import { int } from '../../../lib/format';
 import { PROBABILIDADES, CLIENTES, PROB_TONE, PROB_LABEL, etiquetaMesLarga, claveMes } from './calculo';
 import { fechaCortaISO } from './textos';
 import { Campo, Entrada, AreaTexto, Selector } from './campos';
+import PrecioPicker from '../propuestas/PrecioPicker';
+import CampoNumero from '../propuestas/CampoNumero';
+import { LISTA_POR_CLIENTE } from '../propuestas/constantes';
+import { money } from '../../../lib/format';
 
 const OPC_CLIENTE = CLIENTES.map((c) => ({ id: c.key, label: c.label }));
 const OPC_PROB = PROBABILIDADES.map((p) => ({ id: p.id, label: p.label }));
 
 export default function HojaProyecto({
-  abierto, proyecto, mesInicial, horizonte = [], catalogoSkus = [], stock, arribos,
+  abierto, proyecto, mesInicial, horizonte = [], catalogoSkus = [], stock, arribos, precios,
   puedeEditar = false, guardando = false,
   onCerrar, onCrear, onActualizar, onEliminar, onGuardarLinea, onEliminarLinea, onReservarTodo, onPedirCompra, onAbrirSku,
 }) {
@@ -27,6 +31,10 @@ export default function HojaProyecto({
   const [busca, setBusca] = useState('');
   const [piezasNuevas, setPiezasNuevas] = useState('');
   const [skuSel, setSkuSel] = useState(null);
+  const [precioNuevo, setPrecioNuevo] = useState({ listaSel: '', precio: 0 });
+  // Precio por defecto al elegir SKU: la lista natural del cliente (LISTA_POR_CLIENTE) o la primera disponible; editable y con personalizado.
+  const preciosDe = (sku) => precios?.get?.(sku) || {};
+  const precioDefault = (sku, cliente) => { const m = preciosDe(sku); const nat = LISTA_POR_CLIENTE[cliente]; const lista = m[nat] != null ? nat : Object.keys(m)[0] || ''; return { listaSel: lista, precio: lista ? m[lista] : 0 }; };
 
   const opcMeses = useMemo(() => {
     const base = horizonte.map((m) => ({ id: m.clave, label: m.labelLargo || m.label }));
@@ -79,12 +87,14 @@ export default function HojaProyecto({
     const pz = Math.round(Number(piezasNuevas)) || 0;
     if (!sku) { toast.error('Elige un SKU'); return; }
     if (pz <= 0) { toast.error('Pon las piezas'); return; }
+    const pr = precioNuevo.listaSel || precioNuevo.precio ? precioNuevo : precioDefault(sku, campos.cliente);
+    const precio = Number(pr.precio) || 0, lista = pr.listaSel || null;
     if (nuevo) {
-      setLineasNuevas((ls) => [...ls.filter((l) => l.sku !== sku), { sku, piezas: pz, descripcion: skuSel?.descripcion || '' }]);
+      setLineasNuevas((ls) => [...ls.filter((l) => l.sku !== sku), { sku, piezas: pz, precio, lista, descripcion: skuSel?.descripcion || '' }]);
     } else {
-      onGuardarLinea?.(proyecto.id, { sku, piezas: pz });
+      onGuardarLinea?.(proyecto.id, { sku, piezas: pz, precio, lista });
     }
-    setBusca(''); setPiezasNuevas(''); setSkuSel(null);
+    setBusca(''); setPiezasNuevas(''); setSkuSel(null); setPrecioNuevo({ listaSel: '', precio: 0 });
   };
 
   const lineas = nuevo ? lineasNuevas : (proyecto?.lineas || []);
@@ -92,7 +102,7 @@ export default function HojaProyecto({
   return (
     <HojaLateral abierto={abierto} onClose={onCerrar} theme={theme} ancho={560}
       titulo={nuevo ? 'Nuevo proyecto' : proyecto?.nombre || 'Proyecto'}
-      sub={nuevo ? 'Una venta comprometida: cliente, mes y SKUs.' : `${PROB_LABEL[proyecto?.probabilidad] || ''} · ${int(proyecto?.pz || 0)} pz · ${proyecto?.cubiertoPct == null ? '—' : `${Math.round(proyecto.cubiertoPct)} % cubierto`}`}
+      sub={nuevo ? 'Una venta comprometida: cliente, mes, SKUs y precio.' : `${PROB_LABEL[proyecto?.probabilidad] || ''} · ${money(proyecto?.monto || 0)} · ${int(proyecto?.pz || 0)} pz · ${proyecto?.cubiertoPct == null ? '—' : `${Math.round(proyecto.cubiertoPct)} % cubierto`}`}
       acciones={!nuevo && <Pill tone={PROB_TONE[proyecto?.probabilidad] || 'gray'}>{PROB_LABEL[proyecto?.probabilidad]}</Pill>}>
 
       <div style={{ display: 'grid', gap: 10, padding: '4px 4px 14px' }}>
@@ -121,18 +131,18 @@ export default function HojaProyecto({
       <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 12 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, padding: '0 4px' }}>
           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, color: theme.text }}>SKUs del proyecto</span>
-          <span style={{ fontSize: 10.5, color: theme.textMuted }}>{lineas.length} · {int(lineas.reduce((s, l) => s + Number(l.piezas || 0), 0))} pz</span>
+          <span style={{ fontSize: 10.5, color: theme.textMuted }}>{lineas.length} · {int(lineas.reduce((s, l) => s + Number(l.piezas || 0), 0))} pz · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay }}>{money(lineas.reduce((s, l) => s + (Number(l.piezas) || 0) * (Number(l.precio) || 0), 0))}</strong></span>
         </div>
 
         {puedeEditar && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 6, alignItems: 'center', padding: '0 4px 8px', position: 'relative' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 170px auto', gap: 6, alignItems: 'center', padding: '0 4px 8px', position: 'relative' }}>
             <div style={{ position: 'relative' }}>
               <Search size={13} style={{ position: 'absolute', left: 9, top: 9, color: theme.textMuted }} />
               <Entrada valor={busca} onChange={(v) => { setBusca(v); setSkuSel(null); }} placeholder="Buscar SKU" style={{ paddingLeft: 26 }} onEnter={agregarSku} />
               {sugerencias.length > 0 && !skuSel && (
                 <div style={{ position: 'absolute', zIndex: 2, top: 34, left: 0, right: 0, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
                   {sugerencias.map((s) => (
-                    <button key={s.sku} type="button" onClick={() => { setSkuSel(s); setBusca(s.sku); }}
+                    <button key={s.sku} type="button" onClick={() => { setSkuSel(s); setBusca(s.sku); setPrecioNuevo(precioDefault(s.sku, campos.cliente)); }}
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 0, background: 'transparent', color: theme.text, fontFamily: TYPO.fontText, fontSize: 11.5, cursor: 'pointer' }}>
                       <strong style={{ fontFamily: TYPO.fontDisplay }}>{s.sku}</strong>
                       <span style={{ color: theme.textMuted }}> · {s.descripcion || 'sin descripción'}</span>
@@ -146,7 +156,8 @@ export default function HojaProyecto({
                 </div>
               )}
             </div>
-            <Entrada tipo="number" min={0} valor={piezasNuevas} onChange={setPiezasNuevas} placeholder="pz" onEnter={agregarSku} />
+            <CampoNumero value={piezasNuevas === '' ? null : Number(piezasNuevas)} onChange={(n) => setPiezasNuevas(n == null ? '' : String(n))} onEnter={agregarSku} placeholder="pz" ancho={80} alto={30} ariaLabel="Piezas" />
+            {skuSel ? <PrecioPicker r={{ precios: preciosDe(skuSel.sku) }} val={precioNuevo} onChange={(patch) => setPrecioNuevo((v) => ({ ...v, ...patch }))} /> : <span style={{ fontSize: 10.5, color: theme.textMuted }}>precio: elige el SKU</span>}
             <Boton icon={Plus} onClick={agregarSku}>Agregar</Boton>
           </div>
         )}
@@ -154,8 +165,8 @@ export default function HojaProyecto({
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontFamily: TYPO.fontDisplay, fontSize: 11 }}>
           <thead>
             <tr>
-              {['SKU', 'Pz', 'Disp. hoy', 'Tránsito', 'Falta', ''].map((h, i) => (
-                <th key={h + i} style={{ textAlign: i === 0 ? 'left' : i === 5 ? 'center' : 'right', padding: '4px 6px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>{h}</th>
+              {['SKU', 'Pz', 'Precio', 'Monto', 'Disp. hoy', 'Llega', 'Falta', ''].map((h, i) => (
+                <th key={h + i} style={{ textAlign: i === 0 ? 'left' : i === 7 ? 'center' : 'right', padding: '4px 6px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -180,10 +191,16 @@ export default function HojaProyecto({
                         style={{ height: 24, width: 74, textAlign: 'right', fontSize: 11 }} />
                     ) : int(l.piezas)}
                   </td>
+                  <td style={{ padding: '5px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.border}` }}>
+                    {puedeEditar ? (
+                      <PrecioPicker r={{ precios: preciosDe(l.sku) }} val={{ listaSel: l.lista || (Number(l.precio) > 0 && !Object.values(preciosDe(l.sku)).includes(Number(l.precio)) ? '__custom' : ''), precio: Number(l.precio) || 0 }}
+                        onChange={(patch) => { const v = { listaSel: patch.listaSel ?? l.lista, precio: patch.precio ?? l.precio }; if (nuevo) setLineasNuevas((ls) => ls.map((x) => (x.sku === l.sku ? { ...x, precio: v.precio, lista: v.listaSel } : x))); else onGuardarLinea?.(proyecto.id, { sku: l.sku, piezas: l.piezas, reservado: l.reservado, precio: v.precio, lista: v.listaSel }); }} />
+                    ) : <span style={{ fontVariantNumeric: 'tabular-nums' }}>{Number(l.precio) > 0 ? money(l.precio) : '—'}</span>}
+                  </td>
+                  <td style={{ padding: '5px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.border}`, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{Number(l.precio) > 0 ? money((Number(l.piezas) || 0) * Number(l.precio)) : <span style={{ color: theme.orange || '#FF9500', fontWeight: 500 }}>sin precio</span>}</td>
                   <td style={{ padding: '5px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.border}`, fontVariantNumeric: 'tabular-nums', color: theme.textMuted }}>{int(disp)}</td>
                   <td style={{ padding: '5px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.border}`, fontVariantNumeric: 'tabular-nums', color: theme.textMuted }}>
-                    {enCamino ? int(enCamino) : '—'}
-                    {prox && <div style={{ fontSize: 9.5 }}>llega {fechaCortaISO(prox.eta)}</div>}
+                    {prox ? <><span style={{ color: theme.text }}>{fechaCortaISO(prox.eta)}</span><div style={{ fontSize: 9.5 }}>{int(prox.cantidad)} pz{enCamino > prox.cantidad ? ` · ${int(enCamino)} en total` : ''}</div></> : (enCamino ? `${int(enCamino)} pz sin ETA` : '—')}
                   </td>
                   <td style={{ padding: '5px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.border}`, fontVariantNumeric: 'tabular-nums', color: falta > 0 ? (theme.red || '#FF3B30') : theme.textMuted }}>{falta > 0 ? int(falta) : '—'}</td>
                   <td style={{ padding: '5px 6px', textAlign: 'center', borderBottom: `1px solid ${theme.border}` }}>
@@ -199,7 +216,7 @@ export default function HojaProyecto({
               );
             })}
             {!lineas.length && (
-              <tr><td colSpan={6} style={{ padding: '14px 6px', textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 11.5 }}>Todavía no tiene SKUs.</td></tr>
+              <tr><td colSpan={8} style={{ padding: '14px 6px', textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 11.5 }}>Todavía no tiene SKUs.</td></tr>
             )}
           </tbody>
         </table>

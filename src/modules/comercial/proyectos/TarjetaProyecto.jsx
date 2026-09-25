@@ -8,7 +8,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { EASE, DUR } from '../../../lib/motion';
 import { elevation } from '../../../lib/elevation';
 import { Pill } from '../../../components/kit';
-import { int } from '../../../lib/format';
+import { int, moneyCompact } from '../../../lib/format';
 import { PROB_LABEL, PROB_TONE, CLIENTE_LABEL, CLIENTES } from './calculo';
 import { pctCorto } from './textos';
 
@@ -42,7 +42,7 @@ export default function TarjetaProyecto({ proyecto: p, onAbrir, onMover, arrastr
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
           <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {CLIENTE_LABEL[p.cliente] || p.cliente} · {int(p.pz)} pz{p.skus ? ` · ${p.skus} SKU${p.skus === 1 ? '' : 's'}` : ''}
+            {CLIENTE_LABEL[p.cliente] || p.cliente} · <span style={{ color: theme.text, fontWeight: 600, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>{p.monto > 0 ? moneyCompact(p.monto) : 'sin precio'}</span> · {int(p.pz)} pz{p.skus ? ` · ${p.skus} SKU${p.skus === 1 ? '' : 's'}` : ''}
           </div>
         </div>
         {arrastrable && <GripVertical size={12} style={{ color: theme.textSubtle || theme.textMuted, opacity: hover ? 0.8 : 0.25, flexShrink: 0, marginTop: 2 }} />}

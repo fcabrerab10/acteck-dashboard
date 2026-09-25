@@ -46,7 +46,7 @@ export function useAbasto() {
     queryFn: async () => {
       const opcional = (p) => p.catch(() => []);
       const hoyISO = new Date().toISOString().slice(0, 10);
-      const [inventario, transito, leadTimes, leadProveedor, roadmap, catalogo, embarques] = await Promise.all([
+      const [inventario, transito, leadTimes, leadProveedor, roadmap, catalogo, embarques, preciosLista] = await Promise.all([
         fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
         fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,embarques,embarques_detalle'),
         opcional(fetchAll('v_lead_time_sku', 'sku,dias_promedio,muestras,supplier_principal,familia')),
@@ -58,7 +58,11 @@ export function useAbasto() {
         // Es el caso de Audive (AV-*): 19 SKUs en producción con arribo a CEDIS.
         opcional(fetchAll('embarques_compras', 'codigo,descripcion,arribo_cedis,estatus',
           (q) => q.or(`arribo_cedis.gte.${hoyISO},arribo_cedis.is.null`))),
+        // Listas de precio por SKU (v_estrategia_precios_lista): el precio de cada línea se elige de aquí o es personalizado.
+        opcional(fetchAll('v_estrategia_precios_lista', 'sku,lista,precio')),
       ]);
+      const precios = new Map();
+      for (const r of preciosLista) { if (!r.sku || !r.lista) continue; const m = precios.get(r.sku) || {}; m[r.lista] = Number(r.precio) || 0; precios.set(r.sku, m); }
       const descripciones = new Map();
       for (const c of catalogo) if (c.articulo) descripciones.set(c.articulo, c.descripcion || '');
       for (const r of roadmap) if (r.sku && r.descripcion) descripciones.set(r.sku, r.descripcion);
@@ -97,7 +101,7 @@ export function useAbasto() {
           enRoadmap: false, enTransito: true, etaTransito: info.eta, estatusTransito: info.estatus,
         });
       }
-      return { inventario, transito, leadTimes, leadProveedor, descripciones, catalogoSkus };
+      return { inventario, transito, leadTimes, leadProveedor, descripciones, catalogoSkus, precios };
     },
   });
 }
@@ -140,7 +144,7 @@ export async function crearProyecto(campos, perfil) {
     // `data.id` puede ser un id temporal (tmp_…): el buzón lo sustituye por el real al sincronizar.
     await escribir({
       tabla: 'proyecto_lineas', op: 'insert', origen: 'Proyectos', titulo: payload.nombre,
-      filas: lineas.map((l) => ({ proyecto_id: data.id, sku: l.sku, piezas: Math.round(Number(l.piezas)) || 0, reservado: Math.round(Number(l.reservado)) || 0, notas: l.notas || null })),
+      filas: lineas.map((l) => ({ proyecto_id: data.id, sku: l.sku, piezas: Math.round(Number(l.piezas)) || 0, reservado: Math.round(Number(l.reservado)) || 0, precio: l.precio == null || l.precio === '' ? null : Number(l.precio) || 0, lista: l.lista || null, notas: l.notas || null })),
     });
   }
   if (!offline) await invalidarProyectos();
@@ -165,6 +169,8 @@ export async function guardarLinea(proyectoId, linea) {
     piezas: Math.round(Number(linea.piezas)) || 0,
     reservado: Math.round(Number(linea.reservado)) || 0,
     notas: linea.notas || null,
+    ...(linea.precio !== undefined ? { precio: linea.precio === null || linea.precio === '' ? null : Number(linea.precio) || 0 } : {}),
+    ...(linea.lista !== undefined ? { lista: linea.lista || null } : {}),
   };
   const { offline } = await escribir({ tabla: 'proyecto_lineas', op: 'upsert', filas: payload, onConflict: 'proyecto_id,sku', origen: 'Proyectos', titulo: linea.sku });
   if (!offline) await invalidarProyectos();

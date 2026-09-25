@@ -116,7 +116,7 @@ async function stock(i, ctx) {
     lineas.push(`En camino ${int(N(t.cantidad))} pz · ${t.embarques} embarque${N(t.embarques) === 1 ? '' : 's'} · llega ${fmtCorta(t.eta_mas_cercana)}${det[0]?.po ? ` (${det[0].po}${det[0].estatus ? ` · ${String(det[0].estatus).toLowerCase()}` : ''})` : ''}`);
   } else lineas.push('Nada en camino');
   if (i.tipo === 'transito') {
-    return { titulo: `${sku} · en camino`, cifra: t ? `${int(N(t.cantidad))} pz` : '0 pz', sub: t ? `llega ${fmtCorta(t.eta_mas_cercana)} · ${t.embarques} embarque${N(t.embarques) === 1 ? '' : 's'}` : 'No hay PO abierta para este SKU', lineas: [desc, r ? `Stock hoy ${int(N(r.inv_actual_piezas))} pz` : ''].filter(Boolean), abrir: ir('Abrir Inventario', 'inventarioGlobal', null, { sku }), tambien: [ir('Proyectos y abasto', 'forecastReservas'), ir('S&OP', 'forecastClientes')] };
+    return { titulo: `${sku} · en camino`, cifra: t ? `${int(N(t.cantidad))} pz` : '0 pz', sub: t ? `llega ${fmtCorta(t.eta_mas_cercana)} · ${t.embarques} embarque${N(t.embarques) === 1 ? '' : 's'}` : 'No hay PO abierta para este SKU', lineas: [desc, r ? `Stock hoy ${int(N(r.inv_actual_piezas))} pz` : ''].filter(Boolean), abrir: ir('Abrir Inventario', 'inventarioGlobal', null, { sku }), tambien: [ir('Proyectos y forecast', 'forecastReservas'), ir('S&OP', 'forecastClientes')] };
   }
   return { titulo: `${sku} · stock`, cifra: r ? `${int(N(r.inv_actual_piezas))} pz` : '0 pz', sub: desc || (r ? '' : 'Sin inventario comercial'), lineas, abrir: ir('Abrir Inventario', 'inventarioGlobal', null, { sku }), tambien: [ir('Sell In consolidado', 'sellIn', null, { sku }), ir('Estrategia de Precios', 'estrategiaPrecios')] };
 }
@@ -215,7 +215,7 @@ async function inventarioEmpresa(i, ctx) {
   if (!(perfil?.es_super_admin || puedeVerPestanaGlobal(perfil, 'inventario_global'))) return sinPermiso('el inventario');
   const r = (await q1(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,inv_actual_disponible,dias_inv,skus_con_stock,piezas_pendientes')))[0];
   if (!r) return { titulo: 'Inventario comercial', cifra: '—', sub: 'Sin datos', lineas: [], abrir: ir('Abrir Inventario', 'inventarioGlobal'), tambien: [] };
-  return { titulo: 'Inventario comercial (Inv Actual)', cifra: moneyCompact(N(r.inv_actual)), sub: `${int(N(r.inv_actual_piezas))} piezas · ${int(N(r.skus_con_stock))} SKUs con stock`, lineas: [r.dias_inv != null ? `${int(N(r.dias_inv))} días de inventario` : '', N(r.piezas_pendientes) ? `${int(N(r.piezas_pendientes))} piezas en camino` : ''].filter(Boolean), abrir: ir('Abrir Inventario', 'inventarioGlobal'), tambien: [ir('S&OP', 'forecastClientes'), ir('Proyectos y abasto', 'forecastReservas')] };
+  return { titulo: 'Inventario comercial (Inv Actual)', cifra: moneyCompact(N(r.inv_actual)), sub: `${int(N(r.inv_actual_piezas))} piezas · ${int(N(r.skus_con_stock))} SKUs con stock`, lineas: [r.dias_inv != null ? `${int(N(r.dias_inv))} días de inventario` : '', N(r.piezas_pendientes) ? `${int(N(r.piezas_pendientes))} piezas en camino` : ''].filter(Boolean), abrir: ir('Abrir Inventario', 'inventarioGlobal'), tambien: [ir('S&OP', 'forecastClientes'), ir('Proyectos y forecast', 'forecastReservas')] };
 }
 
 const MOTOR = { cuota, ventas, sellout, stock, transito: stock, pendientes, reunion, pagos, cobranza, margen, inventarioEmpresa };

@@ -250,3 +250,37 @@ test('el filtro por cliente sólo deja los proyectos de ese cliente', () => {
   assert.equal(r.porProyecto[0].cliente, 'pcel');
   assert.equal(r.celdaPorSkuMes.get('SKU1|2026-10').necesidad, 100);
 });
+
+// ── Proyectos y forecast (2026-09-25): dinero, días hábiles y arribos próximos ──
+test('el monto del proyecto es Σ piezas × precio y el tablero suma por mes y cliente', async () => {
+  const { tablero: tab } = await import('../src/modules/comercial/proyectos/calculo.js');
+  const r = calcular({
+    proyectos: [proyecto('a', 10), proyecto('b', 10, { cliente: 'pcel', probabilidad: 'prospecto' }), proyecto('c', 10, { probabilidad: 'cancelado' })],
+    lineas: [linea('l1', 'a', 'SKU1', 100, { precio: 250 }), linea('l2', 'a', 'SKU2', 10), linea('l3', 'b', 'SKU1', 4, { precio: 1000 }), linea('l4', 'c', 'SKU1', 99, { precio: 9 })],
+    inventario: [{ sku: 'SKU1', disponible: 1000 }], hoy: HOY,
+  });
+  const a = r.porProyecto.find((p) => p.id === 'a');
+  assert.equal(a.monto, 25000); assert.equal(a.sinPrecio, 1);
+  const col = tab(r).find((c) => c.clave === '2026-10');
+  assert.equal(col.monto, 29000, 'el cancelado no suma');
+  assert.equal(col.montoPorCliente.digitalife, 25000); assert.equal(col.montoPorCliente.pcel, 4000);
+  assert.equal(col.montoPorProb.prospecto, 4000);
+  assert.equal(r.resumen.monto, 29000); assert.equal(r.resumen.montoMesActual, 29000);
+});
+
+test('días hábiles: viernes + 3 hábiles = miércoles; entre viernes y miércoles hay 3', async () => {
+  const { sumarDiasHabiles, diasHabilesEntre } = await import('../src/modules/comercial/proyectos/calculo.js');
+  assert.equal(sumarDiasHabiles('2026-10-16', 3), '2026-10-21');   // vie 16 oct → mié 21
+  assert.equal(diasHabilesEntre('2026-10-16', '2026-10-21'), 3);
+  assert.equal(diasHabilesEntre('2026-10-21', '2026-10-16'), -3);
+  assert.equal(diasHabilesEntre('2026-10-17', '2026-10-19'), 1);   // sáb → lun
+});
+
+test('arribosProximos: el embarque más cercano por SKU de proyecto activo, con días hábiles', async () => {
+  const { arribosProximos } = await import('../src/modules/comercial/proyectos/calculo.js');
+  const transito = [{ sku: 'SKU1', cantidad: 700, embarques_detalle: [{ po: 'ABT1', eta: '2026-10-20', cantidad: 500 }, { po: 'ABT2', eta: '2026-11-02', cantidad: 200 }, { po: 'ABT0', eta: '2026-10-01', cantidad: 50 }] }];
+  const r = calcular({ proyectos: [proyecto('a', 11)], lineas: [linea('l1', 'a', 'SKU1', 100, { precio: 10 })], inventario: [], transito, hoy: HOY });
+  const arr = arribosProximos(r, transito, HOY);   // hoy jue 15 oct
+  assert.equal(arr.length, 1); assert.equal(arr[0].eta, '2026-10-20'); assert.equal(arr[0].po, 'ABT1'); assert.equal(arr[0].cantidad, 500);
+  assert.equal(arr[0].diasHabiles, 3, 'jue 15 → mar 20 = vie, lun, mar');
+});

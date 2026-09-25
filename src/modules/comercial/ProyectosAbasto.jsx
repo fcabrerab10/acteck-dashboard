@@ -16,7 +16,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaGlobal } from '../../lib/permisos';
-import { int } from '../../lib/format';
+import { int, moneyCompact } from '../../lib/format';
 import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando, toast } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
@@ -164,7 +164,7 @@ export default function ProyectosAbasto() {
   return (
     <div ref={rootRef} data-stagger style={{ display: 'grid', gap: 12, fontFamily: TYPO.fontText }}>
       <Hero
-        eyebrow="Clientes propios · abasto"
+        eyebrow="Proyectos y forecast · clientes propios"
         titulo={fraseHero(r)}
         sub={subHero(r)}
         stats={stats}>
@@ -175,7 +175,7 @@ export default function ProyectosAbasto() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 10 }}>
         <KpiCard eyebrow="Proyectos activos" big={int(r.proyectos)} bigSmall={r.enRiesgo ? `· ${r.enRiesgo} en riesgo` : null}
           sub={`${r.confirmados} confirmados · ${horizonte[0].label}–${horizonte.at(-1).label}`} />
-        <KpiCard eyebrow="Piezas comprometidas" big={int(r.piezas)} bigSmall="pz" sub={`${int(r.cubierto)} con respaldo hoy`} />
+        <KpiCard eyebrow="Monto comprometido" big={moneyCompact(r.monto || 0)} bigSmall={r.montoMesActual ? `· ${moneyCompact(r.montoMesActual)} este mes` : null} sub={`${int(r.piezas)} pz · ${moneyCompact(r.montoConfirmado || 0)} confirmado${r.sinPrecio ? ` · ${r.sinPrecio} línea${r.sinPrecio === 1 ? '' : 's'} sin precio` : ''}`} />
         <KpiCard eyebrow="% cubierto" big={pctCorto(r.cubiertoPct)} progress={r.cubiertoPct ?? 0}
           sub="Inventario disponible + tránsito que llega a tiempo" />
         <KpiCard eyebrow="SKUs por comprar" big={int(r.skusPorComprar)} bigSmall={r.piezasPorComprar ? `· ${int(r.piezasPorComprar)} pz` : null}
@@ -235,6 +235,7 @@ export default function ProyectosAbasto() {
         mesInicial={hojaProyecto?.mesClave}
         horizonte={horizonte}
         catalogoSkus={ab.data?.catalogoSkus || []}
+        precios={ab.data?.precios}
         stock={stock} arribos={arribos}
         puedeEditar={puedeEditar} guardando={ocupado}
         onCerrar={() => setHojaProyecto(null)}

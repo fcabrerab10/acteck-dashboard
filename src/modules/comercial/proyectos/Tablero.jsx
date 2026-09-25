@@ -5,7 +5,8 @@ import { Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { EASE, DUR } from '../../../lib/motion';
-import { int } from '../../../lib/format';
+import { int, moneyCompact } from '../../../lib/format';
+import { CLIENTE_LABEL, CLIENTES } from './calculo';
 import TarjetaProyecto from './TarjetaProyecto';
 
 export default function Tablero({ columnas, onAbrir, onMoverAMes, onMoverRelativo, onNuevo, puedeEditar }) {
@@ -41,6 +42,18 @@ export default function Tablero({ columnas, onAbrir, onMoverAMes, onMoverRelativ
                 {col.proyectos.length ? `${col.proyectos.length} · ${int(col.piezas)} pz` : '—'}
               </span>
             </header>
+            {col.monto > 0 && (
+              <div style={{ padding: '0 4px 2px' }} title={`Propuesto ${moneyCompact(col.montoPorProb?.prospecto || 0)} · probable ${moneyCompact(col.montoPorProb?.probable || 0)} · confirmado ${moneyCompact(col.montoPorProb?.confirmado || 0)}`}>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{moneyCompact(col.monto)}</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 3 }}>
+                  {CLIENTES.filter((c) => col.montoPorCliente?.[c.key] > 0).map((c) => (
+                    <span key={c.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: 999, background: c.color }} />{CLIENTE_LABEL[c.key]} {moneyCompact(col.montoPorCliente[c.key])}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {col.proyectos.map((p) => (
               <TarjetaProyecto key={p.id} proyecto={p} onAbrir={onAbrir}

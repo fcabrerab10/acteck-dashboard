@@ -40,7 +40,7 @@ import { calcularTodo, backorderPorSku, facturasSinOC } from '../src/modules/com
 import { taskPagosCalcular as _taskPagosCalcular, reglasAlertasPagos } from './_pagos.js';
 import { ETAPA_LABEL as ETAPA_LABEL_TRACKING, DIAS_DETENIDA } from '../src/modules/comercial/tracking/textos.js';
 // Proyectos y abasto V3 · el mismo motor puro que pinta la pantalla (FIFO por mes, lead time real).
-import { calcular as calcularProyectos, CLIENTE_LABEL as CLIENTE_LABEL_PROY, etiquetaMesLarga as mesLargoProy } from '../src/modules/comercial/proyectos/calculo.js';
+import { calcular as calcularProyectos, CLIENTE_LABEL as CLIENTE_LABEL_PROY, etiquetaMesLarga as mesLargoProy, arribosProximos as arribosProximosProy } from '../src/modules/comercial/proyectos/calculo.js';
 
 async function upsertChunks(rows) {
   const CHUNK = 200;
@@ -899,6 +899,7 @@ async function datosProyectos(hoy) {
     proyectos, lineas, inventario, transito, leadTimes,
     hoy: new Date(hoy.anio, hoy.mes - 1, hoy.dia),
   });
+  _proyectos.transito = transito;
   return _proyectos;
 }
 
@@ -949,6 +950,40 @@ async function reglaArriboTardeProyecto(hoy) {
       caduca_at: p.anio && p.mes ? new Date(Date.UTC(p.anio, p.mes, 15)).toISOString() : null,
       valor: tarde.reduce((s, f) => s + f.transitoDespues, 0),
       meta: { proyecto_id: p.id, skus: tarde.slice(0, 20) },
+    });
+  }
+  return out;
+}
+
+// ─── g-ter. arribo_proximo_proyecto / arribo_hoy_proyecto (2026-09-25) ───
+// Fernando: «un aviso 3 días antes, pero en día hábil, y un aviso el día que llega desde temprano, para mí
+// y para Karolina». generar-alertas corre a las 07:00 CDMX; el aviso "3 días hábiles antes" sale el día D en
+// que hoy + 3 hábiles = ETA (L–V), y el de "llega hoy" el mismo día del ETA. Sin para_usuario: lo ven todos
+// los internos con permiso de Proyectos (Fernando y Karolina) en la campana y en el resumen de las 09:00.
+async function reglasArribosProyecto(hoy) {
+  const res = await datosProyectos(hoy);
+  const hoyIso = `${hoy.anio}-${String(hoy.mes).padStart(2, '0')}-${String(hoy.dia).padStart(2, '0')}`;
+  const lista = arribosProximosProy(res, res.transito || [], new Date(hoy.anio, hoy.mes - 1, hoy.dia));
+  const out = [];
+  // Agrupa por proyecto + ETA para no mandar un aviso por SKU.
+  const grupos = new Map();
+  for (const a of lista) { const k = `${a.proyectoId}|${a.eta}`; const g = grupos.get(k) || { ...a, skus: [] }; g.skus.push(a); grupos.set(k, g); }
+  for (const g of grupos.values()) {
+    const tipo = g.eta === hoyIso ? 'arribo_hoy_proyecto' : g.diasHabiles === 3 ? 'arribo_proximo_proyecto' : null;
+    if (!tipo) continue;
+    const det = g.skus.slice(0, 8).map((x) => `${x.sku} (${fmtN(x.cantidad)} pz${x.po ? ` · ${x.po}` : ''})`).join(' · ');
+    const [, m, d] = g.eta.split('-').map(Number);
+    out.push({
+      tipo, severidad: tipo === 'arribo_hoy_proyecto' ? 'alta' : 'media',
+      clave: `${tipo}|${g.proyectoId}|${g.eta}`,
+      titulo: tipo === 'arribo_hoy_proyecto' ? `${g.nombre}: hoy llega el inventario` : `${g.nombre}: el inventario llega en 3 días hábiles (${d} ${MESES_CORTO[m - 1]})`,
+      detalle: `${CLIENTE_LABEL_PROY[g.cliente] || g.cliente} · ${det}. ${tipo === 'arribo_hoy_proyecto' ? 'Confirma la descarga en CEDIS y avisa al cliente.' : 'Prepara la entrega con el cliente.'}`,
+      cliente_key: g.cliente, sku: g.skus[0].sku,
+      area: 'forecast',
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'forecastReservas', label: 'Ver el proyecto' },
+      caduca_at: new Date(Date.UTC(hoy.anio, hoy.mes - 1, hoy.dia + (tipo === 'arribo_hoy_proyecto' ? 2 : 4))).toISOString(),
+      valor: g.skus.reduce((s2, x) => s2 + x.cantidad, 0),
+      meta: { proyecto_id: g.proyectoId, eta: g.eta, dias_habiles: g.diasHabiles, skus: g.skus.slice(0, 20) },
     });
   }
   return out;
@@ -1453,6 +1488,7 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['reserva_dia',            () => reglaReservasArribo(hoy, 'reserva_dia')],
     ['proyecto_sin_cobertura', () => reglaProyectoSinCobertura(hoy)],
     ['arribo_tarde_proyecto',  () => reglaArriboTardeProyecto(hoy)],
+    ['arribos_proyecto',       () => reglasArribosProyecto(hoy)],
     ['oc_detenida',            () => reglaOcDetenida(hoy)],
     ['oc_backorder_sin_po',    () => reglaOcBackorderSinPo(hoy)],
     ['factura_sin_oc',         () => reglaFacturaSinOc(hoy)],

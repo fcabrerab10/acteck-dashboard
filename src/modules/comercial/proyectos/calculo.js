@@ -20,7 +20,7 @@ export const divide = (a, b) => (!b ? null : a / b);
 
 // ─── Probabilidad ───
 export const PROBABILIDADES = [
-  { id: 'prospecto',  label: 'Prospecto',  tone: 'gray',   demanda: true },
+  { id: 'prospecto',  label: 'Propuesto',  tone: 'gray',   demanda: true },
   { id: 'probable',   label: 'Probable',   tone: 'blue',   demanda: true },
   { id: 'confirmado', label: 'Confirmado', tone: 'green',  demanda: true },
   { id: 'entregado',  label: 'Entregado',  tone: 'purple', demanda: false },
@@ -255,13 +255,17 @@ export function calcular({
   const porProyecto = visibles.map((p) => {
     const ls = lineasPorProyecto.get(p.id) || [];
     const clave = p.anio && p.mes ? claveMes(p.anio, p.mes) : null;
-    let pz = 0, cubierto = 0, reservado = 0;
+    let pz = 0, cubierto = 0, reservado = 0, monto = 0, montoCubierto = 0, sinPrecio = 0;
     const faltantes = [];
     for (const l of ls) {
       const piezas = N(l.piezas);
       pz += piezas; reservado += N(l.reservado);
+      // Dinero: piezas × precio de la línea (lista del cliente o personalizado). Sin precio no suma y se cuenta aparte.
+      const precio = N(l.precio);
+      if (precio > 0) monto += piezas * precio; else if (piezas > 0) sinPrecio += 1;
       const cub = idsDemanda.has(p.id) ? Math.min(piezas, cubiertoPorLinea.get(`${p.id}|${l.sku}`) || 0) : piezas;
       cubierto += cub;
+      if (precio > 0) montoCubierto += cub * precio;
       const falta = Math.max(0, piezas - cub);
       if (falta > 0.5) {
         const cel = clave ? celdaPorSkuMes.get(`${l.sku}|${clave}`) : null;
@@ -277,6 +281,7 @@ export function calcular({
     return {
       ...p,
       clave, skus: ls.length, lineas: ls,
+      monto: Math.round(monto), montoCubierto: Math.round(montoCubierto), sinPrecio,
       pz, reservado, cubierto: Math.round(cubierto),
       cubiertoPct: pz > 0 ? Math.min(100, (cubierto / pz) * 100) : null,
       faltante: Math.max(0, Math.round(pz - cubierto)),
@@ -318,7 +323,13 @@ export function calcular({
   const piezas = activos.reduce((s, p) => s + p.pz, 0);
   const cubiertoTotal = activos.reduce((s, p) => s + p.cubierto, 0);
   const proximo = comprasSugeridas.find((c) => c.limite) || null;
+  const mesActualClave = claveMes(hoy.getFullYear(), hoy.getMonth() + 1);
+  const montoActivos = activos.reduce((s, p) => s + p.monto, 0);
   const resumen = {
+    monto: montoActivos,
+    montoMesActual: activos.filter((p) => p.clave === mesActualClave).reduce((s, p) => s + p.monto, 0),
+    montoConfirmado: activos.filter((p) => p.probabilidad === 'confirmado').reduce((s, p) => s + p.monto, 0),
+    sinPrecio: activos.reduce((s, p) => s + p.sinPrecio, 0),
     proyectos: activos.length,
     confirmados: activos.filter((p) => p.probabilidad === 'confirmado').length,
     piezas,
@@ -360,13 +371,20 @@ export function matriz(res, { medida = 'necesidad', soloFaltante = false } = {})
 
 /** Tablero: proyectos agrupados por mes del horizonte (+ columna "Después" para lo que cae fuera). */
 export function tablero(res) {
-  const cols = res.horizonte.map((m) => ({ ...m, proyectos: [], piezas: 0 }));
+  const vacia = () => ({ proyectos: [], piezas: 0, monto: 0, montoPorCliente: {}, montoPorProb: { prospecto: 0, probable: 0, confirmado: 0 } });
+  const cols = res.horizonte.map((m) => ({ ...m, ...vacia() }));
   const porClave = new Map(cols.map((c) => [c.clave, c]));
-  const fuera = { clave: 'fuera', label: 'Más adelante', anio: null, mes: null, proyectos: [], piezas: 0 };
+  const fuera = { clave: 'fuera', label: 'Más adelante', anio: null, mes: null, ...vacia() };
   for (const p of res.porProyecto) {
     const col = (p.clave && porClave.get(p.clave)) || fuera;
     col.proyectos.push(p);
     col.piezas += p.pz;
+    // El dinero del mes: sólo lo que compromete (propuesto · probable · confirmado); entregado y cancelado no suman.
+    if (ESTADOS_DEMANDA.includes(p.probabilidad)) {
+      col.monto += p.monto;
+      col.montoPorCliente[p.cliente] = (col.montoPorCliente[p.cliente] || 0) + p.monto;
+      col.montoPorProb[p.probabilidad] = (col.montoPorProb[p.probabilidad] || 0) + p.monto;
+    }
   }
   for (const c of [...cols, fuera]) c.proyectos.sort((a, b) => (a.cubiertoPct ?? 101) - (b.cubiertoPct ?? 101) || b.pz - a.pz);
   return fuera.proyectos.length ? [...cols, fuera] : cols;
@@ -380,4 +398,39 @@ export function detalleSku(res, sku) {
     .map((p) => ({ ...p, linea: p.lineas.find((l) => l.sku === sku) }));
   const compra = res.comprasSugeridas.find((c) => c.sku === sku) || null;
   return { sku, celdas, proyectos, compra };
+}
+
+// ── Días hábiles y arribos próximos (avisos 3 días hábiles antes y el día que llega · 2026-09-25) ──
+const esHabil = (d) => { const w = d.getUTCDay(); return w !== 0 && w !== 6; };
+const utcDe = (iso) => { const [a, m, d] = String(iso).slice(0, 10).split('-').map(Number); return new Date(Date.UTC(a, m - 1, d)); };
+/** Suma n días hábiles (L–V) a una fecha ISO; devuelve ISO. */
+export function sumarDiasHabiles(iso, n) {
+  const d = utcDe(iso); let k = 0;
+  while (k < n) { d.setUTCDate(d.getUTCDate() + 1); if (esHabil(d)) k++; }
+  return d.toISOString().slice(0, 10);
+}
+/** Días hábiles entre dos fechas ISO (desde excluido, hasta incluido). Negativo si hasta < desde. */
+export function diasHabilesEntre(desdeIso, hastaIso) {
+  const a = utcDe(desdeIso), b = utcDe(hastaIso);
+  const sig = a <= b ? 1 : -1; let n = 0; const d = new Date(a);
+  while (d.getTime() !== b.getTime()) { d.setUTCDate(d.getUTCDate() + sig); if (esHabil(d)) n += sig; }
+  return n;
+}
+/**
+ * Arribos que le importan a los proyectos activos: por proyecto y SKU, el embarque más próximo cuya ETA
+ * aún no pasó. → [{ proyectoId, nombre, cliente, sku, piezas, eta, cantidad, diasHabiles, po }]
+ */
+export function arribosProximos(res, transito = [], hoy = new Date()) {
+  const hoyIso = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())).toISOString().slice(0, 10);
+  const arribos = arribosDeTransito(transito);
+  const out = [];
+  for (const p of res.porProyecto) {
+    if (!ESTADOS_DEMANDA.includes(p.probabilidad)) continue;
+    for (const l of p.lineas || []) {
+      const prox = (arribos.get(l.sku) || []).filter((a) => a.eta && a.eta >= hoyIso).sort((a, b) => a.eta.localeCompare(b.eta))[0];
+      if (!prox) continue;
+      out.push({ proyectoId: p.id, nombre: p.nombre, cliente: p.cliente, sku: l.sku, piezas: N(l.piezas), eta: prox.eta, cantidad: N(prox.cantidad), po: prox.po || null, diasHabiles: diasHabilesEntre(hoyIso, prox.eta) });
+    }
+  }
+  return out.sort((a, b) => a.eta.localeCompare(b.eta));
 }

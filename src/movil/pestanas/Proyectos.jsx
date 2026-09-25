@@ -23,6 +23,7 @@ import { useNav } from '../nav';
 import { Cabecera, TituloGrande, HeroM, ListaAgrupada, Fila, BotonGrande, CampoBusqueda, Vacio, HojaM, Segmented, Pill, toast } from '../piezas';
 import { Cargando } from '../../components/kit';
 import { int, MONO } from '../util';
+import { moneyCompact } from '../../lib/format';
 import { compartir } from '../../lib/whatsapp';
 
 const VISTAS = [{ id: 'proyectos', label: 'Proyectos' }, { id: 'faltantes', label: 'Faltantes' }];
@@ -86,7 +87,7 @@ export default function Proyectos() {
 
       {!cargando && (
         <>
-          <HeroM eyebrow="Clientes propios · abasto" frase={fraseHero(r)}
+          <HeroM eyebrow="Proyectos y forecast" frase={fraseHero(r)}
             stats={[
               { k: 'Proyectos', v: int(r.proyectos), sub: `${r.confirmados} conf.` },
               { k: 'Piezas', v: int(r.piezas), sub: 'comprometidas' },
@@ -117,7 +118,7 @@ export default function Proyectos() {
                 <ListaAgrupada key={m.clave} titulo={m.labelLargo || m.label} meta={`${m.proyectos.length} · ${int(m.proyectos.reduce((s, p) => s + p.pz, 0))} pz`} style={{ marginTop: 14 }}>
                   {m.proyectos.map((p) => (
                     <Fila key={p.id} tono={colorCliente(p.cliente)} titulo={p.nombre}
-                      sub={`${CLIENTE_LABEL[p.cliente] || p.cliente} · ${int(p.pz)} pz · ${PROB_LABEL[p.probabilidad]}`}
+                      sub={`${CLIENTE_LABEL[p.cliente] || p.cliente} · ${p.monto > 0 ? moneyCompact(p.monto) + ' · ' : ''}${int(p.pz)} pz · ${PROB_LABEL[p.probabilidad]}`}
                       valor={pctCorto(p.cubiertoPct)} valorSub={p.faltante > 0 ? `faltan ${int(p.faltante)}` : 'cubierto'}
                       onClick={() => setAbierto(p.id)} />
                   ))}
@@ -143,7 +144,7 @@ export default function Proyectos() {
 
           {vista === 'faltantes' && res.comprasSugeridas.length > 0 && (
             <div style={{ padding: '12px 16px 0' }}>
-              <BotonGrande icon={Share2} onClick={async () => { if (await compartir(textoCompartir(r, res.comprasSugeridas), { titulo: 'Proyectos y abasto' }) === 'share') toast.ok('Compartido'); }}>Compartir faltantes</BotonGrande>
+              <BotonGrande icon={Share2} onClick={async () => { if (await compartir(textoCompartir(r, res.comprasSugeridas), { titulo: 'Proyectos y forecast' }) === 'share') toast.ok('Compartido'); }}>Compartir faltantes</BotonGrande>
             </div>
           )}
 
