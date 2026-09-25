@@ -12,6 +12,7 @@ import { GRUPOS, DIAS_SEMANA, TOLERANCIA_SEMANAL, TOLERANCIA_MENSUAL, normalizar
 import { guardarCadencia } from './fuentesConfig';
 import { frescuraManual, relTiempo, fmtFechaHora } from './frescura';
 import { subirArchivo } from './subir';
+import { queryClient } from '../../../lib/queryClient';
 import Anillo from './Anillo';
 import ZonaArrastre from './ZonaArrastre';
 
@@ -119,6 +120,9 @@ export default function CargasManuales({ status, upload, fuentes = [], perfil, o
     try {
       const r = await subirArchivo(f, file, { opts, confirmarPeriodo: confirmarPeriodo(f), onProgress: (pct, texto) => setCargas((c) => ({ ...c, [f.id]: { pct, texto } })) });
       toast.ok(`${f.titulo}: ${r.filas.toLocaleString('es-MX')} filas en ${(r.ms / 1000).toFixed(0)} s`);
+      // Lo recién cargado debe verse en cualquier pantalla sin esperar los 5 min de caché (Fernando 2026-09-24: la propuesta
+      // con el sell out e inventario nuevos de Digitalife). Se invalida todo React Query, incluidos fetchAll/cachedQuery.
+      queryClient.invalidateQueries();
       setCasillas((c) => ({ ...c, [f.id]: {} }));
       setCortes((c) => ({ ...c, [f.id]: '' }));
       setAbierta(f.id);

@@ -107,6 +107,8 @@ export default function PropuestasTab() {
     return () => { vivo = false; };
   }, [vista, modelo?.clienteKey, skus.length]);
 
+  // «Actualizar datos» del armador: limpia la caché de datos y vuelve a traer el catálogo (sell out, inventario del cliente, precios…).
+  const actualizarCatalogo = async () => { const { queryClient } = await import('../../lib/queryClient'); await queryClient.invalidateQueries(); setSkus([]); };
   const catalogoMap = useMemo(() => new Map(skus.map((r) => [r.sku, r])), [skus]);
   const cliente = CLIENTES.find((c) => c.key === modelo?.clienteKey);
   const memoria = useMemo(() => (modelo?.clienteKey ? memoriaPorSku(propuestas, modelo.clienteKey) : new Map()), [propuestas, modelo?.clienteKey]);
@@ -301,7 +303,7 @@ export default function PropuestasTab() {
   }
   return shell(
     <Armar cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta} nombre={nombre} setNombre={setNombre} folio={modelo?.folio}
-      memoria={memoria} sensible={sensible} autosave={autosave} onBack={salirGuardando} onGuardar={() => guardarBorrador()}
+      memoria={memoria} sensible={sensible} autosave={autosave} onBack={salirGuardando} onGuardar={() => guardarBorrador()} onActualizar={actualizarCatalogo}
       onRevisar={() => { setRevisando(true); if (ultimo.current?.hayQueGuardar) guardarBorrador({ silencioso: true }); }} />,
   );
 }

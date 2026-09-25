@@ -5,7 +5,7 @@
 // catálogo con sombreado suave y pill "Sugerido · N pz"; Aceptar (o clic en la fila) los agrega con esa cantidad y la
 // fila vuelve a su orden normal. "Aceptar todos los sugeridos (N)" en la toolbar; "Sombreado" apaga el resaltado.
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Check, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Check, ExternalLink, RefreshCw } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Hero, Panel, Pill, Boton, TablaCompacta } from '../../../components/kit';
@@ -39,7 +39,7 @@ function PillHero({ tipo, children, onClick, title }) {
   );
 }
 
-export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta, nombre, setNombre, folio, memoria, sensible, autosave, onBack, onGuardar, onRevisar }) {
+export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta, nombre, setNombre, folio, memoria, sensible, autosave, onBack, onGuardar, onRevisar, onActualizar }) {
   const { theme } = useTheme();
   const cliCol = clienteColor(theme, cliente.key);
   const accent = theme.accent || '#007AFF';
@@ -215,6 +215,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
     <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Boton icon={ArrowLeft} onClick={onBack} title="Guarda el borrador y regresa a Propuestas">Propuestas</Boton>
+        {onActualizar && <Boton icon={RefreshCw} onClick={onActualizar} title="Vuelve a traer sell out, inventario del cliente, precios e inventario de Acteck (por si acabas de cargar un reporte)">Actualizar datos</Boton>}
         <span style={{ width: 26, height: 26, borderRadius: 8, background: cliCol, color: '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 11 }}>{cliente.iniciales}</span>
         <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>Propuesta {cliente.label} ·</span>
         <input type="text" value={nombre || ''} onChange={(e) => setNombre?.(e.target.value)} placeholder="Nombre de la propuesta (obligatorio para enviar)" aria-label="Nombre de la propuesta"
