@@ -171,10 +171,11 @@ export default function CargasManuales({ status, upload, fuentes = [], perfil, o
         style={{ height: 24, padding: '0 6px', borderRadius: 7, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 11 }} />
     ) },
     { key: 'estado', label: 'Estado', align: 'left', render: (r) => <Pill tone={r.pill.tone} dot>{r.pill.txt}</Pill> },
+    // Va antes de «Esperada»: el editor de cadencia es ancho y en Digitalife empujaba este botón fuera de la tarjeta (2026-09-28).
+    { key: 'subir', label: 'Archivo', align: 'left', render: (r) => <ZonaArrastre kind={r.f.kind} accept={r.f.accept} disabled={!!cargas[r.f.id]} onFile={(file) => subir(r.f, file)} texto={cargas[r.f.id] ? `${Math.round(cargas[r.f.id].pct * 100)} %` : undefined} /> },
     { key: 'esperada', label: 'Esperada', align: 'left', render: (r) => editable
       ? <EditorCadencia key={`${r.f.id}-${JSON.stringify(r.f.cadencia)}`} fuente={r.f} theme={theme} onGuardado={{ quien, cb: onRefetch }} />
       : <span style={{ color: theme.textMuted, whiteSpace: 'nowrap' }} title={labelLimite(r.f.cadencia) || undefined}>{labelCadencia(r.f.cadencia)}</span> },
-    { key: 'subir', label: '', align: 'right', render: (r) => <ZonaArrastre kind={r.f.kind} accept={r.f.accept} disabled={!!cargas[r.f.id]} onFile={(file) => subir(r.f, file)} texto={cargas[r.f.id] ? `${Math.round(cargas[r.f.id].pct * 100)} %` : undefined} /> },
   ];
 
   return (
