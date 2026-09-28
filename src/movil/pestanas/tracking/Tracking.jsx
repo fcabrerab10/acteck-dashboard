@@ -9,6 +9,7 @@
 // Toda la lógica es la MISMA de la web: tracking/datos.js (useTrackingDatos + escrituras),
 // tracking/calculo.js (calcularTodo, resumen, backorderPorSku, surtirHoy, facturasSinOC, ordenar, búsqueda)
 // y tracking/textos.js (formatos y textos de WhatsApp). Aquí sólo hay layout táctil.
+import { TYPO } from '../../../lib/themeTokens';
 import React, { useMemo, useState } from 'react';
 import { Plus, ClipboardPaste, FileText, Share2, PackageCheck, AlertTriangle, Package } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -227,14 +228,23 @@ export default function Tracking() {
       {cuerpo}
       <div style={{ height: 72 }} />
 
-      {puedeEditar && <FAB onClick={() => setHoja({ tipo: 'mas' })} label="Registrar OC o cotización" />}
+      {puedeEditar && <FAB onClick={() => setHoja({ tipo: 'mas' })} label="Nuevo pedido" />}
 
-      <HojaM abierto={hoja?.tipo === 'mas'} onClose={() => setHoja(null)} titulo="Registrar" sub="Karolina sólo captura la OC: facturas y guías llegan del ERP" alto="44vh">
+      {/* Mismo acuerdo que la web (3.44.0): un pedido nace desde la OC del cliente (captura manual o correo) o desde una factura del ERP. */}
+      <HojaM abierto={hoja?.tipo === 'mas'} onClose={() => setHoja(null)} titulo="Nuevo pedido" sub="Desde la OC del cliente o desde una factura del ERP · varias facturas y envíos por pedido" alto={sinOC.length ? '72vh' : '48vh'}>
         <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <BotonGrande primario icon={Plus} onClick={() => setHoja({ tipo: 'oc' })}>Registrar OC</BotonGrande>
-          <BotonGrande icon={ClipboardPaste} onClick={() => setHoja({ tipo: 'pegar' })}>Pegar correo</BotonGrande>
+          <BotonGrande primario icon={Plus} onClick={() => setHoja({ tipo: 'oc' })}>Desde la OC del cliente</BotonGrande>
+          <BotonGrande icon={ClipboardPaste} onClick={() => setHoja({ tipo: 'pegar' })}>Pegar el correo de la OC</BotonGrande>
           <BotonGrande icon={FileText} onClick={() => setHoja({ tipo: 'cotizacion' })}>Cotización</BotonGrande>
         </div>
+        {sinOC.length > 0 && (
+          <ListaAgrupada titulo="Desde una factura del ERP" meta={sinOC.length} pie="Toca una factura: el pedido nace con sus productos, piezas y precio.">
+            {sinOC.slice(0, 12).map((f) => (
+              <Fila key={f.folio} titulo={<span style={{ fontFamily: TYPO.fontDisplay }}>{f.folio}</span>} sub={`${nombreCliente(f.cliente_key)} · ${f.referencia || 'sin referencia'} · ${fmtFecha(f.fecha)}`}
+                valor={fmtMoneyShort(f.monto)} valorSub={`${fmtInt(f.piezas)} pz`} onClick={() => setHoja({ tipo: 'factura', factura: f })} />
+            ))}
+          </ListaAgrupada>
+        )}
       </HojaM>
 
       <HojaOC abierto={hoja?.tipo === 'oc' || hoja?.tipo === 'pegar'} onClose={() => setHoja(null)} modo={hoja?.tipo === 'pegar' ? 'pegar' : 'nueva'}

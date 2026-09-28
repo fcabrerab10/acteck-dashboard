@@ -30,7 +30,7 @@ const VISTAS = [{ id: 'proyectos', label: 'Proyectos' }, { id: 'faltantes', labe
 const colorCliente = (k) => CLIENTES.find((c) => c.key === k)?.color || '#8E8E93';
 const tonoPct = (p) => (p == null ? 'gray' : p >= 99.5 ? 'green' : p >= 70 ? 'orange' : 'red');
 
-export default function Proyectos() {
+export default function Proyectos({ inicial = null }) {
   const { theme } = useTheme();
   const nav = useNav();
   const perfil = usePerfil();
@@ -41,7 +41,7 @@ export default function Proyectos() {
 
   const [vista, setVista] = useState('proyectos');
   const [mesSel, setMesSel] = useState(null);     // null = todos
-  const [abierto, setAbierto] = useState(null);   // id del proyecto
+  const [abierto, setAbierto] = useState(inicial?.proyectoId || null);   // id del proyecto (una alerta de arribo lo trae en `inicial`)
   const [nuevo, setNuevo] = useState(false);
 
   const pr = useProyectos();

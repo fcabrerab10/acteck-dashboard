@@ -82,6 +82,8 @@ export default function Alertas() {
         nav.navegar({ clienteKey: ck || null, pagina: 'pagos', extra: ex });
         return;
       }
+      // Proyectos y forecast (arribo_proximo/hoy/tarde, sin cobertura): abre el proyecto.
+      if (pagina === 'forecastReservas') { nav.navegar({ pagina: 'forecastReservas', extra: a.meta?.proyecto_id ? { proyectoId: a.meta.proyecto_id } : null }); return; }
       if (ex?.sku || pagina === 'inventarioGlobal') { if (ex?.sku) nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); return; }
       if (pagina === 'agenda' || pagina === 'adminInterna') { nav.navegar({ pagina: 'agenda', extra: a.meta?.item_id ? { itemId: a.meta.item_id } : null }); return; }
       if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`, ['digitalife', 'pcel', 'dicotech'].includes(ck) ? idNodo(ck, 'home') : null); return; }

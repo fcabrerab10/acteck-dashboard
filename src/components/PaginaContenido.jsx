@@ -269,7 +269,7 @@ export default function PaginaContenido({
       )}
       {pagina === 'forecastReservas' && (
         puedeVerPestanaGlobal(perfil, 'forecast_reservas')
-          ? <ProyectosAbasto />
+          ? <ProyectosAbasto inicial={extra} />
           : <SinAcceso motivo="No tienes acceso a Proyectos y forecast." />
       )}
       {pagina === 'ordenesCompra' && (

@@ -61,7 +61,7 @@ const GLOBALES = {
     ? { tipo: 'push', key: `oc-${extra.ocId}`, el: h(FichaOC, { ocId: extra.ocId }) }
     : { tipo: 'push', key: 'tracking', el: h(Tracking) }),
   // Proyectos y abasto (V3 · 2026-09-21): sustituye al Forecast de reservas en el celular.
-  forecastReservas:  () => ({ tipo: 'push', key: 'proyectos', el: h(Proyectos) }),
+  forecastReservas:  (extra) => ({ tipo: 'push', key: extra?.proyectoId ? `proyectos-${extra.proyectoId}` : 'proyectos', el: h(Proyectos, { inicial: extra || null }) }),
   // Agenda V4 · pestaña RAÍZ del shell (2026-09-22), con su propia pila: ya no se empuja sobre otra pestaña.
   // `extra` viene de una notificación: { itemId } abre el ítem o su minuta; { vista } elige la vista inicial;
   // MovilApp se lo pasa a la pantalla raíz. adminInterna (página vieja) cae aquí también.

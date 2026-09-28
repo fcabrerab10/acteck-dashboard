@@ -10,7 +10,7 @@
 //
 // Todo el cálculo vive en proyectos/calculo.js (puro, con pruebas); aquí sólo va el layout,
 // el estado de la UI y las escrituras. Ver docs/PROYECTOS_ABASTO.md.
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -45,7 +45,7 @@ const MEDIDAS = [
   { id: 'reservado', label: 'Reservado' },
 ];
 
-export default function ProyectosAbasto() {
+export default function ProyectosAbasto({ inicial = null }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const puedeEditar = puedeEditarPestanaGlobal(perfil, 'forecast_reservas');
@@ -60,6 +60,8 @@ export default function ProyectosAbasto() {
   const [medida, setMedida] = useState('necesidad');
   const [soloFaltante, setSoloFaltante] = useState(false);
   const [hojaProyecto, setHojaProyecto] = useState(null);   // { proyecto } | { nuevo:true, mesClave }
+  // Una alerta de arribo (meta.proyecto_id) abre directo la hoja del proyecto.
+  useEffect(() => { if (inicial?.proyectoId) setHojaProyecto({ proyectoId: inicial.proyectoId }); }, [inicial?.proyectoId]);
   const [skuAbierto, setSkuAbierto] = useState(null);
   const [ocupado, setOcupado] = useState(false);
 

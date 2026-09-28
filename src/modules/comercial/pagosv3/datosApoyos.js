@@ -1,6 +1,7 @@
 // Datos para el formulario de Apoyo por producto (lecturas puntuales, todas cacheadas).
 import { supabase } from '../../../lib/supabase';
-import { cachedQuery } from '../../../lib/queries';
+import { useQuery } from '@tanstack/react-query';
+import { cachedQuery, fetchAll } from '../../../lib/queries';
 
 const q = async (b) => { const { data, error } = await cachedQuery(b); if (error) throw error; return data || []; };
 
@@ -48,4 +49,24 @@ export function bonificacionesLigadas(pagos = []) {
   const m = new Map();
   for (const p of pagos) { const b = p?.detalle?.bonificacion; if (b?.venta_id != null) m.set(b.venta_id, p); }
   return m;
+}
+
+/** Apoyos acumulados por SKU de un cliente (pagos tipo apoyo_producto, sin cancelados): sku → { monto, piezas, n, ultimo, folios }. */
+export async function apoyosPorSku(clienteKey) {
+  const pagos = await fetchAll('pagos', 'id,cliente,estado,periodo,created_at,detalle', (q) => q.eq('tipo', 'apoyo_producto').eq('cliente', clienteKey).neq('estado', 'cancelado'));
+  const m = new Map();
+  for (const p of pagos || []) {
+    const fecha = p.detalle?.bonificacion?.fecha || (p.periodo ? `${p.periodo}-01` : String(p.created_at || '').slice(0, 10));
+    for (const l of p.detalle?.productos || []) {
+      const c = m.get(l.sku) || { monto: 0, piezas: 0, n: 0, ultimo: null, folios: [] };
+      c.monto += Number(l.monto) || 0; c.piezas += Number(l.piezas) || 0; c.n += 1;
+      if (!c.ultimo || fecha > c.ultimo) c.ultimo = fecha;
+      if (p.detalle?.bonificacion?.folio) c.folios.push(p.detalle.bonificacion.folio);
+      m.set(l.sku, c);
+    }
+  }
+  return m;
+}
+export function useApoyosPorSku(clienteKey, enabled = true) {
+  return useQuery({ queryKey: ['apoyos_sku', clienteKey], queryFn: () => apoyosPorSku(clienteKey), enabled: !!clienteKey && enabled, staleTime: 5 * 60 * 1000 });
 }

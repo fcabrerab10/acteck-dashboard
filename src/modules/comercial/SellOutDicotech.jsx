@@ -9,6 +9,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useUnidadDetalle, fmtUnidad, SelectorUnidad } from './sellin/unidad.jsx';
 import { useRoadmap, useInventarioCliente } from '../../lib/queries';
+import { useApoyosPorSku } from './pagosv3/datosApoyos';
+import { PillApoyoSku } from './pagosv3/TablaApoyo';
+
 import { disponibilidadDeCampos } from '../../lib/disponibilidad';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
@@ -124,6 +127,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   // Datos compartidos via React Query
   const { data: roadmap = [] } = useRoadmap();
   const { data: inventarioCliente = [] } = useInventarioCliente(clienteKey);
+  const { data: apoyosSku } = useApoyosPorSku(clienteKey);
 
   const [loading, setLoading] = useState(true);
   const [mensual, setMensual] = useState([]);
@@ -853,7 +857,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         selloutGeneral={selloutGeneral} anio={anio} mesActual={mesActual} />
 
       {/* Tabla SKU · click en fila expande drill inline debajo */}
-      <TablaSKU theme={theme} P={P} isDark={isDark}
+      <TablaSKU theme={theme} P={P} isDark={isDark} apoyosSku={apoyosSku}
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
@@ -1492,7 +1496,7 @@ function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSu
 }
 
 // ═══════════════ Tabla SKU (sin marca column · single-brand Acteck) + drill inline ═══════════════
-function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, selloutGeneral, inventarioSucursalMap }) {
+function TablaSKU({ theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, selloutGeneral, inventarioSucursalMap }) {
   const fmtU = fmtUnidad(unidad);
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
@@ -1577,6 +1581,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                       )}
                       {r.sku}
                       {r.marca && <span title={r.marca} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: marcaColor(r.marca, P), textTransform: 'uppercase' }}>{String(r.marca).slice(0, 2)}</span>}
+                      <PillApoyoSku a={apoyosSku?.get?.(r.sku)} />
                     </span>
                   </td>
                   <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>

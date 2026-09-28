@@ -13,6 +13,7 @@
 // Fuentes: las filas de sell-out ya cargadas por la pantalla padre (una sola petición por cliente) +
 // inventario_cliente / sellout_pcel por sku y año (useInventarioSkuAnio, ~20-40 renglones).
 // PCEL no reporta importe: el monto es piezas × precio de lista (ver sellout/datos.js).
+import { useApoyosPorSku } from '../../../modules/comercial/pagosv3/datosApoyos';
 import React, { useMemo, useState } from 'react';
 import { PackageSearch } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -44,6 +45,8 @@ export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, fi
   const esPcel = clienteKey === 'pcel';
 
   const { data: histo, isLoading: lHisto } = useInventarioSkuAnio(clienteKey, sku, anio, codigosPcel);
+  const { data: apoyosSku } = useApoyosPorSku(clienteKey);
+  const apoyo = apoyosSku?.get?.(sku) || null;
 
   const fmt = unidad === 'monto' ? moneyCompact : (n) => Math.round(n).toLocaleString('es-MX');
   const fmtLargo = unidad === 'monto' ? money : (n) => `${int(n)} pz`;
@@ -127,6 +130,11 @@ export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, fi
           sub={a.ritmoMes > 0 ? `al ritmo de ${int(a.ritmoMes)} pz/mes (${a.mesesRitmo}m)` : 'sin ritmo de venta'}
           pill={cobertura != null ? { tone: tonoCob, label: cobertura <= 4 ? 'baja' : cobertura >= 16 ? 'alta' : 'ok' } : undefined} />
       </KpiGrid>
+      {apoyo && apoyo.monto > 0 && (
+        <div style={{ padding: '10px 16px 0' }}>
+          <Pill tone="green" dot>Apoyo acumulado {moneyCompact(apoyo.monto)} · {apoyo.n} apoyo{apoyo.n === 1 ? '' : 's'} · {int(apoyo.piezas)} pz · último {apoyo.ultimo || '—'}</Pill>
+        </div>
+      )}
 
       <TituloSeccionM style={{ margin: '20px 0 0', padding: '0 28px 6px' }} meta={`${anio}`}>Sell-out mes a mes</TituloSeccionM>
       <div style={{ padding: '0 16px' }}>

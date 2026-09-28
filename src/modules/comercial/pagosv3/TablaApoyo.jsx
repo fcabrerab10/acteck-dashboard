@@ -6,6 +6,13 @@ import { TYPO } from '../../../lib/themeTokens';
 import { Pill } from '../../../components/kit';
 import { MONO, mxn, mxn2 } from './ui';
 import { calcularApoyo } from './apoyos';
+import { moneyCompact } from '../../../lib/format';
+
+/** Pastilla «apoyo $X» junto al SKU en Sell Out (Fernando 2026-09-24: ver cuánto apoyo lleva cada producto). */
+export function PillApoyoSku({ a, size = 'xs' }) {
+  if (!a || !(a.monto > 0)) return null;
+  return <Pill tone="green" size={size} title={`${a.n} apoyo${a.n === 1 ? '' : 's'} · ${a.piezas.toLocaleString('es-MX')} pz · último ${a.ultimo || '—'}${a.folios.length ? ` · NC ${a.folios.join(', ')}` : ''}`}>apoyo {moneyCompact(a.monto)}</Pill>;
+}
 
 export function PillCuadre({ cuadre, bonificacion, size = 'xs' }) {
   if (!cuadre) return null;
