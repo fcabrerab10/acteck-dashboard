@@ -114,3 +114,13 @@ function partesISO(iso) {
   if (mm < 1 || mm > 12 || d < 1 || d > 31) return null;
   return { y, m: mm, d };
 }
+
+// ── Fecha local (2026-09-28) ──
+// `new Date().toISOString().slice(0, 10)` da la fecha en UTC: en Guadalajara (UTC−6) desde las 18:00 ya es
+// "mañana". Fernando lo notó («el dashboard tiene mal el horario y la fecha»). Usar SIEMPRE estas dos.
+export function isoLocal(d) {
+  const x = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(x.getTime())) return '';
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+export const hoyISO = () => isoLocal(new Date());

@@ -6,12 +6,12 @@ import React, { useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { fechaCorta } from '../../../lib/format';
+import { fechaCorta, hoyISO } from '../../../lib/format';
 import { Panel, DeltaPill, Boton, toast } from '../../../components/kit';
 import { useCompetencia, useCompetenciaMutaciones } from './datos';
 import { fmtMoney, selectPill } from './textos';
 
-const VACIA = () => ({ competidor: '', marca: '', modelo: '', precio: '', fecha: new Date().toISOString().slice(0, 10), comentario: '' });
+const VACIA = () => ({ competidor: '', marca: '', modelo: '', precio: '', fecha: hoyISO(), comentario: '' });
 
 function Formulario({ theme, inicial, onGuardar, onCancelar }) {
   const [f, setF] = useState(inicial);

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { isoLocal } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaGlobal } from '../../lib/permisos';
@@ -788,7 +789,7 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
     (async () => {
       const hoy = new Date();
       const anioCorte = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1).getFullYear();
-      const hoyISO = hoy.toISOString().slice(0, 10);
+      const hoyISO = isoLocal(hoy);
       const [demRes, traRes, ltRes, embRes, siRes, soPcelRes] = await Promise.all([
         // Demanda con piezas + monto. Misma vista que ya combina sellout/sell_in
         supabase.from('v_demanda_sku').select('cliente, anio, mes, piezas, monto_pesos')

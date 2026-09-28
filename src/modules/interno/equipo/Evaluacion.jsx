@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, Check, Lock } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { money, moneyCompact } from '../../../lib/format';
+import { money, moneyCompact, hoyISO } from '../../../lib/format';
 import { Panel, Pill, Boton, Segmented, toast, GraficaLineas } from '../../../components/kit';
 import { suaveBg, hairline } from '../../../components/perfil/comun';
 import { BONO_BASE, BONO_PCT, serieBonos } from './calculo.js';
@@ -214,7 +214,7 @@ function Tareas({ tareas, onChange, disabled }) {
 
 function Ajustes({ ajustes, onChange, disabled }) {
   const { theme } = useTheme();
-  const [nuevo, setNuevo] = useState({ fecha: new Date().toISOString().slice(0, 10), descripcion: '', monto: '' });
+  const [nuevo, setNuevo] = useState({ fecha: hoyISO(), descripcion: '', monto: '' });
   const add = () => {
     const monto = Number(nuevo.monto);
     if (!nuevo.descripcion.trim() || !Number.isFinite(monto) || monto === 0) return;

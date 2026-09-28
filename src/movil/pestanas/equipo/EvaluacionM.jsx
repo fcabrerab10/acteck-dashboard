@@ -7,6 +7,7 @@
 // después (debounce) con indicador "Guardando… / Guardado". Al salir de la pantalla se vacía lo pendiente.
 // Facturado vs cuota: Digitalife + PCEL + Dicotech. Sin costos ni márgenes.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { hoyISO } from '../../../lib/format';
 import { Check, Copy, Lock, Share2, Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -234,7 +235,7 @@ function AjustesM({ ajustes, onChange, disabled, total }) {
   const add = () => {
     const monto = Number(nuevo.monto);
     if (!nuevo.descripcion.trim() || !Number.isFinite(monto) || monto === 0) return;
-    onChange([...ajustes, { id: Date.now(), fecha: new Date().toISOString().slice(0, 10), descripcion: nuevo.descripcion.trim(), monto }]);
+    onChange([...ajustes, { id: Date.now(), fecha: hoyISO(), descripcion: nuevo.descripcion.trim(), monto }]);
     setNuevo({ descripcion: '', monto: '' });
   };
   const quitar = (i) => onChange(ajustes.filter((_, k) => k !== i));

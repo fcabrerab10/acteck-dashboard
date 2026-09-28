@@ -9,6 +9,7 @@
 //   Calendario — mes en cuadrícula con puntos por tipo; tocar un día lista sus pagos.
 // Sin edición de reglas (sólo lectura): el candado vive en la web.
 import React, { useEffect, useMemo, useState } from 'react';
+import { hoyISO, isoLocal } from '../../../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Send, Check, Hash, FileText, XCircle, Mail, RotateCcw } from 'lucide-react';
 import { supabase, DB_CONFIGURED } from '../../../lib/supabase';
@@ -27,7 +28,6 @@ import CalendarioM, { fechaDe } from './CalendarioM';
 import { HojaCorreo, HojaFolio, HojaRegistrar, HojaConfirmar } from './hojas';
 
 const STALE = 2 * 60 * 1000;
-const hoyISO = () => new Date().toISOString().slice(0, 10);
 const pad = (n) => String(n).padStart(2, '0');
 
 // Acción principal de cada etapa: la que dispara el deslizar a la derecha.
@@ -232,7 +232,7 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
   const desdeRango = (() => {
     const d = new Date(hoy);
     if (histRango === 'mes') return `${anio}-${pad(mes)}-01`;
-    if (histRango === '3m') { d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); }
+    if (histRango === '3m') { d.setMonth(d.getMonth() - 3); return isoLocal(d); }
     if (histRango === 'anio') return `${hoy.slice(0, 4)}-01-01`;
     return '0000-00-00';
   })();

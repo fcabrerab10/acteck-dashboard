@@ -3,6 +3,7 @@
 // modo 'manual': el mismo formulario vacío. modo 'editar': el formulario con la reunión existente.
 // Sólo kit + piezas de perfil/comun; nada de Tailwind de color ni hex.
 import React, { useMemo, useState } from 'react';
+import { isoLocal } from '../../../../lib/format';
 import { Trash2, Plus, Sparkles, ArrowLeft, Search } from 'lucide-react';
 import { TYPO } from '../../../../lib/themeTokens';
 import { Boton, Pill, TablaCompacta, toast } from '../../../../components/kit';
@@ -13,7 +14,7 @@ import { parsearCorreo, enriquecerLineas, proponerFolio, MESES_NOMBRE, SKU_RE } 
 const hoy = new Date();
 const FORM_VACIO = () => ({
   folio: '', anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, titulo: `Compras S&OP ${MESES_NOMBRE[hoy.getMonth()]} ${hoy.getFullYear()}`,
-  solicita: '', fecha: hoy.toISOString().slice(0, 10), nota: '', nota_autor: '', siguientes: [], lineas: [], avisos: [], fuente: 'manual', correo_raw: null,
+  solicita: '', fecha: isoLocal(hoy), nota: '', nota_autor: '', siguientes: [], lineas: [], avisos: [], fuente: 'manual', correo_raw: null,
 });
 
 const formDesdeReunion = (r, lineas) => ({

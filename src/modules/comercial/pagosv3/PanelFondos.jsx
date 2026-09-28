@@ -1,6 +1,7 @@
 // Panel "Fondos por cliente" · saldo = abonos − cargos. Cada fondo abre su estado de cuenta.
 // Un fondo en negativo se marca y bloquea cargos nuevos hasta autorizar el sobregiro.
 import React, { useMemo, useState } from 'react';
+import { hoyISO } from '../../../lib/format';
 import { Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -106,7 +107,7 @@ function FormMovimiento({ fondo, onCerrar, onGuardar }) {
   const [tipo, setTipo] = useState('abono');
   const [monto, setMonto] = useState('');
   const [concepto, setConcepto] = useState('');
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha] = useState(hoyISO());
   const [forzar, setForzar] = useState(false);
   const bloqueado = tipo === 'cargo' && Number(fondo.saldo) < 0 && !forzar;
 

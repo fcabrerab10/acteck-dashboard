@@ -2,6 +2,7 @@
 // por PO con ETA dentro de 7 / 14 / 30 días (Segmented) o todos. Cruza con el estado de
 // cobertura calculado en pantalla: "resuelve N agotados/críticos". Click en una PO abre sus SKUs.
 import React, { useMemo, useState } from 'react';
+import { hoyISO } from '../../../lib/format';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Pill, Segmented, TablaCompacta } from '../../../components/kit';
@@ -40,7 +41,7 @@ export default function ProximosArribos({ transito, skuRows, descripciones, onVe
       });
     });
     // diasEnTransito = días desde el ETD (lo que ya lleva navegando): sólo para lo que aún no llega.
-    const hoyISO = new Date().toISOString().slice(0, 10);
+    const hoyISO = hoyISO();
     return [...m.values()].map((it) => ({
       ...it,
       nSkus: it.skus.length,

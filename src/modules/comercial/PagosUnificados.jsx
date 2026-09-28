@@ -11,6 +11,7 @@
 // El 90 % de los pagos los calcula el motor (pagosv3/motor.js, el mismo que usa el cron
 // en api/_pagos.js); el resto se captura a mano. Todos siguen un solo flujo.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { hoyISO } from '../../lib/format';
 import { Plus, Send, Mail } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -44,8 +45,6 @@ import FormApoyoProducto from './pagosv3/FormApoyoProducto';
 import { PillCuadre } from './pagosv3/TablaApoyo';
 import { cuadreCon } from './pagosv3/apoyos';
 import HojaRegistrarPago from './pagosv3/HojaRegistrarPago';
-
-const hoyISO = () => new Date().toISOString().slice(0, 10);
 const MESES = M.MESES_LARGOS;
 
 export default function PagosUnificados({ clienteKey = null }) {

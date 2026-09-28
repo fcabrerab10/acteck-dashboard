@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { hoyISO, isoLocal } from '../../lib/format';
 import { supabase, DB_CONFIGURED, fetchAllPagesREST } from '../../lib/supabase';
 import { formatMXN, loadSheetJS } from '../../lib/utils';
 import { usePerfil } from '../../lib/perfilContext';
@@ -135,7 +136,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // ── Recomendaciones del día (L) ──
   // SIN useEffect — solo lectura inicial de localStorage y escritura
   // explícita en el callback, para evitar loops de re-render.
-  const recoStorageKey = 'recoDescartadas-' + clienteKey + '-' + new Date().toISOString().slice(0, 10);
+  const recoStorageKey = 'recoDescartadas-' + clienteKey + '-' + hoyISO();
   const [recoDescartadas, setRecoDescartadas] = React.useState(() => {
     try {
       if (typeof localStorage === 'undefined') return new Set();
@@ -219,7 +220,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     }
     ws['!cols'] = [{ wch: 14 }, { wch: 55 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
-    const fecha = new Date().toISOString().slice(0, 10);
+    const fecha = hoyISO();
     const nombreLimpio = (propPersonalizada.nombre || 'personalizada').replace(/[^a-z0-9-_]/gi, '_').toLowerCase();
     XLSX.writeFile(wb, `propuesta-${clienteKey}-${nombreLimpio}-${fecha}.xlsx`);
     if (DB_CONFIGURED) {
@@ -462,8 +463,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const fp = new Date(p.fecha || p.created_at);
         const fechaIni = new Date(fp.getFullYear(), fp.getMonth(), fp.getDate());
         const fechaFin = new Date(fechaIni.getTime() + 14 * 86400000);
-        const fechaIniISO = fechaIni.toISOString().slice(0, 10);
-        const fechaFinISO = fechaFin.toISOString().slice(0, 10);
+        const fechaIniISO = isoLocal(fechaIni);
+        const fechaFinISO = isoLocal(fechaFin);
         const semanasVent = esPcel ? semanasEnVentana(fechaIni, 14) : null;
 
         let totalSug = 0, totalCompr = 0, skusComprados = 0;
@@ -582,7 +583,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       monto: prop.monto_oc != null ? String(prop.monto_oc) : "",
       piezas: prop.piezas_oc != null ? String(prop.piezas_oc) : "",
       folio: prop.folio_oc || "",
-      fecha: prop.fecha_oc ? String(prop.fecha_oc).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      fecha: prop.fecha_oc ? String(prop.fecha_oc).slice(0, 10) : hoyISO(),
       monto_total: Number(prop.monto_total) || 0,
       piezas_total: Number(prop.piezas_total) || 0,
     });
@@ -1137,7 +1138,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const esPcel = clienteKey === 'pcel';
 
       // Tracking N — fechas precisas para ventana de 14d desde la propuesta
-      const hace120dias = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
+      const hace120dias = isoLocal(new Date(Date.now() - 120 * 86400000));
 
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
              histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw,

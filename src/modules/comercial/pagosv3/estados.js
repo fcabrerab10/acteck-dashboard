@@ -1,3 +1,4 @@
+import { hoyISO } from '../../../lib/format';
 // Flujo de un pago · Pagos V3 (2026-09-12) · PURO
 //   calculado → solicitado → autorizado → folio → pagado
 //   rechazado (con motivo) regresa a calculado · cancelado = "No aplica"
@@ -57,7 +58,7 @@ export function faltaPara(pago, hacia) {
   return null;
 }
 
-const HOY = () => new Date().toISOString().slice(0, 10);
+const HOY = () => hoyISO();
 
 /** Días que lleva el pago en su etapa actual (para "atorados"). */
 export function diasEnEtapa(pago, hoyISO = HOY()) {

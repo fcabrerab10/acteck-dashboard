@@ -1,6 +1,7 @@
 // Fondos · Dicotech (Fondo MKT cliente + Fondo interno, tabla mensual de saldos y
 // aplicaciones) y PCEL (ledger de Fondo MKT / Fondo Directo con aportes y gastos).
 import React from 'react';
+import { hoyISO } from '../../../lib/format';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { formatMXN } from '../../../lib/utils';
@@ -62,7 +63,7 @@ export function FondosDicotech({ dicoFondoTablaMensual, revertirMovimientoFondo,
 // ═══ PCEL · ledger ═══
 export function FondosPcel({ fondoResumen, fondoLoading, canEdit, setFondoForm, setShowFondoForm, eliminarMovimientoFondo }) {
   const { theme } = useTheme();
-  const abrir = (tipo, tipo_mov) => { setFondoForm((f) => ({ ...f, tipo_fondo: tipo, tipo_mov, fecha: new Date().toISOString().slice(0, 10), concepto: '', monto: '', folio: '', notas: '' })); setShowFondoForm(true); };
+  const abrir = (tipo, tipo_mov) => { setFondoForm((f) => ({ ...f, tipo_fondo: tipo, tipo_mov, fecha: hoyISO(), concepto: '', monto: '', folio: '', notas: '' })); setShowFondoForm(true); };
   const tonoMov = (m) => (m === 'inicial' ? 'gray' : m === 'aporte' ? 'green' : 'red');
   const columnas = [
     { key: 'fecha', label: 'Fecha', align: 'left', mono: true, render: (m) => new Date(m.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) },

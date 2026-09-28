@@ -15,6 +15,7 @@
 // ExportCart + ExportPreviewModal, UltimasComprasCard, TransitoTimeline, AgregarLineaModal, useSolicitudes, excelSOP,
 // snapshot, reuniones/ (Reuniones, FormularioReunion, DetalleReunion, parserCorreo, cruce, useReuniones).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isoLocal } from '../../lib/format';
 import { ShoppingCart, Plus, CalendarDays, LayoutList } from 'lucide-react';
 import { usePerfil } from '../../lib/perfilContext';
 import { useTheme } from '../../lib/themeContext';
@@ -173,7 +174,7 @@ function ForecastPantalla({ perfil, sensible }) {
   };
   const lineaDesdeRow = (row, cantidad) => {
     let fecha_estimada = null;
-    if (row.ltDias && row.ltDias > 0) { const d = new Date(); d.setDate(d.getDate() + Math.round(row.ltDias)); fecha_estimada = d.toISOString().slice(0, 10); }
+    if (row.ltDias && row.ltDias > 0) { const d = new Date(); d.setDate(d.getDate() + Math.round(row.ltDias)); fecha_estimada = isoLocal(d); }
     const ppc = Number(row.piezasPorContenedor || 0);
     return {
       sku: row.sku, descripcion: row.descripcion, cantidad, proveedor: row.supplier || '', fecha_estimada,

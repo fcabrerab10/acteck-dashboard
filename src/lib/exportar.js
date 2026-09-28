@@ -1,3 +1,4 @@
+import { hoyISO } from './format';
 // exportar.js — Exportación genérica a Excel (xlsx-js-style) y PDF ("como se ve").
 //
 // Reglas (CLAUDE.md · Rendimiento): xlsx-js-style se carga SOLO bajo demanda
@@ -7,9 +8,6 @@
 //   await exportarExcel({ titulo: 'Sell In Digitalife', hojas: [{ nombre: 'SKUs', columnas, filas, totales }] });
 //   await exportarPDF({ titulo: 'Sell In', subtitulo: 'Digitalife · 2026', elemento: ref.current });
 //   const { columnas, filas } = tablaDesdeDOM(tableRef.current);
-
-const hoyISO = () => new Date().toISOString().slice(0, 10);
-
 const FORMATO_POR_TIPO = {
   numero: '#,##0',
   moneda: '$#,##0',

@@ -4,6 +4,7 @@
 // v_transito_sku y v_estrategia_precios_lista. MC % sólo con permiso `sensible`.
 // "Compartir disponibilidad" usa textoDisponibilidad de lib/whatsapp.js: lista de precios obligatoria y SIN datos sensibles.
 import React, { useMemo, useState } from 'react';
+import { hoyISO } from '../../../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Share2, Copy, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
@@ -16,9 +17,6 @@ import { textoDisponibilidad, compartir, copiar, fechaCorta, precio as fmtPrecio
 import { marcaDeSku, normalizarMarca, toneMarca } from '../../../lib/marcas';
 import { tonoCobertura, etiquetaCobertura } from '../inventario/constantes';
 import { MESES, N, fmtInt, fmtMoneyShort, fmtPct, pctDelta, capitalizar, canalLabel, canalTone, roadmapTone, ultimosMeses, mesesCerrados } from './textos';
-
-const hoyISO = () => new Date().toISOString().slice(0, 10);
-
 function useDrillSku(sku) {
   return useQuery({
     queryKey: ['sellin_global', 'drill', sku],

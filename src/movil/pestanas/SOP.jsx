@@ -9,6 +9,7 @@
 //   · Mi export (SOPExport.jsx): borrador de solicitudes_compra compartido con escritorio.
 // Datos SOLO vía src/lib/queries.js (fetchAll con cache 5 min) + React Query; el borrador se lee con useSolicitudes.
 import React, { useEffect, useMemo, useState } from 'react';
+import { isoLocal } from '../../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Ship, Plus, Trash2, ClipboardList, Package, AlertTriangle, Lock, Factory, Anchor, PackagePlus } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -128,7 +129,7 @@ export default function SOP() {
       const ppc = N(r.piezasPorContenedor);
       const cnts = ppc > 0 ? Math.ceil(cantidad / ppc) : null;
       let fechaEstimada = null;
-      if (r.ltDias > 0) { const d = new Date(); d.setDate(d.getDate() + Math.round(r.ltDias)); fechaEstimada = d.toISOString().slice(0, 10); }
+      if (r.ltDias > 0) { const d = new Date(); d.setDate(d.getDate() + Math.round(r.ltDias)); fechaEstimada = isoLocal(d); }
       const existente = enExport.get(r.sku);
       if (existente) {
         await sol.editarLinea(existente.id, { cantidad, contenedores: cnts });

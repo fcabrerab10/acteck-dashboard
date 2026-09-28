@@ -10,6 +10,7 @@
 //   · useCompetencia(sku) / useSupuesto(categoria): tablas que la app ESCRIBE → sin cachedQuery ni fetchAll
 //     (supabase directo) y, tras escribir, invalidateDataCache() + invalidación de su queryKey.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { hoyISO } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
 import { fetchAll, cachedQuery, useRoadmap, invalidateDataCache } from '../../../lib/queries';
 import { cambiosPorSku, factPorSku, elasticidadPorCategoria } from './calculo';
@@ -119,7 +120,7 @@ export function useCompetenciaMutaciones(sku) {
       const payload = {
         sku, competidor: String(fila.competidor || '').trim(), marca: fila.marca?.trim() || null, modelo: fila.modelo?.trim() || null,
         especificaciones: fila.especificaciones?.trim() || null, precio: Number(fila.precio), moneda: fila.moneda || 'MXN',
-        fuente: fila.fuente?.trim() || null, url: fila.url?.trim() || null, fecha: fila.fecha || new Date().toISOString().slice(0, 10), comentario: fila.comentario?.trim() || null,
+        fuente: fila.fuente?.trim() || null, url: fila.url?.trim() || null, fecha: fila.fecha || hoyISO(), comentario: fila.comentario?.trim() || null,
       };
       const q = fila.id ? supabase.from('precios_competencia').update(payload).eq('id', fila.id) : supabase.from('precios_competencia').insert(payload);
       const { error } = await q;

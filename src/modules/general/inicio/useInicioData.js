@@ -15,13 +15,14 @@
 //   Últimos cambios            → auditoria_cambios (5) · v_fuentes_frescura (erp_ventas) vía useFrescura en el componente
 //   Requiere decisión          → alertas vía useAlertas (lib/alertas.js) en el componente
 import { useEffect, useState } from 'react';
+import { isoLocal } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../../lib/queries';
 import { CLIENTES, DIAS_AGENDA } from './config';
 
 const MEDIDAS = 'anio,mes,fact_bruta,devoluciones,rmas,bonificaciones,fact_neta,venta_neta,costo_venta_neta,contribucion,utilidad_comercial,piezas_venta_neta';
 const KEYS = CLIENTES.map((c) => c.key);
-const iso = (d) => d.toISOString().slice(0, 10);
+const iso = (d) => isoLocal(d);
 
 // Lecturas opcionales (tablas que pueden no existir o no tener permiso): nunca tumban la pantalla.
 async function opcional(p, vacio = []) {

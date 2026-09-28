@@ -7,6 +7,7 @@
 // Total de envíos no puede exceder la cantidad original de la línea.
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { isoLocal } from '../../../lib/format';
 import { X, Plus, Trash2, Calendar } from 'lucide-react';
 
 const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
@@ -16,7 +17,7 @@ function addWeeks(dateStr, weeks) {
   const d = new Date(dateStr);
   if (isNaN(d)) return null;
   d.setDate(d.getDate() + weeks * 7);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 export default function EnviosEditor({ linea, onClose, onGuardar }) {

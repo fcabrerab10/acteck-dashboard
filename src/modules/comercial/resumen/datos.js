@@ -2,6 +2,7 @@
 // Todo pasa por src/lib/queries.js (paginación paralela + cache 5 min). Las tablas que la app
 // escribe (cuotas_mensuales, clientes_credito_config) se leen directo, sin cache.
 import { useEffect, useState } from 'react';
+import { isoLocal } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
 import { fetchAllQ, cachedQuery } from '../../../lib/queries';
 import { CLIENTE_KEYS, anioActual, opcionesPeriodo, finDeMes } from './calculo';
@@ -41,7 +42,7 @@ export function useResumenData() {
     let vivo = true;
     const t0 = performance.now();
     const desde = new Date(); desde.setMonth(desde.getMonth() - 14);
-    const desdeIso = desde.toISOString().slice(0, 10);
+    const desdeIso = isoLocal(desde);
     const q = (f, o) => fetchAllQ(f, { pageSize: 1000, label: 'resumen', ...o });
 
     (async () => {

@@ -1,8 +1,8 @@
 // Cálculos puros del Home V3 · sin React, sin red. Entradas: data de useHomeData + config.
 import { MESES, META_INV_DIAS, Q_MESES } from './config';
+import { hoyISO } from '../../../lib/format';
 
 const num = (v) => Number(v) || 0;
-const hoyISO = () => new Date().toISOString().slice(0, 10);
 const sum = (arr, f = (x) => x) => arr.reduce((s, x) => s + num(f(x)), 0);
 const pctDe = (a, b) => (b > 0 ? (a / b) * 100 : null);
 const delta = (a, b) => (b > 0 ? ((a - b) / b) * 100 : null);

@@ -1,6 +1,7 @@
 // Cálculos puros de Inicio · sin React, sin red. Entrada: data de useInicioData + alertas + modo ('mes' | 'anio').
 // Los % (MC, MUC, lost profit) se calculan SIEMPRE al agregar, nunca se suman ni se promedian.
 import { MESES, MESES_LARGO, CLIENTES, DIAS_AGENDA } from './config';
+import { isoLocal } from '../../../lib/format';
 import { inventarioDesdeVista } from '../../../lib/medidas';
 import { SEV_ORDEN } from '../../../lib/alertas';
 
@@ -8,7 +9,7 @@ const N = (v) => Number(v) || 0;
 const sum = (arr, f = (x) => x) => arr.reduce((s, x) => s + N(f(x)), 0);
 const pctDe = (a, b) => (b > 0 ? (a / b) * 100 : null);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
-const iso = (d) => d.toISOString().slice(0, 10);
+const iso = (d) => isoLocal(d);
 
 // ── Agregado de medidas del director sobre un conjunto de filas (cualquier grano)
 export function agg(rows) {

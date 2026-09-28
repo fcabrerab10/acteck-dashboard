@@ -6,6 +6,7 @@
 //   fetchPreciosVigentes(skus)                     → Map sku → { lista → precio } (para Duplicar con lista vigente)
 //   fetchKpisClientes()                            → { clienteKey: { cuota, facturado, gap } } del mes en curso
 import { supabase } from '../../../lib/supabase';
+import { hoyISO } from '../../../lib/format';
 import { fetchAll, fetchAllQ, cachedQuery } from '../../../lib/queries';
 import { MES_ACTUAL, CLIENTES, mesesCerrados } from './constantes';
 import { indiceDe } from './filtros';
@@ -94,7 +95,7 @@ export async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
 
 // ═══ Fetch de SPIFFs activos hoy ═══
 export async function fetchSpiffsActivos() {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyISO();
   const { data, error } = await supabase.from('spiffs')
     .select('sku,monto,vigencia_inicio,vigencia_fin,descripcion,fuente')
     .lte('vigencia_inicio', hoy).gte('vigencia_fin', hoy);
@@ -171,7 +172,7 @@ export async function fetchCatalogo(clienteKey) {
     else if (k === prev.k) { prev.piezas += Number(f.piezas) || 0; prev.monto += Number(f.monto) || 0; }
   }
   // Próximo arribo por SKU (v_transito_sku.embarques_detalle: el embarque con la ETA más cercana).
-  const hoyIso = new Date().toISOString().slice(0, 10);
+  const hoyIso = hoyISO();
   const arribo = new Map();
   for (const t of transitoRes?.data || []) {
     const det = (Array.isArray(t.embarques_detalle) ? t.embarques_detalle : []).filter((d) => d?.eta).sort((a, b) => String(a.eta).localeCompare(String(b.eta)));

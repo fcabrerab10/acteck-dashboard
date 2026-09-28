@@ -6,6 +6,7 @@
 //   · El abasto (inventario, tránsito, lead times, catálogo) es de sólo lectura y pesado:
 //     ahí sí se usa fetchAll de src/lib/queries.js (paginación paralela + cache 5 min).
 import { useQuery } from '@tanstack/react-query';
+import { hoyISO } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
 import { queryClient } from '../../../lib/queryClient';
 import { fetchAll } from '../../../lib/queries';
@@ -45,7 +46,7 @@ export function useAbasto() {
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const opcional = (p) => p.catch(() => []);
-      const hoyISO = new Date().toISOString().slice(0, 10);
+      const hoyISO = hoyISO();
       const [inventario, transito, leadTimes, leadProveedor, roadmap, catalogo, embarques, preciosLista] = await Promise.all([
         fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
         fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,embarques,embarques_detalle'),

@@ -1,5 +1,6 @@
 // Pagos completados · Segmented 3 m / 6 m / año / todo, agrupados por mes y expandibles.
 import React, { useMemo, useState } from 'react';
+import { isoLocal } from '../../../lib/format';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { formatMXN, formatFecha } from '../../../lib/utils';
@@ -19,7 +20,7 @@ export default function HistorialPagados({ pagados, catActiva, onTogglePagado, c
     if (rango === '3m') { desde = new Date(hoy); desde.setMonth(hoy.getMonth() - 3); }
     else if (rango === '6m') { desde = new Date(hoy); desde.setMonth(hoy.getMonth() - 6); }
     else desde = new Date(hoy.getFullYear(), 0, 1);
-    const desdeISO = desde.toISOString().slice(0, 10);
+    const desdeISO = isoLocal(desde);
     return pagados.filter((r) => { const f = r.fecha_pago_real || r.fecha_compromiso; return f && String(f).slice(0, 10) >= desdeISO; });
   }, [pagados, rango]);
 

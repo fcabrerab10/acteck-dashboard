@@ -1,5 +1,6 @@
 // Datos para el formulario de Apoyo por producto (lecturas puntuales, todas cacheadas).
 import { supabase } from '../../../lib/supabase';
+import { isoLocal } from '../../../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { cachedQuery, fetchAll } from '../../../lib/queries';
 
@@ -32,7 +33,7 @@ export async function datosProducto(clienteKey, sku) {
 export async function bonificacionesErp(clienteKey) {
   const desde = new Date(); desde.setMonth(desde.getMonth() - 15);
   const rows = await q(supabase.from('erp_ventas').select('venta_id,folio,periodo,articulo,descripcion,monto_venta_pesos,referencia')
-    .eq('cliente_key', clienteKey).eq('rama', 'SERVICIOS').eq('movimiento_venta', 'Bonificacion Venta').gte('periodo', desde.toISOString().slice(0, 10))
+    .eq('cliente_key', clienteKey).eq('rama', 'SERVICIOS').eq('movimiento_venta', 'Bonificacion Venta').gte('periodo', isoLocal(desde))
     .order('periodo', { ascending: false }).limit(400));
   const m = new Map();
   for (const r of rows) {

@@ -3,6 +3,7 @@
 // se arma con el kit (Hero · KpiCard · Segmented · TablaCompacta · Panel · Pill · Boton)
 // y sub-vistas en ./pagos/*.jsx.
 import React, { useState, useEffect, useRef } from "react";
+import { hoyISO, isoLocal } from '../../lib/format';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';
@@ -881,7 +882,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [fondoForm, setFondoForm] = useState({
     tipo_fondo: "mkt",
     tipo_mov: "gasto",
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: hoyISO(),
     concepto: "",
     monto: "",
     folio: "",
@@ -972,14 +973,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
       return a.fecha < b.fecha ? -1 : 1;
     }));
     setShowFondoForm(false);
-    setFondoForm({ tipo_fondo: "mkt", tipo_mov: "gasto", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" });
+    setFondoForm({ tipo_fondo: "mkt", tipo_mov: "gasto", fecha: hoyISO(), concepto: "", monto: "", folio: "", notas: "" });
     flash("✓ Movimiento registrado");
   };
 
   // Crear movimiento de fondo a partir de un pago/promo (auto-link por pago_id)
   const crearMovimientoDesdePago = async (pago) => {
     const tipo_fondo = "mkt";  // solo MKT por ahora (Fondo Directo no se gestiona)
-    const fecha = pago.fecha_pago_real || pago.fecha_compromiso || new Date().toISOString().slice(0, 10);
+    const fecha = pago.fecha_pago_real || pago.fecha_compromiso || hoyISO();
     const d = new Date(fecha + "T00:00:00");
     const mes = d.getMonth() + 1;
     const row = {
@@ -1187,7 +1188,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     // Efectos cruzados:
     //   - Si se marca fecha_pago_real → estatus='pagado'
     //   - Si estatus pasa a 'pagado' y no hay fecha_pago_real aún → autocompletar con hoy
-    const hoyISO = new Date().toISOString().slice(0, 10);
+    const hoyISO = hoyISO();
     const reg = registros.find(r => r.id === id);
     const extra = {};
     if (field === "fecha_pago_real" && value) extra.estatus = "pagado";
@@ -1401,7 +1402,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       if (!row.fecha_compromiso) return null;
       const d = new Date(row.fecha_compromiso + "T00:00:00");
       d.setMonth(d.getMonth() + 1);
-      return d.toISOString().slice(0, 10);
+      return isoLocal(d);
     })();
     const copia = {
       cliente: row.cliente || clienteKey,
@@ -1424,7 +1425,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // Toggle rápido: marcar como pagado con fecha de hoy (o des-marcar)
   const togglePagado = async (row) => {
     if (!canEdit) return;
-    const hoyISO = new Date().toISOString().slice(0, 10);
+    const hoyISO = hoyISO();
     const yaPagado = row.estatus === "pagado";
     const updates = yaPagado
       ? { estatus: "pendiente", fecha_pago_real: null }
@@ -1720,7 +1721,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const anioActual = hoy.getFullYear();
   const mesActualNum = hoy.getMonth() + 1;
   const nombreMesActual = MESES_LARGOS[hoy.getMonth()];
-  const hoyISO = hoy.toISOString().slice(0, 10);
+  const hoyISO = isoLocal(hoy);
   const rebateTotalAcum = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0));
   const tieneFondos = clienteKey === "dicotech" || clienteKey === "pcel";
   const edit = { editingCell, editValue, setEditValue, saveEdit, cancelEdit, startEdit };
@@ -1730,7 +1731,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const pendientesActivos = registros.filter(visibleEnTodas);
   const nPendientes = pendientesActivos.length;
   const vencidos = registros.filter(r => r.estatus === "vencido" || (["pendiente", "en_proceso"].includes(r.estatus) && r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 10) < hoyISO));
-  const en7 = (() => { const d = new Date(hoy); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
+  const en7 = (() => { const d = new Date(hoy); d.setDate(d.getDate() + 7); return isoLocal(d); })();
   const vencenSemana = pendientesActivos.filter(r => r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 10) >= hoyISO && String(r.fecha_compromiso).slice(0, 10) <= en7);
   const proximoVenc = pendientesActivos.map(r => r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 10)).filter(f => f && f >= hoyISO).sort()[0] || null;
   const pagadosAnio = registros.filter(r => r.estatus === "pagado" && String(r.fecha_pago_real || r.fecha_compromiso || "").slice(0, 4) === String(anioActual));
