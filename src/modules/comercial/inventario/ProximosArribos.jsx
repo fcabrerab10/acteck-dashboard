@@ -41,14 +41,14 @@ export default function ProximosArribos({ transito, skuRows, descripciones, onVe
       });
     });
     // diasEnTransito = días desde el ETD (lo que ya lleva navegando): sólo para lo que aún no llega.
-    const hoyISO = hoyISO();
+    const hoy = hoyISO();
     return [...m.values()].map((it) => ({
       ...it,
       nSkus: it.skus.length,
       resuelve: it.skus.filter((s) => s.necesitado).length,
       dias: diasHasta(it.eta),
       naviera: (it.contenedor && navieraPor.get(it.contenedor)) || null,
-      diasEnTransito: it.etd && it.etd <= hoyISO ? Math.round((Date.parse(`${hoyISO}T00:00:00`) - Date.parse(`${it.etd}T00:00:00`)) / 86400000) : null,
+      diasEnTransito: it.etd && it.etd <= hoy ? Math.round((Date.parse(`${hoy}T00:00:00`) - Date.parse(`${it.etd}T00:00:00`)) / 86400000) : null,
     }))
       .sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')) || b.piezas - a.piezas);
   }, [transito, porSku, descripciones, navieraPor]);
