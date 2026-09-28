@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { hoyISO } from '../../lib/format';
+import { hoyISO as fechaHoyISO } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import {
@@ -1900,7 +1900,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
     setCargando(true);
     (async () => {
       try {
-        const hoyISO = hoyISO();
+        const hoyISO = fechaHoyISO();
         const [semRes, proxRes, ultRes, invRes] = await Promise.all([
           supabase.from('v_sellout_pcel_semanal')
             .select('anio,semana,piezas,inventario,antiguedad,transito,backorder,costo')

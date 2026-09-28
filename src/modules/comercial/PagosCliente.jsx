@@ -3,7 +3,7 @@
 // se arma con el kit (Hero · KpiCard · Segmented · TablaCompacta · Panel · Pill · Boton)
 // y sub-vistas en ./pagos/*.jsx.
 import React, { useState, useEffect, useRef } from "react";
-import { hoyISO, isoLocal } from '../../lib/format';
+import { hoyISO as fechaHoyISO, isoLocal } from '../../lib/format';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';
@@ -1188,7 +1188,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     // Efectos cruzados:
     //   - Si se marca fecha_pago_real → estatus='pagado'
     //   - Si estatus pasa a 'pagado' y no hay fecha_pago_real aún → autocompletar con hoy
-    const hoyISO = hoyISO();
+    const hoyISO = fechaHoyISO();
     const reg = registros.find(r => r.id === id);
     const extra = {};
     if (field === "fecha_pago_real" && value) extra.estatus = "pagado";
@@ -1425,7 +1425,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // Toggle rápido: marcar como pagado con fecha de hoy (o des-marcar)
   const togglePagado = async (row) => {
     if (!canEdit) return;
-    const hoyISO = hoyISO();
+    const hoyISO = fechaHoyISO();
     const yaPagado = row.estatus === "pagado";
     const updates = yaPagado
       ? { estatus: "pendiente", fecha_pago_real: null }
