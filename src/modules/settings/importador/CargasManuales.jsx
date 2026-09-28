@@ -51,7 +51,7 @@ function EditorCadencia({ fuente, theme, onGuardado }) {
     return guardar({ tipo: 'semanal', dia: c.tipo === 'semanal' ? c.dia : 1, tolerancia: c.tipo === 'semanal' ? c.tolerancia : TOLERANCIA_SEMANAL });
   };
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', opacity: guardando ? 0.6 : 1 }}>
+    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', maxWidth: 300, whiteSpace: 'normal', opacity: guardando ? 0.6 : 1 }}>
       <select value={c.tipo} onChange={(e) => cambiarTipo(e.target.value)} style={sel} title="Cadencia">
         <option value="semanal">semanal</option><option value="mensual">mensual</option><option value="cambio">cuando cambie</option>
       </select>
