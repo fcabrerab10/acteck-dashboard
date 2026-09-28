@@ -25,6 +25,7 @@ const ALLOWED = {
   // Alimenta v_erp_medidas (medidas del director). Replace por año (deleteAnios).
   erp_ventas:         'venta_id,venta_renglon',
   sellout_detalle:    'cliente,fecha,no_parte,row_hash',
+  sellout_ensambles:  'cliente,fecha,folio,sku,row_hash',   // ensambles de Digitalife (2026-09-28)
   inventario_cliente: 'cliente,sku,anio,semana',
   roadmap_sku:       'sku',
   precios_sku:       'sku,lista,anio,mes',
@@ -149,7 +150,7 @@ export default async function handler(req, res) {
     // Lo usa el importador (Digitalife · "es el histórico completo") para
     // reemplazar el sell out del cliente. Sólo tablas con columna cliente.
     if (deleteCliente) {
-      const TABLAS_CLIENTE = new Set(['sellout_detalle', 'inventario_cliente', 'inventario_cliente_sucursal']);
+      const TABLAS_CLIENTE = new Set(['sellout_detalle', 'sellout_ensambles', 'inventario_cliente', 'inventario_cliente_sucursal']);
       const cli = String(deleteCliente);
       if (!TABLAS_CLIENTE.has(table) || !/^[a-z_]{2,40}$/.test(cli)) return res.status(400).json({ error: 'deleteCliente no permitido', table, cliente: cli });
       const dr = await fetch(`${SB_URL}/rest/v1/${table}?cliente=eq.${cli}`, {
@@ -225,7 +226,7 @@ export default async function handler(req, res) {
     // Refrescar la vista materializada mv_sellout_unificado cuando se
     // actualiza cualquiera de las tablas que la alimentan. Se hace
     // fire-and-forget para no bloquear la respuesta del cliente.
-    const AFECTA_SELLOUT_MV = new Set(['sellout_general', 'sellout_detalle', 'sellout_pcel', 'facturacion_clientes']);
+    const AFECTA_SELLOUT_MV = new Set(['sellout_general', 'sellout_detalle', 'sellout_ensambles', 'sellout_pcel', 'facturacion_clientes']);
     if (AFECTA_SELLOUT_MV.has(table)) {
       // No await — dispara y sigue
       fetch(`${SB_URL}/rest/v1/rpc/refresh_mv_sellout_unificado`, {

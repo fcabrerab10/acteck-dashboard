@@ -80,6 +80,8 @@ export const FUENTES = [
     casilla: { key: 'historico', label: 'es histórico completo (reemplaza el sell out de Digitalife)' } },
   { id: 'digitalife-inv', grupo: 'digitalife', statusKey: 'inv_digitalife', tipo: 'semana', titulo: 'Inventario semanal', parser: 'digitalifeInv', accept: EXCEL, kind: 'Excel',
     formato: ['Acteck_BalamRush_Inventario.xlsx · Hoja39', 'snapshot por (cliente, sku, año, semana)'], cadencia: LUNES },
+  { id: 'digitalife-ensambles', grupo: 'digitalife', statusKey: 'ensambles_digitalife', tipo: 'sellout', titulo: 'Ventas de ensambles', parser: 'digitalifeEnsambles', accept: EXCEL, kind: 'Excel',
+    formato: ['Acteck_BalamRush_Ventas_Ensambles.xlsx · Hoja55', 'componentes nuestros dentro de PCs armadas · se suman al sell out · dedup por fecha + folio + parte'], cadencia: LUNES },
   // ── PCEL ──
   { id: 'pcel-vm', grupo: 'pcel', statusKey: 'sellout_pcel', tipo: 'semana', titulo: 'Venta-marca semanal', parser: 'pcelVentaMarca', accept: EXCEL, kind: 'Excel',
     formato: ['venta-marca-ACTECK.xlsx · "Ventas por Fabricante"', 'semana desde "Vta Semana N" · también mensual histórico y catálogo SKU'], cadencia: LUNES },

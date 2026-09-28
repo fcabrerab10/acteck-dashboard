@@ -10,7 +10,7 @@ export { leerWorkbook } from './_util';
 export { default as roadmap } from './roadmap';
 export { default as estadosResultados } from './estadosResultados';
 export { selloutGeneral, revkoSellout } from './selloutGeneral';
-export { digitalifeSellout, digitalifeInv } from './digitalife';
+export { digitalifeSellout, digitalifeInv, digitalifeEnsambles } from './digitalife';
 export { default as pcelVentaMarca } from './pcel';
 export { dicotechSelloutSemanal, dicotechInventario } from './dicotech';
 export { default as estadoCuenta } from './estadoCuenta';

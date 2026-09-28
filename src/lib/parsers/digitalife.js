@@ -54,3 +54,32 @@ export function digitalifeInv(wb, fileName, opts = {}) {
   }).filter((r) => r.sku);
   return { table: 'inventario_cliente', onConflict: 'cliente,sku,anio,semana', rows: out, periodo: { anio, semana }, resumen: `${out.length} SKUs · semana ${semana}/${anio}` };
 }
+
+// Ventas de ensambles (2026-09-28): Acteck_BalamRush_Ventas_Ensambles.xlsx · FECHA · FOLIO · NUM PARTE ENSAMBLE ·
+// MARCA COMPONENTE · NUM PARTE COMPONENTE · DESCRIPCION COMPONENTE · CANTIDAD. Componentes nuestros que salen
+// dentro de PCs armadas por Digitalife; no vienen en su sell out. Append con dedup por hash (se puede resubir).
+export function digitalifeEnsambles(wb) {
+  const sh = primeraHoja(wb, 'Hoja55');
+  const rows = XLSX().utils.sheet_to_json(sh, { defval: null });
+  const out = rows.map((r) => {
+    const obj = objSnake(r);
+    const o = {
+      cliente: 'digitalife', fecha: toISODate(obj.fecha),
+      folio: toStr(obj.folio), ensamble: toStr(obj.num_parte_ensamble ?? obj.ensamble),
+      marca: toStr(obj.marca_componente ?? obj.marca),
+      sku: toStr(obj.num_parte_componente ?? obj.no_parte ?? obj.sku),
+      descripcion: toStr(obj.descripcion_componente ?? obj.descripcion),
+      cantidad: toNum(obj.cantidad) ?? 0,
+    };
+    if (!o.fecha || !o.sku) return null;
+    o.sku = o.sku.toUpperCase();
+    o.row_hash = hash([o.fecha, o.folio, o.ensamble, o.sku, o.cantidad].join('|'));
+    return o;
+  }).filter(Boolean);
+  const fechas = out.map((r) => r.fecha).sort();
+  const folios = new Set(out.map((r) => r.folio));
+  return {
+    table: 'sellout_ensambles', onConflict: 'cliente,fecha,folio,sku,row_hash', rows: out,
+    resumen: `${out.length} componentes en ${folios.size} ensambles${fechas.length ? ` · ${fechas[0]} → ${fechas[fechas.length - 1]}` : ''}`,
+  };
+}
