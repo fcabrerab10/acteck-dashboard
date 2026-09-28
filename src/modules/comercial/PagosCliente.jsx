@@ -3,7 +3,7 @@
 // se arma con el kit (Hero · KpiCard · Segmented · TablaCompacta · Panel · Pill · Boton)
 // y sub-vistas en ./pagos/*.jsx.
 import React, { useState, useEffect, useRef } from "react";
-import { hoyISO as fechaHoyISO, isoLocal } from '../../lib/format';
+import { hoyISO, hoyISO as fechaHoyISO, isoLocal } from '../../lib/format';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';

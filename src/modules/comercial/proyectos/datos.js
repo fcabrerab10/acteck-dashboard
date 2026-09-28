@@ -46,7 +46,7 @@ export function useAbasto() {
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const opcional = (p) => p.catch(() => []);
-      const hoyISO = hoyISO();
+      const hoy = hoyISO();
       const [inventario, transito, leadTimes, leadProveedor, roadmap, catalogo, embarques, preciosLista] = await Promise.all([
         fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
         fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,embarques,embarques_detalle'),
@@ -58,7 +58,7 @@ export function useAbasto() {
         // producto nuevo) antes de que el ERP lo facture y de que entre al roadmap.
         // Es el caso de Audive (AV-*): 19 SKUs en producción con arribo a CEDIS.
         opcional(fetchAll('embarques_compras', 'codigo,descripcion,arribo_cedis,estatus',
-          (q) => q.or(`arribo_cedis.gte.${hoyISO},arribo_cedis.is.null`))),
+          (q) => q.or(`arribo_cedis.gte.${hoy},arribo_cedis.is.null`))),
         // Listas de precio por SKU (v_estrategia_precios_lista): el precio de cada línea se elige de aquí o es personalizado.
         opcional(fetchAll('v_estrategia_precios_lista', 'sku,lista,precio')),
       ]);

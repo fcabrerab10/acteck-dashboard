@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { hoyISO as fechaHoyISO } from '../../lib/format';
+import { hoyISO, hoyISO as fechaHoyISO } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import {
