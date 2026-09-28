@@ -148,6 +148,14 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
     const medir = () => setAnchoCat(el.clientWidth); medir();
     const ro = new ResizeObserver(medir); ro.observe(el); return () => ro.disconnect();
   }, []);
+  const gridRef = useRef(null);
+  const [anchoGrid, setAnchoGrid] = useState(0);
+  useEffect(() => {
+    const el = gridRef.current; if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const medir = () => setAnchoGrid(el.clientWidth); medir();
+    const ro = new ResizeObserver(medir); ro.observe(el); return () => ro.disconnect();
+  }, []);
+  const apilar = anchoGrid > 0 && anchoGrid < 1180;   // laptop con menú abierto o media pantalla: «Mi propuesta» arriba, catálogo a todo lo ancho
   const nivelCompacto = anchoCat === 0 ? 0 : anchoCat < 1000 ? 2 : anchoCat < 1320 ? 1 : 0;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
   const muted = (v) => (v ? int(v) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>);
@@ -156,7 +164,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
 
   const columnas = [
     { key: 'sku', label: 'SKU', align: 'left', width: 96, sort: true, mono: true, render: (r) => <span style={{ ...mono, fontWeight: 600, color: r.sku in propuesta ? accent : theme.text }}>{r.sku}</span> },
-    { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 260, sort: true, render: (r) => <span title={r.descripcion}>{r.descripcion || '—'}</span> },
+    { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: nivelCompacto ? 170 : 260, sort: true, render: (r) => <span title={r.descripcion}>{r.descripcion || '—'}</span> },
     { key: 'familia', label: 'Familia', align: 'left', width: 100, sort: true, render: (r) => <span style={{ color: theme.textMuted, fontSize: 10.5 }}>{r.familia || '—'}{r.rdmp ? <Pill tone={roadmapTone(r.rdmp)} size="xs" style={{ marginLeft: 5 }}>{r.rdmp}</Pill> : null}</span> },
     { key: 'invCliente', label: 'Inv cli', width: 60, sort: true, render: (r) => { const s = sugeridos.get(r.sku); return s ? <span style={{ color: theme.red || '#FF3B30', fontWeight: 600 }} title={s.stock ? `${s.dias} días de cobertura` : 'Sin stock en el cliente'}>{int(s.stock)}</span> : muted(r.invCliente); } },
     ...[2, 1, 0].map((idx) => ({ key: `m${idx}`, label: mesLbl(mesesKeys[idx]), width: 52, render: (r) => <span style={{ color: theme.textMuted }}>{muted(N(r.selloutMes?.[mesesKeys[idx]]))}</span> })),
@@ -186,7 +194,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
         onEnter={() => { if (sugeridos.has(r.sku)) aceptarSugerido(r.sku); else toggleSku(r.sku); }}
         title="Piezas a proponer: escribe la cantidad y luego Aceptar o marca la fila (Enter también la agrega)" ariaLabel={`Piezas a proponer de ${r.sku}`} />
     )) },
-    { key: 'precio', label: 'Precio', align: 'left', width: 168, render: (r) => {
+    { key: 'precio', label: 'Precio', align: 'left', width: nivelCompacto ? 150 : 168, render: (r) => {
       if (r.sku in propuesta) return <PrecioPicker r={r} val={propuesta[r.sku]} onChange={(patch) => editarSku(r.sku, patch)} />;
       const s = sugeridos.get(r.sku);
       if (!s) return <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Marcar para editar</span>;
@@ -252,7 +260,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
         )}
       </Hero>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 10, alignItems: 'start' }}>
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: apilar ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 320px', gap: 10, alignItems: 'start' }}>
         <div ref={catalogoRef} style={{ minWidth: 0 }}>
         <Panel padding="0" titulo="Catálogo" meta={`${int(filtrados.length)} de ${int(skus.length)} SKUs · ${propuestaLista.length} seleccionados`}
           acciones={<Buscador value={busqueda} onChange={setBusqueda} resultados={int(filtrados.length)} placeholder="Buscar: mouse inalámbrico, AC-93, balam, RMI…" width={300} />}>
