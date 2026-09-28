@@ -207,9 +207,9 @@ export function serieHistorico(historico, listas) {
 }
 
 /** Disponibilidad hoy: disponible + próximo arribo (v_transito_sku.embarques_detalle). */
-export function disponibilidad(inv, tr, hoyISO = hoyISO()) {
+export function disponibilidad(inv, tr, hoy = hoyISO()) {
   const det = (Array.isArray(tr?.embarques_detalle) ? tr.embarques_detalle : []).filter((e) => N(e.cantidad) > 0).sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')));
-  const proximo = det.find((e) => e.eta && e.eta >= hoyISO) || det.find((e) => e.eta) || null;
+  const proximo = det.find((e) => e.eta && e.eta >= hoy) || det.find((e) => e.eta) || null;
   return {
     disponible: N(inv?.disponible), inventario: N(inv?.inventario), enCamino: N(tr?.cantidad),
     proximoArribo: proximo ? { fecha: proximo.eta, piezas: N(proximo.cantidad), po: proximo.po } : null,
