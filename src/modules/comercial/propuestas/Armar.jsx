@@ -4,7 +4,7 @@
 // Sugeridos (sugeridos.js): nada se marca solo. Los SKUs con cobertura crítica en el cliente van AL PRINCIPIO del
 // catálogo con sombreado suave y pill "Sugerido · N pz"; Aceptar (o clic en la fila) los agrega con esa cantidad y la
 // fila vuelve a su orden normal. "Aceptar todos los sugeridos (N)" en la toolbar; "Sombreado" apaga el resaltado.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ExternalLink, RefreshCw } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -138,6 +138,17 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
   }, [propuestaLista]);
 
   const cuotaPct = contexto?.cuota > 0 ? Math.min(100, Math.round((contexto.facturado / contexto.cuota) * 100)) : 0;
+  // Regla de ancho: en laptops (Karolina, 2026-09-28) la tabla se cortaba a la derecha. Se mide el panel y, si no
+  // cabe, se ocultan columnas de apoyo (meses sueltos, SPIFF, familia, últ. compra); ⌀ 3m, inventarios, Llega,
+  // piezas y precio siempre se quedan. Las ocultas siguen en el tooltip del SKU.
+  const catalogoRef = useRef(null);
+  const [anchoCat, setAnchoCat] = useState(0);
+  useEffect(() => {
+    const el = catalogoRef.current; if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const medir = () => setAnchoCat(el.clientWidth); medir();
+    const ro = new ResizeObserver(medir); ro.observe(el); return () => ro.disconnect();
+  }, []);
+  const nivelCompacto = anchoCat === 0 ? 0 : anchoCat < 1000 ? 2 : anchoCat < 1320 ? 1 : 0;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
   const muted = (v) => (v ? int(v) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>);
   const sugTitle = (s) => `Vendió ${int(s.ritmo)} pz/mes en los 3 meses cerrados · stock del cliente ${int(s.stock)} pz (${s.stock ? `${s.dias} días de cobertura` : 'sin stock'}) → necesita ${int(s.necesarias)} pz para 1 mes · disponible en Acteck ${int(s.disp)} pz${s.sinStock ? ' → sin stock para proponer' : s.piezas < s.necesarias ? ` → se sugiere lo disponible: ${int(s.piezas)} pz` : ''}`;
@@ -242,6 +253,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       </Hero>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 10, alignItems: 'start' }}>
+        <div ref={catalogoRef} style={{ minWidth: 0 }}>
         <Panel padding="0" titulo="Catálogo" meta={`${int(filtrados.length)} de ${int(skus.length)} SKUs · ${propuestaLista.length} seleccionados`}
           acciones={<Buscador value={busqueda} onChange={setBusqueda} resultados={int(filtrados.length)} placeholder="Buscar: mouse inalámbrico, AC-93, balam, RMI…" width={300} />}>
           <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}` }}>
@@ -269,12 +281,13 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
             </div>
           )}
           <div style={{ padding: 0 }}>
-            <TablaCompacta dense columnas={columnas} filas={filtrados.slice(0, LIMITE)} rowKey={(r) => r.sku} orden={orden} onSort={onSort}
+            <TablaCompacta dense columnas={columnas.filter((c) => nivelCompacto === 0 || !(['m0', 'm1', 'm2', 'spiff'].includes(c.key) || (nivelCompacto >= 2 && ['familia', 'ultima'].includes(c.key))))} filas={filtrados.slice(0, LIMITE)} rowKey={(r) => r.sku} orden={orden} onSort={onSort}
               onRowClick={(r) => toggleSku(r.sku)} maxHeight="calc(100vh - 330px)" vacio="Ningún SKU coincide con la búsqueda y los filtros."
               rowStyle={(r) => (r.sku in propuesta ? { background: `${accent}${theme.mode === 'dark' ? '1F' : '0D'}` } : sombreado && sugeridos.has(r.sku) ? { background: `${accent}14` } : null)} />
             {filtrados.length > LIMITE && <div style={{ padding: 10, textAlign: 'center', fontSize: 11, color: theme.textMuted }}>Mostrando {LIMITE} de {int(filtrados.length)} · afina la búsqueda o los filtros</div>}
           </div>
         </Panel>
+        </div>
         <MiPropuesta cliente={cliente} propuestaLista={propuestaLista} totalPropuesta={totalPropuesta} piezasTotal={piezasTotal}
           spiffTotal={spiffTotal} spiffSkusCount={spiffSkusCount} spiffDisponiblesCount={spiffDisponiblesCount}
           margenProm={margenProm} sensible={sensible} autosave={autosave} onGuardar={onGuardar} onRevisar={onRevisar} onQuitar={quitarSku} onVaciar={vaciar} onEditar={editarSku} />

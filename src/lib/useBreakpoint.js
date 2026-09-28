@@ -55,10 +55,12 @@ export function useIsTouch() {
 // True cuando conviene usar shell mobile: iPhone/iPad en cualquier orientación.
 // - mobile / tablet siempre
 // - laptop (<1440) sólo si es dispositivo touch (iPad landscape)
+// Regla pura (2026-09-28, Fernando: «cuando trabajamos en pantalla dividida se hace la versión del celular»):
+// una computadora (puntero fino) a media pantalla —768 a 1023 px— sigue siendo escritorio; el shell móvil sólo
+// va en teléfonos (< 768) y en dispositivos táctiles hasta 1439 px (iPad en cualquier orientación).
+export const debeUsarShellMovil = (bp, touch) => bp === 'mobile' || ((bp === 'tablet' || bp === 'laptop') && !!touch);
 export const useMobileShell = () => {
   const bp = useBreakpoint();
   const touch = useIsTouch();
-  if (bp === 'mobile' || bp === 'tablet') return true;
-  if (bp === 'laptop' && touch) return true;
-  return false;
+  return debeUsarShellMovil(bp, touch);
 };

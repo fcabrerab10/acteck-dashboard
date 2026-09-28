@@ -267,3 +267,13 @@ test('pictogramas y posiciones: rectángulos normalizados por hueco', () => {
   assert.deepEqual(posicionSlot('unoArriba2Abajo', 1), { fila: 1, col: 0 });
   assert.deepEqual(posicionSlot('dos', 1), { fila: 0, col: 1 });
 });
+
+test('shell móvil sólo en teléfono o en táctil hasta 1439 px; una computadora a media pantalla es escritorio', async () => {
+  const { debeUsarShellMovil } = await import('../src/lib/useBreakpoint.js');
+  assert.equal(debeUsarShellMovil('mobile', false), true);
+  assert.equal(debeUsarShellMovil('tablet', false), false, 'Chrome en Windows a 950 px sin táctil');
+  assert.equal(debeUsarShellMovil('laptop', false), false);
+  assert.equal(debeUsarShellMovil('tablet', true), true, 'iPad vertical');
+  assert.equal(debeUsarShellMovil('laptop', true), true, 'iPad horizontal');
+  assert.equal(debeUsarShellMovil('desktop', true), false);
+});
