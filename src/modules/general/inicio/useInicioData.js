@@ -15,7 +15,7 @@
 //   Últimos cambios            → auditoria_cambios (5) · v_fuentes_frescura (erp_ventas) vía useFrescura en el componente
 //   Requiere decisión          → alertas vía useAlertas (lib/alertas.js) en el componente
 import { useEffect, useState } from 'react';
-import { isoLocal } from '../../../lib/format';
+import { isoLocal } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../../lib/queries';
 import { CLIENTES, DIAS_AGENDA } from './config';

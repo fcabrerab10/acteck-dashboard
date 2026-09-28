@@ -1,5 +1,5 @@
 // Utilidades de la app móvil V3 · fechas locales, saludo, formato.
-export { money, moneyCompact, int, pct, fechaCorta, relativo } from '../lib/format';
+export { money, moneyCompact, int, pct, fechaCorta, relativo } from '../lib/format.js';
 // Qué campos trae realmente la fuente de cada cliente (ver src/lib/disponibilidad.js).
 export { disponibilidadDeCampos, filasUltimaSemana, ultimaSemana } from '../lib/disponibilidad';
 

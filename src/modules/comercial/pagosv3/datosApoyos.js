@@ -1,6 +1,6 @@
 // Datos para el formulario de Apoyo por producto (lecturas puntuales, todas cacheadas).
 import { supabase } from '../../../lib/supabase';
-import { isoLocal } from '../../../lib/format';
+import { isoLocal } from '../../../lib/format.js';
 import { useQuery } from '@tanstack/react-query';
 import { cachedQuery, fetchAll } from '../../../lib/queries';
 

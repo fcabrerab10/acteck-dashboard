@@ -1,7 +1,7 @@
 // Cálculos puros de Inicio · sin React, sin red. Entrada: data de useInicioData + alertas + modo ('mes' | 'anio').
 // Los % (MC, MUC, lost profit) se calculan SIEMPRE al agregar, nunca se suman ni se promedian.
 import { MESES, MESES_LARGO, CLIENTES, DIAS_AGENDA } from './config';
-import { isoLocal } from '../../../lib/format';
+import { isoLocal } from '../../../lib/format.js';
 import { inventarioDesdeVista } from '../../../lib/medidas';
 import { SEV_ORDEN } from '../../../lib/alertas';
 

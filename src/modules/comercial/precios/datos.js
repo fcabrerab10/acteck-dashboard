@@ -10,7 +10,7 @@
 //   · useCompetencia(sku) / useSupuesto(categoria): tablas que la app ESCRIBE → sin cachedQuery ni fetchAll
 //     (supabase directo) y, tras escribir, invalidateDataCache() + invalidación de su queryKey.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { hoyISO } from '../../../lib/format';
+import { hoyISO } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
 import { fetchAll, cachedQuery, useRoadmap, invalidateDataCache } from '../../../lib/queries';
 import { cambiosPorSku, factPorSku, elasticidadPorCategoria } from './calculo';

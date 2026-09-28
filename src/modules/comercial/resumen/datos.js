@@ -2,7 +2,7 @@
 // Todo pasa por src/lib/queries.js (paginación paralela + cache 5 min). Las tablas que la app
 // escribe (cuotas_mensuales, clientes_credito_config) se leen directo, sin cache.
 import { useEffect, useState } from 'react';
-import { isoLocal } from '../../../lib/format';
+import { isoLocal } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
 import { fetchAllQ, cachedQuery } from '../../../lib/queries';
 import { CLIENTE_KEYS, anioActual, opcionesPeriodo, finDeMes } from './calculo';

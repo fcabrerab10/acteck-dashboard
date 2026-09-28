@@ -1,6 +1,6 @@
 // proyectos/textos.js — todo el lenguaje de la pantalla en un solo lugar (web y celular).
 // Puro: no importa React ni toca red, así lo pueden usar las pruebas y el cron.
-import { int } from '../../../lib/format';
+import { int } from '../../../lib/format.js';
 import { MESES_CORTO, MESES_LARGO, PROB_LABEL, CLIENTE_LABEL } from './calculo';
 
 export { PROB_LABEL, CLIENTE_LABEL };

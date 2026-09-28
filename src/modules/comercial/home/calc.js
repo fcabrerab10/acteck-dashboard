@@ -1,6 +1,6 @@
 // Cálculos puros del Home V3 · sin React, sin red. Entradas: data de useHomeData + config.
 import { MESES, META_INV_DIAS, Q_MESES } from './config';
-import { hoyISO } from '../../../lib/format';
+import { hoyISO } from '../../../lib/format.js';
 
 const num = (v) => Number(v) || 0;
 const sum = (arr, f = (x) => x) => arr.reduce((s, x) => s + num(f(x)), 0);

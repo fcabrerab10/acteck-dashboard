@@ -1,7 +1,7 @@
 // Resumen de Clientes · textos: narrativa del hero y de cada tarjeta + texto de WhatsApp.
 // El texto compartible sale de textoAvance (src/lib/whatsapp.js): nunca lleva cartera, márgenes ni costos.
 import { textoAvance } from '../../../lib/whatsapp';
-import { moneyCompact, int } from '../../../lib/format';
+import { moneyCompact, int } from '../../../lib/format.js';
 import { labelPeriodo, MESES_CORTO } from './calculo';
 
 export const fmtCompact = moneyCompact;

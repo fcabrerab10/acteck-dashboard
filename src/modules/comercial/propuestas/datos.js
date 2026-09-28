@@ -6,7 +6,7 @@
 //   fetchPreciosVigentes(skus)                     → Map sku → { lista → precio } (para Duplicar con lista vigente)
 //   fetchKpisClientes()                            → { clienteKey: { cuota, facturado, gap } } del mes en curso
 import { supabase } from '../../../lib/supabase';
-import { hoyISO } from '../../../lib/format';
+import { hoyISO } from '../../../lib/format.js';
 import { fetchAll, fetchAllQ, cachedQuery } from '../../../lib/queries';
 import { MES_ACTUAL, CLIENTES, mesesCerrados } from './constantes';
 import { indiceDe } from './filtros';

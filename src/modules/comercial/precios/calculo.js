@@ -2,7 +2,7 @@
 // precio bajo accionable, margen por lista (sensible), cambios del mes y análisis del drill.
 // Elasticidad / simulador / precio bajo por SKU: ./elasticidad.js (sin imports, con test en scripts/test-precios-elasticidad.mjs).
 import { LISTAS, MAX_COLUMNAS_LISTA, ordenarListas, listaDeCliente, normalizar, tokens as tokenizar, coincide, N, mesesCerrados } from './textos';
-import { hoyISO } from '../../../lib/format';
+import { hoyISO } from '../../../lib/format.js';
 import { precioBajoPorCliente as _precioBajoPorCliente } from './elasticidad';
 
 // ── Filtros ──

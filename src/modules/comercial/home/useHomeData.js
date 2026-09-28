@@ -2,7 +2,7 @@
 // Tablas que la app escribe (pendientes, minutas, marketing_actividades, pagos, inventario_cliente,
 // roadmap_sku, sellout_sku) NO pasan por cachedQuery: se leen directo o por fetchAll como los hooks.
 import { useEffect, useState } from 'react';
-import { isoLocal } from '../../../lib/format';
+import { isoLocal } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
 import { fetchAll, cachedQuery, useFacturacion, useCuotasMensuales } from '../../../lib/queries';
 

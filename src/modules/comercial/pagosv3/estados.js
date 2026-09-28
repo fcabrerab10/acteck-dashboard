@@ -1,4 +1,4 @@
-import { hoyISO } from '../../../lib/format';
+import { hoyISO } from '../../../lib/format.js';
 // Flujo de un pago · Pagos V3 (2026-09-12) · PURO
 //   calculado → solicitado → autorizado → folio → pagado
 //   rechazado (con motivo) regresa a calculado · cancelado = "No aplica"

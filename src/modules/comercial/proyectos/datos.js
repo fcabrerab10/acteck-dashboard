@@ -6,7 +6,7 @@
 //   · El abasto (inventario, tránsito, lead times, catálogo) es de sólo lectura y pesado:
 //     ahí sí se usa fetchAll de src/lib/queries.js (paginación paralela + cache 5 min).
 import { useQuery } from '@tanstack/react-query';
-import { hoyISO } from '../../../lib/format';
+import { hoyISO } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
 import { queryClient } from '../../../lib/queryClient';
 import { fetchAll } from '../../../lib/queries';
