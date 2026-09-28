@@ -63,8 +63,8 @@ async function cargarSellOutSku(ck, anios) {
     });
     return { conMonto: true, valuadoALista: true, mapaPcel: aSku, inversoPcel: inverso, precios, cobertura: { conPrecio, sinPrecio }, rows: canon };
   }
-  const rows = await fetchAll('v_sellout_detalle_sku_mes', 'sku,marca,anio,mes,piezas,monto', (q) => q.eq('cliente', ck).in('anio', anios));
-  return { conMonto: true, rows: rows.map((r) => ({ sku: r.sku, anio: N(r.anio), mes: N(r.mes), piezas: N(r.piezas), monto: N(r.monto) })) };
+  const rows = await fetchAll('v_sellout_detalle_sku_mes', 'sku,marca,anio,mes,piezas,monto,piezas_ensamble,monto_ensamble', (q) => q.eq('cliente', ck).in('anio', anios));
+  return { conMonto: true, rows: rows.map((r) => ({ sku: r.sku, anio: N(r.anio), mes: N(r.mes), piezas: N(r.piezas), monto: N(r.monto), piezasEns: N(r.piezas_ensamble), montoEns: N(r.monto_ensamble) })) };
 }
 
 // Foto de inventario del cliente en la última semana cargada.

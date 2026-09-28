@@ -130,6 +130,11 @@ export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, fi
           sub={a.ritmoMes > 0 ? `al ritmo de ${int(a.ritmoMes)} pz/mes (${a.mesesRitmo}m)` : 'sin ritmo de venta'}
           pill={cobertura != null ? { tone: tonoCob, label: cobertura <= 4 ? 'baja' : cobertura >= 16 ? 'alta' : 'ok' } : undefined} />
       </KpiGrid>
+      {(() => { const e = filas.filter((r) => N(r.anio) === anio).reduce((s, r) => ({ pz: s.pz + N(r.piezasEns), monto: s.monto + N(r.montoEns) }), { pz: 0, monto: 0 }); return e.pz > 0 ? (
+        <div style={{ padding: '10px 16px 0' }}>
+          <Pill tone="purple" dot>{int(e.pz)} pz en ensambles {anio} · {moneyCompact(e.monto)} estimado · ya sumadas</Pill>
+        </div>
+      ) : null; })()}
       {apoyo && apoyo.monto > 0 && (
         <div style={{ padding: '10px 16px 0' }}>
           <Pill tone="green" dot>Apoyo acumulado {moneyCompact(apoyo.monto)} · {apoyo.n} apoyo{apoyo.n === 1 ? '' : 's'} · {int(apoyo.piezas)} pz · último {apoyo.ultimo || '—'}</Pill>

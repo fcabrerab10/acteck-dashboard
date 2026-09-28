@@ -16,7 +16,7 @@ import { disponibilidadDeCampos } from '../../lib/disponibilidad';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
+import { Cargando, Panel, Pill, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
@@ -109,6 +109,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
   const [loading, setLoading] = useState(true);
   const [mensual, setMensual] = useState([]);
   const [skuMesRaw, setSkuMesRaw] = useState([]);
+  const [modelosEns, setModelosEns] = useState([]);   // v_sellout_ensambles_modelo
   const [inventarioSucursal, setInventarioSucursal] = useState([]);
   const [marcaMes, setMarcaMes] = useState([]);
   const [rango, setRango, rangoPersistido] = usePersistTrimestres(`sellOut:${clienteKey}`, () => new Set(['Q3']));
@@ -121,15 +122,18 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [mes, skuMes, invSuc, mrcMes] = await Promise.all([
-        fetchAll('v_sellout_digitalife_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
-        fetchAll('v_sellout_digitalife_sku_mes', 'sku,anio,mes,piezas,monto',
+      const [mes, skuMes, invSuc, mrcMes, modelosEns] = await Promise.all([
+        fetchAll('v_sellout_digitalife_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas,piezas_ensamble,monto_ensamble,ensambles'),
+        // Ensambles (2026-09-28): piezas sumadas; monto estimado a precio promedio; las dos partes vienen separadas.
+        fetchAll('v_sellout_digitalife_sku_mes', 'sku,anio,mes,piezas,monto,piezas_suelto,monto_suelto,piezas_ensamble,monto_ensamble',
           (q) => q.in('anio', [anioPrev, anio])),
         fetchAll('v_inventario_cliente_sucursal_ultimo', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
         fetchAll('v_sellout_digitalife_marca_mes', 'marca,anio,mes,piezas,monto,tx,skus_distintos',
           (q) => q.in('anio', [anioPrev, anio])),
+        fetchAll('v_sellout_ensambles_modelo', 'ensamble,sku,descripcion,marca,piezas,ensambles,primera_fecha,ultima_fecha,monto', (q) => q.eq('cliente', clienteKey)),
       ]);
+      setModelosEns(modelosEns);
       setMensual(mes);
       setSkuMesRaw(skuMes);
       setInventarioSucursal(invSuc);
@@ -199,6 +203,34 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
 
     return { mtdMonto, mtdPiezas, mtdPrev, mtdPiezasPrev, yoyMtd, ytdMonto, ytdPiezas, ytdMontoPrev, yoyYtd, momPrev, momPct };
   }, [mensualPorAnio, anio, anioPrev, mesActual]);
+
+  // Ensambles del año y del mes (piezas reales, monto estimado a precio promedio suelto).
+  const ens = useMemo(() => {
+    let ytdPz = 0, ytdMonto = 0, ytdN = 0, mtdPz = 0, mtdMonto = 0, mtdN = 0;
+    for (const r of mensual) {
+      if (Number(r.anio) !== anio || Number(r.mes) > mesActual) continue;
+      ytdPz += Number(r.piezas_ensamble) || 0; ytdMonto += Number(r.monto_ensamble) || 0; ytdN += Number(r.ensambles) || 0;
+      if (Number(r.mes) === mesActual) { mtdPz += Number(r.piezas_ensamble) || 0; mtdMonto += Number(r.monto_ensamble) || 0; mtdN += Number(r.ensambles) || 0; }
+    }
+    return { ytdPz, ytdMonto, ytdN, mtdPz, mtdMonto, mtdN };
+  }, [mensual, anio, mesActual]);
+  const ensPorSku = useMemo(() => {
+    const m = new Map();
+    for (const r of skuMesRaw) { if (Number(r.anio) !== anio) continue; const pz = Number(r.piezas_ensamble) || 0; if (pz > 0) m.set(r.sku, (m.get(r.sku) || 0) + pz); }
+    return m;
+  }, [skuMesRaw, anio]);
+  const modelos = useMemo(() => {
+    const m = new Map();
+    for (const r of modelosEns) {
+      const k = r.ensamble || '(sin modelo)';
+      const c = m.get(k) || { ensamble: k, componentes: [], piezas: 0, monto: 0, ensambles: 0, ultima: null };
+      c.componentes.push({ sku: r.sku, piezas: Number(r.piezas) || 0, descripcion: r.descripcion || '' });
+      c.piezas += Number(r.piezas) || 0; c.monto += Number(r.monto) || 0; c.ensambles = Math.max(c.ensambles, Number(r.ensambles) || 0);
+      if (!c.ultima || String(r.ultima_fecha) > c.ultima) c.ultima = String(r.ultima_fecha || '');
+      m.set(k, c);
+    }
+    return [...m.values()].map((c) => ({ ...c, componentes: c.componentes.sort((a, b) => b.piezas - a.piezas) })).sort((a, b) => b.piezas - a.piezas);
+  }, [modelosEns]);
 
   // Matriz SKU × mes
   const matrizSku = useMemo(() => {
@@ -523,6 +555,16 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
           bigSmall={camposInv.valor && invTotales.valor > 0 ? `pz · ${fmt.money(invTotales.valor)}` : 'pz'}
           sub={<>{invTotales.skus} SKUs con stock · {familiasInvYTD.length} familias</>}
         />
+        {ens.ytdPz > 0 && (
+          <KpiCard theme={theme} P={P}
+            eyebrow={`Ensambles · YTD ${anio}`}
+            badge={{ l: 'estimado', tone: 'neutral' }}
+            title="componentes nuestros dentro de PCs armadas"
+            big={fmt.money(ens.ytdMonto)}
+            bigSmall={`${fmt.int(ens.ytdPz)} pz`}
+            sub={<>{fmt.int(ens.ytdN)} ensambles · ya sumado al sell out · {MESES[mesActual - 1]}: <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.int(ens.mtdPz)} pz</strong></>}
+          />
+        )}
       </div>
 
       {/* Fila: Timeline + Inventario por familia */}
@@ -539,8 +581,11 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
       <MarcaCard theme={theme} P={P} marcas={marcaYTD} totalYTD={totalYTD}
         selected={marcaFilter} onSelect={setMarcaFilter} />
 
+      {/* Ensambles: qué PCs arma el cliente y qué componentes nuestros lleva cada una */}
+      {modelos.length > 0 && <EnsamblesCard theme={theme} P={P} modelos={modelos} />}
+
       {/* Tabla SKU */}
-      <TablaSKU theme={theme} P={P} isDark={isDark} apoyosSku={apoyosSku}
+      <TablaSKU theme={theme} P={P} isDark={isDark} apoyosSku={apoyosSku} ensPorSku={ensPorSku}
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
@@ -836,7 +881,7 @@ function MarcaCard({ theme, P, marcas, totalYTD, selected, onSelect }) {
 }
 
 // ═══════════════ Tabla SKU ═══════════════
-function TablaSKU({ theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
+function TablaSKU({ theme, P, isDark, apoyosSku, ensPorSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
   const fmtU = fmtUnidad(unidad);
   // Heat pill · idéntico a SI V2 (4 niveles Apple iOS blue)
   const heatCell = (v) => {
@@ -919,6 +964,7 @@ function TablaSKU({ theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqued
                       {r.sku}
                       {r.marca && <span title={r.marca} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: marcaColor(r.marca), textTransform: 'uppercase' }}>{String(r.marca).slice(0, 2)}</span>}
                       <PillApoyoSku a={apoyosSku?.get?.(r.sku)} />
+                      {ensPorSku?.get?.(r.sku) > 0 && <Pill tone="purple" size="xs" title={`${fmt.int(ensPorSku.get(r.sku))} pz salieron dentro de PCs armadas este año (ya sumadas)`}>{fmt.int(ensPorSku.get(r.sku))} en ensambles</Pill>}
                     </span>
                   </td>
                   <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
@@ -1004,7 +1050,7 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, i
 
   // Derivados del SKU
   const stats = useMemo(() => {
-    let ytdPiezas = 0, ytdMonto = 0, prevPiezas = 0, prevMonto = 0;
+    let ytdPiezas = 0, ytdMonto = 0, prevPiezas = 0, prevMonto = 0, ytdEns = 0, ytdEnsMonto = 0;
     const mensual = Array(12).fill(0);
     const mensualMonto = Array(12).fill(0);
     for (const r of skuMesRaw) {
@@ -1015,6 +1061,7 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, i
       const mt = Number(r.monto) || 0;
       if (y === anio) {
         ytdPiezas += pz; ytdMonto += mt;
+        ytdEns += Number(r.piezas_ensamble) || 0; ytdEnsMonto += Number(r.monto_ensamble) || 0;
         if (m >= 1 && m <= 12) { mensual[m - 1] += pz; mensualMonto[m - 1] += mt; }
       } else if (y === anioPrev) {
         prevPiezas += pz; prevMonto += mt;
@@ -1023,7 +1070,7 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, i
     const yoy = prevMonto > 0 ? ((ytdMonto - prevMonto) / prevMonto * 100) : null;
     const promMensual = mensual.filter((v) => v > 0);
     const promedio = promMensual.length > 0 ? promMensual.reduce((a, b) => a + b, 0) / promMensual.length : 0;
-    return { ytdPiezas, ytdMonto, prevPiezas, prevMonto, mensual, mensualMonto, yoy, mesesActivos: promMensual.length, promedio };
+    return { ytdPiezas, ytdMonto, prevPiezas, prevMonto, mensual, mensualMonto, yoy, mesesActivos: promMensual.length, promedio, ytdEns, ytdEnsMonto };
   }, [skuMesRaw, sku, anio, anioPrev]);
 
   const invSuc = inventarioSucursalMap?.get(sku) || [];
@@ -1098,6 +1145,18 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, i
               </span>
             </div>
             <SkuMonthlyChart theme={theme} P={P} isDark={isDark} mensual={stats.mensual} mensualMonto={stats.mensualMonto} />
+            {stats.ytdEns > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${theme.divider || theme.border}` }}>
+                <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 6, padding: '6px 8px' }}>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, fontWeight: 600 }}>Venta suelta YTD</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 700, color: theme.text }}>{fmt.int(stats.ytdPiezas - stats.ytdEns)} pz <span style={{ fontSize: 10, fontWeight: 500, color: theme.textMuted }}>· {fmt.money(stats.ytdMonto - stats.ytdEnsMonto)}</span></div>
+                </div>
+                <div style={{ background: theme.surface, border: `1px solid ${P.purple || '#5856D6'}`, borderRadius: 6, padding: '6px 8px' }}>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.05em', color: P.purple || '#5856D6', fontWeight: 600 }}>En ensambles YTD · estimado</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 700, color: theme.text }}>{fmt.int(stats.ytdEns)} pz <span style={{ fontSize: 10, fontWeight: 500, color: theme.textMuted }}>· {fmt.money(stats.ytdEnsMonto)} a precio promedio</span></div>
+                </div>
+              </div>
+            )}
           </div>
           {/* Inventario por sucursal */}
           <div style={{
@@ -1163,4 +1222,51 @@ function DrillHeroStat({ k, v, s, valColor }) {
 function SkuMonthlyChart({ mensual }) {
   const datos = MESES.map((x, i) => ({ x, piezas: mensual[i] > 0 ? mensual[i] : null }));
   return <GraficaLineas compacto datos={datos} series={[{ key: 'piezas', label: 'Piezas', tipo: 'principal' }]} formato={(v) => `${fmt.int(v)} pz`} alto={110} mostrarMinMax={false} />;
+}
+
+
+// ═══════════════ Ensambles (2026-09-28) ═══════════════
+// Modelos de PC que arma el cliente con componentes nuestros. Piezas reales del archivo semanal; el monto es
+// estimado a precio promedio suelto (v_sellout_precio_prom_sku). Estas piezas YA están sumadas al sell out.
+function EnsamblesCard({ theme, P, modelos }) {
+  const [abierto, setAbierto] = useState(null);
+  const totPz = modelos.reduce((s, m) => s + m.piezas, 0), totMonto = modelos.reduce((s, m) => s + m.monto, 0), totEns = modelos.reduce((s, m) => s + m.ensambles, 0);
+  const th = { padding: '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, textAlign: 'right', whiteSpace: 'nowrap' };
+  const td = { padding: '6px 8px', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 11.5, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', textAlign: 'right', whiteSpace: 'nowrap' };
+  return (
+    <Panel titulo="Ensambles" meta={`${modelos.length} modelos · ${fmt.int(totEns)} PCs armadas · ${fmt.int(totPz)} componentes nuestros · ${fmt.money(totMonto)} estimado`} plegable abiertoInicial={false}>
+      <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 6 }}>Componentes nuestros dentro de las PCs que arma Digitalife. Las piezas ya están sumadas al sell out; el monto es estimado al precio promedio al que se vende suelto cada SKU. Clic en un modelo para ver qué lleva.</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={{ ...th, textAlign: 'left' }}>Modelo</th><th style={th}>PCs</th><th style={{ ...th, textAlign: 'left' }}>Componentes nuestros</th><th style={th}>Piezas</th><th style={th}>Monto est.</th><th style={th}>Último</th></tr></thead>
+          <tbody>
+            {modelos.map((m) => {
+              const on = abierto === m.ensamble;
+              return (
+                <React.Fragment key={m.ensamble}>
+                  <tr onClick={() => setAbierto(on ? null : m.ensamble)} style={{ cursor: 'pointer', background: on ? `${P.accent}12` : 'transparent' }}>
+                    <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: theme.text }}>{m.ensamble}</td>
+                    <td style={td}>{fmt.int(m.ensambles)}</td>
+                    <td style={{ ...td, textAlign: 'left', fontFamily: TYPO.fontText, color: theme.textMuted, whiteSpace: 'normal' }}>{m.componentes.slice(0, 4).map((c) => `${c.sku} ×${fmt.int(c.piezas)}`).join(' · ')}{m.componentes.length > 4 ? ` · +${m.componentes.length - 4}` : ''}</td>
+                    <td style={{ ...td, fontWeight: 600, color: theme.text }}>{fmt.int(m.piezas)}</td>
+                    <td style={td}>{fmt.money(m.monto)}</td>
+                    <td style={{ ...td, color: theme.textMuted }}>{m.ultima ? m.ultima.slice(5, 10).replace('-', '/') : '—'}</td>
+                  </tr>
+                  {on && m.componentes.map((c) => (
+                    <tr key={c.sku} style={{ background: `${P.accent}08` }}>
+                      <td style={{ ...td, textAlign: 'left', paddingLeft: 24, color: theme.text }}>{c.sku}</td>
+                      <td style={td} />
+                      <td style={{ ...td, textAlign: 'left', fontFamily: TYPO.fontText, color: theme.textMuted, whiteSpace: 'normal' }}>{c.descripcion}</td>
+                      <td style={td}>{fmt.int(c.piezas)}</td>
+                      <td style={td} colSpan={2} />
+                    </tr>
+                  ))}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
 }
