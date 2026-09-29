@@ -54,7 +54,7 @@ export async function traerDatos({ anio, mes, sbGetAll }) {
     sbGetAll(`v_fact_cliente_mes?select=cliente_key,anio,mes,monto&anio=eq.${anio}&mes=gte.${desdeMes}&mes=lte.${mes}`),
     sbGetAll(`cuotas_mensuales?select=cliente,anio,mes,cuota_min,cuota_minima_interna&anio=eq.${anio}`),
     sbGetAll(`sellout_sku?select=cliente,anio,mes,monto_pesos&anio=eq.${anio}&mes=eq.${mes}`),
-    sbGetAll(`v_sellout_general_vendedor_mes?select=anio,mes,vendedor_nombre,importe&anio=eq.${anio}&mes=eq.${mes}&mayorista=ilike.*dicotech*`),
+    sbGetAll(`v_sellout_dicotech_vendedor_mes?select=anio,mes,vendedor_nombre,importe&anio=eq.${anio}&mes=eq.${mes}&mayorista=ilike.*dicotech*`),
     sbGetAll(`pagos_dinamica_mes?select=cliente,anio,mes,meta,premios&anio=eq.${anio}&mes=eq.${mes}`),
     sbGetAll(`marketing_actividades?select=id,cliente,nombre,anio,mes,fecha,inversion,costo,cobro,pago_id&anio=eq.${anio}`),
     cierraQ ? sbGetAll(`sell_in_sku?select=cliente,sku,mes,monto_pesos&anio=eq.${anio}&mes=gte.${desdeMes}&mes=lte.${mes}`) : Promise.resolve([]),

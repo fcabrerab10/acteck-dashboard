@@ -3,7 +3,7 @@
 // Reglas de rendimiento del proyecto:
 //   · `pagos`, `pagos_*`, `pagos_fondos*`, `pagos_dinamica_mes` las ESCRIBE la app →
 //     nunca se envuelven con cachedQuery; tras cada escritura se invalida el cache.
-//   · Las vistas de sólo lectura (v_fact_cliente_mes, v_sellout_general_vendedor_mes…)
+//   · Las vistas de sólo lectura (v_fact_cliente_mes, v_sellout_dicotech_vendedor_mes…)
 //     sí pasan por cachedQuery / fetchAllQ.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -57,7 +57,7 @@ export function useDatosPagos({ perfil, anio, mes }) {
         supabase.from('cuotas_mensuales').select('cliente,anio,mes,cuota_min,cuota_minima_interna').eq('anio', anio).in('cliente', visibles),
         supabase.from('sellout_sku').select('cliente,anio,mes,monto_pesos').eq('anio', anio).in('cliente', visibles),
         visibles.includes('dicotech')
-          ? cachedQuery(supabase.from('v_sellout_general_vendedor_mes').select('anio,mes,vendedor_nombre,importe').eq('anio', anio).ilike('mayorista', '%dicotech%'))
+          ? cachedQuery(supabase.from('v_sellout_dicotech_vendedor_mes').select('anio,mes,vendedor_nombre,importe').eq('anio', anio).ilike('mayorista', '%dicotech%'))
           : Promise.resolve({ data: [] }),
         supabase.from('marketing_actividades').select('id,cliente,nombre,anio,mes,fecha,inversion,costo,cobro,pago_id,estatus').eq('anio', anio).in('cliente', visibles),
         // Rebate por categoría (Digitalife): sell in por SKU + categoría del SKU.
