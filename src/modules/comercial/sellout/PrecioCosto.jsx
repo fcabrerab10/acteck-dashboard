@@ -67,7 +67,7 @@ const navegarPagos = (clienteKey, extra) => window.dispatchEvent(new CustomEvent
 
 export default function BloquePrecioCosto({ clienteKey, sku, anio, P = {}, isDark }) {
   const { theme } = useTheme();
-  const { perfil } = usePerfil();
+  const perfil = usePerfil();
   const puedeRegistrar = puedeEditarPagos(perfil, clienteKey);
   const { data, isLoading } = usePrecioCostoSku(clienteKey, sku, anio);
   const { data: apoyos } = useApoyosPorSku(clienteKey);
