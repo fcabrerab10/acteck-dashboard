@@ -43,7 +43,9 @@ navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
 // vieja y entra a una pestaña que aún no había cargado, el chunk da 404 y React tira "Se rompió algo".
 // Aquí se detecta ese caso (vite:preloadError o error de import dinámico) y, en vez del error, se
 // activa el SW nuevo y se recarga. Guardia de 60 s en sessionStorage para no entrar en bucle.
-const esErrorDeVersion = (err) => /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|error loading dynamically/i.test(String(err?.message || err || ''));
+// «Cannot read properties of undefined (reading 'default')» dentro de un React.lazy es la misma situación:
+// el chunk viejo ya no existe y el import resuelve sin módulo (2026-09-29, Fernando lo vio tras 4 deploys seguidos).
+const esErrorDeVersion = (err) => /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|error loading dynamically|reading 'default'/i.test(String(err?.message || err || ''));
 let recuperando = false;
 async function recuperarVersion() {
   if (recuperando) return;
