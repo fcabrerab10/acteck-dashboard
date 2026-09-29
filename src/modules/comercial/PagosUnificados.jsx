@@ -47,7 +47,7 @@ import { cuadreCon } from './pagosv3/apoyos';
 import HojaRegistrarPago from './pagosv3/HojaRegistrarPago';
 const MESES = M.MESES_LARGOS;
 
-export default function PagosUnificados({ clienteKey = null }) {
+export default function PagosUnificados({ clienteKey = null, extra = null }) {
   const perfil = usePerfil();
   const { theme } = useTheme();
   const rootRef = useRef(null);
@@ -63,6 +63,10 @@ export default function PagosUnificados({ clienteKey = null }) {
   const [expandido, setExpandido] = useState(null);
   const [formManual, setFormManual] = useState(false);
   const [formApoyo, setFormApoyo] = useState(false);       // ＋ Apoyo por producto (2026-09-24)
+  const [apoyoSkuInicial, setApoyoSkuInicial] = useState(null); // desde Sell Out › drill del SKU › «Registrar apoyo» (2026-09-29)
+  useEffect(() => {
+    if (extra?.apoyoSku) { setApoyoSkuInicial(extra.apoyoSku); setFormApoyo(true); }
+  }, [extra]);
   const [registrando, setRegistrando] = useState(null);
   const [correoLoteTxt, setCorreoLoteTxt] = useState(null);
 
@@ -446,7 +450,7 @@ export default function PagosUnificados({ clienteKey = null }) {
       />
 
       <FormApoyoProducto
-        abierto={formApoyo} onCerrar={() => setFormApoyo(false)}
+        abierto={formApoyo} onCerrar={() => { setFormApoyo(false); setApoyoSkuInicial(null); }} skuInicial={apoyoSkuInicial}
         clientes={visibles.filter(puedeEditar)} clienteInicial={clienteSel} anio={anio} mes={mes} pagos={d.pagos || []}
         onGuardar={(datos) => recargarTras(() => crearPagoManual({ datos, perfil }), 'Apoyo por producto creado')}
       />

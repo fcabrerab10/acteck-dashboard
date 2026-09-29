@@ -15,7 +15,7 @@ import { calcularApoyo, conceptoApoyo, detalleApoyo, historialSku } from './apoy
 import { buscarSkus, datosProducto, bonificacionesErp, bonificacionesLigadas } from './datosApoyos';
 import { PillCuadre } from './TablaApoyo';
 
-export default function FormApoyoProducto({ abierto, onCerrar, clientes, clienteInicial, anio, mes, pagos = [], onGuardar }) {
+export default function FormApoyoProducto({ abierto, onCerrar, clientes, clienteInicial, anio, mes, pagos = [], onGuardar, skuInicial = null }) {
   const { theme } = useTheme();
   const [cliente, setCliente] = useState(clienteInicial || clientes[0]);
   const [productos, setProductos] = useState([]);
@@ -30,6 +30,13 @@ export default function FormApoyoProducto({ abierto, onCerrar, clientes, cliente
   const ligadas = useMemo(() => bonificacionesLigadas(pagos), [pagos]);
 
   useEffect(() => { if (abierto) { setCliente(clienteInicial || clientes[0]); setProductos([]); setBonif(null); setBusca(''); setSugs([]); setNotas(''); } }, [abierto, clienteInicial, clientes]);
+  // Abierto desde el drill de un SKU en Sell Out: el producto entra solo (2026-09-29).
+  useEffect(() => {
+    if (!abierto || !skuInicial || !cliente) return undefined;
+    let vivo = true;
+    buscarSkus(skuInicial).then((r) => { const s = r.find((x) => x.sku === skuInicial) || r[0]; if (vivo && s) agregar(s); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [abierto, skuInicial, cliente]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!abierto || !cliente) return undefined;
     let vivo = true; setCargandoLista(true);

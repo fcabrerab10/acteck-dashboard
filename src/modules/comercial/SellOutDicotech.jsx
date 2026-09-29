@@ -18,6 +18,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
+import BloquePrecioCosto from './sellout/PrecioCosto';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { colorMarca } from '../../lib/marcas';
@@ -857,7 +858,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         selloutGeneral={selloutGeneral} anio={anio} mesActual={mesActual} />
 
       {/* Tabla SKU · click en fila expande drill inline debajo */}
-      <TablaSKU theme={theme} P={P} isDark={isDark} apoyosSku={apoyosSku}
+      <TablaSKU clienteKey={clienteKey} theme={theme} P={P} isDark={isDark} apoyosSku={apoyosSku}
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
@@ -1496,7 +1497,7 @@ function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSu
 }
 
 // ═══════════════ Tabla SKU (sin marca column · single-brand Acteck) + drill inline ═══════════════
-function TablaSKU({ theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, selloutGeneral, inventarioSucursalMap }) {
+function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, selloutGeneral, inventarioSucursalMap }) {
   const fmtU = fmtUnidad(unidad);
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
@@ -1612,7 +1613,7 @@ function TablaSKU({ theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqued
                 {isOpen && (
                   <tr>
                     <td colSpan={rowColSpan} style={{ padding: 0, border: 0 }}>
-                      <SkuDrillInline theme={theme} P={P} isDark={isDark}
+                      <SkuDrillInline clienteKey={clienteKey} theme={theme} P={P} isDark={isDark}
                         skuRow={r}
                         anio={anio} anioPrev={anioPrev} mesActual={mesActual}
                         selloutGeneral={selloutGeneral}
@@ -2152,7 +2153,7 @@ function MiniRankingList({ theme, P, color, title, count, items }) {
 }
 
 // ═══════════════ Drill-down INLINE por SKU (dentro de la tabla) ═══════════════
-function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, selloutGeneral, inventarioSucursalMap, onClose }) {
+function SkuDrillInline({ clienteKey, theme, P, isDark, skuRow, anio, anioPrev, mesActual, selloutGeneral, inventarioSucursalMap, onClose }) {
   const sku = skuRow.sku;
   const [precioLista, setPrecioLista] = useState(null);
   const [loadingPrecio, setLoadingPrecio] = useState(true);
@@ -2317,6 +2318,7 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, s
             <InvSucursalMini theme={theme} P={P} isDark={isDark} inv={invSuc} total={invTotal} />
           </div>
 
+          <BloquePrecioCosto clienteKey={clienteKey} sku={sku} anio={anio} P={P} isDark={isDark} />
           <div style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted, textAlign: 'right' }}>
             Datos <strong>sellout_general</strong> · precio <strong>precios_sku</strong> lista DICOTECH · inv <strong>inventario_cliente_sucursal</strong>
           </div>

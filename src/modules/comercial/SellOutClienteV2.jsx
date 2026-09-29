@@ -18,6 +18,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Cargando, Panel, Pill, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
+import BloquePrecioCosto from './sellout/PrecioCosto';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronRight } from 'lucide-react';
@@ -585,7 +586,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
       {modelos.length > 0 && <EnsamblesCard theme={theme} P={P} modelos={modelos} />}
 
       {/* Tabla SKU */}
-      <TablaSKU theme={theme} P={P} isDark={isDark} apoyosSku={apoyosSku} ensPorSku={ensPorSku}
+      <TablaSKU clienteKey={clienteKey} theme={theme} P={P} isDark={isDark} apoyosSku={apoyosSku} ensPorSku={ensPorSku}
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
@@ -881,7 +882,7 @@ function MarcaCard({ theme, P, marcas, totalYTD, selected, onSelect }) {
 }
 
 // ═══════════════ Tabla SKU ═══════════════
-function TablaSKU({ theme, P, isDark, apoyosSku, ensPorSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
+function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, ensPorSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
   const fmtU = fmtUnidad(unidad);
   // Heat pill · idéntico a SI V2 (4 niveles Apple iOS blue)
   const heatCell = (v) => {
@@ -995,7 +996,7 @@ function TablaSKU({ theme, P, isDark, apoyosSku, ensPorSku, rows, busqueda, onCh
                 {isOpen && (
                   <tr>
                     <td colSpan={4 + MESES.length + 3} style={{ padding: 0, border: 0 }}>
-                      <SkuDrillInline theme={theme} P={P} isDark={isDark}
+                      <SkuDrillInline clienteKey={clienteKey} theme={theme} P={P} isDark={isDark}
                         skuRow={r}
                         anio={anio} anioPrev={anioPrev}
                         skuMesRaw={skuMesRaw}
@@ -1045,7 +1046,7 @@ function cellStyle(theme, align) {
 
 // ═══════════════ Drill-down inline por SKU ═══════════════
 // Muestra: hero mini con marca/desc/roadmap + KPI strip + evolución mensual + inventario por sucursal
-function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, inventarioSucursalMap, onClose }) {
+function SkuDrillInline({ clienteKey, theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, inventarioSucursalMap, onClose }) {
   const sku = skuRow.sku;
 
   // Derivados del SKU
@@ -1202,6 +1203,10 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, skuMesRaw, i
                 </div>
               </>
             )}
+          </div>
+          {/* Precio y costo (2026-09-29): costo convenio / facturado + apoyos en Pagos */}
+          <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+            <BloquePrecioCosto clienteKey={clienteKey} sku={sku} anio={anio} P={P} isDark={isDark} />
           </div>
         </div>
       </div>

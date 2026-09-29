@@ -239,7 +239,7 @@ export default function PaginaContenido({
               : <InventarioGlobal />)
           : <SinAcceso motivo="No tienes acceso a Inventario." />
       )}
-      {pagina === 'pagos' && !clienteKey && <PagosUnificados clienteKey={pagosCliente} />}
+      {pagina === 'pagos' && !clienteKey && <PagosUnificados clienteKey={pagosCliente} extra={extra} />}
       {pagina === 'cobranzaGlobal' && (
         puedeVerPestanaGlobal(perfil, 'cobranza_global')
           ? (mobile
