@@ -1219,9 +1219,14 @@ function DrillHeroStat({ k, v, s, valColor }) {
   );
 }
 
-function SkuMonthlyChart({ mensual }) {
-  const datos = MESES.map((x, i) => ({ x, piezas: mensual[i] > 0 ? mensual[i] : null }));
-  return <GraficaLineas compacto datos={datos} series={[{ key: 'piezas', label: 'Piezas', tipo: 'principal' }]} formato={(v) => `${fmt.int(v)} pz`} alto={110} mostrarMinMax={false} />;
+// Con `cabecera` para que el cursor tenga dónde leerse (compacto la apaga): pastilla del mes con piezas y monto.
+function SkuMonthlyChart({ mensual, mensualMonto = [] }) {
+  const datos = MESES.map((x, i) => ({ x, piezas: mensual[i] > 0 ? mensual[i] : null, monto: mensual[i] > 0 ? (mensualMonto[i] || 0) : null }));
+  const series = [
+    { key: 'piezas', label: 'Piezas', tipo: 'principal' },
+    { key: 'monto', label: 'Monto', tipo: 'lectura', formato: fmt.money },
+  ];
+  return <GraficaLineas compacto datos={datos} series={series} formato={(v) => `${fmt.int(v)} pz`} alto={110} mostrarMinMax={false} />;
 }
 
 

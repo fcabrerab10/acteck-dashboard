@@ -4,9 +4,10 @@
 // datos:  [{ x: 'Ene', actual, anterior, cuota, cuotaMin?, … }]  (x = etiqueta del eje; el resto son claves de `series`)
 // series: [{ key, label, tipo: 'principal' | 'anterior' | 'cuota' | 'linea', color?, dash?, eje?: 'izq' | 'der', formato? }]
 //   principal → área + puntos + máx/mín · anterior → gris punteado 4 4 · cuota → verde punteado 2 4 · linea → color libre.
+//   lectura → NO se dibuja: sólo sale en las pastillas del mes bajo el cursor (p. ej. el monto junto a las piezas).
 //   eje 'der' pinta la serie contra un segundo eje oculto (p. ej. MC % junto a pesos).
 // formato:         fn(valor) → texto (default moneyCompact). Se usa en pastillas, anotaciones y eje.
-// alto:            px (default 240). compacto: sin anotaciones, sin eje Y, sin leyenda ni cabecera (tarjetas chicas / móvil).
+// alto:            px (default 240). compacto: sin anotaciones, sin eje Y ni leyenda (tarjetas chicas / móvil); la lectura del cursor se conserva.
 // mesActivo:       índice a resaltar (punto grande + etiqueta del eje en negritas).
 // mesesAtenuados:  índices fuera de la selección de trimestres → los puntos bajan a opacidad .35 y un velo del color
 //                  de la superficie (overlay absoluto sobre el SVG) deja la zona al 35 %.
@@ -151,7 +152,9 @@ export default function GraficaLineas({
   const conEjeDer = series.some((s) => s.eje === 'der');
   if (mini) compacto = true;
   const verLeyenda = mini ? false : (leyenda ?? !compacto);
-  const verCabecera = mini ? false : (cabecera ?? !compacto);
+  // La lectura del mes bajo el cursor se muestra también en compacto (Fernando, 2026-09-29: «paso el mouse y no me
+  // muestra la información»); sólo la miniatura o `cabecera={false}` la apagan.
+  const verCabecera = mini ? false : (cabecera ?? true);
 
   // Último mes con dato en la principal · máximo y mínimo (sólo entre valores no nulos).
   const { ultimo, idxMax, idxMin } = useMemo(() => {
@@ -262,6 +265,7 @@ export default function GraficaLineas({
           {conEjeDer && <YAxis yAxisId="der" orientation="right" hide domain={[0, 'auto']} />}
           {!mini && <Tooltip cursor={false} content={() => null} isAnimationActive={false} />}
           {series.map((s, i) => {
+            if (s.tipo === 'lectura') return null;
             const { color, width, dash } = estiloSerie(theme, s, i);
             const eje = s.eje === 'der' ? 'der' : 'izq';
             if (s.tipo === 'principal') {
@@ -294,6 +298,7 @@ export default function GraficaLineas({
   const leyendaEl = verLeyenda && series.length > 0 ? (
     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 10, color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontWeight: 500, marginTop: 4, padding: '0 2px' }}>
       {series.map((s, i) => {
+        if (s.tipo === 'lectura') return null;
         const { color, dash } = estiloSerie(theme, s, i);
         return (
           <span key={s.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
