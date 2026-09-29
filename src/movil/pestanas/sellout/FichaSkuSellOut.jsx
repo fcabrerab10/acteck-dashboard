@@ -14,6 +14,9 @@
 // inventario_cliente / sellout_pcel por sku y año (useInventarioSkuAnio, ~20-40 renglones).
 // PCEL no reporta importe: el monto es piezas × precio de lista (ver sellout/datos.js).
 import { useApoyosPorSku } from '../../../modules/comercial/pagosv3/datosApoyos';
+import { usePrecioCostoSku } from '../../../modules/comercial/sellout/PrecioCosto';
+import { GraficaLineas } from '../../../components/kit';
+import { CreditCard } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { PackageSearch } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -175,6 +178,11 @@ export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, fi
         </div>
       </div>
 
+      {/* Precio y costo (2026-09-29): mismo bloque que el drill web (costo convenio de Digitalife vs nuestra factura;
+          costo promedio facturado en PCEL/Dicotech) + apoyos registrados en Pagos. Registrar apoyo sólo en la web. */}
+      <PrecioCostoM clienteKey={clienteKey} sku={sku} anio={anio} apoyo={apoyo} theme={theme}
+        onVerPagos={() => nav.navegar({ clienteKey, pagina: 'pagos', extra: { sku } })} />
+
       <TituloSeccionM style={{ margin: '20px 0 0', padding: '0 28px 6px' }} meta={mesesStock ? `${mesesStock} meses` : undefined}>Stock al cierre de cada mes</TituloSeccionM>
       <div style={{ padding: '0 16px' }}>
         {lHisto && <Skeleton h={92} r={12} />}
@@ -196,6 +204,63 @@ export default function FichaSkuSellOut({ sku, info = {}, clienteKey, nombre, fi
 
       <div style={{ padding: '16px 16px 0', fontSize: 11, color: theme.textSubtle || theme.textMuted, lineHeight: 1.45, fontFamily: TYPO.fontText }}>
         Sell-out de <span style={{ fontFamily: MONO }}>{esPcel ? 'sellout_pcel_mensual' : clienteKey === 'dicotech' ? 'sellout_sku' : 'sellout_detalle'}</span> · inventario de <span style={{ fontFamily: MONO }}>{esPcel ? 'sellout_pcel' : 'inventario_cliente'}</span> (una foto por semana).
+      </div>
+    </>
+  );
+}
+
+const mxn2 = (n) => (n == null || !isFinite(n) ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n));
+const fechaAnio = (iso) => { if (!iso) return '—'; const [y, m, d] = String(iso).slice(0, 10).split('-'); const t = `${Number(d)} ${MESES[Number(m) - 1]?.toLowerCase() || ''}`; return y !== String(new Date().getFullYear()) ? `${t} ${y.slice(2)}` : t; };
+
+function PrecioCostoM({ clienteKey, sku, anio, apoyo, theme, onVerPagos }) {
+  const { data, isLoading } = usePrecioCostoSku(clienteKey, sku, anio);
+  const esDigitalife = clienteKey === 'digitalife';
+  const conv = data?.ultimaFoto?.convenio || null;
+  const ultima = data?.ultima || null;
+  const dif = conv && ultima?.precio ? conv - ultima.precio : null;
+  const difPct = dif != null && ultima.precio ? (dif / ultima.precio) * 100 : null;
+  const margenCli = conv && data?.ultimaFoto?.venta ? ((data.ultimaFoto.venta - conv) / data.ultimaFoto.venta) * 100 : null;
+  const serie = (data?.fotos || []).map((f) => ({ x: `S${f.semana}`, convenio: f.convenio, venta: f.venta || null }));
+  const meta = isLoading ? 'cargando…' : esDigitalife ? (data?.ultimaFoto ? `foto sem ${data.ultimaFoto.semana}` : 'sin foto') : (data?.promBase ? `ponderado ${data.promBase}` : 'sin facturas');
+  return (
+    <>
+      <TituloSeccionM style={{ margin: '20px 0 0', padding: '0 28px 6px' }} meta={meta}>{esDigitalife ? 'Precio y costo convenio' : 'Precio y costo facturado'}</TituloSeccionM>
+      <div style={{ padding: '0 16px' }}>
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px', fontFamily: TYPO.fontText }}>
+          {isLoading && <Skeleton h={60} r={8} />}
+          {!isLoading && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 }}>
+              {esDigitalife ? (
+                <>
+                  <Dato k="Costo convenio" v={mxn2(conv)} sub={data?.igualDesde && data.ultimaFoto && data.igualDesde.semana !== data.ultimaFoto.semana ? `igual desde sem ${data.igualDesde.semana}` : undefined} theme={theme} />
+                  <Dato k="Nuestra factura" v={mxn2(ultima?.precio)} sub={ultima ? `${fechaAnio(ultima.fecha)}${ultima.lista ? ` · ${ultima.lista}` : ''}` : 'sin facturas'} theme={theme} />
+                  <Dato k="Diferencia" v={dif == null ? '—' : `${dif > 0 ? '+' : '−'}${mxn2(Math.abs(dif))}`} sub={dif == null ? undefined : `${difPct > 0 ? '+' : '−'}${Math.abs(difPct).toFixed(0)}% · ${dif < -0.5 ? 'apoyo ya aplicado' : dif > 0.5 ? 'compró más caro' : 'igual a factura'}`}
+                    color={dif == null ? undefined : dif < -0.5 ? theme.green : dif > 0.5 ? theme.red : undefined} theme={theme} />
+                  <Dato k="Venta Digitalife" v={mxn2(data?.ultimaFoto?.venta || null)} sub={margenCli != null ? `margen del cliente ${margenCli.toFixed(0)}%` : undefined} theme={theme} />
+                </>
+              ) : (
+                <>
+                  <Dato k="Costo prom. facturado" v={mxn2(data?.promFacturado)} sub={data?.promPz ? `${int(data.promPz)} pz ${data.promBase}` : undefined} theme={theme} />
+                  <Dato k="Última factura" v={mxn2(ultima?.precio)} sub={ultima ? `${fechaAnio(ultima.fecha)} · ${int(ultima.pz)} pz${ultima.lista ? ` · ${ultima.lista}` : ''}` : 'sin facturas'} theme={theme} />
+                </>
+              )}
+            </div>
+          )}
+          {esDigitalife && serie.length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <GraficaLineas compacto alto={80} desdeCero={false} mostrarMinMax={false} puntos={false} formato={mxn2} datos={serie}
+                series={[{ key: 'convenio', label: 'Convenio', tipo: 'principal' }, { key: 'venta', label: 'Venta Digitalife', tipo: 'lectura', formato: mxn2 }]} />
+            </div>
+          )}
+          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            {apoyo && apoyo.monto > 0
+              ? <Pill tone="green" dot>{apoyo.n} apoyo{apoyo.n === 1 ? '' : 's'} en Pagos · {int(apoyo.piezas)} pz · {moneyCompact(apoyo.monto)} · último {fechaAnio(apoyo.ultimo)}</Pill>
+              : <Pill tone="gray">sin apoyos registrados en Pagos</Pill>}
+          </div>
+        </div>
+        <div style={{ paddingTop: 10 }}>
+          <BotonGrande icon={CreditCard} onClick={onVerPagos}>Ver en Pagos</BotonGrande>
+        </div>
       </div>
     </>
   );
