@@ -19,6 +19,8 @@ import { isoLocal, fechaCorta } from '../../../lib/format';
 
 const mxn2 = (n) => (n == null || !isFinite(n) ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n));
 const N = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+// «26 nov» si es de este año; «26 nov 25» si no (la última factura de un SKU puede ser de hace meses).
+const fechaAnio = (iso) => { const y = String(iso || '').slice(0, 4); return y && y !== String(new Date().getFullYear()) ? `${fechaCorta(iso)} ${y.slice(2)}` : fechaCorta(iso); };
 
 async function precioCostoSku(clienteKey, sku, anio) {
   const desde = isoLocal(new Date(Date.now() - 90 * 86400000));
@@ -98,7 +100,7 @@ export default function BloquePrecioCosto({ clienteKey, sku, anio, P = {}, isDar
           <>
             <Cifra theme={theme} k="Costo convenio" v={mxn2(conv)} borde={P.accent || '#007AFF'}
               s={data?.igualDesde && data.ultimaFoto && (data.igualDesde.semana !== data.ultimaFoto.semana || data.igualDesde.anio !== data.ultimaFoto.anio) ? `igual desde sem ${data.igualDesde.semana}` : (data?.fotos?.length > 1 ? 'cambió esta semana' : null)} />
-            <Cifra theme={theme} k="Nuestra última factura" v={mxn2(ultima?.precio)} s={ultima ? `${fechaCorta(ultima.fecha)}${ultima.lista ? ` · ${ultima.lista}` : ''}` : 'sin facturas'} />
+            <Cifra theme={theme} k="Nuestra última factura" v={mxn2(ultima?.precio)} s={ultima ? `${fechaAnio(ultima.fecha)}${ultima.lista ? ` · ${ultima.lista}` : ''}` : 'sin facturas'} />
             <Cifra theme={theme} k="Diferencia" v={dif == null ? '—' : `${dif > 0 ? '+' : '−'}${mxn2(Math.abs(dif))}${difPct != null ? ` · ${difPct > 0 ? '+' : '−'}${Math.abs(difPct).toFixed(0)}%` : ''}`}
               color={dif == null ? undefined : dif < -0.5 ? green : dif > 0.5 ? red : undefined} s={dif == null ? 'convenio vs factura' : dif < -0.5 ? 'apoyo ya aplicado en su costo' : dif > 0.5 ? 'compró más caro que hoy' : 'igual a la factura'} />
             <Cifra theme={theme} k="Precio venta Digitalife" v={mxn2(data?.ultimaFoto?.venta || null)} s={margenCli != null ? `margen del cliente ${margenCli.toFixed(0)}%` : null} />
@@ -106,7 +108,7 @@ export default function BloquePrecioCosto({ clienteKey, sku, anio, P = {}, isDar
         ) : (
           <>
             <Cifra theme={theme} k="Costo prom. facturado" v={mxn2(data?.promFacturado)} borde={P.accent || '#007AFF'} s={data?.promPz ? `${data.promPz.toLocaleString('es-MX')} pz ${data.promBase}` : null} />
-            <Cifra theme={theme} k="Última factura" v={mxn2(ultima?.precio)} s={ultima ? `${fechaCorta(ultima.fecha)} · ${ultima.pz.toLocaleString('es-MX')} pz` : 'sin facturas'} />
+            <Cifra theme={theme} k="Última factura" v={mxn2(ultima?.precio)} s={ultima ? `${fechaAnio(ultima.fecha)} · ${ultima.pz.toLocaleString('es-MX')} pz` : 'sin facturas'} />
             <Cifra theme={theme} k="Lista" v={ultima?.lista || '—'} s="de la última factura" />
             <Cifra theme={theme} k="Apoyos en Pagos" v={apoyo ? mxn2(apoyo.monto) : '—'} s={apoyo ? `${apoyo.n} apoyo${apoyo.n === 1 ? '' : 's'} · ${apoyo.piezas.toLocaleString('es-MX')} pz` : 'sin apoyos registrados'} color={apoyo ? green : undefined} />
           </>
@@ -121,7 +123,7 @@ export default function BloquePrecioCosto({ clienteKey, sku, anio, P = {}, isDar
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${theme.divider || theme.border}` }}>
         <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Apoyos por producto</span>
         {apoyo
-          ? <Pill tone="green" size="xs" title={apoyo.folios.length ? `NC ${apoyo.folios.join(', ')}` : undefined}>{apoyo.n} apoyo{apoyo.n === 1 ? '' : 's'} · {apoyo.piezas.toLocaleString('es-MX')} pz · {mxn2(apoyo.monto)} · último {apoyo.ultimo ? fechaCorta(apoyo.ultimo) : '—'}</Pill>
+          ? <Pill tone="green" size="xs" title={apoyo.folios.length ? `NC ${apoyo.folios.join(', ')}` : undefined}>{apoyo.n} apoyo{apoyo.n === 1 ? '' : 's'} · {apoyo.piezas.toLocaleString('es-MX')} pz · {mxn2(apoyo.monto)} · último {apoyo.ultimo ? fechaAnio(apoyo.ultimo) : '—'}</Pill>
           : <Pill tone="gray" size="xs">sin apoyos registrados en Pagos</Pill>}
         <span style={{ flex: 1 }} />
         <Boton onClick={(e) => { e.stopPropagation(); navegarPagos(clienteKey, { sku }); }}>Ver en Pagos</Boton>
