@@ -16,7 +16,10 @@ import { canalLabel } from '../../modules/general/inicio/config';
 import { textoFichaCliente, compartir, copiar } from '../../lib/whatsapp';
 import { GraficaLineas } from '../../components/kit';
 import { useNav } from '../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, HeatCell, Vacio, HojaM, BotonGrande, TituloSeccionM, toast } from '../piezas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, HeatCell, Vacio, HojaM, BotonGrande, TituloSeccionM, Segmented, toast } from '../piezas';
+import { SellInM, SellOutM } from './analisis/Pestanas';
+
+const PESTANAS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell In' }, { id: 'sellout', label: 'Sell Out' }];
 import { PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { money, moneyCompact, int, pct, deltaPct, MESES, MONO, N } from '../util';
 import { catalogoSkus, ultimosMeses } from './SellInCliente';
@@ -70,6 +73,7 @@ export default function AnalisisFicha({ clienteNombre, canal, label }) {
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const [compartiendo, setCompartiendo] = useState(false);
+  const [pestana, setPestana] = useState('resumen'); // mismas tres que la página web (2026-10-01)
   const { data, isLoading, error } = useAnalisisFicha(clienteNombre, anio);
   const { data: alertas = [] } = useAlertas({ clienteKey: data?.ck || null, enabled: !!data?.propio });
   const nombre = label || (data?.propio ? nombreCliente(data.ck) : nombreBonito(clienteNombre));
@@ -102,9 +106,12 @@ export default function AnalisisFicha({ clienteNombre, canal, label }) {
     <>
       <Cabecera onVolver={nav.pop} etiqueta="Análisis" />
       <TituloGrande titulo={nombre} sub={<><span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block' }} />{data?.propio ? 'Cliente propio' : 'Cliente del ERP'} · {canalTxt} · {MESES[mes - 1]} {anio}</>} />
+      <div style={{ padding: '0 20px 10px' }}><Segmented value={pestana} onChange={setPestana} options={PESTANAS} /></div>
       {error && <Vacio titulo="No se pudo cargar el cliente" sub={error.message} color={theme.red} />}
       {(isLoading || !r) && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><Skeleton h={84} r={12} /><Skeleton h={160} r={12} /><Skeleton h={300} r={12} /></div>}
-      {r && (
+      {r && pestana === 'sellin' && <SellInM rows={data.rows} anio={anio} mes={mes} />}
+      {r && pestana === 'sellout' && <SellOutM clienteNombre={clienteNombre} nombre={nombre} anio={anio} />}
+      {r && pestana === 'resumen' && (
         <>
           <HeroM eyebrow={`Facturación · ${nombre}`} frase={r.frase} sub={`${money(r.mtd)} este mes${r.piezas ? ` · ${int(r.piezas)} pz` : ''} · activo ${r.mesesActivos} de ${mes} meses`}
             stats={[

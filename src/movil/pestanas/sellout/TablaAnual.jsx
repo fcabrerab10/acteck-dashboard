@@ -59,8 +59,8 @@ export default function TablaAnual({
                 const max = Math.max(0, ...(fila.valores || []).map((v) => N(v)));
                 const tot = (fila.valores || []).reduce((s, v) => s + N(v), 0);
                 return (
-                  <tr key={fila.label || fi}>
-                    <td style={tdLabel} title={fila.label}>{fila.label}{fila.sub && <span style={{ display: 'block', fontSize: 10.5, color: theme.textMuted, fontWeight: 400 }}>{fila.sub}</span>}</td>
+                  <tr key={fila.label || fi} onClick={fila.onClick} style={fila.onClick ? { cursor: 'pointer' } : undefined}>
+                    <td style={{ ...tdLabel, ...(fila.onClick ? { color: theme.accent } : null) }} title={fila.label}>{fila.label}{fila.sub && <span style={{ display: 'block', fontSize: 10.5, color: theme.textMuted, fontWeight: 400 }}>{fila.sub}</span>}</td>
                     {columnas.map((c, i) => <td key={`${c}-${i}`} style={td}><HeatCell v={N(fila.valores?.[i])} max={max} fmt={f} /></td>)}
                     {conProm && <td style={{ ...tdTot, ...sepL }}>{f(prom(fila.valores, fila.promMeses ?? promMeses))}</td>}
                     {conTotalCol && <td style={{ ...tdTot, ...(conProm ? null : sepL), fontWeight: 600, color: theme.text }}>{f(tot)}</td>}
