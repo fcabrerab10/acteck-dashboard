@@ -767,7 +767,7 @@ const FUENTES_UPLOAD = [
   'facturacion_clientes', 'erp_ventas', 'inventario_acteck', 'sellout_general',
   // sellout_detalle se alerta por cliente (cada uno sube su archivo por su lado); la fila
   // agregada 'sellout_detalle' se queda fuera para no duplicar la alerta.
-  'sellout_detalle_digitalife', 'sellout_detalle_dicotech',
+  'sellout_detalle_digitalife', 'sellout_ensambles', 'sellout_detalle_dicotech',
   'sellout_pcel', 'precios_sku', 'compras_oc', 'embarques_compras', 'estados_cuenta', 'guias_erp',
   'programacion_arribos',
 ];
