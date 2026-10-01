@@ -88,6 +88,14 @@ export default function Inicio() {
   return (
     <>
       <TituloGrande titulo={titulo} sub={sub} />
+      {sensible && puedeVerPestanaGlobal(perfil, 'vision_general') && (
+        <div style={{ padding: '0 20px 10px' }}>
+          <button type="button" onClick={() => nav.navegar({ pagina: 'visionGeneral' })}
+            style={{ border: `1px solid ${theme.border}`, background: theme.surface, color: theme.accent, borderRadius: 999, padding: '6px 14px', fontFamily: TYPO.fontText, fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            Cómo va el año <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
 
       {/* La facturación de toda la empresa es sensible: sin el permiso, el hero es de sus clientes y su día. */}
       <HeroM eyebrow={sensible ? `Dirección general · ${r.mesL} ${anio}` : `Mis clientes · ${r.mesL} ${anio}`} frase={sensible ? r.titulo : `Hoy tienes ${decision.length} aviso${decision.length === 1 ? '' : 's'} que atender.`} sub={sensible ? r.sub : `Tus clientes: ${r.clientes.map((c) => c.nombre || c.label || c.key).filter(Boolean).join(' · ') || 'ninguno'}.`}

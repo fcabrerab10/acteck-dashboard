@@ -1,8 +1,12 @@
 // Inicio · pestaña de dirección general armada con el kit V3 (plantilla HomeClienteV3).
-// Segmented Mes / Año cambia TODAS las cifras (Mes = mes actual · Año = YTD).
+// Una sola pestaña con dos modos (Fernando, 2026-10-01: «Inicio y Visión General se me hacen repetitivas», opción A):
+//   Hoy  = qué atender hoy: hero MTD, bandeja Hoy, 4 KPIs, decisiones, mis clientes, agenda.
+//   Año  = cómo va el año: la antigua Visión General (rentabilidad, mix, tendencia 3 años, sell out, inventario).
+// La gráfica de ventas 12 m y el panel de canales salieron de Hoy porque viven en Año. Visión General ya no está en
+// el menú; `pagina: 'visionGeneral'` abre Inicio en modo Año (PaginaContenido).
 // Carga en inicio/useInicioData.js (sólo lib/queries), cálculos en inicio/calc.js, bloques en inicio/bloques.jsx.
 // Se monta lazy desde App.jsx en paginaActiva === 'inicio' con props { onNavegar(clienteKey|null, pagina) }.
-import React, { useMemo, useState } from 'react';
+import React, { lazy, Suspense, useMemo, useState } from 'react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
@@ -13,20 +17,23 @@ import { moneyCompact as $c, int, pct, pp, fecha } from '../../lib/format';
 import { tooltip } from '../../lib/medidas';
 import SinAcceso from '../../components/SinAcceso';
 import FrescuraPill from '../../components/FrescuraPill';
-import { Hero, KpiCard, Pill, Panel, Segmented, SkeletonPantalla } from '../../components/kit';
-import { FUENTES_INICIO, MODOS, PAGINAS, MAX_ALERTAS, abrirNotificaciones } from './inicio/config';
+import { Hero, KpiCard, Pill, Panel, Segmented, SkeletonPantalla, Cargando } from '../../components/kit';
+const VisionGeneral = lazy(() => import('../comercial/VisionGeneral'));
+const VISTAS = [{ id: 'hoy', label: 'Hoy' }, { id: 'anio', label: 'Año' }];
+import { FUENTES_INICIO, PAGINAS, MAX_ALERTAS, abrirNotificaciones } from './inicio/config';
 import { useInicioData } from './inicio/useInicioData';
 import { calcular } from './inicio/calc';
-import { GraficaVentas, DecisionPanel, ClientesGrid, CanalesPanel, AgendaPanel, HoyPanel } from './inicio/bloques';
+import { DecisionPanel, ClientesGrid, AgendaPanel, HoyPanel } from './inicio/bloques';
 
 const signo = (v, d = 0) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneDe = (v) => (v == null ? 'gray' : v >= 0 ? 'green' : 'red');
 const fmtDia = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
 
-export default function Inicio({ onNavegar }) {
+export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
   const perfil = usePerfil();
   const { theme } = useTheme();
-  const [modo, setModo] = useState('mes');
+  const [vista, setVista] = useState(vistaInicial);
+  const modo = 'mes'; // Hoy siempre es el mes en curso; el acumulado del año vive en el modo Año
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
   const { loading, error, data } = useInicioData(anio);
@@ -46,6 +53,21 @@ export default function Inicio({ onNavegar }) {
   const r = useMemo(() => (data ? calcular(data, alertasQ.data || [], { anio, mesActual, hoy, modo, sensible, clientesVisibles }) : null), [data, alertasQ.data, anio, mesActual, hoy, modo, sensible, clientesVisibles]);
 
   if (!puedeVerInicio(perfil)) return <SinAcceso motivo="No tienes acceso a Inicio." />;
+
+  const barra = (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 10.5, color: theme.textMuted }}>{vista === 'hoy' ? `Qué atender hoy · ${fmtDia.format(hoy).replace(',', '')}` : `Cómo va el año · ${anio}`}</span>
+      {ve.visionGeneral && <Segmented options={VISTAS} value={vista} onChange={setVista} />}
+    </div>
+  );
+  if (vista === 'anio' && ve.visionGeneral) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {barra}
+        <Suspense fallback={<Cargando pantalla="visionGeneral" minHeight={520} />}><VisionGeneral /></Suspense>
+      </div>
+    );
+  }
   if (loading || (!r && !error)) return <SkeletonPantalla pantalla="inicio" />;
   if (error) return <Panel titulo="No se pudo cargar Inicio"><div style={{ fontSize: 12, color: theme.red }}>{error}</div></Panel>;
 
@@ -80,10 +102,7 @@ export default function Inicio({ onNavegar }) {
 
   return (
     <div data-stagger style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 10.5, color: theme.textMuted }}>{esMes ? `Mes en curso · ${r.mesL} ${anio}` : `Acumulado · enero a ${r.mesL.toLowerCase()} ${anio}`}</span>
-        <Segmented options={MODOS} value={modo} onChange={setModo} />
-      </div>
+      {barra}
 
       <Hero
         eyebrow={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>Inicio · {diaTxt}<span style={{ textTransform: 'none', letterSpacing: 0 }}><FrescuraPill fuentes={FUENTES_INICIO} inverso /></span></span>}
@@ -101,16 +120,16 @@ export default function Inicio({ onNavegar }) {
         {veEmpresa && <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`Fact Neta · ${labelOtro}`} badge={r.yoyOtro != null ? { l: `${signo(r.yoyOtro)} ${esMes ? 'YoY' : 'YoY a mismo día'}`, tone: toneDe(r.yoyOtro) } : undefined}
           big={$c(r.otro.fact_neta)} bigSmall={r.cuotaOtro ? `de ${$c(r.cuotaOtro)}` : ''}
           sub={[r.pctOtro != null ? `${Math.round(r.pctOtro)}% de cuota ${esMes ? 'YTD' : 'del mes'}` : 'sin cuota', r.pctAnual != null ? `${Math.round(r.pctAnual)}% de la anual ${$c(r.cuota.anual)}` : null].filter(Boolean).join(' · ')}
-          progress={r.pctOtro ?? undefined} onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
+          progress={r.pctOtro ?? undefined} onClick={ve.visionGeneral ? () => setVista('anio') : undefined} />}
         {sensible
           ? <KpiCard medida={tooltip('contribucion')} eyebrow={`Contribución · ${labelPeriodo}`} badge={r.dMc != null ? { l: `${pp(r.dMc)} MC`, tone: r.dMc >= 0 ? 'green' : 'red' } : undefined}
               big={$c(c.contribucion)} bigSmall={c.mc != null ? `MC ${pct(c.mc)}` : ''}
               sub={`${lostTxt} · dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
-              onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />
+              onClick={ve.visionGeneral ? () => setVista('anio') : undefined} />
           : <KpiCard medida={tooltip('pct_lost_profit_bonif', "Devoluciones + RMA's + Bonificaciones")} eyebrow={`Deducciones · ${labelPeriodo}`} badge={c.lostPct != null ? { l: `${pct(c.lostPct)} de la bruta`, tone: c.lostPct > 8 ? 'orange' : 'gray' } : undefined}
               big={$c(c.lost)} bigSmall="dev + RMA + bonif"
               sub={`dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
-              onClick={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
+              onClick={ve.visionGeneral ? () => setVista('anio') : undefined} />}
         {ve.cobranza && <KpiCard eyebrow={cart.corte ? `Cartera · corte ${fecha(cart.corte)}` : 'Cartera'} badge={cart.vencido > 0 ? { l: `${$c(cart.vencido)} vencido`, tone: cart.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al corriente', tone: 'green' }}
           big={$c(cart.saldo)} bigSmall={`${cart.filas.length} cliente${cart.filas.length === 1 ? '' : 's'}`} bigColor={cart.vencido > 0 && cart.pctVencido > 25 ? theme.red : undefined}
           sub={[cart.dso != null ? `DSO ${cart.dso} d` : null, cart.mas90 > 0 ? `${$c(cart.mas90)} > 90 d` : null, cart.filas[0]?.vencido > 0 ? `${cart.filas[0].cliente}: ${$c(cart.filas[0].vencido)} vencido` : null].filter(Boolean).join(' · ') || 'sin estados de cuenta'}
@@ -121,10 +140,8 @@ export default function Inicio({ onNavegar }) {
           onClick={ir(null, PAGINAS.inventario)} />}
       </div>
 
-      {veEmpresa && <GraficaVentas r={r} onNavegar={ve.visionGeneral ? ir(null, PAGINAS.visionGeneral) : undefined} />}
       <DecisionPanel r={r} onNavegar={onNavegar} onNotificaciones={() => abrirNotificaciones(onNavegar, perfil)} max={MAX_ALERTAS} />
       {r.clientes.length > 0 && <ClientesGrid r={r} onNavegar={onNavegar} />}
-      {veEmpresa && ve.sellIn && <CanalesPanel r={r} onNavegar={ir(null, PAGINAS.sellIn)} />}
       <AgendaPanel r={r} frescuraErp={porFuente.erp_ventas} onNavegar={onNavegar} />
     </div>
   );

@@ -208,7 +208,7 @@ export default function PaginaContenido({
         puedeVerPestanaGlobal(perfil, 'vision_general')
           ? (mobile
               ? <MobileVisionGeneral onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <VisionGeneral />)
+              : (puedeVerInicio(perfil) ? <Inicio onNavegar={onNavegar} vistaInicial="anio" /> : <VisionGeneral />))
           : <SinAcceso motivo="No tienes acceso a Visión General." />
       )}
       {pagina === 'analisisClientes' && (

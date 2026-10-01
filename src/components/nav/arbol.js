@@ -52,7 +52,7 @@ const GRUPOS_BASE = [
   {
     id: 'direccionComercial', label: 'Dirección Comercial', icon: Briefcase, color: '#007AFF',
     nodos: [
-      { pagina: 'visionGeneral',    label: 'Visión General',       icon: Activity },
+      // Visión General ya no es nodo (2026-10-01): es el modo «Año» de Inicio. `pagina: 'visionGeneral'` sigue abriéndolo.
       { pagina: 'analisisClientes', label: 'Análisis por Cliente', icon: PieChart },
       { pagina: 'sellIn',           label: 'Sell In',              icon: ShoppingCart },
       { pagina: 'sellOut',          label: 'Sell Out',             icon: ShoppingBag },
