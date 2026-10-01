@@ -1222,6 +1222,8 @@ async function taskInventarioFoto() {
     method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json' }, body: '{}',
   });
   const txt = await r.text();
+  // Visión General lee materializadas (2026-10-01): la de inventario se refresca con la foto diaria.
+  try { await fetch(`${SB_URL}/rest/v1/rpc/refresh_vision_general`, { method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) { console.warn('refresh_vision_general', e.message); }
   if (!r.ok) return { ok: false, motivo: `rpc snapshot_inventario_diario HTTP ${r.status}: ${txt.slice(0, 200)}` };
   let res = null; try { res = JSON.parse(txt); } catch { res = txt; }
   // Cuántos días lleva acumulados el histórico (para verlo de un vistazo en el log del cron).
