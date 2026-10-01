@@ -70,6 +70,9 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
 
   const alertasCliente = useMemo(() => (cliente.propio ? alertas.filter((a) => a.cliente_key === cliente.key) : []), [alertas, cliente]);
 
+  // Sell out: sólo los clientes con fuente (los 12 mayoristas del puente + los 3 propios).
+  const cuentaSellOut = CUENTA_POR_ERP[cliente.cliente] || null;
+
   if (completa && isLoading) return <div style={{ padding: 12 }}><Cargando pantalla="analisisDrill" minHeight={240} /></div>;
 
   // Vista previa (opción A, 2026-10-01): una sola tira con las 6 cifras que importan + trazo de 12 meses + botón.
@@ -111,8 +114,6 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
   const td = { padding: '3px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 11, color: theme.text, whiteSpace: 'nowrap' };
   const tip = { fontSize: 11, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' };
 
-  // Sell out: sólo los clientes con fuente (los 12 mayoristas del puente + los 3 propios).
-  const cuentaSellOut = CUENTA_POR_ERP[cliente.cliente] || null;
 
   const topMostrar = completa ? topSkus : topSkus.slice(0, 5);
 
