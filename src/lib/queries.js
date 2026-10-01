@@ -311,14 +311,37 @@ export function useLineamientos(clienteKey) {
 }
 
 // ─── Inventario cliente ───
+// PCEL no manda archivo de inventario: su existencia viene en el reporte semanal venta-marca (`sellout_pcel`:
+// inventario + costo_promedio por SKU). Se devuelve con la MISMA forma que inventario_cliente para que
+// Sell Out PCEL pinte la tarjeta «Inv. PCEL» (2026-10-01, Fernando: «no veo cuánto inventario tiene el cliente»;
+// salía 0 pz porque leía inventario_cliente, que PCEL no tiene). El móvil ya lo hacía así.
+async function inventarioPcelUltimaSemana() {
+  const { data: ult } = await cachedQuery(supabase.from('sellout_pcel').select('anio,semana').not('anio', 'is', null)
+    .order('anio', { ascending: false, nullsFirst: false }).order('semana', { ascending: false, nullsFirst: false }).limit(1));
+  const u = ult?.[0];
+  if (!u) return [];
+  const rows = await fetchAll('sellout_pcel', 'sku,pcel_sku,marca,producto,inventario,costo_promedio', (q) => q.eq('anio', u.anio).eq('semana', u.semana));
+  const m = new Map();
+  for (const r of rows) {
+    const sku = r.sku || r.pcel_sku;
+    if (!sku) continue;
+    const stock = Number(r.inventario) || 0, costo = Number(r.costo_promedio) || 0;
+    const o = m.get(sku) || { sku, marca: r.marca || null, titulo: r.producto || null, stock: 0, valor: 0, costo_convenio: costo, precio_venta: null, fecha_ultima_venta: null, dias_sin_venta: null, anio: u.anio, semana: u.semana };
+    o.stock += stock; o.valor += stock * costo;
+    m.set(sku, o);
+  }
+  return [...m.values()];
+}
+
 export function useInventarioCliente(clienteKey) {
   return useQuery({
     queryKey: ['inventario_cliente', clienteKey],
     enabled: !!clienteKey,
-    queryFn: () =>
+    queryFn: () => (clienteKey === 'pcel'
+      ? inventarioPcelUltimaSemana()
       // Sólo la última foto semanal (v_inventario_cliente_ultimo): las pantallas se quedaban con ella
       // y tiraban las otras 21 (Digitalife: 28 K filas → 1.3 K; 2026-09-22).
-      fetchAll('v_inventario_cliente_ultimo', 'sku,marca,titulo,stock,valor,costo_convenio,precio_venta,fecha_ultima_venta,dias_sin_venta,anio,semana', (q) => q.eq('cliente', clienteKey)),
+      : fetchAll('v_inventario_cliente_ultimo', 'sku,marca,titulo,stock,valor,costo_convenio,precio_venta,fecha_ultima_venta,dias_sin_venta,anio,semana', (q) => q.eq('cliente', clienteKey))),
   });
 }
 
