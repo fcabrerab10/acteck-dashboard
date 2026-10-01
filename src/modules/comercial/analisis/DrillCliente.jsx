@@ -73,6 +73,11 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
   // Sell out: sólo los clientes con fuente (los 12 mayoristas del puente + los 3 propios).
   const cuentaSellOut = CUENTA_POR_ERP[cliente.cliente] || null;
 
+  // Último mes con sell out de ESTA cuenta (≤ mes elegido): el bloque «Sell out» y la vista previa lo usan en vez
+  // del mes de la tabla, porque el día 1 el mes en curso sale en $0.
+  const soMes = cuentaSellOut ? mensualSO.filter((r) => r.cuenta === cuentaSellOut && N(r.anio) === anio && N(r.mes) <= mesMax && N(r.importe) > 0).map((r) => N(r.mes)) : [];
+  const mesSellOut = soMes.length ? Math.max(...soMes) : mesMax;
+
   if (completa && isLoading) return <div style={{ padding: 12 }}><Cargando pantalla="analisisDrill" minHeight={240} /></div>;
 
   // Vista previa (opción A, 2026-10-01): una sola tira con las 6 cifras que importan + trazo de 12 meses + botón.
@@ -127,8 +132,8 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
         </div>
       )}
       {cuentaSellOut && (
-        <Panel titulo="Sell out" meta={`${MESES[mesMax - 1]} ${anio} · lo que este cliente desplaza y lo que tiene en su almacén · sin IVA`} padding="10px 12px">
-          <ResumenSellOut cuenta={cuentaSellOut} anio={anio} mes={mesMax} compacto />
+        <Panel titulo="Sell out" meta={`${MESES[mesSellOut - 1]} ${anio} · lo que este cliente desplaza y lo que tiene en su almacén · sin IVA`} padding="10px 12px">
+          <ResumenSellOut cuenta={cuentaSellOut} anio={anio} mes={mesSellOut} compacto />
         </Panel>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 8 }}>
