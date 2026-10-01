@@ -37,6 +37,10 @@
       "schedule": "0 14 2 * *"
     },
     {
+      "path": "/api/cron?task=puente-vigilante",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/cron?task=inventario-foto",
       "schedule": "30 1 * * *"
     },

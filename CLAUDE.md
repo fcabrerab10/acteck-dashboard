@@ -103,6 +103,15 @@ Configuración → Actualización de datos (`src/modules/settings/ActualizacionD
 
 ---
 
+## Máquinas y roles (2026-10-01) — LEER ANTES DE TOCAR EL PUENTE
+
+| Máquina | Qué es | Qué se puede hacer | Qué NO |
+|---|---|---|---|
+| **Mac mini (oficina)** | **El puente.** Repo en `~/acteck/acteck-dashboard` (symlink en `~/Documents/Acteck/acteck-dashboard`), rama `main`. Corre `bridge/` con launchd: `com.acteck.sync.diario` (06:30: ventas, inventario, precios, cuotas, sell out), `com.acteck.sync.intradia` (cada hora 8–19 L-S: ventas 45 días, inventario, precios), `com.acteck.sync.solicitudes` (cada 5 min: latido + "Pedir corrida"), `com.acteck.sync.embarques` (07:30 y 13:30: Master Embarques por Sheets API si hay `google-oauth-token.json`). Además la app de Claude tiene la tarea programada `acteck-embarques-diario` (07:10, baja el Sheet por el conector de Drive) como respaldo. | También se puede programar código ahí. Para ver el puente: `tail -40 bridge/logs/sync-$(date +%F).log`, `launchctl list \| grep com.acteck`, `node --env-file=credenciales.env sync.mjs test`. | No mover el repo ni la carpeta `bridge/` (launchd apunta a la ruta). No borrar `bridge/credenciales.env`, `google-oauth-*.json`, `Master Embarques.xlsx`. No correr `./run.sh embarques` esperando que lea el Sheet si no existe `google-oauth-token.json` (da 401/403: el Sheet no es público). |
+| **MacBook Pro (Fernando, viaja)** | **Sólo código.** Clon normal del repo. | Programar, probar con `npm run dev`, hacer commits/PR. Vigilar el puente desde fuera: Configuración → Actualización de datos (sección "Cargas automáticas": estado por fuente, latido, "Pedir corrida"), o `sync_status`/`sync_events` en Supabase. | **Nunca** instalar launchd, ni `bridge/setup.sh`, ni correr `bridge/run.sh` (no tiene acceso a los SQL Server de la oficina ni credenciales.env). Si algo del puente falla, el diagnóstico se hace en la Mac mini o pidiendo corrida desde el panel. |
+
+Si una fuente aparece **Atrasada** o **Error** en el panel: ventas/inventario/precios → ver log en la Mac mini; embarques → en la Mac mini revisar `launchctl list | grep embarques` y, si sigue el respaldo por Claude, la sección Scheduled de la app (una corrida "en ejecución" colgada bloquea las siguientes: detenerla y "Run now"). El cron de Vercel `puente-vigilante` manda correo a Fernando cuando una fuente lleva demasiado sin cargar o el latido lleva más de 30 min sin llegar.
+
 ## Rendimiento — reglas (2026-09-08)
 
 Se partió el bundle y se centralizó la carga de datos. Arranque: ~1,067 KB gz → ~177 KB gz. Estas reglas evitan regresiones:

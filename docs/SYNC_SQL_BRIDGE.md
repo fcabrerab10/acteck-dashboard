@@ -294,3 +294,16 @@ Lo que ya quedó en la Mac de Fernando y lo que falta para que todo corra solo:
 | Sección "Cargas automáticas" en Actualización de datos | en la rama | mergear a `main` (Vercel despliega solo) |
 
 La tarea diaria de Claude corre `bridge/embarques-drive.sh <json del conector>`, que decodifica el xlsx y llama a `embarques-xlsx.mjs`; deja rastro en `logs/sync-<fecha>.log` y en `sync_events` como el resto del puente.
+
+## Master Embarques sin la app de Claude (2026-10-01)
+
+Del 25-sep al 1-oct el Sheet no se cargó porque la tarea programada de Claude se quedó "en ejecución" y bloqueó las siguientes. Para no depender de la app:
+
+1. En Google Cloud (cuenta de Fernando): proyecto cualquiera → **APIs y servicios → Biblioteca → Google Sheets API → Habilitar**. Luego **Pantalla de consentimiento OAuth** (externa, agregar `fernando.cabrera@acteck.com` como usuario de prueba) y **Credenciales → Crear credenciales → ID de cliente OAuth → Aplicación de escritorio**. Descargar el JSON y guardarlo como `bridge/google-oauth-client.json` en la Mac mini.
+2. En la Mac mini: `cd ~/acteck/acteck-dashboard/bridge && node --env-file=credenciales.env google-auth.mjs` → abre el navegador, elegir la cuenta, aceptar "ver hojas de cálculo". Guarda `google-oauth-token.json` (refresh token, permisos 600).
+3. Probar: `node --env-file=credenciales.env sync.mjs test` debe decir `Sheet: OAuth del usuario` y listar pestañas; luego `./run.sh embarques`.
+4. Desde ese momento `com.acteck.sync.embarques` (07:30 y 13:30) carga el Sheet solo. La tarea de Claude `acteck-embarques-diario` se puede deshabilitar.
+
+`embarques-sheet.sh` es el guardián: si no existe el token (ni service account) no hace nada y lo anota en el log, para que no genere errores diarios mientras no esté configurado.
+
+**Vigilante en la nube** (`/api/cron?task=puente-vigilante`, cada hora): revisa `sync_status`; si ventas/inventario/precios llevan > 3 h sin carga en horario laboral, cuotas/sell out/embarques > 27 h, o el latido del puente > 30 min, manda correo a Fernando (SMTP de Vercel, el mismo de los recordatorios). Repite el aviso cada 6 h mientras siga el problema y manda "resuelto" cuando vuelve a cargar. Vive en Vercel, no en la Mac mini, para avisar también si la Mac mini se apaga.

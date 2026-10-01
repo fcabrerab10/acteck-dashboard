@@ -1807,6 +1807,79 @@ async function taskResumenProgramado({ dryRun = esDryRun(), hora = null } = {}) 
   return { dryRun, hoy: hoy.iso, hora: horaCDMX, perfiles: perfiles.length, enviados, omitidos, marcadas, criticas, ...(dryRun ? { previews } : {}) };
 }
 
+// ─── Vigilante del puente (cada hora) ───────────────────────────────────────
+// Vive en Vercel, no en la Mac mini: avisa por correo a Fernando si una fuente del
+// puente lleva demasiado sin cargar o si el latido dejó de llegar (Mac apagada,
+// agente caído, tarea de embarques colgada). Repite cada 6 h mientras siga y manda
+// "resuelto" cuando vuelve. Estado del último aviso en sync_status.fuente='vigilante'.
+const VIGILANTE_FUENTES = [
+  { key: 'erp_sell_in',      nombre: 'Ventas ERP',       horaria: true },
+  { key: 'erp_inventario',   nombre: 'Inventario ERP',   horaria: true },
+  { key: 'precios',          nombre: 'Precios ERP',      horaria: true },
+  { key: 'cuotas_mensuales', nombre: 'Cuotas',           horaria: false },
+  { key: 'sellout_general',  nombre: 'Sell out general', horaria: false },
+  { key: 'embarques',        nombre: 'Master Embarques', horaria: false },
+];
+async function taskPuenteVigilante({ dryRun = false } = {}) {
+  const H = { apikey: SRK, Authorization: 'Bearer ' + SRK };
+  const rows = await (await fetch(`${SB_URL}/rest/v1/sync_status?select=fuente,ultima_actualizacion,registros,meta`, { headers: H })).json();
+  const byKey = Object.fromEntries((rows || []).map((r) => [r.fuente, r]));
+  const ahora = new Date();
+  const cdmx = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+  const dia = cdmx.getDay(), hora = cdmx.getHours();
+  const laboral = dia >= 1 && dia <= 6 && hora >= 9 && hora < 21;
+  const horasDesde = (iso) => (iso ? (ahora - new Date(iso)) / 3600000 : Infinity);
+  const problemas = [];
+  for (const f of VIGILANTE_FUENTES) {
+    const h = horasDesde(byKey[f.key]?.ultima_actualizacion);
+    const limite = f.horaria ? (laboral ? 3 : 27) : 27;
+    if (h > limite) problemas.push(`${f.nombre}: sin carga desde hace ${h === Infinity ? 'siempre' : Math.round(h) + ' h'} (límite ${limite} h)`);
+  }
+  const latido = byKey.puente?.ultima_actualizacion;
+  const minLatido = latido ? (ahora - new Date(latido)) / 60000 : Infinity;
+  if (minLatido > 30) problemas.push(`Latido del puente: ${latido ? 'hace ' + Math.round(minLatido) + ' min' : 'nunca'} (la Mac mini puede estar apagada o sin red)`);
+  // Último evento de error por fuente, para dar el mensaje en el correo.
+  let errores = {};
+  try {
+    const evs = await (await fetch(`${SB_URL}/rest/v1/sync_events?select=status_key,status,created_at,detalles&status_key=not.is.null&order=created_at.desc&limit=120`, { headers: H })).json();
+    for (const ev of evs || []) if (!(ev.status_key in errores)) errores[ev.status_key] = ev;
+  } catch {}
+  const detalleErrores = VIGILANTE_FUENTES
+    .filter((f) => errores[f.key]?.status === 'error' && horasDesde(errores[f.key].created_at) < 48)
+    .map((f) => `${f.nombre}: ${String(errores[f.key].detalles?.mensaje || errores[f.key].detalles?.error || '').slice(0, 300)}`);
+
+  const firma = problemas.join('|');
+  const prev = byKey.vigilante?.meta || {};
+  const horasUltimo = horasDesde(prev.avisado_at);
+  const estadoCambio = (prev.firma || '') !== firma;
+  const resuelto = !problemas.length && prev.firma;
+  const debeAvisar = problemas.length ? (estadoCambio || horasUltimo >= 6) : Boolean(resuelto);
+
+  let enviado = null;
+  if (debeAvisar && !dryRun) {
+    const SMTP_USER = process.env.SMTP_USER, SMTP_PASS = process.env.SMTP_PASS;
+    const TO = process.env.SMTP_TO_FERNANDO || 'fernando.cabrera@acteck.com';
+    if (!SMTP_USER || !SMTP_PASS) { enviado = { error: 'SMTP_USER/SMTP_PASS no configurados' }; }
+    else {
+      const { default: nodemailer } = await import('nodemailer');
+      const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: SMTP_USER, pass: SMTP_PASS.replace(/\s+/g, '') } });
+      const asunto = problemas.length ? `🔴 Puente Acteck: ${problemas.length} fuente${problemas.length > 1 ? 's' : ''} sin actualizar` : '🟢 Puente Acteck: todo volvió a cargar';
+      const cuerpo = problemas.length
+        ? `Fernando,\n\nEl puente de la Mac mini tiene datos atrasados (${cdmx.toLocaleString('es-MX')} CDMX):\n\n${problemas.map((p) => '· ' + p).join('\n')}\n${detalleErrores.length ? '\nÚltimo error registrado:\n' + detalleErrores.map((p) => '· ' + p).join('\n') + '\n' : ''}\nQué revisar: Configuración → Actualización de datos → Cargas automáticas (botón "Pedir corrida").\nSi el latido no llega, la Mac mini está apagada o sin red. Si sólo falla Master Embarques, en la Mac mini: Scheduled → detener la corrida colgada → Run now, o configurar google-auth.mjs (docs/SYNC_SQL_BRIDGE.md).\n\nEste aviso se repite cada 6 h mientras siga el problema.\n— Dashboard Acteck`
+        : `Fernando,\n\nTodas las fuentes del puente volvieron a cargar (${cdmx.toLocaleString('es-MX')} CDMX).\n\n— Dashboard Acteck`;
+      try {
+        const info = await transporter.sendMail({ from: `"Dashboard Acteck" <${SMTP_USER}>`, to: TO, subject: asunto, text: cuerpo });
+        enviado = { to: TO, asunto, msg_id: info.messageId };
+      } catch (e) { enviado = { error: e.message }; }
+    }
+    await fetch(`${SB_URL}/rest/v1/sync_status?on_conflict=fuente`, {
+      method: 'POST', headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ fuente: 'vigilante', ultima_actualizacion: ahora.toISOString(), registros: problemas.length, meta: { firma, avisado_at: ahora.toISOString(), problemas, enviado } }),
+    }).catch(() => {});
+  }
+  return { ok: true, laboral, problemas, detalleErrores, latido_min: Number.isFinite(minLatido) ? Math.round(minLatido) : null, avisado: debeAvisar, enviado, dryRun };
+}
+
 export default async function handler(req, res) {
   // CRON_SECRET es OBLIGATORIO. Si no está configurado, el endpoint rechaza todo.
   // Vercel Cron manda `authorization: Bearer <CRON_SECRET>` automáticamente
@@ -1851,6 +1924,8 @@ export default async function handler(req, res) {
       // sólo para Fernando y Karolina. Sin ?momento la task deduce cuál toca por la hora CDMX.
       const q = req.query || {};
       result = await taskAgendaCorreo({ dryRun: esDryRun() || q.dryRun === '1', momento: ['manana', 'tarde'].includes(q.momento) ? q.momento : null, para: q.para || null });
+    } else if (task === 'puente-vigilante') {
+      result = await taskPuenteVigilante({ dryRun: esDryRun() || req.query?.dryRun === '1' });
     } else if (task === 'agenda-hoy') {
       // Agenda (V3): resumen diario por persona a las 08:30 CDMX (vercel.json: 30 14 * * 1-6 UTC)
       result = await taskAgendaHoy({ dryRun: esDryRun() || req.query?.dryRun === '1' });

@@ -32,7 +32,7 @@ const dryRun = flag('--dry-run');
 const top = parseInt(opt('--top') || '0', 10);
 const env = (k, d = '') => (process.env[k] ?? d).trim();
 const VERSION = (() => { try { return JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version; } catch { return '?'; } })();
-const AGENTES = ['com.acteck.sync.diario', 'com.acteck.sync.intradia', 'com.acteck.sync.solicitudes'];
+const AGENTES = ['com.acteck.sync.diario', 'com.acteck.sync.intradia', 'com.acteck.sync.solicitudes', 'com.acteck.sync.embarques'];
 
 // Ventas: dos modos.
 //   · ventana (default): sólo los últimos ERP_VENTAS_DIAS días (o --dias N) por `periodo`;
