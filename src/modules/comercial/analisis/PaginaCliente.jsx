@@ -215,10 +215,28 @@ function SellOutCuenta({ codigo, nombre, anio }) {
   const { data: cuotas = [] } = useCuotas(cuenta ? anio : null);
   const [estadoSel, setEstadoSel] = useState(null);
 
-  const ultimo = useMemo(() => ultimoMesSellOut(dias), [dias]);
-  const mes = ultimo && ultimo.anio === anio ? ultimo.mes : (anio === new Date().getFullYear() ? new Date().getMonth() + 1 : 12);
+  // Mes = el último con sell out de ESTA cuenta en el año (no el del consolidado: el día 1 otra cuenta ya tiene
+  // ventas y ésta saldría en $0). Dimensiones = lo que la fuente trajo en cualquier mes del año, no sólo en ese mes.
+  const propios = useMemo(() => mensual.filter((r) => r.cuenta === cuenta && Number(r.anio) === anio), [mensual, cuenta, anio]);
+  const mes = useMemo(() => {
+    const con = propios.filter((r) => Number(r.importe) > 0).map((r) => Number(r.mes));
+    if (con.length) return Math.max(...con);
+    const u = ultimoMesSellOut(dias);
+    return u && u.anio === anio ? u.mes : (anio === new Date().getFullYear() ? new Date().getMonth() + 1 : 12);
+  }, [propios, dias, anio]);
   const corteDia = useMemo(() => ultimoDiaConVenta(dias, anio, mes) || 31, [dias, anio, mes]);
-  const fila = useMemo(() => construirFilas({ cuentas, mensual, dias, anio, mes, corteDia, cuotas }).find((f) => f.cuenta === cuenta) || null, [cuentas, mensual, dias, anio, mes, corteDia, cuotas, cuenta]);
+  const fila = useMemo(() => {
+    const f = construirFilas({ cuentas, mensual, dias, anio, mes, corteDia, cuotas }).find((x) => x.cuenta === cuenta);
+    if (!f) return null;
+    const hay = (k) => propios.some((r) => r[k] != null);
+    return {
+      ...f,
+      sucursales: hay('sucursales') ? (f.sucursales ?? 0) : null,
+      vendedores: hay('vendedores') ? (f.vendedores ?? 0) : null,
+      clientesFinales: hay('clientes_finales') ? (f.clientesFinales ?? 0) : null,
+      estados: Math.max(f.estados || 0, ...propios.map((r) => Number(r.estados) || 0)),
+    };
+  }, [cuentas, mensual, dias, anio, mes, corteDia, cuotas, cuenta, propios]);
 
   if (!cuenta) {
     return (

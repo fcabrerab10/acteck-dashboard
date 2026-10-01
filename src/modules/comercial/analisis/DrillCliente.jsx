@@ -97,7 +97,7 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
       <div style={{ padding: '10px 14px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr)) 120px auto', gap: 12, alignItems: 'center', fontFamily: TYPO.fontText }}>
         <Cifra k={`Fact Neta ${periodo}`} v={money(cliente.cur.fact_neta)} s={yoyCur != null ? `${signo(yoyCur, 0)} vs ${anio - 1}` : `sin ${anio - 1}`} color={tono(yoyCur)} />
         <Cifra k={`YTD ${anio}`} v={money(cliente.ytd.fact_neta)} s={yoyYtd != null ? `${signo(yoyYtd, 0)} vs ${anio - 1}` : `sin ${anio - 1}`} color={tono(yoyYtd)} />
-        <Cifra k="Cuota YTD" v={cliente.pctCuota == null && cliente.cuota == null ? '—' : pct(cliente.pctCuota, 0)} s={cliente.cuota != null ? `de ${moneyFull(cliente.cuota)} · ${periodo}` : 'sin cuota cargada'} />
+        <Cifra k={`Cuota ${modo === 'mes' ? MESES[mesMax - 1] : 'YTD'}`} v={cliente.cuota == null ? '—' : pct(cliente.pctCuota, 0)} s={cliente.cuota != null ? `de ${moneyFull(cliente.cuota)}` : 'sin cuota cargada'} />
         <Cifra k={so ? `Sell out ${MESES[N(so.mes) - 1]}` : 'Sell out'} v={so ? money(N(so.importe)) : '—'} s={so ? (soSi != null ? `SO/SI ${pct(soSi, 0)}` : 'sin sell in ese mes') : cuentaSellOut ? 'sin venta este año' : 'no reporta'} />
         <Cifra k="Inventario" v={so && so.inv_piezas != null ? `${int(N(so.inv_piezas))} pz` : '—'} s={so && so.inv_piezas != null ? (semInv != null ? `${semInv.toFixed(1)} semanas` : 'sin ritmo') : 'no reporta'} />
         {verSensible
