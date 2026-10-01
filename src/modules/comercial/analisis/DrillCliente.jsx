@@ -14,8 +14,10 @@ import { useDetalleCliente } from './useAnalisisData';
 import ResumenSellOut from '../sellout/ResumenSellOut';
 import { CUENTA_POR_ERP } from '../sellout/datos';
 import { MESES, N, idxMes, enPeriodo, serie12, pctDe } from './calc';
-import { money, moneyFull, int, pct } from './formato';
+import { money, moneyFull, int, pct, signo } from './formato';
 import { useApoyoCliente } from '../sellin/datos';
+import { useMensual } from '../sellout/datos';
+import { semanasInventario } from '../sellout/calculo';
 import { agruparApoyo, totalesApoyo, factBruta, pctSobre } from '../sellin/apoyo';
 
 const SEV_TONE = { critica: 'red', alta: 'orange', media: 'yellow', info: 'gray' };
@@ -26,7 +28,8 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
   const completa = vista === 'completa';
   const { theme } = useTheme();
   const accent = theme.accent || '#007AFF', green = theme.green || '#34C759';
-  const { data: detalle, isLoading } = useDetalleCliente(cliente.cliente, anio);
+  const { data: detalle, isLoading } = useDetalleCliente(cliente.cliente, anio, completa);
+  const { data: mensualSO = [] } = useMensual(anio);
   const { data: roadmap } = useRoadmap();
 
   const serie = useMemo(() => serie12(cliente.mensual, anio, mesMax), [cliente, anio, mesMax]);
@@ -67,7 +70,41 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
 
   const alertasCliente = useMemo(() => (cliente.propio ? alertas.filter((a) => a.cliente_key === cliente.key) : []), [alertas, cliente]);
 
-  if (isLoading) return <div style={{ padding: 12 }}><Cargando pantalla="analisisDrill" minHeight={240} /></div>;
+  if (completa && isLoading) return <div style={{ padding: 12 }}><Cargando pantalla="analisisDrill" minHeight={240} /></div>;
+
+  // Vista previa (opción A, 2026-10-01): una sola tira con las 6 cifras que importan + trazo de 12 meses + botón.
+  if (!completa) {
+    const periodo = modo === 'mes' ? `${MESES[mesMax - 1]} ${anio}` : `ene–${MESES[mesMax - 1].toLowerCase()} ${anio}`;
+    const yoyCur = cliente.yoy;
+    const yoyYtd = cliente.ytdPrev?.fact_neta > 0 ? ((cliente.ytd.fact_neta - cliente.ytdPrev.fact_neta) / cliente.ytdPrev.fact_neta) * 100 : null;
+    // Sell out: último mes con venta (≤ mes elegido) de v_sellout_cuenta_mes; inventario y semanas si la fuente lo trae.
+    const so = cuentaSellOut ? mensualSO.filter((r) => r.cuenta === cuentaSellOut && N(r.anio) === anio && N(r.mes) <= mesMax && N(r.importe) > 0).sort((a, b) => N(b.mes) - N(a.mes))[0] : null;
+    const soSi = so && N(so.sell_in) > 0 ? (N(so.importe) / N(so.sell_in)) * 100 : null;
+    const pz3m = so ? mensualSO.filter((r) => r.cuenta === cuentaSellOut && idxMes(N(r.anio), N(r.mes)) >= idxMes(N(so.anio), N(so.mes)) - 3 && idxMes(N(r.anio), N(r.mes)) < idxMes(N(so.anio), N(so.mes))).reduce((s, r) => s + N(r.cantidad), 0) : 0;
+    const semInv = so && so.inv_piezas != null ? semanasInventario(N(so.inv_piezas), pz3m) : null;
+    const Cifra = ({ k, v, s, color }) => (
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k}</div>
+        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: theme.text, lineHeight: 1.2 }}>{v}</div>
+        {s != null && <div style={{ fontSize: 9.5, color: color || theme.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s}</div>}
+      </div>
+    );
+    const tono = (v) => (v == null ? undefined : v >= 0 ? green : theme.red);
+    return (
+      <div style={{ padding: '10px 14px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr)) 120px auto', gap: 12, alignItems: 'center', fontFamily: TYPO.fontText }}>
+        <Cifra k={`Fact Neta ${periodo}`} v={money(cliente.cur.fact_neta)} s={yoyCur != null ? `${signo(yoyCur, 0)} vs ${anio - 1}` : `sin ${anio - 1}`} color={tono(yoyCur)} />
+        <Cifra k={`YTD ${anio}`} v={money(cliente.ytd.fact_neta)} s={yoyYtd != null ? `${signo(yoyYtd, 0)} vs ${anio - 1}` : `sin ${anio - 1}`} color={tono(yoyYtd)} />
+        <Cifra k="Cuota YTD" v={cliente.pctCuota == null && cliente.cuota == null ? '—' : pct(cliente.pctCuota, 0)} s={cliente.cuota != null ? `de ${moneyFull(cliente.cuota)} · ${periodo}` : 'sin cuota cargada'} />
+        <Cifra k={so ? `Sell out ${MESES[N(so.mes) - 1]}` : 'Sell out'} v={so ? money(N(so.importe)) : '—'} s={so ? (soSi != null ? `SO/SI ${pct(soSi, 0)}` : 'sin sell in ese mes') : cuentaSellOut ? 'sin venta este año' : 'no reporta'} />
+        <Cifra k="Inventario" v={so && so.inv_piezas != null ? `${int(N(so.inv_piezas))} pz` : '—'} s={so && so.inv_piezas != null ? (semInv != null ? `${semInv.toFixed(1)} semanas` : 'sin ritmo') : 'no reporta'} />
+        {verSensible
+          ? <Cifra k={`MC % · YTD`} v={pct(cliente.ytd.fact_neta ? (cliente.ytd.contribucion / cliente.ytd.fact_neta) * 100 : null)} s={`${cliente.mesesCompra12} de 12 meses con compra`} />
+          : <Cifra k="Última compra" v={cliente.ultimaCompra ? `${MESES[cliente.ultimaCompra.mes - 1]} ${String(cliente.ultimaCompra.anio).slice(2)}` : '—'} s={`${cliente.mesesCompra12} de 12 meses con compra`} />}
+        <div title="Fact. neta · últimos 12 meses"><GraficaLineas mini alto={38} datos={serie.map((d) => ({ x: d.label, v: d.fact_neta }))} series={[{ key: 'v', label: 'Fact. neta', tipo: 'principal' }]} formato={money} /></div>
+        {onAbrir && <Boton primario icon={ArrowUpRight} onClick={(e) => { e.stopPropagation(); onAbrir(cliente); }}>Ver página completa</Boton>}
+      </div>
+    );
+  }
 
   const periodoLbl = modo === 'mes' ? `${MESES[mesMax - 1]} ${anio}` : `ene–${MESES[mesMax - 1].toLowerCase()} ${anio}`;
   const th = { padding: '4px 6px', fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.divider || theme.border}`, textAlign: 'right', whiteSpace: 'nowrap' };

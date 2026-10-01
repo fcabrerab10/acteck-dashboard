@@ -17,8 +17,9 @@ import { tooltip } from '../../../lib/medidas';
 import ComparadorPeriodos from '../ComparadorPeriodos';
 import DrillCliente, { ApoyoDelAnio } from './DrillCliente';
 import DrillCuenta from '../sellout/DrillCuenta';
-import { useCuentas, useMensual, useDias, useCuotas, useDrillSkus, useDrillInventario, CUENTA_POR_ERP } from '../sellout/datos';
-import { construirFilas, ultimoMesConVenta as ultimoMesSellOut, ultimoDiaConVenta, skusDeCuenta, ultimosMeses } from '../sellout/calculo';
+import SellOutPorReceta, { BloqueSkus } from '../sellout/BloquesCuenta';
+import { useCuentas, useMensual, useDias, useCuotas, CUENTA_POR_ERP } from '../sellout/datos';
+import { construirFilas, ultimoMesConVenta as ultimoMesSellOut, ultimoDiaConVenta } from '../sellout/calculo';
 import { useDetalleCliente } from './useAnalisisData';
 import { MESES, N, idxMes, serie12, pctDe, yoyDe, mcDe, cuotaPeriodo, alcanceCuota } from './calc';
 import { money, moneyFull, int, pct, signo, toneDe, toneCanal, labelCanal } from './formato';
@@ -229,75 +230,17 @@ function SellOutCuenta({ codigo, nombre, anio }) {
     );
   }
   if (cDias || cMes || !fila) return <Cargando pantalla="selloutDrill" minHeight={320} />;
-  return (
-    <>
-      <Panel titulo="Sell Out" meta={`${fila.nombre} · ${MESES[mes - 1].toLowerCase()} ${anio} · lo que desplaza y lo que tiene en su almacén · sin IVA`} padding="0">
-        <DrillCuenta fila={fila} anio={anio} mes={mes} corteDia={corteDia} estadoSel={estadoSel} onEstado={setEstadoSel} />
-      </Panel>
-      <DetalleSkuSellOut cuenta={cuenta} anio={anio} mes={mes} conInventario={fila.invValor != null} />
-    </>
-  );
-}
-
-// Detalle por SKU del sell out (2026-10-01, Fernando: «que también tenga su detalle por SKU»): mismo formato que el de
-// Sell In — SKU × últimos 12 meses en piezas o monto, buscador, descripción del roadmap, promedio, total, YoY (12 m vs
-// los 12 anteriores) y, si la cuenta reporta inventario, stock y semanas. Datos: mv_sellout_cuenta_sku_mes (2 años).
-function DetalleSkuSellOut({ cuenta, anio, mes, conInventario }) {
-  const { theme } = useTheme();
-  const skuQ = useDrillSkus(cuenta, anio);
-  const invQ = useDrillInventario(cuenta, conInventario);
-  const { data: roadmap } = useRoadmap();
-  const [unidad, setUnidad] = useState('monto');
-  const [busca, setBusca] = useState('');
-  const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
-  const rd = useMemo(() => { const m = new Map(); (roadmap || []).forEach((r) => m.set(r.sku, r)); return m; }, [roadmap]);
-  const meses12 = useMemo(() => ultimosMeses(anio, mes, 12), [anio, mes]);
-
-  const filas = useMemo(() => {
-    const modo = unidad === 'piezas' ? 'piezas' : 'importe';
-    const actual = skusDeCuenta(skuQ.data || [], invQ.data || [], anio, mes, modo);
-    // YoY: los mismos 12 meses un año atrás.
-    const prev = new Map(skusDeCuenta(skuQ.data || [], [], anio - 1, mes, modo).map((f) => [f.sku, f.total]));
-    return actual.map((f) => ({ ...f, max: Math.max(0, ...f.meses), yoy: yoyDe(f.total, prev.get(f.sku) || 0), descripcion: rd.get(f.sku)?.descripcion || '' }));
-  }, [skuQ.data, invQ.data, anio, mes, unidad, rd]);
-
-  const visibles = useMemo(() => {
-    const q = busca.trim().toUpperCase();
-    const l = q ? filas.filter((f) => f.sku.includes(q) || f.descripcion.toUpperCase().includes(q) || String(f.marca || '').toUpperCase().includes(q)) : filas;
-    const dir = orden.dir === 'asc' ? 1 : -1;
-    return [...l].sort((a, b) => { const va = a[orden.col], vb = b[orden.col]; if (typeof va === 'string') return String(va).localeCompare(String(vb)) * dir; return ((va ?? -Infinity) - (vb ?? -Infinity)) * dir; });
-  }, [filas, busca, orden]);
-
-  const fmtU = unidad === 'piezas' ? int : money;
-  return (
-    <Panel titulo="Detalle por SKU · Sell Out" meta={`${visibles.length} SKUs · últimos 12 meses · ${unidad === 'piezas' ? 'piezas' : 'importe sin IVA'}${conInventario ? ' · stock de la última foto' : ''}`}
-      acciones={(
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, height: 28, minWidth: 200 }}>
-            <Search size={12} style={{ color: theme.textMuted }} />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="SKU, descripción o marca…" style={{ flex: 1, outline: 'none', fontSize: 11.5, background: 'transparent', border: 'none', color: theme.text, fontFamily: 'inherit' }} />
-            {busca && <button onClick={() => setBusca('')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: theme.textMuted, padding: 0, display: 'inline-flex' }}><X size={12} /></button>}
-          </div>
-          <Segmented options={[{ id: 'piezas', label: 'Piezas' }, { id: 'monto', label: 'Monto' }]} value={unidad} onChange={setUnidad} />
-        </div>
-      )} padding="0 0 2px">
-      {skuQ.isLoading ? <Cargando pantalla="selloutDrill" minHeight={240} /> : (
-        <TablaCompacta dense maxHeight={520} rowKey={(r) => r.sku} filas={visibles} orden={orden}
-          onSort={(col) => setOrden((o) => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: col === 'sku' ? 'asc' : 'desc' }))}
-          vacio="Sin SKUs con sell out en los últimos 12 meses."
-          columnas={[
-            { key: 'sku', label: 'SKU', align: 'left', mono: true, width: 100, sort: true },
-            { key: 'descripcion', label: 'Descripción', align: 'left', maxWidth: 240, render: (r) => <span style={{ color: theme.textMuted }} title={r.descripcion}>{r.descripcion || r.marca || '—'}</span> },
-            ...meses12.map((m, i) => ({ key: `m${i}`, label: `${MESES[m.mes - 1]}${m.anio !== anio ? ` ${String(m.anio).slice(2)}` : ''}`, width: 50, render: (r) => <HeatCell v={r.meses[i]} max={r.max} fmt={fmtU} /> })),
-            { key: 'prom', label: 'Prom', width: 60, sort: true, render: (r) => fmtU(r.prom) },
-            { key: 'total', label: 'Total', width: 70, bold: true, sort: true, render: (r) => fmtU(r.total) },
-            { key: 'yoy', label: 'YoY', width: 64, sort: true, render: (r) => <DeltaPill value={r.yoy} /> },
-            ...(conInventario ? [
-              { key: 'stock', label: 'Stock', width: 58, sort: true, render: (r) => (r.stock == null ? '—' : int(r.stock)) },
-              { key: 'semanas', label: 'Sem.', width: 52, sort: true, render: (r) => (r.stock === 0 ? <Pill tone="orange" size="xs">0</Pill> : r.semanas == null ? '—' : r.semanas.toFixed(1)) },
-            ] : []),
-          ]} />
-      )}
-    </Panel>
-  );
+  // Propios (Digitalife, PCEL, Dicotech): el drill con pestañas del consolidado + detalle por SKU.
+  // No propios: bloques apilados a la medida de lo que trae su fuente (sellout/BloquesCuenta.jsx · RECETAS).
+  if (fila.propio) {
+    return (
+      <>
+        <Panel titulo="Sell Out" meta={`${fila.nombre} · ${MESES[mes - 1].toLowerCase()} ${anio} · lo que desplaza y lo que tiene en su almacén · sin IVA`} padding="0">
+          <DrillCuenta fila={fila} anio={anio} mes={mes} corteDia={corteDia} estadoSel={estadoSel} onEstado={setEstadoSel} />
+        </Panel>
+        <BloqueSkus cuenta={cuenta} anio={anio} mes={mes} conInventario={fila.invValor != null} />
+      </>
+    );
+  }
+  return <SellOutPorReceta cuenta={cuenta} fila={fila} anio={anio} mes={mes} corteDia={corteDia} />;
 }
