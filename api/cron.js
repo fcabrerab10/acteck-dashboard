@@ -1807,7 +1807,7 @@ async function taskResumenProgramado({ dryRun = esDryRun(), hora = null } = {}) 
   return { dryRun, hoy: hoy.iso, hora: horaCDMX, perfiles: perfiles.length, enviados, omitidos, marcadas, criticas, ...(dryRun ? { previews } : {}) };
 }
 
-// ─── Vigilante del puente (cada hora) ───────────────────────────────────────
+// ─── Vigilante del puente (4 veces al día; Hobby no admite crons por hora) ───────────────────────────────────────
 // Vive en Vercel, no en la Mac mini: avisa por correo a Fernando si una fuente del
 // puente lleva demasiado sin cargar o si el latido dejó de llegar (Mac apagada,
 // agente caído, tarea de embarques colgada). Repite cada 6 h mientras siga y manda
