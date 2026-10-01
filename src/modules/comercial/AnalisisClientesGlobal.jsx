@@ -32,6 +32,7 @@ export default function AnalisisClientesGlobal() {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [modo, setModo] = useState('mes');
+  const [mesSel, setMesSel] = useState(null); // mes elegido a mano (2026-10-01, Fernando); null = último mes con venta
   const [busqueda, setBusqueda] = useState('');
   const [canalFiltro, setCanalFiltro] = useState('TODOS');
   const [origen, setOrigen] = useState('todos');
@@ -47,9 +48,11 @@ export default function AnalisisClientesGlobal() {
   const cuotas = useMemo(() => mapaCuotas(cuotasRows), [cuotasRows]);
 
   useEffect(() => { if (anios.length && !anios.includes(anio)) setAnio(anios[0]); }, [anios, anio]);
+  useEffect(() => { setMesSel(null); }, [anio]);
   useEffect(() => { setAbierto(null); }, [anio, modo, canalFiltro, origen, busqueda]);
 
-  const mesMax = useMemo(() => ultimoMesConVenta(rows || [], anio) || (anio === hoy.getFullYear() ? hoy.getMonth() + 1 : 12), [rows, anio]);
+  const mesAuto = useMemo(() => ultimoMesConVenta(rows || [], anio) || (anio === hoy.getFullYear() ? hoy.getMonth() + 1 : 12), [rows, anio]);
+  const mesMax = mesSel && mesSel <= mesAuto ? mesSel : mesAuto;
   const agg = useMemo(() => agregarClientes(rows || [], anio, mesMax, modo), [rows, anio, mesMax, modo]);
   const global = useMemo(() => {
     const r = rows || [];
@@ -117,7 +120,7 @@ export default function AnalisisClientesGlobal() {
 
   const mesLbl = MESES[mesMax - 1];
   const periodoLbl = modo === 'mes' ? `${mesLbl} ${anio}` : `YTD ene–${mesLbl.toLowerCase()} ${anio}`;
-  const esParcial = anio === hoy.getFullYear() && mesMax === hoy.getMonth() + 1;
+  const esParcial = anio === hoy.getFullYear() && mesMax === hoy.getMonth() + 1 && mesMax === mesAuto;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
   const sel = { height: 30, padding: '0 10px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, cursor: 'pointer' };
   const sensibleTip = 'Sólo visible con permiso de información sensible';
@@ -183,6 +186,9 @@ export default function AnalisisClientesGlobal() {
           <Segmented options={MODOS} value={modo} onChange={setModo} />
           <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} style={sel} title="Año (comparativo contra el anterior)">
             {(anios.length ? anios : [anio]).map((y) => <option key={y} value={y}>{y} vs {y - 1}</option>)}
+          </select>
+          <select value={mesMax} onChange={(e) => setMesSel(Number(e.target.value))} style={sel} title={modo === 'mes' ? 'Mes a ver' : 'Acumulado hasta este mes'}>
+            {Array.from({ length: mesAuto }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{modo === 'mes' ? MESES[m - 1] : `ene–${MESES[m - 1].toLowerCase()}`}{m === mesAuto ? ' · último' : ''}</option>)}
           </select>
           <span style={{ fontSize: 10.5, color: theme.textMuted }}>{modo === 'mes' ? `Mes · ${mesLbl} ${anio}` : `Acumulado · enero a ${mesLbl.toLowerCase()} ${anio}`}{esParcial ? ' · mes en curso' : ''}</span>
         </div>
