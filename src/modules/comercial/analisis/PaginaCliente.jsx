@@ -7,7 +7,7 @@
 //              buscador, MC % si sensible), composición por categoría, apoyo comercial y comparador de periodos.
 //   Sell Out → el MISMO drill del Sell Out consolidado (DrillCuenta) para la cuenta ligada al código del ERP
 //              (CUENTA_POR_ERP: 12 mayoristas + 3 propios); si el cliente no reporta sell out, se dice y ya.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -15,11 +15,12 @@ import { useRoadmap } from '../../../lib/queries';
 import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Boton, HeatCell, GraficaLineas, Cargando } from '../../../components/kit';
 import { tooltip } from '../../../lib/medidas';
 import ComparadorPeriodos from '../ComparadorPeriodos';
+import ExportMenu from '../../../components/ExportMenu';
 import DrillCliente, { ApoyoDelAnio } from './DrillCliente';
 import DrillCuenta from '../sellout/DrillCuenta';
 import SellOutPorReceta, { BloqueSkus } from '../sellout/BloquesCuenta';
-import { useCuentas, useMensual, useDias, useCuotas, CUENTA_POR_ERP } from '../sellout/datos';
-import { construirFilas, ultimoMesConVenta as ultimoMesSellOut, ultimoDiaConVenta } from '../sellout/calculo';
+import { useCuentas, useMensual, useDias, useCuotas, useDrillSkus, CUENTA_POR_ERP } from '../sellout/datos';
+import { construirFilas, ultimoMesConVenta as ultimoMesSellOut, ultimoDiaConVenta, ultimosMeses, skusDeCuenta } from '../sellout/calculo';
 import { useDetalleCliente } from './useAnalisisData';
 import { MESES, N, idxMes, serie12, pctDe, yoyDe, mcDe, cuotaPeriodo, alcanceCuota } from './calc';
 import { money, moneyFull, int, pct, signo, toneDe, toneCanal, labelCanal } from './formato';
@@ -29,8 +30,65 @@ const TABS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell 
 export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible, alertas = [], cuotas, onVolver, tabInicial = 'resumen' }) {
   const { theme } = useTheme();
   const [tab, setTab] = useState(tabInicial);
+  const rootRef = useRef(null);
   const mesLbl = MESES[mesMax - 1];
   const cuentaSellOut = CUENTA_POR_ERP[cliente.cliente] || null;
+  // Para exportar (2026-10-01): el detalle por SKU de Sell In y de Sell Out se arma aquí con las mismas consultas
+  // (cacheadas) que usan las pestañas, así el Excel sale completo aunque no se hayan abierto.
+  const { data: detalleSku } = useDetalleCliente(cliente.cliente, anio);
+  const { data: skuSellOut } = useDrillSkus(cuentaSellOut, anio, !!cuentaSellOut);
+  const { data: roadmapExp } = useRoadmap();
+  const excel = () => {
+    const rd = new Map((roadmapExp || []).map((r) => [r.sku, r]));
+    const kFin = idxMes(anio, mesMax);
+    const meses12 = ultimosMeses(anio, mesMax, 12);
+    const colMes = (pref) => meses12.map((m, i) => ({ label: `${MESES[m.mes - 1]} ${String(m.anio).slice(2)}`, key: `${pref}${i}`, tipo: pref === 'p' ? 'numero' : 'moneda', ancho: 11 }));
+    // Sell In por SKU: fact. neta y piezas por mes (mv_analisis_cliente_sku_mes)
+    const si = new Map();
+    for (const r of detalleSku || []) {
+      const i = idxMes(r.anio, r.mes) - (kFin - 11); if (i < 0 || i > 11) continue;
+      const o = si.get(r.articulo) || { sku: r.articulo, descripcion: rd.get(r.articulo)?.descripcion || '', marca: r.marca || '', categoria: rd.get(r.articulo)?.categoria || r.categoria || '', total: 0, piezas: 0, contribucion: 0 };
+      o[`m${i}`] = (o[`m${i}`] || 0) + N(r.fact_neta); o[`p${i}`] = (o[`p${i}`] || 0) + N(r.piezas_venta_neta);
+      o.total += N(r.fact_neta); o.piezas += N(r.piezas_venta_neta); o.contribucion += N(r.contribucion); si.set(r.articulo, o);
+    }
+    const filasSi = [...si.values()].map((o) => ({ ...o, mc: o.total ? (o.contribucion / o.total) * 100 : null })).sort((a, b) => b.total - a.total);
+    const hojas = [{
+      nombre: 'Resumen', subtitulo: `${cliente.nombre} · Nº ${cliente.cliente} · ${anio} vs ${anio - 1}`,
+      columnas: [{ label: 'Concepto', key: 'k', tipo: 'texto', ancho: 32 }, { label: 'Valor', key: 'v', tipo: 'texto', ancho: 22 }],
+      filas: [
+        { k: `Fact. neta ${mesLbl} ${anio}`, v: moneyFull(N(mes.fact_neta)) }, { k: `Fact. neta ${mesLbl} ${anio - 1}`, v: moneyFull(N(mesPrev.fact_neta)) },
+        { k: `YTD ${anio}`, v: moneyFull(cliente.ytd.fact_neta) }, { k: `YTD ${anio - 1}`, v: moneyFull(cliente.ytdPrev.fact_neta) },
+        { k: 'Piezas YTD', v: int(cliente.ytd.piezas_venta_neta) }, { k: 'Cuota YTD', v: cuotaYtd == null ? '—' : `${moneyFull(cuotaYtd)} · ${pct(pctYtd, 0)}` },
+        ...(verSensible ? [{ k: '% MC YTD', v: pct(mcDe(cliente.ytd)) }, { k: 'Contribución YTD', v: moneyFull(cliente.ytd.contribucion) }] : []),
+        { k: 'Última compra', v: cliente.ultimaCompra ? `${MESES[cliente.ultimaCompra.mes - 1]} ${cliente.ultimaCompra.anio}` : '—' }, { k: 'Meses con compra (12)', v: String(cliente.mesesCompra12) },
+        { k: 'Sell out', v: cuentaSellOut ? 'reporta' : 'no reporta' },
+      ],
+    }, {
+      nombre: 'Sell In por SKU', subtitulo: `${filasSi.length} SKUs · últimos 12 meses · fact. neta y piezas`,
+      columnas: [
+        { label: 'SKU', key: 'sku', tipo: 'texto', ancho: 12 }, { label: 'Descripción', key: 'descripcion', tipo: 'texto', ancho: 40 }, { label: 'Marca', key: 'marca', tipo: 'texto', ancho: 12 }, { label: 'Categoría', key: 'categoria', tipo: 'texto', ancho: 16 },
+        ...colMes('m'), { label: 'Total 12 m', key: 'total', tipo: 'moneda', ancho: 14 }, ...colMes('p'), { label: 'Piezas 12 m', key: 'piezas', tipo: 'numero', ancho: 11 },
+        ...(verSensible ? [{ label: 'MC %', key: 'mc', tipo: 'pct', ancho: 8 }] : []),
+      ],
+      filas: filasSi,
+    }];
+    if (cuentaSellOut) {
+      const mesSo = (() => { const con = (skuSellOut || []).filter((r) => N(r.anio) === anio && N(r.importe) > 0).map((r) => N(r.mes)); return con.length ? Math.max(...con) : mesMax; })();
+      const m12 = ultimosMeses(anio, mesSo, 12);
+      const imp = skusDeCuenta(skuSellOut || [], [], anio, mesSo, 'importe'), pz = new Map(skusDeCuenta(skuSellOut || [], [], anio, mesSo, 'piezas').map((f) => [f.sku, f]));
+      const filasSo = imp.map((f) => { const p = pz.get(f.sku); const o = { sku: f.sku, descripcion: rd.get(f.sku)?.descripcion || '', marca: f.marca || '', total: f.total, piezas: p?.total || 0 }; f.meses.forEach((v, i) => { o[`m${i}`] = v; o[`p${i}`] = p?.meses[i] || 0; }); return o; });
+      hojas.push({
+        nombre: 'Sell Out por SKU', subtitulo: `${filasSo.length} SKUs · últimos 12 meses a ${MESES[mesSo - 1]} ${anio} · importe sin IVA y piezas`,
+        columnas: [
+          { label: 'SKU', key: 'sku', tipo: 'texto', ancho: 12 }, { label: 'Descripción', key: 'descripcion', tipo: 'texto', ancho: 40 }, { label: 'Marca', key: 'marca', tipo: 'texto', ancho: 12 },
+          ...m12.map((m, i) => ({ label: `${MESES[m.mes - 1]} ${String(m.anio).slice(2)}`, key: `m${i}`, tipo: 'moneda', ancho: 11 })), { label: 'Total 12 m', key: 'total', tipo: 'moneda', ancho: 14 },
+          ...m12.map((m, i) => ({ label: `${MESES[m.mes - 1]} ${String(m.anio).slice(2)} pz`, key: `p${i}`, tipo: 'numero', ancho: 10 })), { label: 'Piezas 12 m', key: 'piezas', tipo: 'numero', ancho: 11 },
+        ],
+        filas: filasSo,
+      });
+    }
+    return { titulo: `${cliente.nombre} · ${anio}`, archivo: `Cliente ${cliente.cliente} ${cliente.nombre.slice(0, 30)} ${anio}`, hojas };
+  };
 
   const mes = cliente.mensual.get(idxMes(anio, mesMax)) || {}, mesPrev = cliente.mensual.get(idxMes(anio - 1, mesMax)) || {};
   const yoyMes = yoyDe(N(mes.fact_neta), N(mesPrev.fact_neta)), yoyYtd = yoyDe(cliente.ytd.fact_neta, cliente.ytdPrev.fact_neta);
@@ -47,7 +105,7 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
   ].join(' · ');
 
   return (
-    <div data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
+    <div ref={rootRef} data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Boton icon={ArrowLeft} onClick={onVolver}>Análisis por cliente</Boton>
         <Segmented options={TABS} value={tab} onChange={setTab} />
@@ -56,6 +114,7 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
           <Pill tone={toneCanal(cliente.canal)} size="xs">{labelCanal(cliente.canal)}</Pill>
           {cliente.propio && <Pill tone="inverse" size="xs">propio</Pill>}
           {cliente.ocasional && <Pill tone="orange" size="xs">compra ocasional</Pill>}
+          <ExportMenu titulo={cliente.nombre} subtitulo={`Nº ${cliente.cliente} · ${anio}`} excel={excel} pdf={{ ref: rootRef }} />
         </span>
       </div>
 

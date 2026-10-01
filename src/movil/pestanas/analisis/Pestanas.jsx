@@ -128,8 +128,8 @@ export function SellOutM({ clienteNombre, nombre, anio }) {
       <KpiGrid>
         <KpiM eyebrow={`Sell out ${MESES[mes - 1]}`} big={moneyCompact(N(act?.importe))} sub={dYoy != null ? `${deltaPct(dYoy)} vs ${anio - 1}` : `sin ${anio - 1}`} pill={dYoy != null ? { tone: tonoDelta(dYoy), label: deltaPct(dYoy) } : undefined} />
         <KpiM eyebrow="Sell out vs sell in" big={soSi == null ? '—' : `${Math.round(soSi)}%`} sub={act && N(act.sell_in) > 0 ? `sell in ${moneyCompact(N(act.sell_in))}` : 'sin sell in ese mes'} />
-        <KpiM eyebrow="Clientes finales" big={act?.clientes_finales != null ? int(N(act.clientes_finales)) : '—'} sub={act?.clientes_finales != null ? 'con compra en el mes' : 'la fuente no lo trae'} />
-        <KpiM eyebrow="Inventario" big={act?.inv_piezas != null ? `${int(N(act.inv_piezas))} pz` : '—'} sub={act?.inv_piezas != null ? (act.inv_valor != null ? money(N(act.inv_valor)) : 'última foto') : 'no reporta'} />
+        <KpiM eyebrow="Clientes finales" big={fila.clientesFinales != null ? int(N(fila.clientesFinales)) : '—'} sub={fila.clientesFinales != null ? 'con compra en el mes' : 'la fuente no lo trae'} />
+        <KpiM eyebrow="Inventario" big={fila.invValor != null ? `${int(N(act?.inv_piezas))} pz` : '—'} sub={fila.invValor != null ? money(N(fila.invValor)) : 'no reporta'} />
       </KpiGrid>
       <div style={{ padding: '14px 16px 0' }}>
         <BotonGrande primario icon={ShoppingBag} onClick={() => nav.push(<Cuenta fila={fila} anio={anio} mes={mes} corteDia={corteDia} />, `sellout-cuenta-${cuenta}`)}>Abrir Sell Out completo</BotonGrande>
