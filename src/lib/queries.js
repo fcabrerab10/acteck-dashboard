@@ -320,11 +320,17 @@ async function inventarioPcelUltimaSemana() {
     .order('anio', { ascending: false, nullsFirst: false }).order('semana', { ascending: false, nullsFirst: false }).limit(1));
   const u = ult?.[0];
   if (!u) return [];
-  const rows = await fetchAll('sellout_pcel', 'sku,pcel_sku,marca,producto,inventario,costo_promedio', (q) => q.eq('anio', u.anio).eq('semana', u.semana));
+  // El reporte trae el código PCEL (556285…): se traduce a SKU Acteck con pcel_sku_map (sin mapa se deja el código).
+  const [rows, mapa] = await Promise.all([
+    fetchAll('sellout_pcel', 'sku,pcel_sku,marca,producto,inventario,costo_promedio', (q) => q.eq('anio', u.anio).eq('semana', u.semana)),
+    fetchAll('pcel_sku_map', 'sku_pcel,sku_acteck'),
+  ]);
+  const aSku = new Map((mapa || []).map((x) => [String(x.sku_pcel), x.sku_acteck]));
   const m = new Map();
   for (const r of rows) {
-    const sku = r.sku || r.pcel_sku;
-    if (!sku) continue;
+    const cod = r.pcel_sku || r.sku;
+    if (!cod) continue;
+    const sku = aSku.get(String(cod)) || (r.sku && /^(AC|BR|AV)-/.test(r.sku) ? r.sku : String(cod));
     const stock = Number(r.inventario) || 0, costo = Number(r.costo_promedio) || 0;
     const o = m.get(sku) || { sku, marca: r.marca || null, titulo: r.producto || null, stock: 0, valor: 0, costo_convenio: costo, precio_venta: null, fecha_ultima_venta: null, dias_sin_venta: null, anio: u.anio, semana: u.semana };
     o.stock += stock; o.valor += stock * costo;
