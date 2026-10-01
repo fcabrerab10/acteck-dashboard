@@ -27,11 +27,14 @@ import { money, moneyFull, int, pct, signo, toneDe, toneCanal, labelCanal } from
 
 const TABS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell In' }, { id: 'sellout', label: 'Sell Out' }];
 
-export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible, alertas = [], cuotas, onVolver, tabInicial = 'resumen' }) {
+// `periodo` (2026-10-01, Fernando: «en la página completa no me deja seleccionar mes o periodos»): los mismos
+// controles de la tabla — Mes/YTD, año y mes — viven también en la barra de la página y cambian el estado de la pestaña.
+export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible, alertas = [], cuotas, onVolver, tabInicial = 'resumen', periodo = null }) {
   const { theme } = useTheme();
   const [tab, setTab] = useState(tabInicial);
   const rootRef = useRef(null);
   const mesLbl = MESES[mesMax - 1];
+  const sel = { height: 30, padding: '0 10px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, cursor: 'pointer' };
   const cuentaSellOut = CUENTA_POR_ERP[cliente.cliente] || null;
   // Para exportar (2026-10-01): el detalle por SKU de Sell In y de Sell Out se arma aquí con las mismas consultas
   // (cacheadas) que usan las pestañas, así el Excel sale completo aunque no se hayan abierto.
@@ -109,7 +112,17 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Boton icon={ArrowLeft} onClick={onVolver}>Análisis por cliente</Boton>
         <Segmented options={TABS} value={tab} onChange={setTab} />
-        <span style={{ fontSize: 10.5, color: theme.textMuted }}>{anio} vs {anio - 1} · {modo === 'mes' ? `mes ${mesLbl}` : `YTD ene–${mesLbl.toLowerCase()}`}</span>
+        {periodo ? (
+          <>
+            <Segmented options={[{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD' }]} value={modo} onChange={periodo.setModo} />
+            <select value={anio} onChange={(e) => periodo.setAnio(Number(e.target.value))} style={sel} title="Año (comparativo contra el anterior)">
+              {periodo.anios.map((y) => <option key={y} value={y}>{y} vs {y - 1}</option>)}
+            </select>
+            <select value={mesMax} onChange={(e) => periodo.setMes(Number(e.target.value))} style={sel} title={modo === 'mes' ? 'Mes a ver' : 'Acumulado hasta este mes'}>
+              {Array.from({ length: periodo.mesAuto || 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{modo === 'mes' ? MESES[m - 1] : `ene–${MESES[m - 1].toLowerCase()}`}{m === periodo.mesAuto ? ' · último' : ''}</option>)}
+            </select>
+          </>
+        ) : <span style={{ fontSize: 10.5, color: theme.textMuted }}>{anio} vs {anio - 1} · {modo === 'mes' ? `mes ${mesLbl}` : `YTD ene–${mesLbl.toLowerCase()}`}</span>}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           <Pill tone={toneCanal(cliente.canal)} size="xs">{labelCanal(cliente.canal)}</Pill>
           {cliente.propio && <Pill tone="inverse" size="xs">propio</Pill>}

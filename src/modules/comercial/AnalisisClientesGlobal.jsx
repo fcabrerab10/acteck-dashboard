@@ -115,7 +115,10 @@ export default function AnalisisClientesGlobal() {
   // Página completa de un cliente (vive dentro de esta pestaña; «‹ Análisis por cliente» regresa a la tabla).
   if (paginaCliente) {
     const c = filas.find((f) => f.cliente === paginaCliente) || agg.clientes.map(aplanar).find((f) => f.cliente === paginaCliente);
-    if (c) return <PaginaCliente cliente={c} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} cuotas={cuotas} onVolver={() => setPaginaCliente(null)} />;
+    if (c) return (
+      <PaginaCliente cliente={c} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} cuotas={cuotas} onVolver={() => setPaginaCliente(null)}
+        periodo={{ anios: anios.length ? anios : [anio], setAnio, mesAuto, setMes: setMesSel, setModo }} />
+    );
   }
 
   const mesLbl = MESES[mesMax - 1];
