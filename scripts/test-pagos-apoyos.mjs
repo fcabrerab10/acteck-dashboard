@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calcularApoyo, cuadreCon, conceptoApoyo, detalleApoyo } from '../src/modules/comercial/pagosv3/apoyos.js';
+import { calcularApoyo, cuadreCon, conceptoApoyo, detalleApoyo, cuadreConvenio, apoyosVigentes } from '../src/modules/comercial/pagosv3/apoyos.js';
 const P = [
   { sku: 'AC-933858', piezas: 40, precio_factura: 814.8, apoyo_pz: 70, inv_restante: 60 },
   { sku: 'BR-940726', piezas: 15, precio_factura: 1850, apoyo_pz: 140, inv_restante: 7 },
@@ -33,4 +33,23 @@ test('historial de un SKU: varios apoyos al mismo producto, del más reciente al
   ];
   const h = historialSku(pagos, 'digitalife', 'AC-1');
   assert.equal(h.length, 2); assert.equal(h[0].pago_id, 2); assert.equal(h[1].folio, '13600'); assert.equal(h[0].monto + h[1].monto, 1300);
+});
+
+test('cuadre contra el costo convenio de la última foto', () => {
+  const l = { sku: 'AC-933858', precio_factura: 814.8, apoyo_pz: 84.27 };
+  assert.equal(cuadreConvenio(l, { costo_convenio: 730.53 }).estado, 'cuadra');
+  assert.equal(cuadreConvenio(l, { costo_convenio: 814.8 }).estado, 'pendiente', 'el convenio sigue igual a la factura: Digitalife no lo ha aplicado');
+  const d = cuadreConvenio(l, { costo_convenio: 700 }); assert.equal(d.estado, 'difiere'); assert.ok(d.diferencia < 0);
+  assert.equal(cuadreConvenio(l, null).estado, 'sin_foto');
+});
+test('apoyos vigentes por convenio: apoyo = factura − convenio, registrados vs por registrar', () => {
+  const filas = [
+    { sku: 'A', apoyo_pz: 140, stock: 175, apoyo_inventario: 24500, vendidas_90d: 58 },
+    { sku: 'B', apoyo_pz: 0, stock: 10, apoyo_inventario: 0, vendidas_90d: 3 },
+    { sku: 'C', apoyo_pz: -50, stock: 4, apoyo_inventario: -200, vendidas_90d: 0 },
+  ];
+  const v = apoyosVigentes(filas, new Map([['A', { n: 1, monto: 24500, piezas: 175, folios: [] }]]));
+  assert.equal(v.vigentes.length, 1); assert.equal(v.vigentes[0].registrado, true);
+  assert.equal(v.apoyoInventario, 24500); assert.equal(v.pendientes, 0); assert.equal(v.compraronCaro, 1);
+  assert.equal(apoyosVigentes(filas, null).pendientes, 1);
 });

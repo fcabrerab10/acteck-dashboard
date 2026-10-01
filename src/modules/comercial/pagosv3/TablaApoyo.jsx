@@ -5,10 +5,12 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Pill } from '../../../components/kit';
 import { MONO, mxn, mxn2 } from './ui';
-import { calcularApoyo } from './apoyos';
+import { cuadreConvenio, calcularApoyo } from './apoyos';
 import { moneyCompact } from '../../../lib/format';
 
 /** Pastilla «apoyo $X» junto al SKU en Sell Out (Fernando 2026-09-24: ver cuánto apoyo lleva cada producto). */
+import { useApoyosConvenio } from './datosApoyos';
+
 export function PillApoyoSku({ a, size = 'xs' }) {
   if (!a || !(a.monto > 0)) return null;
   return <Pill tone="green" size={size} title={`${a.n} apoyo${a.n === 1 ? '' : 's'} · ${a.piezas.toLocaleString('es-MX')} pz · último ${a.ultimo || '—'}${a.folios.length ? ` · NC ${a.folios.join(', ')}` : ''}`}>apoyo {moneyCompact(a.monto)}</Pill>;
@@ -20,8 +22,11 @@ export function PillCuadre({ cuadre, bonificacion, size = 'xs' }) {
   return <Pill tone={cuadre.tone} size={size} dot title={bonificacion ? `${bonificacion.concepto || ''} · ${bonificacion.fecha || ''} · ${mxn(bonificacion.monto)}` : 'Liga la bonificación cuando el ERP la emita'}>{txt}</Pill>;
 }
 
-export default function TablaApoyo({ productos = [], bonificacion = null, compacto = false }) {
+export default function TablaApoyo({ productos = [], bonificacion = null, compacto = false, clienteKey = null, fechaRegistro = null }) {
   const { theme } = useTheme();
+  const { data: convFilas } = useApoyosConvenio(clienteKey, !!clienteKey);
+  const conv = new Map((convFilas || []).map((f) => [f.sku, f]));
+  const conConvenio = conv.size > 0;
   const c = calcularApoyo(productos, bonificacion);
   const th = { textAlign: 'right', padding: '4px 6px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap' };
   const td = { textAlign: 'right', padding: '5px 6px', borderBottom: `1px solid ${theme.border}`, fontSize: 11.5, ...MONO, whiteSpace: 'nowrap' };
@@ -31,7 +36,7 @@ export default function TablaApoyo({ productos = [], bonificacion = null, compac
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead><tr>
-          <th style={{ ...th, ...izq }}>Producto</th><th style={th} title="Inventario apoyado o protegido">Inv apoyado</th><th style={th}>Precio factura</th><th style={th}>Apoyo / pz</th><th style={th}>Nuevo costo</th><th style={th}>Monto</th><th style={th} title="Inventario en el cliente al capturar">Inv restante</th>
+          <th style={{ ...th, ...izq }}>Producto</th><th style={th} title="Inventario apoyado o protegido">Inv apoyado</th><th style={th}>Precio factura</th><th style={th}>Apoyo / pz</th><th style={th}>Nuevo costo</th>{conConvenio && <th style={th} title="Costo convenio en la última foto de inventario del cliente contra el nuevo costo registrado">Convenio</th>}<th style={th}>Monto</th><th style={th} title="Inventario en el cliente al capturar">Inv restante</th>
         </tr></thead>
         <tbody>
           {c.lineas.map((l) => (
@@ -41,6 +46,7 @@ export default function TablaApoyo({ productos = [], bonificacion = null, compac
               <td style={td}>{mxn2(l.precio_factura)}</td>
               <td style={{ ...td, color: theme.green || '#34C759' }}>−{mxn2(l.apoyo_pz)}</td>
               <td style={{ ...td, fontWeight: 600 }}>{mxn2(l.nuevo_costo)}</td>
+              {conConvenio && <td style={{ ...td, textAlign: 'left' }}>{(() => { const c = cuadreConvenio(l, conv.get(l.sku), { fechaRegistro }); return <Pill tone={c.tone} size="xs" dot title={c.esperado != null ? `esperado ${c.esperado.toFixed(2)} · real ${c.real.toFixed(2)}` : ''}>{c.label}</Pill>; })()}</td>}
               <td style={td}>{mxn(l.monto)}</td>
               <td style={{ ...td, color: l.inv_restante == null ? theme.textMuted : l.inv_restante > 0 ? theme.text : theme.red }}>{l.inv_restante == null ? '—' : `${l.inv_restante.toLocaleString('es-MX')} pz`}</td>
             </tr>
@@ -48,7 +54,7 @@ export default function TablaApoyo({ productos = [], bonificacion = null, compac
           <tr>
             <td style={{ ...td, ...izq, fontWeight: 600, borderBottom: 0 }}>Total</td>
             <td style={{ ...td, borderBottom: 0 }}>{c.piezas.toLocaleString('es-MX')} pz</td>
-            <td style={{ ...td, borderBottom: 0 }} colSpan={3} />
+            <td style={{ ...td, borderBottom: 0 }} colSpan={conConvenio ? 4 : 3} />
             <td style={{ ...td, fontWeight: 700, borderBottom: 0 }}>{mxn(c.total)}</td>
             <td style={{ ...td, borderBottom: 0 }} />
           </tr>

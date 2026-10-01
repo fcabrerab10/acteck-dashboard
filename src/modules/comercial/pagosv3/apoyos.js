@@ -69,3 +69,39 @@ export function historialSku(pagos = [], clienteKey, sku) {
   }
   return out.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
 }
+
+// ── Costo convenio (2026-10-01) ───────────────────────────────────────────────────────────
+// Fernando: «lo que se pone como apoyo es la diferencia entre el costo y el costo convenio». Digitalife registra en
+// su inventario un costo convenio = lo que le facturamos − el apoyo. Dos usos:
+//   cuadreConvenio: un producto ya registrado en Pagos contra la última foto del cliente → ¿su convenio ya refleja el
+//                   apoyo? (cuadra · difiere · pendiente si la foto es anterior a la captura · sin_foto)
+//   apoyosVigentes: filas de v_apoyos_convenio (apoyo_pz = factura − convenio) marcando las que ya tienen pago.
+export function cuadreConvenio(linea, conv, { fechaRegistro = null } = {}) {
+  if (!conv || conv.costo_convenio == null) return { estado: 'sin_foto', label: 'sin foto de inventario', tone: 'gray' };
+  const esperado = Number(linea.precio_factura) - Number(linea.apoyo_pz);
+  const real = Number(conv.costo_convenio);
+  const diferencia = real - esperado;
+  if (Math.abs(diferencia) <= TOLERANCIA_CUADRE) return { estado: 'cuadra', esperado, real, diferencia, label: `convenio ${real.toFixed(2)} · cuadra`, tone: 'green' };
+  // Si el convenio sigue igual a la factura (sin apoyo) y la foto es de antes del registro, Digitalife aún no lo refleja.
+  const sinAplicar = Math.abs(real - Number(linea.precio_factura)) <= TOLERANCIA_CUADRE;
+  if (sinAplicar) return { estado: 'pendiente', esperado, real, diferencia, label: fechaRegistro ? 'convenio aún sin el apoyo' : 'convenio sin el apoyo', tone: 'orange' };
+  return { estado: 'difiere', esperado, real, diferencia, label: `convenio ${real.toFixed(2)} · esperado ${esperado.toFixed(2)} (${diferencia > 0 ? '+' : '−'}${Math.abs(diferencia).toFixed(2)})`, tone: 'red' };
+}
+
+export function apoyosVigentes(filas = [], apoyosPorSku = null) {
+  const N = (v) => Number(v) || 0;
+  const con = filas.filter((f) => N(f.apoyo_pz) > TOLERANCIA_CUADRE * 0.5);
+  const vigentes = con.map((f) => {
+    const reg = apoyosPorSku?.get?.(f.sku) || null;
+    return { ...f, apoyo_pz: N(f.apoyo_pz), apoyo_inventario: N(f.apoyo_inventario), stock: N(f.stock), vendidas_90d: N(f.vendidas_90d), registrado: !!reg, registro: reg };
+  });
+  const piezas = vigentes.reduce((s, f) => s + f.stock, 0);
+  const apoyoInventario = vigentes.reduce((s, f) => s + f.apoyo_inventario, 0);
+  const pend = vigentes.filter((f) => !f.registrado);
+  return {
+    vigentes, piezas, apoyoInventario,
+    apoyoPorPieza: piezas ? apoyoInventario / piezas : 0,
+    pendientes: pend.length, apoyoPendiente: pend.reduce((s, f) => s + f.apoyo_inventario, 0),
+    compraronCaro: filas.filter((f) => N(f.apoyo_pz) < -TOLERANCIA_CUADRE * 0.5).length,
+  };
+}

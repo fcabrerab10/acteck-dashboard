@@ -42,6 +42,7 @@ import PanelReglas from './pagosv3/PanelReglas';
 import PanelMarketing from './pagosv3/PanelMarketing';
 import FormPagoManual from './pagosv3/FormPagoManual';
 import FormApoyoProducto from './pagosv3/FormApoyoProducto';
+import PanelApoyosConvenio from './pagosv3/PanelApoyosConvenio';
 import { PillCuadre } from './pagosv3/TablaApoyo';
 import { cuadreCon } from './pagosv3/apoyos';
 import HojaRegistrarPago from './pagosv3/HojaRegistrarPago';
@@ -64,6 +65,7 @@ export default function PagosUnificados({ clienteKey = null, extra = null }) {
   const [formManual, setFormManual] = useState(false);
   const [formApoyo, setFormApoyo] = useState(false);       // ＋ Apoyo por producto (2026-09-24)
   const [apoyoSkuInicial, setApoyoSkuInicial] = useState(null); // desde Sell Out › drill del SKU › «Registrar apoyo» (2026-09-29)
+  const [apoyoPrefill, setApoyoPrefill] = useState(null);       // desde la sección Apoyos (convenio): { sku, apoyo_pz, piezas } (2026-10-01)
   useEffect(() => {
     if (extra?.apoyoSku) { setApoyoSkuInicial(extra.apoyoSku); setFormApoyo(true); }
   }, [extra]);
@@ -263,6 +265,7 @@ export default function PagosUnificados({ clienteKey = null, extra = null }) {
   const reglaDest = reglaDe(d.reglas, '_global', 'destinatarios');
   const SECCIONES = [
     { id: 'calculo', label: 'Cálculo' },
+    { id: 'apoyos', label: 'Apoyos' },
     { id: 'marketing', label: 'Marketing' },
     { id: 'fondo', label: 'Fondo' },
     { id: 'reglas', label: 'Reglas' },
@@ -418,6 +421,11 @@ export default function PagosUnificados({ clienteKey = null, extra = null }) {
         />
       )}
 
+      {seccion === 'apoyos' && (
+        <PanelApoyosConvenio clienteKey={clienteSel} nombre={nombreSel} puedeEditar={puedeAlgo}
+          onRegistrar={(pre) => { setApoyoPrefill(pre); setApoyoSkuInicial(pre.sku); setFormApoyo(true); }} />
+      )}
+
       {seccion === 'marketing' && (
         <PanelMarketing
           actividades={d.actividades} clientes={clientesFiltro} anio={anio} mes={mes}
@@ -450,7 +458,7 @@ export default function PagosUnificados({ clienteKey = null, extra = null }) {
       />
 
       <FormApoyoProducto
-        abierto={formApoyo} onCerrar={() => { setFormApoyo(false); setApoyoSkuInicial(null); }} skuInicial={apoyoSkuInicial}
+        abierto={formApoyo} onCerrar={() => { setFormApoyo(false); setApoyoSkuInicial(null); setApoyoPrefill(null); }} skuInicial={apoyoSkuInicial} prefill={apoyoPrefill}
         clientes={visibles.filter(puedeEditar)} clienteInicial={clienteSel} anio={anio} mes={mes} pagos={d.pagos || []}
         onGuardar={(datos) => recargarTras(() => crearPagoManual({ datos, perfil }), 'Apoyo por producto creado')}
       />

@@ -15,7 +15,7 @@ import { calcularApoyo, conceptoApoyo, detalleApoyo, historialSku } from './apoy
 import { buscarSkus, datosProducto, bonificacionesErp, bonificacionesLigadas } from './datosApoyos';
 import { PillCuadre } from './TablaApoyo';
 
-export default function FormApoyoProducto({ abierto, onCerrar, clientes, clienteInicial, anio, mes, pagos = [], onGuardar, skuInicial = null }) {
+export default function FormApoyoProducto({ abierto, onCerrar, clientes, clienteInicial, anio, mes, pagos = [], onGuardar, skuInicial = null, prefill = null }) {
   const { theme } = useTheme();
   const [cliente, setCliente] = useState(clienteInicial || clientes[0]);
   const [productos, setProductos] = useState([]);
@@ -34,7 +34,7 @@ export default function FormApoyoProducto({ abierto, onCerrar, clientes, cliente
   useEffect(() => {
     if (!abierto || !skuInicial || !cliente) return undefined;
     let vivo = true;
-    buscarSkus(skuInicial).then((r) => { const s = r.find((x) => x.sku === skuInicial) || r[0]; if (vivo && s) agregar(s); }).catch(() => {});
+    buscarSkus(skuInicial).then((r) => { const s = r.find((x) => x.sku === skuInicial) || r[0] || { sku: skuInicial, descripcion: prefill?.descripcion || '' }; if (vivo && s) agregar(s, prefill); }).catch(() => {});
     return () => { vivo = false; };
   }, [abierto, skuInicial, cliente]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -50,9 +50,10 @@ export default function FormApoyoProducto({ abierto, onCerrar, clientes, cliente
     return () => { vivo = false; clearTimeout(t); };
   }, [busca, productos]);
 
-  const agregar = async (s) => {
+  // `pre` (desde Apoyos por convenio): apoyo por pieza = factura − convenio y piezas = inventario disponible en ese momento.
+  const agregar = async (s, pre = null) => {
     setBusca(''); setSugs([]);
-    const base = { sku: s.sku, descripcion: s.descripcion || '', piezas: null, precio_factura: 0, apoyo_pz: null, inv_restante: null, cargando: true };
+    const base = { sku: s.sku, descripcion: s.descripcion || '', piezas: pre?.piezas ?? null, precio_factura: 0, apoyo_pz: pre?.apoyo_pz ?? null, inv_restante: null, cargando: true };
     setProductos((prev) => [...prev, base]);
     try {
       const d = await datosProducto(cliente, s.sku);

@@ -71,3 +71,11 @@ export async function apoyosPorSku(clienteKey) {
 export function useApoyosPorSku(clienteKey, enabled = true) {
   return useQuery({ queryKey: ['apoyos_sku', clienteKey], queryFn: () => apoyosPorSku(clienteKey), enabled: !!clienteKey && enabled, staleTime: 5 * 60 * 1000 });
 }
+
+/** Apoyos por costo convenio (v_apoyos_convenio = mv, se refresca en refresh_vision_general). Sólo Digitalife trae convenio. */
+export async function apoyosConvenio(clienteKey) {
+  return fetchAll('v_apoyos_convenio', 'cliente,sku,titulo,anio,semana,stock,costo_convenio,precio_venta,precio_factura,fecha_factura,apoyo_pz,apoyo_pct,vendidas_90d,apoyo_inventario', (q) => q.eq('cliente', clienteKey));
+}
+export function useApoyosConvenio(clienteKey, enabled = true) {
+  return useQuery({ queryKey: ['apoyos_convenio', clienteKey], queryFn: () => apoyosConvenio(clienteKey), enabled: !!clienteKey && enabled, staleTime: 5 * 60 * 1000 });
+}

@@ -236,6 +236,13 @@ export default async function handler(req, res) {
       }).catch(() => {});
     }
 
+    // v_apoyos_convenio (mv) depende de la foto de inventario del cliente: refrescar al cargarla (2026-10-01).
+    if (table === 'inventario_cliente') {
+      fetch(`${SB_URL}/rest/v1/rpc/refresh_vision_general`, {
+        method: 'POST', headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, 'Content-Type': 'application/json', Prefer: 'params=single-object' }, body: '{}',
+      }).catch(() => {});
+    }
+
     res.status(200).json({ ok: true, table, count: rows.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
