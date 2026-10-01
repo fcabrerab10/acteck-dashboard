@@ -8,7 +8,8 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
 import { SEV_LABEL } from '../../../lib/alertas';
-import { Cargando, KpiCard, HeatCell, Pill, Panel, GraficaLineas } from '../../../components/kit';
+import { ArrowUpRight } from 'lucide-react';
+import { Cargando, KpiCard, HeatCell, Pill, Panel, GraficaLineas, Boton } from '../../../components/kit';
 import { useDetalleCliente } from './useAnalisisData';
 import ResumenSellOut from '../sellout/ResumenSellOut';
 import { CUENTA_POR_ERP } from '../sellout/datos';
@@ -19,7 +20,10 @@ import { agruparApoyo, totalesApoyo, factBruta, pctSobre } from '../sellin/apoyo
 
 const SEV_TONE = { critica: 'red', alta: 'orange', media: 'yellow', info: 'gray' };
 
-export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible, alertas = [] }) {
+// vista 'preview' (fila expandida de la tabla, 2026-10-01): sell out resumido, KPIs, tendencia, categorías y top 5
+// SKUs + botón «Ver página completa»; vista 'completa' (pestaña Resumen de PaginaCliente): todo, con top 10, apoyo y alertas.
+export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible, alertas = [], vista = 'preview', onAbrir }) {
+  const completa = vista === 'completa';
   const { theme } = useTheme();
   const accent = theme.accent || '#007AFF', green = theme.green || '#34C759';
   const { data: detalle, isLoading } = useDetalleCliente(cliente.cliente, anio);
@@ -73,8 +77,17 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
   // Sell out: sólo los clientes con fuente (los 12 mayoristas del puente + los 3 propios).
   const cuentaSellOut = CUENTA_POR_ERP[cliente.cliente] || null;
 
+  const topMostrar = completa ? topSkus : topSkus.slice(0, 5);
+
   return (
-    <div data-stagger style={{ padding: 12, background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', display: 'grid', gap: 10, fontFamily: TYPO.fontText }}>
+    <div data-stagger style={{ padding: completa ? 0 : 12, background: completa ? 'transparent' : theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', display: 'grid', gap: 10, fontFamily: TYPO.fontText }}>
+      {!completa && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: theme.textMuted }}>Vista previa de <strong style={{ color: theme.text }}>{cliente.nombre}</strong> · {periodoLbl}</span>
+          <span style={{ marginLeft: 'auto' }} />
+          {onAbrir && <Boton primario icon={ArrowUpRight} onClick={(e) => { e.stopPropagation(); onAbrir(cliente); }}>Ver página completa</Boton>}
+        </div>
+      )}
       {cuentaSellOut && (
         <Panel titulo="Sell out" meta={`${MESES[mesMax - 1]} ${anio} · lo que este cliente desplaza y lo que tiene en su almacén · sin IVA`} padding="10px 12px">
           <ResumenSellOut cuenta={cuentaSellOut} anio={anio} mes={mesMax} compacto />
@@ -112,8 +125,8 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
               ))}
             </div>
           </Panel>
-          <ApoyoDelAnio codigo={cliente.cliente} anio={anio} mesMax={mesMax} />
-          {cliente.propio && (
+          {completa && <ApoyoDelAnio codigo={cliente.cliente} anio={anio} mesMax={mesMax} />}
+          {completa && cliente.propio && (
             <Panel titulo="Alertas activas" meta={alertasCliente.length ? `${alertasCliente.length} sin resolver` : 'sin alertas'}>
               {!alertasCliente.length && <div style={{ fontSize: 11, color: theme.textMuted }}>Nada pendiente para este cliente.</div>}
               <div style={{ display: 'grid', gap: 5 }}>
@@ -129,7 +142,7 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
         </div>
       </div>
 
-      <Panel titulo="Top 10 SKUs" meta={`${periodoLbl} · ${money(totalPeriodo)} · intensidad = mes vs pico del SKU (últimos 6 meses)`} padding="0 0 2px">
+      <Panel titulo={completa ? 'Top 10 SKUs' : 'Top 5 SKUs'} meta={`${periodoLbl} · ${money(totalPeriodo)} · intensidad = mes vs pico del SKU (últimos 6 meses)${completa ? '' : ' · la página completa trae los 12 meses de todos los SKUs'}`} padding="0 0 2px">
         <div style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
@@ -145,7 +158,7 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
             </thead>
             <tbody>
               {!topSkus.length && <tr><td colSpan={6 + meses6.length} style={{ ...td, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, padding: 14 }}>Sin SKUs en el periodo.</td></tr>}
-              {topSkus.map((s, i) => (
+              {topMostrar.map((s, i) => (
                 <tr key={s.sku}>
                   <td style={{ ...td, textAlign: 'left', color: theme.textMuted }}>{i + 1}</td>
                   <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{s.sku}</td>
@@ -169,7 +182,7 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
  * (rebate, marketing, protección de precios…), con su peso sobre la fact. bruta del cliente.
  * Antes sólo existía como un total agregado dentro de la Venta Neta.
  */
-function ApoyoDelAnio({ codigo, anio, mesMax }) {
+export function ApoyoDelAnio({ codigo, anio, mesMax }) {
   const { theme } = useTheme();
   const { data, isLoading } = useApoyoCliente(codigo, anio);
   const filas = useMemo(() => agruparApoyo(data?.filas || [], { anio, mes: mesMax, por: 'concepto', hijo: 'mes' }), [data, anio, mesMax]);

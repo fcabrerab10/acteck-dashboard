@@ -1,7 +1,7 @@
 {
   "name": "acteck-dashboard",
   "private": true,
-  "version": "3.50.3",
+  "version": "3.51.0",
   "type": "module",
   "scripts": {
     "prebuild": "node scripts/verificar-deploy.mjs",

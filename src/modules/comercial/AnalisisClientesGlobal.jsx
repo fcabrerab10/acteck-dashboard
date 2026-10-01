@@ -18,6 +18,7 @@ import { useAniosDisponibles, useAnalisisClientes, useCuotasClientes } from './a
 import { MESES, PROPIOS, OTROS_KEY, OCASIONAL, agregarClientes, filaOtros, aplanar, ultimoMesConVenta, totalesMensuales, idxMes, yoyDe, mcDe, ajustesDe, sumarPeriodo, pctDe, vacio, mapaCuotas, cuotaPeriodo, alcanceCuota } from './analisis/calc';
 import { money, moneyFull, int, pct, signo, toneDe, toneCanal, labelCanal } from './analisis/formato';
 import DrillCliente from './analisis/DrillCliente';
+import PaginaCliente from './analisis/PaginaCliente';
 import ParetoPanel from './analisis/ParetoPanel';
 
 const MODOS = [{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD' }];
@@ -37,6 +38,7 @@ export default function AnalisisClientesGlobal() {
   const [orden, setOrden] = useState({ col: 'fact_neta', dir: 'desc' });
   const [abierto, setAbierto] = useState(null);
   const [compCliente, setCompCliente] = useState(null);
+  const [paginaCliente, setPaginaCliente] = useState(null); // código ERP del cliente abierto en página completa (2026-10-01)
 
   const { data: anios = [] } = useAniosDisponibles();
   const { data: rows, isLoading } = useAnalisisClientes(anio);
@@ -106,6 +108,12 @@ export default function AnalisisClientesGlobal() {
 
   if (!puedeVerPestanaGlobal(perfil, 'analisis_clientes')) return <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />;
   if (isLoading || !rows) return <Cargando pantalla="analisisClientes" minHeight={520} />;
+
+  // Página completa de un cliente (vive dentro de esta pestaña; «‹ Análisis por cliente» regresa a la tabla).
+  if (paginaCliente) {
+    const c = filas.find((f) => f.cliente === paginaCliente) || agg.clientes.map(aplanar).find((f) => f.cliente === paginaCliente);
+    if (c) return <PaginaCliente cliente={c} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} cuotas={cuotas} onVolver={() => setPaginaCliente(null)} />;
+  }
 
   const mesLbl = MESES[mesMax - 1];
   const periodoLbl = modo === 'mes' ? `${mesLbl} ${anio}` : `YTD ene–${mesLbl.toLowerCase()} ${anio}`;
@@ -241,7 +249,7 @@ export default function AnalisisClientesGlobal() {
                 ]} />
             </div>
           )
-          : <DrillCliente cliente={r} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} />
+          : <DrillCliente cliente={r} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} vista="preview" onAbrir={(c) => setPaginaCliente(c.cliente)} />
         )} />
 
       <ParetoPanel filas={filas} periodoLbl={periodoLbl} />
