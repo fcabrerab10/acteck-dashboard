@@ -41,7 +41,8 @@ async function leerEventos(desde) {
 }
 
 async function leerAuditoria(desde) {
-  return fetchPaged((from, to, withCount) => supabase.from('auditoria_cambios')
+  // 2026-10-02: v_auditoria_equipo = auditoria_cambios con `cambios` recortado a las llaves que usan los textos (13 MB → KB).
+  return fetchPaged((from, to, withCount) => supabase.from('v_auditoria_equipo')
     .select('id,tabla,operacion,registro_id,cliente_key,usuario_id,cambios,creado_at', conCount(withCount))
     .gte('creado_at', desde).not('usuario_id', 'is', null).order('creado_at', { ascending: false }).range(from, to), { pageSize: 1000, label: 'auditoria_cambios' });
 }
