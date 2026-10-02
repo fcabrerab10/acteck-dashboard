@@ -43,7 +43,8 @@ export function useResumenData() {
     const t0 = performance.now();
     const desde = new Date(); desde.setMonth(desde.getMonth() - 14);
     const desdeIso = isoLocal(desde);
-    const q = (f, o) => fetchAllQ(f, { pageSize: 1000, label: 'resumen', ...o });
+    // 2026-10-02: 5000 por página e inventario_cliente sólo del año anterior en adelante (bajaba TODO el histórico: 32 páginas).
+    const q = (f, o) => fetchAllQ(f, { pageSize: 5000, label: 'resumen', ...o });
 
     (async () => {
       const [ventasMes, facturacion, cuotasRes, ccRes, selloutSku, selloutPcelMensual, selloutPcel, inventarioCliente, estadosCuenta] = await Promise.all([
@@ -55,7 +56,7 @@ export function useResumenData() {
         // PCEL: valuación ÚNICA (piezas × precio de lista PCEL PROVISIONAL) desde la vista oficial.
         q(() => supabase.from('v_sellout_pcel_sku_mes').select('sku, anio, mes, piezas, monto').gte('anio', anioActual - 1)),
         q(() => supabase.from('sellout_pcel').select('sku, anio, semana, inventario, costo_promedio').gte('anio', anioActual - 1)),
-        q(() => supabase.from('inventario_cliente').select('cliente, sku, stock, valor, costo_convenio, anio, semana').in('cliente', CLIENTE_KEYS).not('anio', 'is', null)),
+        q(() => supabase.from('inventario_cliente').select('cliente, sku, stock, valor, costo_convenio, anio, semana').in('cliente', CLIENTE_KEYS).not('anio', 'is', null).gte('anio', anioActual - 1)),
         q(() => supabase.from('estados_cuenta').select('id, cliente, fecha_corte, saldo_actual, saldo_vencido, dso, aging_mas90').in('cliente', CLIENTE_KEYS).gte('fecha_corte', desdeIso)),
       ]);
 

@@ -38,7 +38,8 @@ const ESTADO_INICIAL = {
 export function useForecastData() {
   const [state, setState] = useState(ESTADO_INICIAL);
 
-  const fetchAll = (qFactory, pageSize = 1000) => fetchAllQ(qFactory, { pageSize, label: 'sop' });
+  // 2026-10-02: 5000 por página (facturacion_clientes eran 28 páginas de 1000 = 28 peticiones + count).
+  const fetchAll = (qFactory, pageSize = 5000) => fetchAllQ(qFactory, { pageSize, label: 'sop' });
 
   const reload = async () => {
     setState((s) => ({ ...s, loading: true }));

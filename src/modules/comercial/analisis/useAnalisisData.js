@@ -24,7 +24,7 @@ export function useAnalisisClientes(anio) {
     enabled: !!anio,
     queryFn: () => fetchAllQ(
       () => supabase.from('v_analisis_cliente_mes').select(SELECT).in('anio', [anio - 1, anio]),
-      { pageSize: 1000, orderCol: 'cliente', label: 'v_analisis_cliente_mes' },
+      { pageSize: 5000, orderCol: 'cliente', label: 'v_analisis_cliente_mes' },
     ),
     staleTime: 5 * 60 * 1000,
   });

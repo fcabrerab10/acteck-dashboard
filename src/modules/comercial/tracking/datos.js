@@ -17,10 +17,16 @@ function leer(table, select = '*', extra = (q) => q, orderCol = 'created_at') {
   return fetchPaged((from, to, withCount) => extra(supabase.from(table).select(select, withCount ? { count: 'exact' } : undefined).order(orderCol, { ascending: true }).range(from, to)), { label: table });
 }
 
-export async function cargarTodo() {
+export async function cargarTodo({ forzar = false } = {}) {
+  // La RPC liga facturas y guías del ERP a las OCs (idempotente) pero tarda 5-8 s con el ERP de 2026 (medido
+  // 2026-10-01). El cron la corre a diario; desde la pantalla sólo se vuelve a correr si pasaron > 30 min desde la
+  // última corrida de este navegador (localStorage) o si se pide explícitamente (forzar = true).
   let sync = null;
-  try { const { data, error } = await supabase.rpc('oc_sincronizar_erp'); sync = error ? { error: error.message } : data; }
-  catch (e) { sync = { error: String(e?.message || e) }; }
+  const K = 'oc_sync_at', hace = Date.now() - Number(localStorage.getItem(K) || 0);
+  if (forzar || hace > 30 * 60 * 1000) {
+    try { const { data, error } = await supabase.rpc('oc_sincronizar_erp'); sync = error ? { error: error.message } : data; if (!error) try { localStorage.setItem(K, String(Date.now())); } catch { /* sin storage */ } }
+    catch (e) { sync = { error: String(e?.message || e) }; }
+  } else sync = { omitida: true, hace_min: Math.round(hace / 60000) };
   const [ocs, ocSkus, envios, envioSkus, cotizaciones, facturas, facturaSkus, erpFacturas, transitoRows, stockRows, roadmapRows, almacenes] = await Promise.all([
     leer('oc_clientes'),
     leer('oc_clientes_skus'),
