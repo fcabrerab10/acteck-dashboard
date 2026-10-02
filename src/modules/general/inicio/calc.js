@@ -215,6 +215,63 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
     mesesArriba: mesesAnio.filter((x) => x.yoy != null && x.yoy >= 0).length, mesesConDatos: mesesAnio.filter((x) => x.yoy != null).length,
     mejor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => b.yoy - a.yoy)[0] || null, peor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => a.yoy - b.yoy)[0] || null };
 
+  // ── Negocio (2026-10-02): mix del período por dimensión, sell out consolidado, en camino y camino del producto
+  const dimRows = d.dimMes || [];
+  const mix = (dim) => {
+    const m = new Map();
+    dimRows.filter((r) => r.dimension === dim && filtro(r)).forEach((r) => {
+      const k = r.valor || 'Otros';
+      const o = m.get(k) || (m.set(k, { key: k, cur: 0, prev: 0, piezas: 0, contribucion: 0 }), m.get(k));
+      if (N(r.anio) === anio) { o.cur += N(r.venta); o.piezas += N(r.piezas); o.contribucion += N(r.contribucion); } else if (N(r.anio) === anio - 1) o.prev += N(r.venta);
+    });
+    const total = sum([...m.values()], (x) => x.cur);
+    return [...m.values()].map((x) => {
+      const qc = dim === 'canal' ? q.porCanal[String(x.key).toUpperCase()] : null;
+      const cuota = qc ? qc.anual * factorCuota : null;
+      return { ...x, share: pctDe(x.cur, total), yoy: delta(x.cur, pro(x.prev)), mc: x.cur ? (x.contribucion / x.cur) * 100 : null, cuota, pct: cuota ? pctDe(x.cur, cuota) : null };
+    }).filter((x) => x.cur !== 0 || x.prev !== 0).sort((a, b) => b.cur - a.cur);
+  };
+  const mixes = { canal: mix('canal'), marca: mix('marca'), categoria: mix('categoria') };
+
+  const so = d.soCuentas || [];
+  const enP = (r, a) => N(r.anio) === a && filtro(r);
+  const cuentasMap = new Map();
+  so.forEach((r) => {
+    const o = cuentasMap.get(r.cuenta) || (cuentasMap.set(r.cuenta, { cuenta: r.cuenta, nombre: r.nombre, canal: r.canal_sellout, propio: !!r.propio, cur: 0, prev: 0, sellIn: 0, piezas: 0, inv: null, invPiezas: null, invSemana: null, ultimoMes: 0 }), cuentasMap.get(r.cuenta));
+    if (enP(r, anio)) { o.cur += N(r.importe); o.sellIn += N(r.sell_in); o.piezas += N(r.cantidad); if (N(r.importe) > 0 && N(r.mes) > o.ultimoMes) o.ultimoMes = N(r.mes); }
+    if (enP(r, anio - 1)) o.prev += N(r.importe);
+    if (N(r.anio) === anio && r.inv_valor != null && (o.invSemana == null || N(r.mes) * 100 + N(r.inv_semana) > o.invSemana)) { o.inv = N(r.inv_valor); o.invPiezas = N(r.inv_piezas); o.invSemana = N(r.mes) * 100 + N(r.inv_semana); }
+  });
+  const cuentas = [...cuentasMap.values()].filter((x) => x.cur > 0 || x.prev > 0).map((x) => ({ ...x, yoy: delta(x.cur, x.prev), soSi: x.sellIn > 0 ? x.cur / x.sellIn : null })).sort((a, b) => b.cur - a.cur);
+  const soTotal = sum(cuentas, (x) => x.cur), soPrev = sum(cuentas, (x) => x.prev), soSellIn = sum(cuentas, (x) => x.sellIn);
+  const soSerie = Array.from({ length: 12 }, (_, i) => {
+    let m = mesActual - 11 + i, a = anio; if (m <= 0) { m += 12; a -= 1; }
+    const rows = so.filter((r) => N(r.anio) === a && N(r.mes) === m);
+    return { key: `${a}-${m}`, label: `${MESES[m - 1]}${m === 1 || i === 0 ? ` ${String(a).slice(2)}` : ''}`, so: sum(rows, (r) => r.importe), si: sum(rows, (r) => r.sell_in), actual: a === anio && m === mesActual };
+  });
+  const invCuentas = cuentas.filter((x) => x.inv != null);
+  const sellOut = { cuentas, total: soTotal, prev: soPrev, yoy: delta(soTotal, soPrev), sellIn: soSellIn, soSi: soSellIn > 0 ? soTotal / soSellIn : null, serie: soSerie,
+    invValor: sum(invCuentas, (x) => x.inv), invCuentas: invCuentas.length, nCuentas: cuentas.filter((x) => x.cur > 0).length };
+
+  // En camino: tránsito agrupado por mes de llegada (ETA) + próximo arribo + atrasados (ETA < hoy)
+  const porMesEta = new Map();
+  let atrasados = { pos: 0, piezas: 0, valor: 0 };
+  const posAll = (() => { const costo = {}; d.inv.forEach((r) => { costo[r.sku] = N(r.costo_promedio); }); const pos = {}; d.transito.forEach((r) => { const c = N(costo[r.sku]); (Array.isArray(r.embarques_detalle) ? r.embarques_detalle : []).forEach((e) => { const k = e.po || 'sin PO'; const o = pos[k] || (pos[k] = { po: k, eta: e.eta || null, piezas: 0, valor: 0, skus: new Set(), estatus: e.estatus, descripcion: null }); o.piezas += N(e.cantidad); o.valor += N(e.cantidad) * c; o.skus.add(r.sku); if (e.eta && (!o.eta || e.eta < o.eta)) o.eta = e.eta; }); }); return Object.values(pos).map((o) => ({ ...o, skus: o.skus.size })); })();
+  posAll.forEach((o) => {
+    if (!o.eta) { const k = 'sin ETA'; const g = porMesEta.get(k) || (porMesEta.set(k, { key: k, label: 'Sin fecha', orden: '9999-99', pos: 0, piezas: 0, valor: 0 }), porMesEta.get(k)); g.pos++; g.piezas += o.piezas; g.valor += o.valor; return; }
+    if (o.eta < hoyISO) { atrasados.pos++; atrasados.piezas += o.piezas; atrasados.valor += o.valor; }
+    const k = o.eta.slice(0, 7); const [ya, ym] = k.split('-').map(Number);
+    const g = porMesEta.get(k) || (porMesEta.set(k, { key: k, label: `${MESES[ym - 1]} ${String(ya).slice(2)}`, orden: k, pos: 0, piezas: 0, valor: 0 }), porMesEta.get(k));
+    g.pos++; g.piezas += o.piezas; g.valor += o.valor;
+  });
+  const proximos = posAll.filter((o) => o.eta && o.eta >= hoyISO).sort((a, b) => a.eta.localeCompare(b.eta)).slice(0, 5);
+  const enCamino = { porMes: [...porMesEta.values()].sort((a, b) => a.orden.localeCompare(b.orden)), proximos, atrasados, pos: posAll.length, piezas: inv.transitoPzs, valor: inv.transitoValor };
+
+  const CAMINO_LABEL = { produccion: 'En producción', pendiente_modular: 'Pendiente de modular', por_consolidar: 'Por consolidar', por_zarpar: 'Por zarpar', transito: 'Navegando', concluido: 'Concluido', rechazado: 'Rechazado', sin_embarque: 'Sin embarque' };
+  const CAMINO_ORDEN = ['produccion', 'pendiente_modular', 'por_consolidar', 'por_zarpar', 'transito'];
+  const camino = (d.camino || []).filter((r) => CAMINO_ORDEN.includes(r.bucket_estatus)).map((r) => ({ key: r.bucket_estatus, label: CAMINO_LABEL[r.bucket_estatus] || r.bucket_estatus, pos: N(r.pos), piezas: N(r.piezas), valor: N(r.valor_mxn) })).sort((a, b) => CAMINO_ORDEN.indexOf(a.key) - CAMINO_ORDEN.indexOf(b.key));
+  inv.skusAgotados = d.invGlobal?.skus_agotados != null ? N(d.invGlobal.skus_agotados) : null;
+
   // Hero: título y sub por reglas
   const nDec = decision.length;
   const mesL = MESES_LARGO[mesActual - 1];
@@ -241,7 +298,7 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
 
   return {
     modo, otroModo, anio, mesActual, mesL, cur, prev, otro, otroPrev, cuota: q, cuotaPeriodo, cuotaOtro, pctCuota, pctOtro, pctAnual, yoy, yoyOtro, yoyUtilidad, yoyLabel, dMc,
-    runRate, runRateYoy, mesRow, mesPrev, comparativo, enCurso, cartera: cart, inv, alertas: activas, decision, clientes, canales, totalCanales, serie, titulo, sub,
+    runRate, runRateYoy, mesRow, mesPrev, comparativo, enCurso, mixes, sellOut, enCamino, camino, cartera: cart, inv, alertas: activas, decision, clientes, canales, totalCanales, serie, titulo, sub,
     agenda: agenda(d, inv, sensible), auditoria: d.auditoria, hayDatos: d.medidas.length > 0, sensible,
   };
 }

@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, pct, pp, fechaCorta, relativo } from '../../../lib/format';
-import { Panel, TablaCompacta, Pill, Boton, toast, GraficaLineas } from '../../../components/kit';
+import { Panel, TablaCompacta, Pill, Boton, toast, GraficaLineas, Segmented } from '../../../components/kit';
 import { useBandejaHoy, completarItem } from '../../agenda/datos';
 import { FilaItem } from '../../agenda/comun';
 import { isoDia as isoDiaAgenda } from '../../agenda/calculo';
@@ -313,6 +313,170 @@ export function ComparativoAnual({ r, mesSel, onMes }) {
         <Stat k="Piezas netas" v={int(tot.piezas)} sub={totP.piezas ? `${r.anio - 1}: ${int(totP.piezas)}` : null} />
       </FilaStats>
       <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 6 }}>Toca un mes en la gráfica o en la tabla para ver toda la pestaña en ese mes. El mes en curso (·) se compara a mismo día del año anterior.</div>
+    </Panel>
+  );
+}
+
+// ═══ Inicio del negocio (2026-10-02) ═══
+// Fernando: «cuando quiero ver el negocio quiero ver sell in, sell out, inventario y lo que viene en camino; el
+// selector que sólo muestre el mes elegido; la cuota como barra que se llena y cambia de color, con monto y %».
+
+/** Barra de cuota: se llena conforme se alcanza y cambia de color (rojo < 60 · naranja < 85 · azul < 100 · verde). */
+export function BarraCuota({ valor, cuota, label = 'cuota', inverso = false, alto = 8 }) {
+  const { theme } = useTheme();
+  if (!cuota) return null;
+  const p = Math.max(0, (valor / cuota) * 100);
+  const color = p >= 100 ? theme.green : p >= 85 ? (inverso ? '#5AC8FA' : theme.accent) : p >= 60 ? theme.orange : theme.red;
+  const muted = inverso ? 'rgba(255,255,255,0.65)' : theme.textMuted;
+  const texto = inverso ? '#FFF' : theme.text;
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: 11, color: muted, fontVariantNumeric: 'tabular-nums' }}>
+        <span><b style={{ color: texto, fontWeight: 600 }}>{$c(valor)}</b> de {$c(cuota)} de {label}</span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 700, color }}>{Math.round(p)}%</span>
+      </div>
+      <div style={{ marginTop: 4, height: alto, borderRadius: 999, background: inverso ? 'rgba(255,255,255,0.14)' : `${theme.text}12`, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ height: '100%', width: `${Math.min(100, p)}%`, background: color, borderRadius: 999, transition: 'width 420ms cubic-bezier(0.32,0.72,0,1), background 220ms' }} />
+        {p > 100 && <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 2, background: '#FFF' }} />}
+      </div>
+    </div>
+  );
+}
+
+/** Selector de período: botón «Sep 2026 ▾» que abre un menú con los meses del año (y «Año»), más el año. */
+export function SelectorPeriodo({ anio, mes, anioHoy, mesHoy, anios, onChange }) {
+  const { theme } = useTheme();
+  const [abierto, setAbierto] = React.useState(false);
+  const [anioMenu, setAnioMenu] = React.useState(anio);
+  React.useEffect(() => { setAnioMenu(anio); }, [anio, abierto]);
+  const label = mes === 'anio' ? `Año ${anio}` : `${MESES[mes - 1]} ${anio}`;
+  const cerrar = () => setAbierto(false);
+  React.useEffect(() => { if (!abierto) return undefined; const h = (e) => { if (!e.target.closest?.('[data-selector-periodo]')) cerrar(); }; document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }, [abierto]);
+  const item = (on) => ({ padding: '6px 10px', borderRadius: 8, fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: on ? 700 : 500, color: on ? '#FFF' : theme.text, background: on ? theme.accent : 'transparent', cursor: 'pointer', textAlign: 'center', border: 0 });
+  return (
+    <div data-selector-periodo style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setAbierto((v) => !v)} aria-haspopup="menu" aria-expanded={abierto}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px 0 12px', borderRadius: 9, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}>
+        {label}<span style={{ fontSize: 10, color: theme.textMuted }}>▾</span>
+      </button>
+      {abierto && (
+        <div role="menu" style={{ position: 'absolute', right: 0, top: 36, zIndex: 40, width: 300, padding: 10, borderRadius: 12, background: theme.surface, border: `1px solid ${theme.border}`, boxShadow: '0 12px 32px rgba(0,0,0,0.18)' }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            {anios.map((a) => <button key={a} type="button" style={{ ...item(a === anioMenu), flex: 1 }} onClick={() => setAnioMenu(a)}>{a}</button>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+            {MESES.map((l, i) => {
+              const m = i + 1; const futuro = anioMenu === anioHoy && m > mesHoy;
+              return <button key={m} type="button" disabled={futuro} style={{ ...item(anioMenu === anio && mes === m), opacity: futuro ? 0.3 : 1, cursor: futuro ? 'default' : 'pointer' }} onClick={() => { onChange(anioMenu, m); cerrar(); }}>{l}</button>;
+            })}
+          </div>
+          <button type="button" style={{ ...item(anioMenu === anio && mes === 'anio'), width: '100%', marginTop: 6, border: `1px solid ${theme.border}` }} onClick={() => { onChange(anioMenu, 'anio'); cerrar(); }}>Año {anioMenu} completo</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Sell out del período por cuenta (consolidado) + evolución 12 m sell out vs sell in
+export function SellOutPanel({ r, onNavegar }) {
+  const { theme } = useTheme();
+  const s = r.sellOut;
+  const periodo = r.modo === 'mes' ? `${r.mesL} ${r.anio}` : (r.anio === new Date().getFullYear() ? `YTD ${r.anio}` : `${r.anio}`);
+  const cols = [
+    { key: 'nombre', label: 'Cuenta', align: 'left', render: (x) => <span style={{ fontWeight: 500 }}>{x.nombre}{x.propio ? <Pill size="xs" tone="blue" style={{ marginLeft: 6 }}>propio</Pill> : null}</span> },
+    { key: 'cur', label: 'Sell out', bold: true, render: (x) => $c(x.cur) },
+    { key: 'share', label: '% total', width: 64, render: (x) => (s.total ? pct((x.cur / s.total) * 100, 0) : '—') },
+    { key: 'yoy', label: `vs ${r.anio - 1}`, width: 74, render: (x) => (x.yoy == null ? <span style={{ color: theme.textMuted }}>—</span> : <Pill size="xs" tone={toneDe(x.yoy)}>{signo(x.yoy, 0)}</Pill>) },
+    { key: 'sellIn', label: 'Sell in', render: (x) => (x.sellIn ? $c(x.sellIn) : '—') },
+    { key: 'soSi', label: 'SO / SI', width: 64, render: (x) => (x.soSi == null ? '—' : <span style={{ color: x.soSi >= 1 ? theme.green : x.soSi < 0.6 ? theme.orange : theme.text }}>{x.soSi.toFixed(2)}</span>) },
+    { key: 'inv', label: 'Inv. cuenta', render: (x) => (x.inv != null ? $c(x.inv) : <span style={{ color: theme.textMuted }}>—</span>) },
+  ];
+  return (
+    <Panel titulo={`Sell out · ${periodo}`} meta={`${s.nCuentas} cuentas con venta · ${$c(s.total)}${s.yoy != null ? ` · ${signo(s.yoy, 0)} vs ${r.anio - 1}` : ''}${s.soSi != null ? ` · SO/SI ${s.soSi.toFixed(2)}` : ''}`}
+      acciones={onNavegar && <Boton size="sm" onClick={onNavegar}>Sell Out consolidado</Boton>}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 12, alignItems: 'start' }}>
+        <div>
+          <GraficaLineas datos={s.serie.map((x) => ({ x: x.label, so: x.so || null, si: x.si || null }))}
+            series={[{ key: 'so', label: 'Sell out', tipo: 'principal' }, { key: 'si', label: 'Sell in', tipo: 'linea', color: theme.textMuted, dash: '4 3' }]}
+            formato={$c} alto={190} mesActivo={s.serie.findIndex((x) => x.actual)} compacto />
+          <FilaStats style={{ padding: '8px 2px 0' }}>
+            <Stat k="Sell out" v={$c(s.total)} sub={s.prev ? `${r.anio - 1}: ${$c(s.prev)}` : null} />
+            <Stat k="Sell in a cuentas" v={$c(s.sellIn)} sub={s.soSi != null ? `SO/SI ${s.soSi.toFixed(2)}` : null} />
+            {s.invCuentas > 0 && <Stat k="Inventario en cuentas" v={$c(s.invValor)} sub={`${s.invCuentas} cuenta${s.invCuentas === 1 ? '' : 's'} reportan`} />}
+          </FilaStats>
+        </div>
+        <TablaCompacta columnas={cols} filas={s.cuentas} rowKey={(x) => x.cuenta} dense maxHeight={300} vacio="Sin sell out en este período." />
+      </div>
+    </Panel>
+  );
+}
+
+// ── Mix del período por canal · marca · categoría (barras con share, Δ vs año anterior y cuota por canal)
+export function MixPanel({ r, onNavegar }) {
+  const { theme } = useTheme();
+  const [dim, setDim] = React.useState('canal');
+  const filas = r.mixes[dim] || [];
+  const max = Math.max(1, ...filas.map((x) => x.cur));
+  const periodo = r.modo === 'mes' ? `${r.mesL} ${r.anio}` : (r.anio === new Date().getFullYear() ? `YTD ${r.anio}` : `${r.anio}`);
+  const hayCuota = dim === 'canal' && filas.some((x) => x.cuota != null);
+  return (
+    <Panel titulo={`Mix de sell in · ${periodo}`} meta={`${filas.length} ${dim === 'canal' ? 'canales' : dim === 'marca' ? 'marcas' : 'categorías'}${hayCuota ? ' · cuota por canal' : ''}`}
+      acciones={<div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Segmented size="sm" value={dim} onChange={setDim} options={[{ id: 'canal', label: 'Canal' }, { id: 'marca', label: 'Marca' }, { id: 'categoria', label: 'Categoría' }]} />{onNavegar && <Boton size="sm" onClick={onNavegar}>Sell In</Boton>}</div>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+        {filas.slice(0, 14).map((x) => (
+          <div key={x.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(0, 2fr) 70px 64px 60px', gap: 10, alignItems: 'center', fontSize: 11.5 }}>
+            <span style={{ fontWeight: 500, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={x.key}>{dim === 'canal' ? canalLabel(x.key) : x.key}</span>
+            <div style={{ height: 8, background: `${theme.text}10`, borderRadius: 999, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(x.cur / max) * 100}%`, background: hayCuota && x.pct != null ? (x.pct >= 100 ? theme.green : x.pct >= 85 ? theme.accent : x.pct >= 60 ? theme.orange : theme.red) : theme.accent, borderRadius: 999 }} /></div>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{$c(x.cur)}</span>
+            <span style={{ color: theme.textMuted, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{x.share != null ? `${x.share.toFixed(0)}%` : '—'}</span>
+            <span style={{ textAlign: 'right' }}>{hayCuota ? (x.pct != null ? <Pill size="xs" tone={toneCuota(x.pct)} title={`cuota ${$c(x.cuota)}`}>{Math.round(x.pct)}%</Pill> : <span style={{ color: theme.textMuted }}>—</span>) : (x.yoy != null ? <Pill size="xs" tone={toneDe(x.yoy)}>{signo(x.yoy, 0)}</Pill> : <span style={{ color: theme.textMuted }}>—</span>)}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 8 }}>{hayCuota ? 'Barra coloreada por % de cuota del canal (cuota anual prorrateada al período). ' : ''}{r.sensible && filas.length ? `MC del período: ${filas.slice(0, 3).map((x) => `${dim === 'canal' ? canalLabel(x.key) : x.key} ${x.mc != null ? pct(x.mc) : '—'}`).join(' · ')}` : ''}</div>
+    </Panel>
+  );
+}
+
+// ── Inventario comercial · qué llega y cuándo · camino del producto
+export function InventarioPanel({ r, onNavegar }) {
+  const { theme } = useTheme();
+  const inv = r.inv, ec = r.enCamino;
+  const maxMes = Math.max(1, ...ec.porMes.map((m) => m.valor));
+  const maxCam = Math.max(1, ...r.camino.map((m) => m.valor));
+  const col = { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 };
+  const tit = { fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, marginBottom: 2 };
+  const fila = (label, valor, sub, pctBar, color) => (
+    <div key={label} style={{ fontSize: 11.5 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><span style={{ color: theme.text, fontWeight: 500 }}>{label}</span><span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{valor}</span></div>
+      {pctBar != null && <div style={{ height: 5, background: `${theme.text}10`, borderRadius: 999, overflow: 'hidden', marginTop: 3 }}><div style={{ height: '100%', width: `${pctBar}%`, background: color || theme.accent, borderRadius: 999 }} /></div>}
+      {sub && <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+  return (
+    <Panel titulo="Inventario y en camino" meta={`${$c(inv.valor)} en almacenes comerciales · ${$c(ec.valor)} en camino en ${ec.pos} PO`}
+      acciones={onNavegar && <Boton size="sm" onClick={onNavegar}>Inventario</Boton>}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+        <div style={col}>
+          <div style={tit}>Inventario comercial</div>
+          {fila('Inv Actual', r.sensible ? $c(inv.valor) : int(inv.piezas), `${int(inv.piezas)} pz · ${int(inv.skus)} SKUs con stock`)}
+          {fila('Días de inventario', inv.cobertura != null ? `${inv.cobertura} d` : '—', 'al ritmo de los 3 meses cerrados', inv.cobertura != null ? Math.min(100, (inv.cobertura / 180) * 100) : null, inv.cobertura > 120 ? theme.orange : inv.cobertura < 30 ? theme.red : theme.green)}
+          {inv.skusAgotados != null && fila('Agotados con demanda', int(inv.skusAgotados), 'SKUs sin stock que sí vendieron en 90 d', null)}
+          {inv.invTotal != null && r.sensible && fila('Inv Total', $c(inv.invTotal), inv.diasInvTotal != null ? `${inv.diasInvTotal} d contando todos los almacenes` : null)}
+        </div>
+        <div style={col}>
+          <div style={tit}>Qué llega y cuándo</div>
+          {ec.porMes.length === 0 && <div style={{ fontSize: 11.5, color: theme.textMuted }}>Sin embarques en camino.</div>}
+          {ec.porMes.slice(0, 6).map((m) => fila(m.label, $c(m.valor), `${int(m.piezas)} pz · ${m.pos} PO`, (m.valor / maxMes) * 100, m.key === 'sin ETA' ? theme.textMuted : theme.accent))}
+          {ec.atrasados.pos > 0 && <div style={{ fontSize: 11, color: theme.red, marginTop: 2 }}>{ec.atrasados.pos} PO con ETA vencida · {$c(ec.atrasados.valor)}</div>}
+          {ec.proximos[0] && <div style={{ fontSize: 10.5, color: theme.textMuted }}>Próximo: PO {ec.proximos[0].po} · {fechaCorta(ec.proximos[0].eta)} · {int(ec.proximos[0].piezas)} pz · {ec.proximos[0].skus} SKUs</div>}
+        </div>
+        <div style={col}>
+          <div style={tit}>Camino del producto</div>
+          {r.camino.length === 0 && <div style={{ fontSize: 11.5, color: theme.textMuted }}>Sin datos del Master Embarques.</div>}
+          {r.camino.map((m) => fila(m.label, $c(m.valor), `${int(m.piezas)} pz · ${m.pos} PO`, (m.valor / maxCam) * 100, m.key === 'transito' ? theme.green : theme.accent))}
+        </div>
+      </div>
     </Panel>
   );
 }

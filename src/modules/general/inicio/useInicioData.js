@@ -41,8 +41,20 @@ async function opcional(p, vacio = []) {
 // comercial y el tránsito: son rápidos de leer pero son el 90 % de los bytes y
 // serializarlos a jsonb retrasaba todo lo demás. Así el reloj lo marca la consulta más
 // lenta, no la suma. Si algo falla se cae al camino de siempre, intacto justo debajo.
+// Inicio del negocio (2026-10-02): mix por canal/marca/categoría, sell out por cuenta (consolidado), camino del
+// producto y SKUs agotados. Todas son MV (ms) y se piden en paralelo con lo demás.
+async function negocio(anios) {
+  const [dim, soCuentas, camino, invGlobal] = await Promise.all([
+    cachedQuery(supabase.from('v_vision_factura_dimension_mes').select('anio,mes,dimension,valor,venta,piezas,contribucion').in('anio', anios)),
+    cachedQuery(supabase.from('v_sellout_cuenta_mes').select('cuenta,nombre,canal_sellout,propio,granularidad,anio,mes,importe,cantidad,sell_in,inv_valor,inv_piezas,inv_semana').in('anio', anios)),
+    cachedQuery(supabase.from('v_vision_camino_resumen').select('bucket_estatus,pos,piezas,valor_mxn')),
+    cachedQuery(supabase.from('v_vision_inventario_global').select('skus_agotados,skus_con_stock').limit(1)),
+  ]);
+  return { dimMes: dim.data || [], soCuentas: soCuentas.data || [], camino: camino.data || [], invGlobal: (invGlobal.data || [])[0] || null };
+}
+
 async function porRpc(anio, anios) {
-  const [rpc, soDl, soPcel, soDico, medInv, inv, transito] = await Promise.all([
+  const [rpc, soDl, soPcel, soDico, medInv, inv, transito, neg] = await Promise.all([
     supabase.rpc('inicio_datos', { p_anio: anio, p_dias: DIAS_AGENDA, p_pesados: false }),
     cachedQuery(supabase.from('v_sellout_digitalife_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
     cachedQuery(supabase.from('v_sellout_pcel_mensual').select('anio,mes,monto,piezas').in('anio', anios)),
@@ -50,6 +62,7 @@ async function porRpc(anio, anios) {
     cachedQuery(supabase.from('v_medidas_inventario').select('*')),
     fetchAll('v_inventario_comercial', 'sku,inventario,costo_promedio'),
     fetchAll('v_transito_sku', 'sku,cantidad,eta_mas_cercana,embarques_detalle'),
+    negocio(anios),
   ]);
   const data = rpc.data;
   if (rpc.error || !data) throw rpc.error || new Error('inicio_datos sin datos');
@@ -60,7 +73,7 @@ async function porRpc(anio, anios) {
     estados: data.estados || [], medInv: (medInv.data || [])[0] || null,
     inv, transito,
     pagos: data.pagos || [], marketing: data.marketing || [], eventosEquipo: data.eventosEquipo || [],
-    eventosCliente: data.eventosCliente || [], auditoria: data.auditoria || [],
+    eventosCliente: data.eventosCliente || [], auditoria: data.auditoria || [], ...neg,
   };
 }
 
@@ -86,7 +99,7 @@ export function useInicioData(anio) {
         const [
           medidas, medidasCli, medidasCanal, cuotasCanales, cuotasMensuales, factCli,
           soDl, soPcel, soDico, estados, medInv, inv, transito,
-          pagos, marketing, eventosEquipo, eventosCliente, auditoria,
+          pagos, marketing, eventosEquipo, eventosCliente, auditoria, neg,
         ] = await Promise.all([
           cachedQuery(supabase.from('v_erp_medidas_mes').select(`${MEDIDAS},cv_ultimos_3_meses`).in('anio', anios).order('anio').order('mes')),
           cachedQuery(supabase.from('v_erp_medidas_cliente_mes').select(`cliente_key,${MEDIDAS}`).in('anio', anios).in('cliente_key', KEYS)),
@@ -106,6 +119,7 @@ export function useInicioData(anio) {
           opcional(supabase.from('eventos_equipo').select('id,titulo,tipo,fecha_ini,fecha_fin').gte('fecha_ini', hoyISO).lte('fecha_ini', limiteISO).order('fecha_ini')),
           opcional(supabase.from('eventos_cliente').select('id,cliente,fecha,lugar,descripcion').gte('fecha', hoyISO).lte('fecha', limiteISO).order('fecha')),
           opcional(supabase.from('auditoria_cambios').select('id,tabla,operacion,registro_id,cliente_key,usuario_email,cambios,creado_at').order('creado_at', { ascending: false }).limit(5)),
+          negocio(anios),
         ]);
         if (cancel) return;
         setSt({ loading: false, error: null, data: {
@@ -113,7 +127,7 @@ export function useInicioData(anio) {
           cuotasCanales: cuotasCanales.data || [], cuotasMensuales, factCli: factCli.data || [],
           sellout: { digitalife: soDl.data || [], pcel: soPcel.data || [], dicotech: soDico.data || [] },
           estados: estados.data || [], medInv: (medInv.data || [])[0] || null, inv, transito,
-          pagos, marketing, eventosEquipo, eventosCliente, auditoria,
+          pagos, marketing, eventosEquipo, eventosCliente, auditoria, ...neg,
         } });
       } catch (e) {
         if (!cancel) setSt({ loading: false, error: e?.message || String(e), data: null });
