@@ -153,6 +153,14 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     abrirProximamente(d.label);
   }, [arbol, irATab, push, abrirProximamente]);
 
+  // El celular también atiende el evento global `acteck:navegar` (lo disparan enlaces internos compartidos con la web,
+  // p. ej. FrescuraPill → importador, y sirve para medir las pantallas desde el panel). 2026-10-02.
+  useEffect(() => {
+    const h = (e) => { const d = e.detail || {}; if (d.pagina) navegar({ pagina: d.pagina, clienteKey: d.clienteKey || null, extra: d.extra, label: d.label }); };
+    window.addEventListener('acteck:navegar', h);
+    return () => window.removeEventListener('acteck:navegar', h);
+  }, [navegar]);
+
   const abrirGrupo = useCallback((id) => {
     const g = arbol.find((x) => x.id === id);
     abrirHoja({ titulo: id === 'clientesPropios' ? 'Clientes' : g?.label || 'Menú', grupo: id, contenido: <HojaGrupo entrada={id} /> });
