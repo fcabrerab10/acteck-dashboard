@@ -18,12 +18,30 @@ import { GraficaLineas } from '../../components/kit';
 import { idNodo } from '../../components/nav/arbol';
 import { useHoyExtra, nombreCliente, colorCliente } from '../datos';
 import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente, puedeVerInicio } from '../../lib/permisos';
-import { saludo, diaLargo, nombreCorto, hoyISO, moneyCompact, money, pct, deltaPct, tonoCuota, MESES, N } from '../util';
+import { saludo, diaLargo, nombreCorto, hoyISO, moneyCompact, money, pct, deltaPct, tonoCuota, tonoDelta, MESES, N, fechaCorta } from '../util';
+import { canalLabel } from '../../modules/general/inicio/config';
 import FichaCliente from './FichaCliente';
 import FichaProducto from '../FichaProducto';
 
 const fmtM = (n) => moneyCompact(n);
 const signo = (v, d = 0) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
+
+/** Barra de cuota (se llena y cambia de color: rojo < 60 · naranja < 85 · azul < 100 · verde) con monto y %. */
+function BarraCuotaM({ valor, cuota, label }) {
+  const { theme } = useTheme();
+  if (!cuota) return null;
+  const p = Math.max(0, (valor / cuota) * 100);
+  const color = p >= 100 ? theme.green : p >= 85 ? '#5AC8FA' : p >= 60 ? theme.orange : theme.red;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11.5, color: 'rgba(245,245,247,0.7)', fontVariantNumeric: 'tabular-nums' }}>
+        <span><b style={{ color: '#FFF', fontWeight: 600 }}>{fmtM(valor)}</b> de {fmtM(cuota)} de {label}</span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 700, color }}>{Math.round(p)}%</span>
+      </div>
+      <div style={{ marginTop: 4, height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.14)', overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, p)}%`, background: color, borderRadius: 999, transition: 'width 420ms cubic-bezier(0.32,0.72,0,1)' }} /></div>
+    </div>
+  );
+}
 
 /** Botón «Sep 2026 ▾» + hoja con los meses (y «Año completo») del año en curso y los dos anteriores. */
 function SelectorPeriodoM({ anio, mes, anioHoy, mesHoy, onChange }) {
@@ -104,6 +122,13 @@ export default function Inicio() {
 
   const titulo = `${saludo(hoy)}, ${nombreCorto(nav.perfil) || 'hola'}`;
   const periodoLbl = modo === 'mes' ? `${MESES[mesActual - 1]} ${anio}` : `${anio}`;
+  const so = r?.sellOut, ec = r?.enCamino;
+  const fraseNegocio = r ? [
+    so.total > 0 ? `Sell out ${fmtM(so.total)}${so.yoy != null ? ` (${deltaPct(so.yoy)} vs ${anio - 1})` : ''}${so.soSi != null ? ` · SO/SI ${so.soSi.toFixed(2)}` : ''}` : null,
+    r.inv.cobertura != null ? `${r.inv.cobertura} d de inventario` : null,
+    ec.valor > 0 ? `${fmtM(ec.valor)} en camino en ${ec.pos} PO` : null,
+    r.cartera.vencido > 0 ? `cartera vencida ${fmtM(r.cartera.vencido)}` : null,
+  ].filter(Boolean).join(' · ') : '';
   const selector = sensible ? <SelectorPeriodoM anio={anio} mes={mes} anioHoy={anioHoy} mesHoy={mesHoy} onChange={elegirPeriodo} /> : null;
   const sub = <><span>{diaLargo(hoy).replace(/^./, (c) => c.toUpperCase())}</span><span>·</span><FrescuraPill fuentes={FUENTES_INICIO} detallado /></>;
 
@@ -142,23 +167,23 @@ export default function Inicio() {
       )}
 
       {/* La facturación de toda la empresa es sensible: sin el permiso, el hero es de sus clientes y su día. */}
-      <HeroM eyebrow={sensible ? `Dirección general · ${modo === 'mes' ? `${r.mesL} ${anio}` : `Año ${anio}`}` : `Mis clientes · ${r.mesL} ${anio}`} frase={sensible ? r.titulo : `Hoy tienes ${decision.length} aviso${decision.length === 1 ? '' : 's'} que atender.`} sub={sensible ? r.sub : `Tus clientes: ${r.clientes.map((c) => c.nombre || c.label || c.key).filter(Boolean).join(' · ') || 'ninguno'}.`}
+      <HeroM eyebrow={sensible ? `Dirección general · ${modo === 'mes' ? `${r.mesL} ${anio}` : `Año ${anio}`}` : `Mis clientes · ${r.mesL} ${anio}`} frase={sensible ? r.titulo : `Hoy tienes ${decision.length} aviso${decision.length === 1 ? '' : 's'} que atender.`} sub={sensible ? fraseNegocio : `Tus clientes: ${r.clientes.map((c) => c.nombre || c.label || c.key).filter(Boolean).join(' · ') || 'ninguno'}.`}
         stats={sensible ? [
-          { k: modo === 'anio' ? `Fact Neta ${anio === anioHoy ? 'YTD' : anio}` : enCurso ? 'Fact Neta MTD' : `Fact Neta ${MESES[mesActual - 1]}`, v: fmtM(r.cur.fact_neta), sub: r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota${r.yoy != null ? ` · ${deltaPct(r.yoy)} ${r.yoyLabel}` : ''}` : r.yoy != null ? `${deltaPct(r.yoy)} ${r.yoyLabel}` : 'sin cuota' },
-          ...(sensible ? [
-            { k: 'Margen MC', v: r.cur.mc != null ? pct(r.cur.mc) : '—', sub: r.dMc != null ? `${r.dMc >= 0 ? '+' : ''}${r.dMc.toFixed(1)} pp` : undefined },
-            { k: 'Utilidad', v: fmtM(r.cur.utilidad_comercial), sub: r.yoyUtilidad != null ? `${deltaPct(r.yoyUtilidad)} YoY` : undefined },
-          ] : [
-            { k: 'YoY', v: r.yoy != null ? deltaPct(r.yoy) : '—', sub: r.yoyLabel },
-            { k: 'Piezas netas', v: Math.round(r.cur.piezas).toLocaleString('es-MX'), sub: modo === 'mes' ? 'del mes' : 'del año' },
-          ]),
+          { k: 'Margen MC', v: r.cur.mc != null ? pct(r.cur.mc) : '—', sub: r.dMc != null ? `${r.dMc >= 0 ? '+' : ''}${r.dMc.toFixed(1)} pp vs ${anio - 1}` : undefined },
+          { k: 'Utilidad', v: fmtM(r.cur.utilidad_comercial), sub: r.yoyUtilidad != null ? `${deltaPct(r.yoyUtilidad)} ${r.yoyLabel}` : undefined },
+          { k: 'Piezas netas', v: Math.round(r.cur.piezas).toLocaleString('es-MX'), sub: modo === 'mes' ? 'del mes' : 'del año' },
         ] : [
           { k: 'Clientes', v: String(r.clientes.length), sub: 'que ves' },
           { k: 'Avisos', v: String(decision.length), sub: 'hoy' },
-        ]} />
+        ]}>
+        {sensible && <BarraCuotaM valor={r.cur.fact_neta} cuota={r.cuotaPeriodo} label={modo === 'mes' ? `cuota de ${r.mesL.toLowerCase()}` : (anio === anioHoy ? 'cuota a la fecha' : 'cuota anual')} />}
+      </HeroM>
 
       <KpiGrid style={{ marginTop: 12 }}>
-        {sensible && <KpiM eyebrow={modo === 'mes' ? `Fact Neta YTD ${anio}` : `Fact Neta ${r.mesL}`} big={fmtM(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1}` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />}
+        {sensible && <KpiM eyebrow={`Sell in · ${periodoLbl}`} big={fmtM(r.cur.fact_neta)} sub={r.yoy != null ? `${deltaPct(r.yoy)} ${r.yoyLabel}` : 'sin comparativo'} progress={r.pctCuota} pill={r.pctCuota != null ? { tone: tonoCuota(r.pctCuota), label: `${Math.round(r.pctCuota)}% cuota` } : undefined} onClick={() => nav.navegar({ pagina: 'sellIn', label: 'Sell In global' })} />}
+        {sensible && <KpiM eyebrow={`Sell out · ${periodoLbl}`} big={so.total > 0 ? fmtM(so.total) : '—'} sub={so.total > 0 ? `${so.nCuentas} cuenta${so.nCuentas === 1 ? '' : 's'}${so.soSi != null ? ` · SO/SI ${so.soSi.toFixed(2)}` : ''}` : 'sin sell out en el período'} pill={so.yoy != null ? { tone: tonoDelta(so.yoy), label: deltaPct(so.yoy) } : undefined} onClick={() => nav.navegar({ pagina: 'sellOut' })} />}
+        {sensible && veInventario && <KpiM eyebrow="En camino" big={fmtM(ec.valor)} sub={`${Math.round(ec.piezas).toLocaleString('es-MX')} pz · ${ec.pos} PO${ec.porMes[0] ? ` · ${ec.porMes[0].label} ${fmtM(ec.porMes[0].valor)}` : ''}`} pill={ec.atrasados.pos > 0 ? { tone: 'red', label: `${ec.atrasados.pos} PO atrasadas` } : ec.proximos[0] ? { tone: 'blue', label: fechaCorta(ec.proximos[0].eta) } : undefined} onClick={abrirFicha} />}
+        {sensible && <KpiM eyebrow={modo === 'mes' ? `Sell in YTD ${anio}` : `Sell in ${r.mesL}`} big={fmtM(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1}` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />}
         {veCobranza && <KpiM eyebrow="Cartera vencida" big={fmtM(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${fmtM(r.cartera.saldo)}` : 'sin saldo'} onClick={() => nav.navegar({ pagina: 'cobranzaGlobal' })} />}
         {veInventario && <KpiM eyebrow="Inventario comercial" big={sensible ? fmtM(r.inv.valor) : `${Math.round(r.inv.piezas).toLocaleString('es-MX')} pz`} sub={r.inv.cobertura != null ? `${r.inv.cobertura} d de cobertura` : `${r.inv.skus} SKUs con stock`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={abrirFicha} />}
         <KpiM eyebrow={`Sell-out ${soMes ? MESES[soMes - 1] : 'últ. mes'}`} big={soTotal > 0 ? fmtM(soTotal) : '—'} sub={soUltimo.length ? `${soUltimo.length} clientes · último mes cerrado` : 'sin sell-out cargado'} />
@@ -183,13 +208,17 @@ export default function Inicio() {
         })}
       </ListaAgrupada>
 
-      <ListaAgrupada titulo={`Clientes · ${periodoLbl}`} style={{ marginTop: 18 }} pie="Toca un cliente para ver su ficha.">
+      {sensible && <SellOutM r={r} periodoLbl={periodoLbl} onAbrir={() => nav.navegar({ pagina: 'sellOut' })} />}
+      {sensible && <MixM r={r} periodoLbl={periodoLbl} />}
+      {sensible && veInventario && <InventarioM r={r} onAbrir={abrirFicha} />}
+
+      {!sensible && <ListaAgrupada titulo={`Clientes · ${periodoLbl}`} style={{ marginTop: 18 }} pie="Toca un cliente para ver su ficha.">
         {r.clientes.map((c) => (
           <Fila key={c.key} tono={colorCliente(c.key, theme)} titulo={c.nombre} sub={c.cuota > 0 ? `${money(c.fact)} de ${fmtM(c.cuota)}` : money(c.fact)}
             pill={c.pct != null ? { tone: tonoCuota(c.pct), label: `${Math.round(c.pct)}% cuota` } : { tone: 'gray', label: c.yoy != null ? `${deltaPct(c.yoy)} YoY` : 'sin cuota' }}
             onClick={() => abrirCliente(c.key)} />
         ))}
-      </ListaAgrupada>
+      </ListaAgrupada>}
 
       {sensible && <ComparativoM r={r} mes={mes} onMes={(m) => setMes(m)} />}
     </>
@@ -232,6 +261,66 @@ function ComparativoM({ r, mes, onMes }) {
           pill={m.yoy == null ? undefined : { tone: m.yoy >= 0 ? 'green' : 'red', label: signo(m.yoy) }}
           style={m.mes === mes ? { background: `${theme.accent}14` } : undefined} />
       ))}
+    </ListaAgrupada>
+  );
+}
+
+// ── Sell out del período por cuenta (consolidado)
+function SellOutM({ r, periodoLbl, onAbrir }) {
+  const { theme } = useTheme();
+  const s = r.sellOut;
+  return (
+    <ListaAgrupada titulo={`Sell out · ${periodoLbl}`} meta={s.nCuentas ? `${s.nCuentas}` : undefined} style={{ marginTop: 18 }}
+      accion={<button type="button" onClick={onAbrir} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 500, padding: 0, cursor: 'pointer' }}>Consolidado ›</button>}
+      pie={s.total > 0 ? `${fmtM(s.total)} en total${s.soSi != null ? ` · SO/SI ${s.soSi.toFixed(2)}` : ''}${s.invCuentas ? ` · inventario en cuentas ${fmtM(s.invValor)}` : ''}` : undefined}>
+      {s.cuentas.length === 0 && <Vacio titulo="Sin sell out en el período" sub="Las cuentas aún no reportan este mes." style={{ padding: '22px 16px' }} />}
+      {s.cuentas.slice(0, 10).map((x) => (
+        <Fila key={x.cuenta} titulo={x.nombre} sub={`${x.sellIn ? `sell in ${fmtM(x.sellIn)}` : 'sin sell in'}${x.soSi != null ? ` · SO/SI ${x.soSi.toFixed(2)}` : ''}${x.inv != null ? ` · inv. ${fmtM(x.inv)}` : ''}`}
+          valor={fmtM(x.cur)} chevron={false} alto={50} pill={x.yoy != null ? { tone: tonoDelta(x.yoy), label: deltaPct(x.yoy) } : undefined} />
+      ))}
+    </ListaAgrupada>
+  );
+}
+
+// ── Mix de sell in por canal · marca · categoría
+function MixM({ r, periodoLbl }) {
+  const { theme } = useTheme();
+  const [dim, setDim] = useState('canal');
+  const filas = (r.mixes[dim] || []).slice(0, 10);
+  const max = Math.max(1, ...filas.map((x) => x.cur));
+  const hayCuota = dim === 'canal' && filas.some((x) => x.cuota != null);
+  return (
+    <ListaAgrupada titulo={`Mix de sell in · ${periodoLbl}`} style={{ marginTop: 18 }}
+      accion={<div style={{ display: 'flex', gap: 2, fontSize: 12, fontWeight: 500 }}>{[['canal', 'Canal'], ['marca', 'Marca'], ['categoria', 'Categoría']].map(([id, l]) => <button key={id} type="button" onClick={() => setDim(id)} style={{ border: 0, background: dim === id ? `${theme.accent}18` : 'transparent', color: dim === id ? theme.accent : theme.textMuted, borderRadius: 999, padding: '3px 9px', fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 500 }}>{l}</button>)}</div>}>
+      {filas.map((x) => (
+        <div key={x.key} style={{ padding: '8px 16px', borderTop: `1px solid ${theme.border}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
+            <span style={{ fontWeight: 500, color: theme.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dim === 'canal' ? canalLabel(x.key) : x.key}</span>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtM(x.cur)} <span style={{ color: theme.textMuted, fontWeight: 500, fontSize: 11.5 }}>{x.share != null ? `${x.share.toFixed(0)}%` : ''}</span></span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <div style={{ flex: 1, height: 6, background: `${theme.text}10`, borderRadius: 999, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(x.cur / max) * 100}%`, background: hayCuota && x.pct != null ? (x.pct >= 100 ? theme.green : x.pct >= 85 ? theme.accent : x.pct >= 60 ? theme.orange : theme.red) : theme.accent, borderRadius: 999 }} /></div>
+            <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: hayCuota && x.pct != null ? theme.text : x.yoy == null ? theme.textMuted : x.yoy >= 0 ? theme.green : theme.red, flexShrink: 0 }}>{hayCuota && x.pct != null ? `${Math.round(x.pct)}% cuota` : x.yoy != null ? `${deltaPct(x.yoy)} vs ${r.anio - 1}` : '—'}</span>
+          </div>
+        </div>
+      ))}
+    </ListaAgrupada>
+  );
+}
+
+// ── Inventario comercial · qué llega y cuándo · camino del producto
+function InventarioM({ r, onAbrir }) {
+  const { theme } = useTheme();
+  const inv = r.inv, ec = r.enCamino;
+  const linea = (k, titulo, sub, valor, color) => <Fila key={k} titulo={titulo} sub={sub} valor={valor} chevron={false} alto={46} tono={color} />;
+  return (
+    <ListaAgrupada titulo="Inventario y en camino" style={{ marginTop: 18 }}
+      accion={<button type="button" onClick={onAbrir} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 500, padding: 0, cursor: 'pointer' }}>Inventario ›</button>}>
+      {linea('inv', 'Inventario comercial', `${Math.round(inv.piezas).toLocaleString('es-MX')} pz · ${inv.skus} SKUs con stock${inv.skusAgotados != null ? ` · ${inv.skusAgotados} agotados con demanda` : ''}`, fmtM(inv.valor), theme.accent)}
+      {linea('dias', 'Días de inventario', 'al ritmo de los 3 meses cerrados', inv.cobertura != null ? `${inv.cobertura} d` : '—', inv.cobertura > 120 ? theme.orange : inv.cobertura < 30 ? theme.red : theme.green)}
+      {ec.porMes.slice(0, 4).map((m) => linea(m.key, `Llega ${m.label}`, `${Math.round(m.piezas).toLocaleString('es-MX')} pz · ${m.pos} PO`, fmtM(m.valor), m.key === 'sin ETA' ? theme.textMuted : theme.teal || theme.accent))}
+      {ec.atrasados.pos > 0 && linea('atr', 'PO con ETA vencida', 'revisar en Inventario › Próximos arribos', `${ec.atrasados.pos}`, theme.red)}
+      {r.camino.map((m) => linea(m.key, m.label, `${Math.round(m.piezas).toLocaleString('es-MX')} pz · ${m.pos} PO`, fmtM(m.valor), theme.purple || theme.accent))}
     </ListaAgrupada>
   );
 }

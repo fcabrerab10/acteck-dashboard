@@ -104,9 +104,9 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
     ec.valor > 0 ? `${$c(ec.valor)} en camino en ${ec.pos} PO${ec.proximos[0] ? ` · próximo arribo ${fecha(ec.proximos[0].eta)}` : ''}` : null,
     cart.vencido > 0 ? `cartera vencida ${$c(cart.vencido)}` : null,
   ].filter(Boolean).join(' · ');
-  const stats = [
+  const _statsSinUso = [
     { k: `Sell in · ${labelPeriodo}`, medida: tooltip('fact_neta', labelPeriodo), v: $c(c.fact_neta), sub: r.yoy != null ? `${signo(r.yoy)} ${r.yoyLabel}` : 'sin comparativo' },
-    { k: 'Sell out', v: so.total > 0 ? $c(so.total) : '—', sub: so.total > 0 ? `${so.nCuentas} cuentas${so.soSi != null ? ` · SO/SI ${so.soSi.toFixed(2)}` : ''}` : 'sin sell out en el período' },
+    { k: 'Sell out', v: so.total > 0 ? $c(so.total) : '—', sub: so.total > 0 ? `${so.nCuentas} cuenta${so.nCuentas === 1 ? '' : 's'}${so.soSi != null ? ` · SO/SI ${so.soSi.toFixed(2)}` : ''}` : 'sin sell out en el período' },
     { k: enCurso ? 'Margen al momento' : 'Margen', medida: tooltip('pct_mc'), v: c.mc != null ? pct(c.mc) : '—', sub: r.dMc != null ? `${pp(r.dMc)} vs ${anio - 1}` : 'MC sobre Fact Neta' },
   ];
 
@@ -116,7 +116,7 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
 
       <Hero
         eyebrow={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>Inicio · {esMes ? `${r.mesL} ${anio}` : `Año ${anio}`}{enCurso ? ` · ${diaTxt}` : ''}<span style={{ textTransform: 'none', letterSpacing: 0 }}><FrescuraPill fuentes={FUENTES_INICIO} inverso /></span></span>}
-        titulo={r.titulo} sub={fraseNegocio} stats={stats}>
+        titulo={r.titulo} sub={fraseNegocio}>
         <div style={{ marginTop: 10, maxWidth: 560 }}><BarraCuota valor={c.fact_neta} cuota={r.cuotaPeriodo} label={esMes ? `cuota de ${r.mesL.toLowerCase()}` : (anio === anioHoy ? 'cuota a la fecha' : 'cuota anual')} inverso /></div>
         {r.decision.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {r.decision.slice(0, 3).map((a) => <Pill key={a.id} tone={a.severidad === 'critica' ? 'red' : 'orange'} dot title={a.detalle || ''}>{a.titulo}</Pill>)}
@@ -130,7 +130,7 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
           sub={r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota${esMes && r.pctOtro != null ? ` · YTD ${Math.round(r.pctOtro)}% de ${$c(r.cuotaOtro)}` : ''}` : 'sin cuota cargada'} onClick={ir(null, PAGINAS.sellIn)} />
         <KpiCard eyebrow={`Sell out · ${labelPeriodo}`} badge={so.yoy != null ? { l: `${signo(so.yoy)} vs ${anio - 1}`, tone: toneDe(so.yoy) } : undefined}
           big={so.total > 0 ? $c(so.total) : '—'} bigSmall={so.soSi != null ? `SO/SI ${so.soSi.toFixed(2)}` : ''}
-          sub={so.total > 0 ? `${so.nCuentas} cuentas · sell in a cuentas ${$c(so.sellIn)}${so.invCuentas ? ` · inv. en cuentas ${$c(so.invValor)}` : ''}` : 'sin sell out cargado en el período'} onClick={ir(null, 'sellOut')} />
+          sub={so.total > 0 ? `${so.nCuentas} cuenta${so.nCuentas === 1 ? '' : 's'} · sell in a cuentas ${$c(so.sellIn)}${so.invCuentas ? ` · inv. en cuentas ${$c(so.invValor)}` : ''}` : 'sin sell out cargado en el período'} onClick={ir(null, 'sellOut')} />
         <KpiCard medida={tooltip('contribucion')} eyebrow={`Contribución · ${labelPeriodo}`} badge={r.dMc != null ? { l: `${pp(r.dMc)} MC`, tone: r.dMc >= 0 ? 'green' : 'red' } : undefined}
           big={$c(c.contribucion)} bigSmall={c.mc != null ? `MC ${pct(c.mc)}` : ''}
           sub={`lost profit ${$c(c.lost)}${c.lostPct != null ? ` (${pct(c.lostPct)} de la bruta)` : ''} · utilidad comercial ${$c(c.utilidad_comercial)}`} />

@@ -392,7 +392,7 @@ export function SellOutPanel({ r, onNavegar }) {
     { key: 'inv', label: 'Inv. cuenta', render: (x) => (x.inv != null ? $c(x.inv) : <span style={{ color: theme.textMuted }}>—</span>) },
   ];
   return (
-    <Panel titulo={`Sell out · ${periodo}`} meta={`${s.nCuentas} cuentas con venta · ${$c(s.total)}${s.yoy != null ? ` · ${signo(s.yoy, 0)} vs ${r.anio - 1}` : ''}${s.soSi != null ? ` · SO/SI ${s.soSi.toFixed(2)}` : ''}`}
+    <Panel titulo={`Sell out · ${periodo}`} meta={`${s.nCuentas} cuenta${s.nCuentas === 1 ? '' : 's'} con venta · ${$c(s.total)}${s.yoy != null ? ` · ${signo(s.yoy, 0)} vs ${r.anio - 1}` : ''}${s.soSi != null ? ` · SO/SI ${s.soSi.toFixed(2)}` : ''}`}
       acciones={onNavegar && <Boton size="sm" onClick={onNavegar}>Sell Out consolidado</Boton>}>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 12, alignItems: 'start' }}>
         <div>

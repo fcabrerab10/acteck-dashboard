@@ -18,6 +18,7 @@ const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
 /** % de cuota que toca enseñar según el orden elegido (mes o YTD). */
 const pctCuotaDe = (o, orden) => (orden === 'mes' ? o.pctCuotaMes : o.pctCuotaYtd);
+const cuotaDe = (o, orden) => (orden === 'mes' ? o.cuotaMes : o.cuotaYtd);
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 function useAnalisisClientes(anio, mes) {
@@ -65,6 +66,7 @@ export default function AnalisisClientes() {
       yoy: delta(o.mtd, o.mtdPrev * factor),
       // % de alcance de cuota; los % no se suman, se recalculan (src/lib/medidas.js).
       cuotaMes: cuotaMes.get(o.nombre) ?? null,
+      cuotaYtd: cuotaYtd.get(o.nombre) ?? null,
       pctCuotaMes: cuotaMes.get(o.nombre) ? (o.mtd / cuotaMes.get(o.nombre)) * 100 : null,
       pctCuotaYtd: cuotaYtd.get(o.nombre) ? (o.ytd / cuotaYtd.get(o.nombre)) * 100 : null,
     }));
@@ -95,7 +97,7 @@ export default function AnalisisClientes() {
           {visibles.map((o) => (
             <Fila key={o.nombre} tono={o.propio ? colorCliente(o.ck, theme) : (o.mtd > 0 ? theme.accent : theme.textSubtle || theme.textMuted)}
               titulo={<span>{o.label}{o.propio && <span style={{ fontSize: 10.5, color: theme.textMuted, marginLeft: 6, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '0.04em' }}>PROPIO</span>}</span>}
-              sub={`${canalLabel(o.canal || 'otros')} · YTD ${moneyCompact(o.ytd)}${pctCuotaDe(o, orden) == null ? '' : ` · cuota ${Math.round(pctCuotaDe(o, orden))} %`}${o.meses ? ` · ${o.meses} meses activo` : ''}`}
+              sub={`${canalLabel(o.canal || 'otros')} · YTD ${moneyCompact(o.ytd)}${pctCuotaDe(o, orden) == null ? '' : ` · cuota ${moneyCompact(cuotaDe(o, orden))} · ${Math.round(pctCuotaDe(o, orden))} %`}${o.meses ? ` · ${o.meses} meses activo` : ''}`}
               valor={o.mtd > 0 ? money(o.mtd) : '—'} valorSub={orden === 'mes' ? undefined : moneyCompact(o.ytd)}
               pill={{ tone: tonoDelta(o.yoy), label: o.yoy != null ? deltaPct(o.yoy) : o.mtd > 0 ? 'nuevo' : 'sin venta' }} onClick={() => abrir(o)} />
           ))}

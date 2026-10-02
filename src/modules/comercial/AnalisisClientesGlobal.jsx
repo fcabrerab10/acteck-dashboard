@@ -147,10 +147,11 @@ export default function AnalisisClientesGlobal() {
     { key: 'piezas', fmt: int, label: 'Pz', sort: true, sum: true, render: (r) => int(r.piezas) },
     { key: 'yoy', label: 'YoY', width: 64, sort: true, render: (r) => <DeltaPill value={r.yoy} />, renderTotal: (v) => <DeltaPill value={v} /> },
     // Cuota de RevkoBi por cliente (v_cuota_erp_mes): % de alcance del mes o del YTD según el modo.
-    { key: 'pctCuota', label: 'Cuota', width: 62, sort: true, render: (r) => (r.pctCuota == null
+    // 2026-10-02 (Fernando): la cuota se ve en MONTO y en % de alcance, con barra que se llena y cambia de color.
+    { key: 'pctCuota', label: 'Cuota', width: 128, sort: true, align: 'left', render: (r) => (r.pctCuota == null
       ? <span style={{ color: theme.textMuted }} title="Este cliente no tiene cuota cargada">—</span>
-      : <Pill tone={r.pctCuota >= 100 ? 'green' : r.pctCuota >= 85 ? 'blue' : 'orange'} size="xs" title={`Cuota ${periodoLbl}: ${moneyFull(r.cuota)}`}>{pct(r.pctCuota, 0)}</Pill>),
-      renderTotal: (v) => (v == null ? '—' : pct(v, 0)) },
+      : <CuotaCelda cuota={r.cuota} pct={r.pctCuota} periodo={periodoLbl} />),
+      renderTotal: (v) => (v == null ? '—' : <CuotaCelda cuota={totales.cuota} pct={v} periodo={periodoLbl} />) },
     ...(verSensible ? [{ key: 'mc', label: 'MC %', width: 56, sort: true, render: (r) => <span style={{ color: r.mc == null ? theme.textMuted : r.mc < 0 ? theme.red : theme.text }}>{pct(r.mc)}</span>, renderTotal: (v) => pct(v) }] : []),
   ];
   const totalesFila = { ...totales, mc: totales.mc, yoy: totales.yoy, pctCuota: totales.pctCuota };
@@ -271,6 +272,22 @@ export default function AnalisisClientesGlobal() {
         )}>
         {compSel ? <ComparadorPeriodos clienteNombre={compSel.nombre} clienteCodigo={compSel.cliente} ocultarSensible={!verSensible} /> : <div style={{ fontSize: 11.5, color: theme.textMuted }}>Sin clientes con venta este año.</div>}
       </Panel>
+    </div>
+  );
+}
+
+
+/** Celda de cuota: monto + % con barra que se llena (rojo < 60 · naranja < 85 · azul < 100 · verde ≥ 100). */
+function CuotaCelda({ cuota, pct: p, periodo }) {
+  const { theme } = useTheme();
+  const color = p >= 100 ? theme.green : p >= 85 ? theme.accent : p >= 60 ? theme.orange : theme.red;
+  return (
+    <div style={{ minWidth: 0 }} title={`Cuota ${periodo}: ${moneyFull(cuota)} · ${Math.round(p)}% alcanzado`}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 10.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+        <span style={{ color: theme.textMuted }}>{money(cuota)}</span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, color }}>{Math.round(p)}%</span>
+      </div>
+      <div style={{ marginTop: 2, height: 4, borderRadius: 999, background: `${theme.text}12`, overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, Math.max(0, p))}%`, background: color, borderRadius: 999 }} /></div>
     </div>
   );
 }
