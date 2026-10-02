@@ -168,7 +168,6 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
               ))}
             </div>
           </Panel>
-          {completa && <ApoyoDelAnio codigo={cliente.cliente} anio={anio} mesMax={mesMax} />}
           {completa && cliente.propio && (
             <Panel titulo="Alertas activas" meta={alertasCliente.length ? `${alertasCliente.length} sin resolver` : 'sin alertas'}>
               {!alertasCliente.length && <div style={{ fontSize: 11, color: theme.textMuted }}>Nada pendiente para este cliente.</div>}
@@ -185,7 +184,8 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
         </div>
       </div>
 
-      <Panel titulo={completa ? 'Top 10 SKUs' : 'Top 5 SKUs'} meta={`${periodoLbl} · ${money(totalPeriodo)} · intensidad = mes vs pico del SKU (últimos 6 meses)${completa ? '' : ' · la página completa trae los 12 meses de todos los SKUs'}`} padding="0 0 2px">
+      {!completa && (
+      <Panel titulo={'Top 5 SKUs'} meta={`${periodoLbl} · ${money(totalPeriodo)} · intensidad = mes vs pico del SKU (últimos 6 meses)${completa ? '' : ' · la página completa trae los 12 meses de todos los SKUs'}`} padding="0 0 2px">
         <div style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
@@ -216,6 +216,7 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
           </table>
         </div>
       </Panel>
+      )}
     </div>
   );
 }

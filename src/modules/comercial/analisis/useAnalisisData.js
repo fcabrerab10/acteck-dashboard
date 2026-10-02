@@ -62,3 +62,17 @@ export function useDetalleCliente(clienteCodigo, anio, enabled = true) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/** Sell in por día del cliente (mv_sellin_cliente_dia): año pedido y anterior, para el «zoom» diario. 2026-10-02. */
+export function useSellInDia(clienteCodigo, anio, enabled = true) {
+  return useQuery({
+    queryKey: ['analisis_clientes', 'dia', clienteCodigo, anio],
+    enabled: enabled && !!clienteCodigo,
+    queryFn: async () => {
+      const { data, error } = await cachedQuery(supabase.from('v_sellin_cliente_dia').select('anio,mes,dia,fact_neta,piezas,facturas').eq('cliente', clienteCodigo).in('anio', [anio - 1, anio]).limit(2000));
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}

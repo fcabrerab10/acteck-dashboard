@@ -16,12 +16,15 @@ import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Boton,
 import { tooltip } from '../../../lib/medidas';
 import ComparadorPeriodos from '../ComparadorPeriodos';
 import ExportMenu from '../../../components/ExportMenu';
-import DrillCliente, { ApoyoDelAnio } from './DrillCliente';
+import DrillCliente from './DrillCliente';
+import ZoomDiario from './ZoomDiario';
+import CuotasTrimestre from './CuotasTrimestre';
+import CategoriasSiSo from './CategoriasSiSo';
 import DrillCuenta from '../sellout/DrillCuenta';
 import SellOutPorReceta, { BloqueSkus } from '../sellout/BloquesCuenta';
 import { useCuentas, useMensual, useDias, useCuotas, useDrillSkus, CUENTA_POR_ERP } from '../sellout/datos';
 import { construirFilas, ultimoMesConVenta as ultimoMesSellOut, ultimoDiaConVenta, ultimosMeses, skusDeCuenta } from '../sellout/calculo';
-import { useDetalleCliente } from './useAnalisisData';
+import { useDetalleCliente, useSellInDia } from './useAnalisisData';
 import { MESES, N, idxMes, serie12, pctDe, yoyDe, mcDe, cuotaPeriodo, alcanceCuota } from './calc';
 import { money, moneyFull, int, pct, signo, toneDe, toneCanal, labelCanal } from './formato';
 
@@ -152,7 +155,9 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
 function SellInCliente({ cliente, anio, mesMax, verSensible, cuotas }) {
   const { theme } = useTheme();
   const { data: detalle, isLoading } = useDetalleCliente(cliente.cliente, anio);
+  const { data: diario = [], isLoading: cargandoDia } = useSellInDia(cliente.cliente, anio);
   const { data: roadmap } = useRoadmap();
+  const cuentaSO = CUENTA_POR_ERP[cliente.cliente] || null;
   const [unidad, setUnidad] = useState('monto');
   const [busca, setBusca] = useState('');
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
@@ -216,6 +221,10 @@ function SellInCliente({ cliente, anio, mesMax, verSensible, cuotas }) {
           sub={`dev ${money(cliente.ytd.devoluciones)} · NC ${money(cliente.ytd.rmas)} · bonif ${money(cliente.ytd.bonificaciones)}`} />
       </div>
 
+      <ZoomDiario titulo={`Sell in por día · ${mesLbl} ${anio}`} filas={diario.map((r) => ({ anio: r.anio, mes: r.mes, dia: r.dia, valor: r.fact_neta }))} anio={anio} mes={mesMax} formato={money} cargando={cargandoDia} />
+
+      <CuotasTrimestre mensual={cliente.mensual} cuotas={cuotas} cliente={cliente.cliente} anio={anio} mesMax={mesMax} />
+
       <Panel titulo="Evolución mensual · Sell In" meta={`últimos 12 meses · línea gris = mismo mes de ${anio - 1}${verSensible ? ' · verde = contribución' : ''}`} padding="6px 8px 4px">
         <GraficaLineas datos={serie.map((d) => ({ x: d.label, fact_neta: d.fact_neta, anterior: d.anterior, contribucion: d.contribucion }))}
           series={[{ key: 'fact_neta', label: 'Fact. neta', tipo: 'principal' }, { key: 'anterior', label: 'Año anterior', tipo: 'anterior' }, ...(verSensible ? [{ key: 'contribucion', label: 'Contribución', tipo: 'linea', color: theme.green || '#34C759' }] : [])]}
@@ -249,24 +258,7 @@ function SellInCliente({ cliente, anio, mesMax, verSensible, cuotas }) {
         )}
       </Panel>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 10 }}>
-        <Panel titulo="Composición por categoría" meta={`YTD ${anio} · roadmap_sku / ERP`}>
-          {!categorias.length && <div style={{ fontSize: 11, color: theme.textMuted }}>Sin ventas en el año.</div>}
-          <div style={{ display: 'grid', gap: 4 }}>
-            {categorias.slice(0, 10).map((c) => (
-              <div key={c.nombre} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 64px 44px', gap: 8, alignItems: 'center', fontSize: 11 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: theme.text }}>{c.nombre}</div>
-                  <div style={{ height: 3, borderRadius: 999, background: theme.border, marginTop: 2 }}><div style={{ height: '100%', width: `${Math.max(2, c.pct)}%`, background: accent, borderRadius: 999 }} /></div>
-                </div>
-                <span style={{ fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', textAlign: 'right', fontWeight: 600 }}>{money(c.monto)}</span>
-                <span style={{ fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: theme.textMuted }}>{pct(c.pct, 0)}</span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <ApoyoDelAnio codigo={cliente.cliente} anio={anio} mesMax={mesMax} />
-      </div>
+      <CategoriasSiSo categoriasSellIn={categorias} cuenta={cuentaSO} anio={anio} mesMax={mesMax} />
 
       <Panel titulo="Comparador de periodos" meta={cliente.nombre} plegable abiertoInicial={false}>
         <ComparadorPeriodos clienteNombre={cliente.nombre} clienteCodigo={cliente.cliente} ocultarSensible={!verSensible} />
@@ -297,6 +289,7 @@ function SellOutCuenta({ codigo, nombre, anio }) {
     return u && u.anio === anio ? u.mes : (anio === new Date().getFullYear() ? new Date().getMonth() + 1 : 12);
   }, [propios, dias, anio]);
   const corteDia = useMemo(() => ultimoDiaConVenta(dias, anio, mes) || 31, [dias, anio, mes]);
+  const diasCuenta = useMemo(() => dias.filter((r) => r.cuenta === cuenta).map((r) => ({ anio: r.anio, mes: r.mes, dia: r.dia, valor: r.importe })), [dias, cuenta]);
   const fila = useMemo(() => {
     const f = construirFilas({ cuentas, mensual, dias, anio, mes, corteDia, cuotas }).find((x) => x.cuenta === cuenta);
     if (!f) return null;
@@ -328,9 +321,15 @@ function SellOutCuenta({ codigo, nombre, anio }) {
         <Panel titulo="Sell Out" meta={`${fila.nombre} · ${MESES[mes - 1].toLowerCase()} ${anio} · lo que desplaza y lo que tiene en su almacén · sin IVA`} padding="0">
           <DrillCuenta fila={fila} anio={anio} mes={mes} corteDia={corteDia} estadoSel={estadoSel} onEstado={setEstadoSel} />
         </Panel>
+        <ZoomDiario titulo={`Sell out por día · ${MESES[mes - 1]} ${anio}`} filas={diasCuenta} anio={anio} mes={mes} formato={money} />
         <BloqueSkus cuenta={cuenta} anio={anio} mes={mes} conInventario={fila.invValor != null} />
       </>
     );
   }
-  return <SellOutPorReceta cuenta={cuenta} fila={fila} anio={anio} mes={mes} corteDia={corteDia} />;
+  return (
+    <>
+      <SellOutPorReceta cuenta={cuenta} fila={fila} anio={anio} mes={mes} corteDia={corteDia} />
+      <ZoomDiario titulo={`Sell out por día · ${MESES[mes - 1]} ${anio}`} filas={diasCuenta} anio={anio} mes={mes} formato={money} />
+    </>
+  );
 }
