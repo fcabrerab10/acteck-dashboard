@@ -13,7 +13,7 @@ import { KpiCard, Panel, Pill, Segmented, Boton, TablaCompacta, Cargando, toast 
 import CampoNumero from '../propuestas/CampoNumero';
 import { descargarBlob } from '../../../lib/compartirArchivo';
 import { construirLibro, nombreArchivoPlantilla } from '../reservas/plantillaCRM';
-import { crearLoteDB, upsertCrmDB, invalidarCrm, invalidarLotes } from '../reservas/datos';
+import { crearLoteDB, upsertCrmDB, invalidarCrm, invalidarLotes, useForecastCrm } from '../reservas/datos';
 import { clienteForecast, useVentasForecast, useStockForecast, useProyectosForecast, useForecastExistente, useClientesErp, PROPIOS } from './forecastDatos';
 import { ventana as ventanaDe, mesSiguiente, sugerir, validar, filasPlantilla, MIN_JUSTIFICACION } from './forecastCalc';
 
@@ -39,15 +39,23 @@ export default function Forecast({ yoId }) {
   const { data: stock } = useStockForecast(cliente);
   const { data: proyectos = [] } = useProyectosForecast(cliente);
   const { data: existente } = useForecastExistente(cliente?.codigo);
+  const { data: exportadas = [] } = useForecastCrm(cliente?.key); // lo que ya salió del dashboard a la plantilla (y por tanto ya está o estará en el CRM)
   const { data: roadmap } = useRoadmap();
   const { data: clientesErp = [] } = useClientesErp();
   const rd = useMemo(() => new Map((roadmap || []).map((r) => [r.sku, r])), [roadmap]);
   const nombreErp = useMemo(() => (sel === 'erp' ? clientesErp.find((c) => c.codigo === codigoErp)?.nombre || codigoErp : null), [sel, codigoErp, clientesErp]);
 
+  // Ya capturado = lo que está en el CRM (copia) + lo exportado desde aquí para cualquier mes de la ventana.
+  const yaCapturado = useMemo(() => {
+    const s = new Set(existente?.skus || []);
+    const keys = new Set(ventana.map((m) => m.key));
+    for (const r of exportadas) if (r.estado === 'exportado' && keys.has(`${r.anio}-${String(r.mes).padStart(2, '0')}`) && N(r.piezas) > 0) s.add(r.sku);
+    return s;
+  }, [existente, exportadas, ventana]);
   const sugerido = useMemo(() => {
     if (!cliente || !ventas) return null;
-    return sugerir({ ventanaMeses: ventana, series: ventas.series, stock: stock || new Map(), proyectos, excluir: verExcluidos ? new Set() : (existente?.skus || new Set()), roadmap: rd, fuente: ventas.fuente });
-  }, [cliente, ventas, stock, proyectos, existente, rd, ventana, verExcluidos]);
+    return sugerir({ ventanaMeses: ventana, series: ventas.series, stock: stock || new Map(), proyectos, excluir: verExcluidos ? new Set() : yaCapturado, roadmap: rd, fuente: ventas.fuente });
+  }, [cliente, ventas, stock, proyectos, yaCapturado, rd, ventana, verExcluidos]);
 
   // Cada vez que cambia el cliente, la ventana o la base, el sugerido manda (lo editado se pierde: se avisa en pantalla).
   useEffect(() => { setFilas(sugerido ? sugerido.filas.map((f) => ({ ...f, meses: { ...f.meses } })) : null); }, [sugerido]);
@@ -121,15 +129,15 @@ export default function Forecast({ yoId }) {
             <KpiCard eyebrow={`SKUs en el forecast · ${nombreCliente}`} big={int(totales.skus)} sub={`${ventana[0].label} – ${ventana[ventana.length - 1].label} · ritmo de ${ventas?.fuente === 'sellout' ? 'sell out' : 'sell in'} 3 meses cerrados`} />
             <KpiCard eyebrow="Piezas sugeridas" big={int(totales.piezas)} sub={ventana.map((m) => `${m.label.split(' ')[0]} ${int(totales.porMes[m.key])}`).join(' · ')} />
             <KpiCard eyebrow="Con proyecto" big={int(totales.proyectos)} sub={totales.proyectos ? 'SKUs que suman piezas de proyectos probables o confirmados' : 'sin proyectos en la ventana'} />
-            <KpiCard eyebrow="Ya en el CRM (no se repiten)" big={int(existente?.skus?.size || 0)} bigColor={existente?.skus?.size ? theme.orange : undefined}
-              sub={existente?.skus?.size ? `${int(existente.piezas)} pz capturadas en el CRM · copia del ${String(existente.capturado || '').slice(0, 10)}` : 'nada capturado en el CRM para este cliente'} />
+            <KpiCard eyebrow="Ya capturado (no se repite)" big={int(yaCapturado.size)} bigColor={yaCapturado.size ? theme.orange : undefined}
+              sub={yaCapturado.size ? `${int(existente?.skus?.size || 0)} en el CRM (copia del ${String(existente?.capturado || '').slice(0, 10)}) · ${int(yaCapturado.size - (existente?.skus?.size || 0))} exportados desde aquí` : 'nada capturado para este cliente'} />
           </div>
 
           <Panel titulo="Sugerido por SKU" meta={`${visibles.length} SKUs · edita piezas o justificación · ✕ quita el SKU`} padding="0 0 2px"
             acciones={(
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="SKU o descripción…" style={{ height: 28, padding: '0 10px', border: `1px solid ${theme.border}`, borderRadius: 999, fontSize: 11.5, background: theme.surface, color: theme.text, fontFamily: 'inherit', outline: 'none', minWidth: 180 }} />
-                {existente?.skus?.size > 0 && <Boton onClick={() => setVerExcluidos((v) => !v)} title="Mostrar también los SKUs que ya tienen forecast en el CRM">{verExcluidos ? 'Ocultar los del CRM' : `Ver los ${existente.skus.size} del CRM`}</Boton>}
+                {yaCapturado.size > 0 && <Boton onClick={() => setVerExcluidos((v) => !v)} title="Mostrar también los SKUs que ya tienen forecast capturado">{verExcluidos ? 'Ocultar los capturados' : `Ver los ${yaCapturado.size} capturados`}</Boton>}
               </div>
             )}>
             <TablaCompacta dense maxHeight={560} rowKey={(r) => r.sku} filas={visibles} vacio="Sin SKUs con ritmo de venta ni proyectos en la ventana."
