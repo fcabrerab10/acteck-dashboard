@@ -307,7 +307,7 @@ export function ComparativoAnual({ r, mesSel, onMes }) {
           onRowClick={onMes ? (m) => onMes(m.mes) : undefined} rowStyle={(m) => (m.mes === mesSel ? { background: `${theme.accent}14` } : null)} />
       </div>
       <FilaStats style={{ padding: '10px 2px 0', borderTop: `1px solid ${theme.border}`, marginTop: 8 }}>
-        <Stat k={`Total ${r.anio}`} v={$c(tot.fact_neta)} sub={c.yoyAnual != null ? `${signo(c.yoyAnual, 0)} vs ${r.anio - 1} (${$c(totP.fact_neta)})` : `${r.anio - 1}: ${$c(totP.fact_neta)}`} color={c.yoyAnual == null ? undefined : c.yoyAnual >= 0 ? theme.green : theme.red} />
+        <Stat k={c.hastaMes < 12 ? `Ene–${c.meses[c.hastaMes - 1].label} ${r.anio}` : `Total ${r.anio}`} v={$c(tot.fact_neta)} sub={c.yoyAnual != null ? `${signo(c.yoyAnual, 0)} vs ${c.hastaMes < 12 ? `ene–${c.meses[c.hastaMes - 1].label.toLowerCase()} ` : ''}${r.anio - 1} (${$c(totP.fact_neta)})` : `${r.anio - 1}: ${$c(totP.fact_neta)}`} color={c.yoyAnual == null ? undefined : c.yoyAnual >= 0 ? theme.green : theme.red} />
         {c.cuotaAnual ? <Stat k="Cuota anual" v={$c(c.cuotaAnual)} sub={tot.fact_neta ? `${Math.round((tot.fact_neta / c.cuotaAnual) * 100)}% alcanzado` : null} /> : null}
         {r.sensible && <Stat k={`MC ${r.anio}`} v={tot.mc != null ? pct(tot.mc) : '—'} sub={tot.mc != null && totP.mc != null ? `${pp(tot.mc - totP.mc)} vs ${r.anio - 1}` : null} />}
         <Stat k="Piezas netas" v={int(tot.piezas)} sub={totP.piezas ? `${r.anio - 1}: ${int(totP.piezas)}` : null} />

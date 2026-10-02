@@ -203,8 +203,10 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
       contribucion: a.contribucion, piezas: a.piezas, conDatos: a.fact_neta !== 0 || a.n > 0, enCurso: esCurso };
   });
   const ultimoMesConDatos = mesesAnio.reduce((u, x) => (x.conDatos ? x.mes : u), 0);
-  const anual = agg(d.medidas.filter((r) => N(r.anio) === anio)), anualPrev = agg(d.medidas.filter((r) => N(r.anio) === anio - 1));
-  const comparativo = { meses: mesesAnio, ultimoMesConDatos, anual, anualPrev, yoyAnual: delta(anual.fact_neta, anualPrev.fact_neta), cuotaAnual: q.anual,
+  // El año anterior se compara a los mismos meses que lleva el año elegido (ene–sep vs ene–sep), no contra sus 12 meses.
+  const hastaMes = ultimoMesConDatos || 12;
+  const anual = agg(d.medidas.filter((r) => N(r.anio) === anio)), anualPrev = agg(d.medidas.filter((r) => N(r.anio) === anio - 1 && N(r.mes) <= hastaMes));
+  const comparativo = { meses: mesesAnio, ultimoMesConDatos, hastaMes, anual, anualPrev, yoyAnual: delta(anual.fact_neta, anualPrev.fact_neta), cuotaAnual: q.anual,
     mesesArriba: mesesAnio.filter((x) => x.yoy != null && x.yoy >= 0).length, mesesConDatos: mesesAnio.filter((x) => x.yoy != null).length,
     mejor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => b.yoy - a.yoy)[0] || null, peor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => a.yoy - b.yoy)[0] || null };
 
