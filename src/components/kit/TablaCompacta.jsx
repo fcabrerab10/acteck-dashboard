@@ -17,6 +17,18 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
   // para que nunca haya que desplazarse horizontalmente para verlo aunque la tabla sea más ancha.
   const scrollRef = useRef(null);
   const [anchoVisible, setAnchoVisible] = useState(0);
+  // 2026-10-02 · Ventana de filas (fluidez): con muchas filas (p. ej. 500 SKUs × 12 HeatCells) el navegador pintaba
+  // miles de celdas en cada orden/filtro. Con maxHeight y > UMBRAL filas sólo se montan las visibles (+ margen) y el
+  // resto se reserva con dos filas espaciadoras; el drill abierto y los totales no cambian.
+  const UMBRAL = 120, ALTO_FILA = dense ? 27 : 33, MARGEN = 12;
+  const virtual = !!maxHeight && filas.length > UMBRAL;
+  const [scrollTop, setScrollTop] = useState(0);
+  const rafRef = useRef(0);
+  const onScroll = virtual ? (e) => { const st = e.currentTarget.scrollTop; cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(() => setScrollTop(st)); } : undefined;
+  const altoMax = typeof maxHeight === 'number' ? maxHeight : 600;
+  const ini = virtual ? Math.max(0, Math.floor(scrollTop / ALTO_FILA) - MARGEN) : 0;
+  const fin = virtual ? Math.min(filas.length, Math.ceil((scrollTop + altoMax) / ALTO_FILA) + MARGEN) : filas.length;
+  const visibles = virtual ? filas.slice(ini, fin) : filas;
   useEffect(() => {
     if (!renderExpandido) return undefined;
     const el = scrollRef.current;
@@ -34,7 +46,7 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
     ? Object.fromEntries(columnas.filter((c) => c.sum).map((c) => [c.key, filas.reduce((s, r) => s + (Number(r[c.key]) || 0), 0)]))
     : totales;
   return (
-    <div ref={scrollRef} style={{ overflow: 'auto', maxHeight, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface }}>
+    <div ref={scrollRef} onScroll={onScroll} style={{ overflow: 'auto', maxHeight, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
           {grupos && (
@@ -63,7 +75,9 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
         </thead>
         <tbody>
           {filas.length === 0 && <tr><td colSpan={columnas.length} style={{ ...td, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, padding: 18 }}>{vacio}</td></tr>}
-          {filas.map((r, i) => {
+          {virtual && ini > 0 && <tr aria-hidden="true"><td colSpan={columnas.length} style={{ padding: 0, height: ini * ALTO_FILA, border: 0 }} /></tr>}
+          {visibles.map((r, j) => {
+            const i = ini + j;
             const k = rowKey(r, i); const abierto = renderExpandido && expandidoKey === k;
             const extra = rowStyle ? (rowStyle(r) || {}) : {};
             const bgReposo = extra.background || (abierto ? (theme.surfaceHover || 'rgba(0,0,0,0.02)') : 'transparent');
@@ -87,6 +101,7 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
               </React.Fragment>
             );
           })}
+          {virtual && fin < filas.length && <tr aria-hidden="true"><td colSpan={columnas.length} style={{ padding: 0, height: (filas.length - fin) * ALTO_FILA, border: 0 }} /></tr>}
         </tbody>
         {tot && (
           <tfoot>
