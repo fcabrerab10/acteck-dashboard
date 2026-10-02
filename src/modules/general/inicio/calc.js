@@ -205,7 +205,12 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
   const ultimoMesConDatos = mesesAnio.reduce((u, x) => (x.conDatos ? x.mes : u), 0);
   // El año anterior se compara a los mismos meses que lleva el año elegido (ene–sep vs ene–sep), no contra sus 12 meses.
   const hastaMes = ultimoMesConDatos || 12;
-  const anual = agg(d.medidas.filter((r) => N(r.anio) === anio)), anualPrev = agg(d.medidas.filter((r) => N(r.anio) === anio - 1 && N(r.mes) <= hastaMes));
+  // Si el último mes del año elegido es el mes en curso, ese mes del año anterior entra prorrateado a mismo día.
+  const mesEnCursoDelAnio = anio === hoy.getFullYear() && hastaMes === hoy.getMonth() + 1;
+  const fPrev = mesEnCursoDelAnio ? Math.min(1, Math.max(1, hoy.getDate()) / new Date(anio, hastaMes, 0).getDate()) : 1;
+  const escalar = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'number' || (typeof v === 'string' && v !== '' && !Number.isNaN(Number(v))) ? N(v) * fPrev : v]));
+  const anual = agg(d.medidas.filter((r) => N(r.anio) === anio));
+  const anualPrev = agg(d.medidas.filter((r) => N(r.anio) === anio - 1 && N(r.mes) <= hastaMes).map((r) => (N(r.mes) === hastaMes ? { ...escalar(r), anio: r.anio, mes: r.mes } : r)));
   const comparativo = { meses: mesesAnio, ultimoMesConDatos, hastaMes, anual, anualPrev, yoyAnual: delta(anual.fact_neta, anualPrev.fact_neta), cuotaAnual: q.anual,
     mesesArriba: mesesAnio.filter((x) => x.yoy != null && x.yoy >= 0).length, mesesConDatos: mesesAnio.filter((x) => x.yoy != null).length,
     mejor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => b.yoy - a.yoy)[0] || null, peor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => a.yoy - b.yoy)[0] || null };
