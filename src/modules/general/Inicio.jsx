@@ -1,9 +1,13 @@
 // Inicio · pestaña de dirección general armada con el kit V3 (plantilla HomeClienteV3).
-// Una sola pestaña con dos modos (Fernando, 2026-10-01: «Inicio y Visión General se me hacen repetitivas», opción A):
-//   Hoy  = qué atender hoy: hero MTD, bandeja Hoy, 4 KPIs, decisiones, mis clientes, agenda.
-//   Año  = cómo va el año: la antigua Visión General (rentabilidad, mix, tendencia 3 años, sell out, inventario).
-// La gráfica de ventas 12 m y el panel de canales salieron de Hoy porque viven en Año. Visión General ya no está en
-// el menú; `pagina: 'visionGeneral'` abre Inicio en modo Año (PaginaContenido).
+// Un solo tablero (Fernando, 2026-10-01: «la híbrida está horrible… lo que debería ver siendo director general: la
+// información anual, el mes actual y moverme entre los meses frente al año anterior», propuesta A ajustada):
+//   · Selector de período: mes (Ene…Dic) o Año, y año. Por defecto el mes en curso. Todas las cifras del tablero
+//     (hero, KPIs, clientes, canales) son de ese período y se comparan con el mismo período del año anterior.
+//   · «Hoy» (bandeja de la Agenda) y «Requiere decisión» son fijos: no dependen del período.
+//   · «<año> frente a <año-1>»: gráfica y tabla mes a mes; clic en un mes cambia el período de toda la pestaña.
+//   · El detalle del año (rentabilidad, mix por marca/categoría, sell out, inventario = la antigua Visión General)
+//     va plegado al final y se monta sólo al abrirlo. `pagina: 'visionGeneral'` abre Inicio en modo Año con ese
+//     panel abierto (PaginaContenido → vistaInicial='anio').
 // Carga en inicio/useInicioData.js (sólo lib/queries), cálculos en inicio/calc.js, bloques en inicio/bloques.jsx.
 // Se monta lazy desde App.jsx en paginaActiva === 'inicio' con props { onNavegar(clienteKey|null, pagina) }.
 import React, { lazy, Suspense, useMemo, useState } from 'react';
@@ -19,11 +23,11 @@ import SinAcceso from '../../components/SinAcceso';
 import FrescuraPill from '../../components/FrescuraPill';
 import { Hero, KpiCard, Pill, Panel, Segmented, SkeletonPantalla, Cargando } from '../../components/kit';
 const VisionGeneral = lazy(() => import('../comercial/VisionGeneral'));
-const VISTAS = [{ id: 'hoy', label: 'Hoy' }, { id: 'anio', label: 'Año' }];
-import { FUENTES_INICIO, PAGINAS, MAX_ALERTAS, abrirNotificaciones } from './inicio/config';
+const RentabilidadBloque = lazy(() => import('../comercial/RentabilidadBloque'));
+import { FUENTES_INICIO, PAGINAS, MAX_ALERTAS, MESES, abrirNotificaciones } from './inicio/config';
 import { useInicioData } from './inicio/useInicioData';
 import { calcular } from './inicio/calc';
-import { DecisionPanel, ClientesGrid, AgendaPanel, HoyPanel } from './inicio/bloques';
+import { DecisionPanel, ClientesGrid, AgendaPanel, HoyPanel, CanalesPanel, ComparativoAnual } from './inicio/bloques';
 
 const signo = (v, d = 0) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneDe = (v) => (v == null ? 'gray' : v >= 0 ? 'green' : 'red');
@@ -32,11 +36,20 @@ const fmtDia = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric
 export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
   const perfil = usePerfil();
   const { theme } = useTheme();
-  const [vista, setVista] = useState(vistaInicial);
-  const modo = 'mes'; // Hoy siempre es el mes en curso; el acumulado del año vive en el modo Año
   const hoy = useMemo(() => new Date(), []);
-  const anio = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
+  const anioHoy = hoy.getFullYear(), mesHoy = hoy.getMonth() + 1;
+  const [anio, setAnio] = useState(anioHoy);
+  const [mes, setMes] = useState(vistaInicial === 'anio' ? 'anio' : mesHoy);   // 1..12 | 'anio'
+  const [verDetalleAnio, setVerDetalleAnio] = useState(vistaInicial === 'anio');
+  const modo = mes === 'anio' ? 'anio' : 'mes';
   const { loading, error, data } = useInicioData(anio);
+  // Mes de cálculo: el elegido; en modo Año, el último mes con ventas de ese año (o el mes en curso).
+  const ultimoMesConDatos = useMemo(() => (data ? (data.medidas || []).filter((r) => Number(r.anio) === anio && Number(r.fact_neta)).reduce((u, r) => Math.max(u, Number(r.mes)), 0) : 0), [data, anio]);
+  const mesActual = modo === 'mes' ? mes : (anio === anioHoy ? mesHoy : (ultimoMesConDatos || 12));
+  const enCurso = anio === anioHoy && mesActual === mesHoy;
+  const anios = useMemo(() => [anioHoy, anioHoy - 1, anioHoy - 2], [anioHoy]);
+  const elegirMes = (m) => { setMes(m); };
+  const elegirAnio = (a) => { setAnio(a); if (a !== anioHoy && mes !== 'anio' && mes > 12) setMes(12); };
   const alertasQ = useAlertas({ clienteKey: null });
   const { porFuente } = useFrescura(true);
 
@@ -50,31 +63,31 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
     sellIn: puedeVerPestanaGlobal(perfil, 'sell_in'),
   }), [perfil]);
   const clientesVisibles = useMemo(() => ['digitalife', 'pcel', 'dicotech'].filter((k) => puedeVerCliente(perfil, k)), [perfil]);
-  const r = useMemo(() => (data ? calcular(data, alertasQ.data || [], { anio, mesActual, hoy, modo, sensible, clientesVisibles }) : null), [data, alertasQ.data, anio, mesActual, hoy, modo, sensible, clientesVisibles]);
+  const r = useMemo(() => (data ? calcular(data, alertasQ.data || [], { anio, mesActual, hoy, modo, sensible, clientesVisibles, enCurso }) : null), [data, alertasQ.data, anio, mesActual, hoy, modo, sensible, clientesVisibles, enCurso]);
 
   if (!puedeVerInicio(perfil)) return <SinAcceso motivo="No tienes acceso a Inicio." />;
 
+  // Selector de período: meses del año elegido (los futuros del año en curso se ocultan) + Año, y el año.
+  const mesesOpc = MESES.map((l, i) => ({ id: i + 1, label: l })).filter((o) => anio < anioHoy || o.id <= mesHoy);
   const barra = (
-    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-      <span style={{ fontSize: 10.5, color: theme.textMuted }}>{vista === 'hoy' ? `Qué atender hoy · ${fmtDia.format(hoy).replace(',', '')}` : `Cómo va el año · ${anio}`}</span>
-      {ve.visionGeneral && <Segmented options={VISTAS} value={vista} onChange={setVista} />}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 10.5, color: theme.textMuted }}>{fmtDia.format(hoy).replace(',', '')}{enCurso ? '' : ` · viendo ${modo === 'mes' ? `${MESES[mesActual - 1]} ${anio}` : anio}`}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Segmented size="sm" options={[...mesesOpc, { id: 'anio', label: 'Año' }]} value={mes} onChange={elegirMes} />
+        <select value={anio} onChange={(e) => elegirAnio(Number(e.target.value))} aria-label="Año"
+          style={{ height: 28, padding: '0 8px', borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {anios.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </div>
     </div>
   );
-  if (vista === 'anio' && ve.visionGeneral) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {barra}
-        <Suspense fallback={<Cargando pantalla="visionGeneral" minHeight={520} />}><VisionGeneral /></Suspense>
-      </div>
-    );
-  }
-  if (loading || (!r && !error)) return <SkeletonPantalla pantalla="inicio" />;
+  if (loading || (!r && !error)) return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{barra}<SkeletonPantalla pantalla="inicio" /></div>;
   if (error) return <Panel titulo="No se pudo cargar Inicio"><div style={{ fontSize: 12, color: theme.red }}>{error}</div></Panel>;
 
   const ir = (ck, pagina) => (onNavegar ? () => onNavegar(ck, pagina) : undefined);
   const esMes = modo === 'mes';
-  const labelPeriodo = esMes ? `MTD · ${r.mesL}` : `YTD ${anio}`;
-  const labelOtro = esMes ? `YTD ${anio}` : `MTD · ${r.mesL}`;
+  const labelPeriodo = esMes ? (enCurso ? `MTD · ${r.mesL}` : `${r.mesL} ${anio}`) : (anio === anioHoy ? `YTD ${anio}` : `${anio}`);
+  const labelOtro = esMes ? `YTD ${anio}` : `${r.mesL} ${anio}`;
   const c = r.cur, cart = r.cartera, inv = r.inv;
   const diaTxt = fmtDia.format(hoy).replace(',', '');
 
@@ -105,7 +118,7 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
       {barra}
 
       <Hero
-        eyebrow={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>Inicio · {diaTxt}<span style={{ textTransform: 'none', letterSpacing: 0 }}><FrescuraPill fuentes={FUENTES_INICIO} inverso /></span></span>}
+        eyebrow={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>Inicio · {esMes ? `${r.mesL} ${anio}` : `Año ${anio}`}{enCurso ? ` · ${diaTxt}` : ""}<span style={{ textTransform: 'none', letterSpacing: 0 }}><FrescuraPill fuentes={FUENTES_INICIO} inverso /></span></span>}
         titulo={veEmpresa ? r.titulo : `Hoy tienes ${r.decision.length} aviso${r.decision.length === 1 ? '' : 's'} que atender.`} sub={veEmpresa ? r.sub : `Tus clientes: ${r.clientes.map((c) => c.nombre || c.label || c.key).filter(Boolean).join(' · ') || 'ninguno'}.`} dot={r.decision.some((a) => a.severidad === 'critica')} stats={stats}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {r.decision.slice(0, 3).map((a) => <Pill key={a.id} tone={a.severidad === 'critica' ? 'red' : 'orange'} dot title={a.detalle || ''}>{a.titulo}</Pill>)}
@@ -120,16 +133,16 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
         {veEmpresa && <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`Fact Neta · ${labelOtro}`} badge={r.yoyOtro != null ? { l: `${signo(r.yoyOtro)} ${esMes ? 'YoY' : 'YoY a mismo día'}`, tone: toneDe(r.yoyOtro) } : undefined}
           big={$c(r.otro.fact_neta)} bigSmall={r.cuotaOtro ? `de ${$c(r.cuotaOtro)}` : ''}
           sub={[r.pctOtro != null ? `${Math.round(r.pctOtro)}% de cuota ${esMes ? 'YTD' : 'del mes'}` : 'sin cuota', r.pctAnual != null ? `${Math.round(r.pctAnual)}% de la anual ${$c(r.cuota.anual)}` : null].filter(Boolean).join(' · ')}
-          progress={r.pctOtro ?? undefined} onClick={ve.visionGeneral ? () => setVista('anio') : undefined} />}
+          progress={r.pctOtro ?? undefined} onClick={() => elegirMes(esMes ? 'anio' : mesActual)} />}
         {sensible
           ? <KpiCard medida={tooltip('contribucion')} eyebrow={`Contribución · ${labelPeriodo}`} badge={r.dMc != null ? { l: `${pp(r.dMc)} MC`, tone: r.dMc >= 0 ? 'green' : 'red' } : undefined}
               big={$c(c.contribucion)} bigSmall={c.mc != null ? `MC ${pct(c.mc)}` : ''}
               sub={`${lostTxt} · dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
-              onClick={ve.visionGeneral ? () => setVista('anio') : undefined} />
+              onClick={() => elegirMes(esMes ? 'anio' : mesActual)} />
           : <KpiCard medida={tooltip('pct_lost_profit_bonif', "Devoluciones + RMA's + Bonificaciones")} eyebrow={`Deducciones · ${labelPeriodo}`} badge={c.lostPct != null ? { l: `${pct(c.lostPct)} de la bruta`, tone: c.lostPct > 8 ? 'orange' : 'gray' } : undefined}
               big={$c(c.lost)} bigSmall="dev + RMA + bonif"
               sub={`dev ${$c(c.devoluciones)} · RMA ${$c(c.rmas)} · bonif ${$c(c.bonificaciones)}`}
-              onClick={ve.visionGeneral ? () => setVista('anio') : undefined} />}
+              onClick={() => elegirMes(esMes ? 'anio' : mesActual)} />}
         {ve.cobranza && <KpiCard eyebrow={cart.corte ? `Cartera · corte ${fecha(cart.corte)}` : 'Cartera'} badge={cart.vencido > 0 ? { l: `${$c(cart.vencido)} vencido`, tone: cart.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al corriente', tone: 'green' }}
           big={$c(cart.saldo)} bigSmall={`${cart.filas.length} cliente${cart.filas.length === 1 ? '' : 's'}`} bigColor={cart.vencido > 0 && cart.pctVencido > 25 ? theme.red : undefined}
           sub={[cart.dso != null ? `DSO ${cart.dso} d` : null, cart.mas90 > 0 ? `${$c(cart.mas90)} > 90 d` : null, cart.filas[0]?.vencido > 0 ? `${cart.filas[0].cliente}: ${$c(cart.filas[0].vencido)} vencido` : null].filter(Boolean).join(' · ') || 'sin estados de cuenta'}
@@ -142,6 +155,20 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
 
       <DecisionPanel r={r} onNavegar={onNavegar} onNotificaciones={() => abrirNotificaciones(onNavegar, perfil)} max={MAX_ALERTAS} />
       {r.clientes.length > 0 && <ClientesGrid r={r} onNavegar={onNavegar} />}
+
+      {veEmpresa && <ComparativoAnual r={r} mesSel={mes} onMes={elegirMes} />}
+      {veEmpresa && ve.sellIn && r.canales.length > 0 && <CanalesPanel r={r} onNavegar={ir(null, PAGINAS.sellIn)} />}
+
+      {sensible && (
+        <Panel titulo={`Rentabilidad ${anio === anioHoy ? 'YTD' : ''} ${anio}`} meta="medidas del director · cascada Fact Bruta → Utilidad Comercial" plegable abiertoInicial={false} onToggle={() => {}}>
+          <Suspense fallback={<Cargando minHeight={200} />}><RentabilidadBloque anio={anio} mesMax={mesActual} /></Suspense>
+        </Panel>
+      )}
+      {ve.visionGeneral && (
+        <Panel titulo={`Detalle del año ${anio}`} meta="mix por canal · marca · categoría, tendencia 3 años, sell out consolidado e inventario" plegable abiertoInicial={verDetalleAnio} onToggle={setVerDetalleAnio}>
+          {verDetalleAnio && <Suspense fallback={<Cargando pantalla="visionGeneral" minHeight={520} />}><VisionGeneral /></Suspense>}
+        </Panel>
+      )}
       <AgendaPanel r={r} frescuraErp={porFuente.erp_ventas} onNavegar={onNavegar} />
     </div>
   );

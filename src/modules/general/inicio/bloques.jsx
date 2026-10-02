@@ -268,3 +268,51 @@ export function HoyPanel({ onNavegar, max = 6 }) {
     </Panel>
   );
 }
+
+// ── Frente al año anterior (2026-10-01, Fernando: «que me pueda mover entre los meses para saber cómo nos ha ido
+// frente al año anterior»). Gráfica de los 12 meses del año elegido contra el anterior (+ cuota) y tabla mes a mes;
+// clic en un mes (gráfica o fila) cambia el período de toda la pestaña.
+export function ComparativoAnual({ r, mesSel, onMes }) {
+  const { theme } = useTheme();
+  const c = r.comparativo;
+  const datos = c.meses.map((m) => ({ x: m.label, fn: m.fn || null, prev: m.prev || null, cuota: m.cuota }));
+  const series = [
+    { key: 'fn', label: String(r.anio), tipo: 'principal' },
+    { key: 'prev', label: String(r.anio - 1), tipo: 'anterior' },
+    ...(c.cuotaAnual ? [{ key: 'cuota', label: 'Cuota', tipo: 'cuota' }] : []),
+  ];
+  const idxActivo = mesSel === 'anio' ? null : mesSel - 1;
+  const meta = c.mesesConDatos
+    ? `${c.mesesArriba} de ${c.mesesConDatos} meses arriba de ${r.anio - 1}${c.mejor ? ` · mejor ${c.mejor.label} ${signo(c.mejor.yoy, 0)}` : ''}${c.peor && c.peor !== c.mejor ? ` · peor ${c.peor.label} ${signo(c.peor.yoy, 0)}` : ''}`
+    : `sin ventas en ${r.anio}`;
+  const filas = c.meses.filter((m) => m.conDatos || m.mes <= (c.ultimoMesConDatos || 0));
+  const cols = [
+    { key: 'label', label: 'Mes', align: 'left', width: 64, render: (m) => <span style={{ fontWeight: m.mes === mesSel ? 700 : 500, color: m.mes === mesSel ? theme.accent : theme.text }}>{m.label}{m.enCurso ? ' ·' : ''}</span> },
+    { key: 'fn', label: String(r.anio), bold: true, render: (m) => (m.fn ? $c(m.fn) : '—') },
+    { key: 'prev', label: String(r.anio - 1), render: (m) => <span style={{ color: theme.textMuted }}>{m.prev ? $c(m.prev) : '—'}</span> },
+    { key: 'yoy', label: 'Δ', width: 70, render: (m) => (m.yoy == null ? <span style={{ color: theme.textMuted }}>—</span> : <Pill size="xs" tone={toneDe(m.yoy)}>{signo(m.yoy, 0)}</Pill>) },
+    ...(c.cuotaAnual ? [{ key: 'pct', label: '% cuota', width: 72, render: (m) => (m.pct == null ? <span style={{ color: theme.textMuted }}>—</span> : <Pill size="xs" tone={toneCuota(m.pct)}>{Math.round(m.pct)}%</Pill>) }] : []),
+    ...(r.sensible ? [
+      { key: 'mc', label: 'MC', width: 60, render: (m) => (m.mc == null ? '—' : pct(m.mc)) },
+      { key: 'dMc', label: 'Δ MC', width: 64, render: (m) => <span style={{ color: m.dMc == null ? theme.textMuted : m.dMc >= 0 ? theme.green : theme.red }}>{m.dMc != null ? pp(m.dMc) : '—'}</span> },
+    ] : []),
+  ];
+  const tot = c.anual, totP = c.anualPrev;
+  return (
+    <Panel titulo={`${r.anio} frente a ${r.anio - 1}`} meta={meta}
+      acciones={mesSel !== 'anio' && onMes ? <Boton size="sm" onClick={() => onMes('anio')}>Ver el año completo</Boton> : null}>
+      <GraficaLineas datos={datos} series={series} formato={$c} alto={190} mesActivo={idxActivo} onClickMes={onMes ? (i) => onMes(i + 1) : undefined} />
+      <div style={{ marginTop: 8 }}>
+        <TablaCompacta columnas={cols} filas={filas} rowKey={(m) => m.mes} dense maxHeight={320} vacio={`Sin ventas registradas en ${r.anio}.`}
+          onRowClick={onMes ? (m) => onMes(m.mes) : undefined} rowStyle={(m) => (m.mes === mesSel ? { background: `${theme.accent}14` } : null)} />
+      </div>
+      <FilaStats style={{ padding: '10px 2px 0', borderTop: `1px solid ${theme.border}`, marginTop: 8 }}>
+        <Stat k={`Total ${r.anio}`} v={$c(tot.fact_neta)} sub={c.yoyAnual != null ? `${signo(c.yoyAnual, 0)} vs ${r.anio - 1} (${$c(totP.fact_neta)})` : `${r.anio - 1}: ${$c(totP.fact_neta)}`} color={c.yoyAnual == null ? undefined : c.yoyAnual >= 0 ? theme.green : theme.red} />
+        {c.cuotaAnual ? <Stat k="Cuota anual" v={$c(c.cuotaAnual)} sub={tot.fact_neta ? `${Math.round((tot.fact_neta / c.cuotaAnual) * 100)}% alcanzado` : null} /> : null}
+        {r.sensible && <Stat k={`MC ${r.anio}`} v={tot.mc != null ? pct(tot.mc) : '—'} sub={tot.mc != null && totP.mc != null ? `${pp(tot.mc - totP.mc)} vs ${r.anio - 1}` : null} />}
+        <Stat k="Piezas netas" v={int(tot.piezas)} sub={totP.piezas ? `${r.anio - 1}: ${int(totP.piezas)}` : null} />
+      </FilaStats>
+      <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 6 }}>Toca un mes en la gráfica o en la tabla para ver toda la pestaña en ese mes. El mes en curso (·) se compara a mismo día del año anterior.</div>
+    </Panel>
+  );
+}

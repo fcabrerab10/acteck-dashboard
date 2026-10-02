@@ -122,7 +122,9 @@ function agenda(d, inv, sensible) {
 const fmtM = (n) => `$${(Math.abs(n) / 1e6).toFixed(Math.abs(n) >= 1e7 ? 1 : 2)}M`;
 
 // ── Resumen principal
-export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = true, clientesVisibles = null }) {
+// enCurso: el periodo elegido es el mes/año en curso (2026-10-01: el director elige cualquier mes de cualquier año;
+// sólo el mes en curso se prorratea al mismo día contra el año anterior).
+export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = true, clientesVisibles = null, enCurso = true }) {
   const hoyISO = iso(hoy), limiteISO = iso(new Date(hoy.getTime() + DIAS_AGENDA * 86400000));
   const filtro = enPeriodo(modo, mesActual), otroModo = modo === 'mes' ? 'anio' : 'mes', filtroOtro = enPeriodo(otroModo, mesActual);
   const cur = agg(d.medidas.filter((r) => N(r.anio) === anio && filtro(r)));
@@ -136,19 +138,19 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
 
   // Mes en curso: el año anterior se prorratea al mismo día del mes (MTD vs MTD), si no el YoY
   // compararía 9 días contra 30. En YTD no hace falta (meses completos hasta el actual).
-  const diasMes = new Date(anio, mesActual, 0).getDate(), diaHoy = Math.max(1, hoy.getDate());
-  const factorMes = Math.min(1, diaHoy / diasMes);
+  const diasMes = new Date(anio, mesActual, 0).getDate(), diaHoy = enCurso ? Math.max(1, hoy.getDate()) : diasMes;
+  const factorMes = enCurso ? Math.min(1, diaHoy / diasMes) : 1;
   const proMes = (v) => v * factorMes;
   const pro = modo === 'mes' ? proMes : (v) => v, proOtro = otroModo === 'mes' ? proMes : (v) => v;
   const yoy = delta(cur.fact_neta, pro(prev.fact_neta)), yoyOtro = delta(otro.fact_neta, proOtro(otroPrev.fact_neta));
   const yoyUtilidad = delta(cur.utilidad_comercial, pro(prev.utilidad_comercial));
   const dMc = cur.mc != null && prev.mc != null ? cur.mc - prev.mc : null;
-  const yoyLabel = modo === 'mes' ? 'YoY a mismo día' : 'YoY';
+  const yoyLabel = modo === 'mes' && enCurso ? 'YoY a mismo día' : modo === 'mes' ? `vs ${MESES[mesActual - 1]} ${anio - 1}` : `vs ${anio - 1}`;
 
   // Run-rate del mes en curso vs mismo mes del año anterior (siempre del mes actual)
   const mesRow = agg(d.medidas.filter((r) => N(r.anio) === anio && N(r.mes) === mesActual));
   const mesPrev = agg(d.medidas.filter((r) => N(r.anio) === anio - 1 && N(r.mes) === mesActual));
-  const runRate = mesRow.fact_neta > 0 ? (mesRow.fact_neta / diaHoy) * diasMes : 0;
+  const runRate = enCurso && mesRow.fact_neta > 0 ? (mesRow.fact_neta / diaHoy) * diasMes : 0;
   const runRateYoy = delta(runRate, mesPrev.fact_neta);
 
   const cart = cartera(d.estados);
@@ -188,6 +190,24 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
     return { key: `${a}-${m}`, label: `${MESES[m - 1]}${m === 1 || i === 0 ? ` ${String(a).slice(2)}` : ''}`, fn, c, mc: fn ? (c / fn) * 100 : null, actual: a === anio && m === mesActual };
   });
 
+  // Comparativo mes a mes del año elegido contra el anterior (el director se mueve entre meses desde aquí)
+  const mesesAnio = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const a = agg(d.medidas.filter((r) => N(r.anio) === anio && N(r.mes) === m));
+    const p = agg(d.medidas.filter((r) => N(r.anio) === anio - 1 && N(r.mes) === m));
+    const cuotaM = q.mes(m);
+    const esCurso = enCurso && m === mesActual && modo === 'mes';
+    return { mes: m, label: MESES[i], fn: a.fact_neta, prev: p.fact_neta, cuota: cuotaM || null,
+      yoy: a.fact_neta > 0 ? delta(a.fact_neta, esCurso ? proMes(p.fact_neta) : p.fact_neta) : null,
+      pct: a.fact_neta > 0 ? pctDe(a.fact_neta, cuotaM) : null, mc: a.mc, mcPrev: p.mc, dMc: a.mc != null && p.mc != null ? a.mc - p.mc : null,
+      contribucion: a.contribucion, piezas: a.piezas, conDatos: a.fact_neta !== 0 || a.n > 0, enCurso: esCurso };
+  });
+  const ultimoMesConDatos = mesesAnio.reduce((u, x) => (x.conDatos ? x.mes : u), 0);
+  const anual = agg(d.medidas.filter((r) => N(r.anio) === anio)), anualPrev = agg(d.medidas.filter((r) => N(r.anio) === anio - 1));
+  const comparativo = { meses: mesesAnio, ultimoMesConDatos, anual, anualPrev, yoyAnual: delta(anual.fact_neta, anualPrev.fact_neta), cuotaAnual: q.anual,
+    mesesArriba: mesesAnio.filter((x) => x.yoy != null && x.yoy >= 0).length, mesesConDatos: mesesAnio.filter((x) => x.yoy != null).length,
+    mejor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => b.yoy - a.yoy)[0] || null, peor: mesesAnio.filter((x) => x.yoy != null).sort((a, b) => a.yoy - b.yoy)[0] || null };
+
   // Hero: título y sub por reglas
   const nDec = decision.length;
   const mesL = MESES_LARGO[mesActual - 1];
@@ -195,12 +215,15 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
   let titulo;
   if (modo === 'mes') {
     const margenTxt = sensible ? ` con margen del ${cur.mc != null ? cur.mc.toFixed(1) : '—'} %` : '';
-    titulo = !cur.fact_neta ? `${mesL} aún sin ventas registradas en el ERP. ${fraseDec}`
-      : pctCuota == null ? `${mesL} lleva ${fmtM(cur.fact_neta)}${margenTxt}. ${fraseDec}`
-      : `${mesL} va al ${Math.round(pctCuota)} % de cuota${margenTxt}. ${fraseDec}`;
+    const yoyTxtM = yoy == null ? '' : `, ${Math.abs(yoy).toFixed(0)} % ${yoy >= 0 ? 'arriba' : 'abajo'} de ${MESES[mesActual - 1].toLowerCase()} ${anio - 1}`;
+    const verbo = enCurso ? 'va al' : 'cerró al';
+    titulo = !cur.fact_neta ? `${mesL} ${anio} sin ventas registradas en el ERP.${enCurso ? ` ${fraseDec}` : ''}`
+      : pctCuota == null ? `${mesL} ${anio} ${enCurso ? 'lleva' : 'cerró en'} ${fmtM(cur.fact_neta)}${margenTxt}${yoyTxtM}.${enCurso ? ` ${fraseDec}` : ''}`
+      : `${mesL} ${anio} ${verbo} ${Math.round(pctCuota)} % de cuota${margenTxt}${yoyTxtM}.${enCurso ? ` ${fraseDec}` : ''}`;
   } else {
     const yoyTxt = yoy == null ? '' : `, ${Math.abs(yoy).toFixed(0)} % ${yoy >= 0 ? 'arriba' : 'abajo'} de ${anio - 1}`;
-    titulo = pctCuota == null ? `${anio} lleva ${fmtM(cur.fact_neta)}${yoyTxt}.` : `${anio} va al ${Math.round(pctCuota)} % de la cuota anual${yoyTxt}.`;
+    const cerrado = anio < hoy.getFullYear();
+    titulo = pctCuota == null ? `${anio} ${cerrado ? 'cerró en' : 'lleva'} ${fmtM(cur.fact_neta)}${yoyTxt}.` : `${anio} ${cerrado ? 'cerró al' : 'va al'} ${Math.round(pctCuota)} % de la cuota anual${yoyTxt}.`;
   }
   const sub = [
     cuotaPeriodo > 0 ? `Fact Neta ${fmtM(cur.fact_neta)} de ${fmtM(cuotaPeriodo)} de cuota` : `Fact Neta ${fmtM(cur.fact_neta)} · sin cuota cargada`,
@@ -211,7 +234,7 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
 
   return {
     modo, otroModo, anio, mesActual, mesL, cur, prev, otro, otroPrev, cuota: q, cuotaPeriodo, cuotaOtro, pctCuota, pctOtro, pctAnual, yoy, yoyOtro, yoyUtilidad, yoyLabel, dMc,
-    runRate, runRateYoy, mesRow, mesPrev, cartera: cart, inv, alertas: activas, decision, clientes, canales, totalCanales, serie, titulo, sub,
+    runRate, runRateYoy, mesRow, mesPrev, comparativo, enCurso, cartera: cart, inv, alertas: activas, decision, clientes, canales, totalCanales, serie, titulo, sub,
     agenda: agenda(d, inv, sensible), auditoria: d.auditoria, hayDatos: d.medidas.length > 0, sensible,
   };
 }
