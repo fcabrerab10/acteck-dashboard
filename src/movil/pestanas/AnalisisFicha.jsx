@@ -109,7 +109,7 @@ export default function AnalisisFicha({ clienteNombre, canal, label }) {
       <div style={{ padding: '0 20px 10px' }}><Segmented value={pestana} onChange={setPestana} options={PESTANAS} /></div>
       {error && <Vacio titulo="No se pudo cargar el cliente" sub={error.message} color={theme.red} />}
       {(isLoading || !r) && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><Skeleton h={84} r={12} /><Skeleton h={160} r={12} /><Skeleton h={300} r={12} /></div>}
-      {r && pestana === 'sellin' && <SellInM rows={data.rows} anio={anio} mes={mes} />}
+      {r && pestana === 'sellin' && <SellInM rows={data.rows} anio={anio} mes={mes} clienteNombre={clienteNombre} />}
       {r && pestana === 'sellout' && <SellOutM clienteNombre={clienteNombre} nombre={nombre} anio={anio} />}
       {r && pestana === 'resumen' && (
         <>

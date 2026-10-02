@@ -21,13 +21,74 @@ import FichaProducto from '../../FichaProducto';
 import Cuenta from '../selloutGlobal/Cuenta';
 import { useCuentas, useDias, useMensual, useCuotas, CUENTA_POR_ERP } from '../../../modules/comercial/sellout/datos';
 import { construirFilas, ultimoDiaConVenta, yoy } from '../../../modules/comercial/sellout/calculo';
+import { GraficaLineas, Pill } from '../../../components/kit';
+import { patronMes } from '../../../modules/comercial/analisis/ZoomDiario';
+import { cuotasPorTrimestre } from '../../../modules/comercial/analisis/CuotasTrimestre';
+import { useCuotasClientes, useSellInDia } from '../../../modules/comercial/analisis/useAnalisisData';
+import { mapaCuotas, idxMes } from '../../../modules/comercial/analisis/calc';
+import { pct } from '../../util';
+
+// ── Zoom por día del mes (2026-10-02, mismo motor que la web: patronMes) ──
+function ZoomDiarioM({ titulo, filas, anio, mes, cargando }) {
+  const { theme } = useTheme();
+  const cur = useMemo(() => patronMes(filas, anio, mes), [filas, anio, mes]);
+  const prev = useMemo(() => patronMes(filas, anio - 1, mes), [filas, anio, mes]);
+  const hoy = new Date(); const enCurso = anio === hoy.getFullYear() && mes === hoy.getMonth() + 1; const diaHoy = enCurso ? hoy.getDate() : cur.diasMes;
+  const datos = cur.porDia.map((d, i) => ({ x: String(d.dia), dia: d.dia <= diaHoy ? d.valor : null, acum: d.dia <= diaHoy ? d.acum : null, prev: prev.porDia[i]?.acum ?? null }));
+  const tono = cur.pctUlt5 == null ? 'gray' : cur.pctUlt5 >= 50 ? 'red' : cur.pctUlt5 >= 35 ? 'orange' : 'green';
+  return (
+    <>
+      <TituloSeccionM style={{ margin: '14px 0 0', padding: '0 28px 6px' }} meta={`${MESES[mes - 1]} ${anio}`}>{titulo}</TituloSeccionM>
+      <div style={{ margin: '0 16px', padding: '8px 8px 10px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+        {cargando ? <Skeleton h={120} r={8} /> : (
+          <>
+            <GraficaLineas compacto alto={150} datos={datos} formato={moneyCompact}
+              series={[{ key: 'dia', label: 'Día', tipo: 'principal' }, { key: 'acum', label: 'Acumulado', tipo: 'linea', color: theme.accent }, { key: 'prev', label: `Acum. ${anio - 1}`, tipo: 'anterior' }]} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '8px 6px 0', fontSize: 11.5, color: theme.textMuted, lineHeight: 1.4 }}>
+              {cur.total > 0 ? <><Pill size="xs" tone={tono}>{cur.pctUlt5 >= 50 ? 'Todo al cierre' : cur.pctUlt5 >= 35 ? 'Cargado al cierre' : 'Repartido'}</Pill><span>{pct(cur.pctUlt5, 0)} en los últimos 5 días · {pct(cur.pctMitad, 0)} en la primera quincena · {cur.conVenta} días con venta{cur.pico ? ` · pico día ${cur.pico.dia}` : ''}</span></> : <span>Sin venta registrada en este mes.</span>}
+            </div>
+            {cur.total > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 6, padding: '8px 6px 0' }}>
+              {cur.semanas.map((w) => <div key={w.semana}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: theme.textMuted }}><span>{w.semana === 5 ? '29+' : `S${w.semana}`}</span><span style={{ color: theme.text, fontWeight: 600 }}>{pct(w.pct, 0)}</span></div><div style={{ height: 4, borderRadius: 999, background: `${theme.text}12`, marginTop: 2, overflow: 'hidden' }}><div style={{ height: '100%', width: `${w.pct}%`, background: w.semana >= 4 && w.pct >= 40 ? theme.orange : theme.accent }} /></div></div>)}
+            </div>}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── Cuotas por trimestre (mismo cálculo que la web: cuotasPorTrimestre) ──
+function CuotasTrimestreM({ rows, codigo, anio, mes }) {
+  const { theme } = useTheme();
+  const { data: cuotasRows = [] } = useCuotasClientes(anio);
+  const qs = useMemo(() => {
+    const mensual = new Map();
+    rows.forEach((r) => { const k = idxMes(r.anio, r.mes); const o = mensual.get(k) || { fact_neta: 0 }; o.fact_neta += N(r.monto); mensual.set(k, o); });
+    return cuotasPorTrimestre(mensual, mapaCuotas(cuotasRows), codigo, anio, mes);
+  }, [rows, cuotasRows, codigo, anio, mes]);
+  const logrados = qs.filter((q) => q.logrado === true).length, cerrados = qs.filter((q) => q.cerrado).length;
+  return (
+    <>
+      <TituloSeccionM style={{ margin: '14px 0 0', padding: '0 28px 6px' }} meta={qs.some((q) => q.cuota) ? `${logrados} de ${cerrados} logrados` : 'sin cuota'}>Cuotas por trimestre</TituloSeccionM>
+      <KpiGrid>
+        {qs.map((q) => {
+          const tone = q.pct == null ? 'gray' : q.pct >= 100 ? 'green' : q.pct >= 85 ? 'blue' : q.pct >= 60 ? 'orange' : 'red';
+          return <KpiM key={q.q} eyebrow={`Q${q.q} · ${q.futuro ? 'por venir' : q.enCurso ? 'en curso' : q.logrado ? 'logrado' : 'no logrado'}`} big={q.futuro ? '—' : moneyCompact(q.venta)} sub={q.cuota ? `de ${moneyCompact(q.cuota)}${q.yoy != null && !q.futuro ? ` · ${deltaPct(q.yoy)} vs ${anio - 1}` : ''}` : 'sin cuota'} progress={q.cuota && !q.futuro ? q.pct : undefined} pill={q.cuota && !q.futuro ? { tone, label: `${Math.round(q.pct)}%` } : undefined} />;
+        })}
+      </KpiGrid>
+    </>
+  );
+}
+
 
 const STALE = 5 * 60 * 1000;
 
 // ───────────────────────────── Sell In ─────────────────────────────
-export function SellInM({ rows = [], anio, mes }) {
+export function SellInM({ rows = [], anio, mes, clienteNombre }) {
   const { theme } = useTheme();
   const nav = useNav();
+  const { data: codigo } = useCodigoErp(clienteNombre, anio);
+  const { data: diario = [], isLoading: cargandoDia } = useSellInDia(codigo, anio, !!codigo);
   const [unidad, setUnidad] = useState('monto');
   const [busca, setBusca] = useState('');
   const meses = useMemo(() => ultimosMeses(anio, mes, 12), [anio, mes]);
@@ -62,6 +123,8 @@ export function SellInM({ rows = [], anio, mes }) {
 
   return (
     <>
+      {codigo && <ZoomDiarioM titulo="Sell in por día" filas={diario.map((r) => ({ anio: r.anio, mes: r.mes, dia: r.dia, valor: r.fact_neta }))} anio={anio} mes={mes} cargando={cargandoDia} />}
+      {codigo && <CuotasTrimestreM rows={rows} codigo={codigo} anio={anio} mes={mes} />}
       <TituloSeccionM style={{ margin: '14px 0 0', padding: '0 28px 6px' }} meta={`${porSku.length} SKUs · 12 meses`}>Detalle por SKU</TituloSeccionM>
       <div style={{ padding: '0 16px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
         <CampoBusqueda value={busca} onChange={setBusca} placeholder="SKU o descripción" style={{ flex: 1 }} />
@@ -131,6 +194,7 @@ export function SellOutM({ clienteNombre, nombre, anio }) {
         <KpiM eyebrow="Clientes finales" big={fila.clientesFinales != null ? int(N(fila.clientesFinales)) : '—'} sub={fila.clientesFinales != null ? 'con compra en el mes' : 'la fuente no lo trae'} />
         <KpiM eyebrow="Inventario" big={fila.invValor != null ? `${int(N(act?.inv_piezas))} pz` : '—'} sub={fila.invValor != null ? money(N(fila.invValor)) : 'no reporta'} />
       </KpiGrid>
+      <ZoomDiarioM titulo="Sell out por día" filas={dias.filter((r) => r.cuenta === cuenta).map((r) => ({ anio: r.anio, mes: r.mes, dia: r.dia, valor: r.importe }))} anio={anio} mes={mes} />
       <div style={{ padding: '14px 16px 0' }}>
         <BotonGrande primario icon={ShoppingBag} onClick={() => nav.push(<Cuenta fila={fila} anio={anio} mes={mes} corteDia={corteDia} />, `sellout-cuenta-${cuenta}`)}>Abrir Sell Out completo</BotonGrande>
         <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '8px 4px 0', lineHeight: 1.4, fontFamily: TYPO.fontText }}>SKUs, inventario, sucursales, clientes finales y estados: sólo lo que la fuente de {nombre} alimenta.</div>
