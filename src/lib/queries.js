@@ -60,7 +60,7 @@ async function runLimited(tasks, limit) {
 
 // Motor común. makePage(from, to, withCount) devuelve un builder listo
 // para await. withCount=true sólo en la primera página (count:'exact').
-export async function fetchPaged(makePage, { pageSize = 1000, label = 'query' } = {}) {
+export async function fetchPaged(makePage, { pageSize = 5000, label = 'query' } = {}) {
   const first = await withRetry(() => makePage(0, pageSize - 1, true), `${label} chunk 0`);
   const acc = [...(first.data || [])];
   if (acc.length < pageSize) return acc; // cabía en una página
@@ -153,7 +153,8 @@ function withExactCount(q) {
 }
 
 async function fetchAll(table, select, extra = (q) => q) {
-  const pageSize = HEAVY_TABLES.has(table) ? 500 : 1000;
+  // 2026-10-02: 5000 por página (PostgREST sirve hasta 5000 filas por petición; medido). Menos round-trips web y celular.
+  const pageSize = HEAVY_TABLES.has(table) ? 2000 : 5000;
   const orderCol = orderColFromSelect(select);
   const makePage = (from, to, withCount) => {
     let q = supabase
@@ -173,7 +174,7 @@ async function fetchAll(table, select, extra = (q) => q) {
 //   fetchAllQ(() => supabase.from('t').select('a,b').eq('x', 1), { pageSize, orderCol })
 // La factory NO debe incluir .range(). Si trae .order() se respeta; si no y
 // se pasa orderCol, se añade. Paralelo + cache igual que fetchAll.
-export async function fetchAllQ(qFactory, { pageSize = 1000, orderCol = null, label = 'query' } = {}) {
+export async function fetchAllQ(qFactory, { pageSize = 5000, orderCol = null, label = 'query' } = {}) {
   const makePage = (from, to, withCount) => {
     let q = qFactory();
     if (orderCol) {

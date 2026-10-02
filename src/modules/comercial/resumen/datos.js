@@ -10,13 +10,13 @@ import { CLIENTE_KEYS, anioActual, opcionesPeriodo, finDeMes } from './calculo';
 const VACIO = {
   loading: true,
   ventasMes: [],            // v_fact_cliente_mes · todos los clientes (share vs empresa + tendencia)
-  facturacion: [],          // facturacion_clientes · sólo los 3 (costo por SKU + top SKUs del mes)
+  // 2026-10-02 · agregados en Postgres (migración 20261002_resumen_clientes_agregados.sql) en lugar de bajar
+  // facturacion_clientes / inventario_cliente / sellout_pcel / sellout_sku por SKU y semana (90 consultas, 7 MB):
+  topSkuMes: [],            // mv_resumen_top_sku_mes · top 5 SKUs por piezas de cada (cliente, anio, mes)
+  inventarioSemana: [],     // mv_resumen_inventario_semana · piezas y valor (según la regla de calculo.js) por (cliente, anio, semana)
+  selloutMes: [],           // mv_resumen_sellout_mes · sell out por (cliente, anio, mes) (pcel = estimado)
   cuotas: [],
   creditoConfig: [],
-  selloutSku: [],
-  selloutPcelMensual: [],
-  selloutPcel: [],          // semanal: inventario + costo_promedio por semana (snapshot PCEL)
-  inventarioCliente: [],
   estadosCuenta: [],
   estadosCuentaDetalle: [],
 };
@@ -47,16 +47,13 @@ export function useResumenData() {
     const q = (f, o) => fetchAllQ(f, { pageSize: 5000, label: 'resumen', ...o });
 
     (async () => {
-      const [ventasMes, facturacion, cuotasRes, ccRes, selloutSku, selloutPcelMensual, selloutPcel, inventarioCliente, estadosCuenta] = await Promise.all([
+      const [ventasMes, topSkuMes, inventarioSemana, selloutMes, cuotasRes, ccRes, estadosCuenta] = await Promise.all([
         q(() => supabase.from('v_fact_cliente_mes').select('cliente_key, anio, mes, monto').gte('anio', anioActual - 2), { orderCol: 'cliente_key' }),
-        q(() => supabase.from('facturacion_clientes').select('cliente_key, sku, piezas, monto, anio, mes').in('cliente_key', CLIENTE_KEYS).gte('anio', anioActual - 1)),
+        cachedQuery(supabase.from('mv_resumen_top_sku_mes').select('cliente_key, anio, mes, sku, piezas, posicion')).then((r) => r.data || []),
+        cachedQuery(supabase.from('mv_resumen_inventario_semana').select('cliente, anio, semana, piezas, valor')).then((r) => r.data || []),
+        cachedQuery(supabase.from('mv_resumen_sellout_mes').select('cliente, anio, mes, monto, estimado')).then((r) => r.data || []),
         supabase.from('cuotas_mensuales').select('cliente, mes, anio, cuota_min, cuota_ideal').in('cliente', CLIENTE_KEYS).gte('anio', anioActual - 2),
         supabase.from('clientes_credito_config').select('cliente, plazo_dias_credito, linea_credito_usd').in('cliente', CLIENTE_KEYS),
-        q(() => supabase.from('sellout_sku').select('cliente, anio, mes, monto_pesos').in('cliente', CLIENTE_KEYS).gte('anio', anioActual - 2)),
-        // PCEL: valuación ÚNICA (piezas × precio de lista PCEL PROVISIONAL) desde la vista oficial.
-        q(() => supabase.from('v_sellout_pcel_sku_mes').select('sku, anio, mes, piezas, monto').gte('anio', anioActual - 1)),
-        q(() => supabase.from('sellout_pcel').select('sku, anio, semana, inventario, costo_promedio').gte('anio', anioActual - 1)),
-        q(() => supabase.from('inventario_cliente').select('cliente, sku, stock, valor, costo_convenio, anio, semana').in('cliente', CLIENTE_KEYS).not('anio', 'is', null).gte('anio', anioActual - 1)),
         q(() => supabase.from('estados_cuenta').select('id, cliente, fecha_corte, saldo_actual, saldo_vencido, dso, aging_mas90').in('cliente', CLIENTE_KEYS).gte('fecha_corte', desdeIso)),
       ]);
 
@@ -75,13 +72,9 @@ export function useResumenData() {
       setState({
         loading: false,
         ventasMes: ventasMes || [],
-        facturacion: facturacion || [],
+        topSkuMes, inventarioSemana, selloutMes,
         cuotas: cuotasRes?.data || [],
         creditoConfig: ccRes?.data || [],
-        selloutSku: selloutSku || [],
-        selloutPcelMensual: selloutPcelMensual || [],
-        selloutPcel: selloutPcel || [],
-        inventarioCliente: inventarioCliente || [],
         estadosCuenta: estadosCuenta || [],
         estadosCuentaDetalle: detalle,
       });

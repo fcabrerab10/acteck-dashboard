@@ -45,8 +45,9 @@ function useSOPDatos(enabled) {
         fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),
         fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,embarques,embarques_detalle'),
         fetchAll('v_lead_time_sku', 'sku,dias_promedio,muestras,supplier_principal,familia'),
-        fetchAll('facturacion_clientes', 'sku,cliente_nombre,canal,anio,mes,piezas', (q) => q.gte('anio', anioCorte)),
-        fetchAll('embarques_compras', 'po,codigo,fecha_emision,arribo_cedis,arribo_almacen,eta_puerto,etd,po_qty,shp_qty,contenedor,estatus,supplier,familia,descripcion,unit_price,sn,lt_dias,tipo_carga,tipo_contenedor,cbm_unitario'),
+        // 2026-10-02: 12 meses exactos (antes todo el año anterior: 44 páginas) y 36 meses de embarques.
+        fetchAll('facturacion_clientes', 'sku,cliente_nombre,canal,anio,mes,piezas', (q) => q.or(filtro12m)),
+        fetchAll('embarques_compras', 'po,codigo,fecha_emision,arribo_cedis,arribo_almacen,eta_puerto,po_qty,shp_qty,contenedor,estatus,supplier,familia,descripcion,unit_price,lt_dias,tipo_carga,tipo_contenedor,cbm_unitario'),
         opcional(fetchAll('reporte_skus', 'sku,orden', (q) => q.eq('activo', true))),
         fetchAll('roadmap_sku', 'sku,descripcion,marca,rdmp'),
         opcional(fetchAll('catalogo_articulos', 'articulo,descripcion')),

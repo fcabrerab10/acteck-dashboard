@@ -22,7 +22,8 @@ export default function EquipoComercial({ anio, mes, sensible = false }) {
   const anioPrev = anio - 1;
   const [abierta, setAbierta] = useState(null);
   const [orden, setOrden] = useState({ col: 'ytd', dir: 'desc' });
-  const { data: filasVista = [], isLoading } = useVendedores(anio);
+  const [panelAbierto, setPanelAbierto] = useState(false); // 2026-10-02: los datos se piden al abrir el panel
+  const { data: filasVista = [], isLoading } = useVendedores(anio, panelAbierto);
 
   const filas = useMemo(() => {
     const porVend = new Map();
@@ -86,7 +87,7 @@ export default function EquipoComercial({ anio, mes, sensible = false }) {
   const meta = isLoading ? 'cargando…' : `${MESES_LARGO[mes - 1]} ${fmtMoneyShort(totales.mes)} · YTD ${fmtMoneyShort(totales.ytd)} · ${filas.length} vendedores · ${ETIQUETA.fact_neta}`;
 
   return (
-    <Panel titulo="Equipo comercial" meta={meta} plegable abiertoInicial={false} padding="8px 10px 10px">
+    <Panel titulo="Equipo comercial" meta={panelAbierto ? meta : 'toca para ver vendedores y clientes'} plegable abiertoInicial={false} onToggle={(v) => { if (v) setPanelAbierto(true); }} padding="8px 10px 10px">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontSize: 10.5, color: theme.textMuted }}>
           Vendedor de cada renglón del ERP (<span style={{ fontFamily: TYPO.fontDisplay }}>v_medidas_ventas_vendedor_mes</span>) · fact. neta, piezas y clientes atendidos del mes · Δ YoY sobre el YTD.

@@ -17,10 +17,10 @@ const COLS_VEND = 'anio,mes,vendedor,fact_bruta,devoluciones,rmas,bonificaciones
  * Apoyo comercial del año y del anterior + la fact. bruta que sirve de denominador.
  * `clienteKey` null = consolidado (todos los clientes y canales).
  */
-export function useApoyoComercial(anio, clienteKey = null) {
+export function useApoyoComercial(anio, clienteKey = null, enabled = true) {
   const anios = [anio - 1, anio];
   return useQuery({
-    queryKey: ['sellin', 'apoyo', anios, clienteKey],
+    queryKey: ['sellin', 'apoyo', anios, clienteKey], enabled: !!enabled,
     queryFn: async () => {
       const filas = await fetchAllQ(
         () => { const q = supabase.from('v_bonificaciones_concepto_mes').select(COLS_APOYO).in('anio', anios); return clienteKey ? q.eq('cliente_key', clienteKey) : q; },
@@ -65,10 +65,10 @@ export function useApoyoCliente(codigo, anio, enabled = true) {
 }
 
 /** Medidas del director por vendedor, año en curso y anterior. */
-export function useVendedores(anio) {
+export function useVendedores(anio, enabled = true) {
   const anios = [anio - 1, anio];
   return useQuery({
-    queryKey: ['sellin', 'vendedores', anios],
+    queryKey: ['sellin', 'vendedores', anios], enabled: !!enabled,
     queryFn: () => fetchAllQ(
       () => supabase.from('v_medidas_ventas_vendedor_mes').select(COLS_VEND).in('anio', anios),
       { pageSize: 2000, orderCol: 'anio', label: 'v_medidas_ventas_vendedor_mes' },

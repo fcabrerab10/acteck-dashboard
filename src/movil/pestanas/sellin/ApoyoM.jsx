@@ -13,7 +13,8 @@ import { money, moneyCompact, MESES, MESES_LARGO, N } from '../../util';
 export default function ApoyoM({ anio, mes, clienteKey = null, style }) {
   const { theme } = useTheme();
   const [abierto, setAbierto] = useState(null);
-  const { data, isLoading } = useApoyoComercial(anio, clienteKey);
+  const [pedido, setPedido] = useState(false); // 2026-10-02: en el celular se carga al tocar (≈400 KB)
+  const { data, isLoading } = useApoyoComercial(anio, clienteKey, pedido);
 
   const filas = useMemo(() => agruparApoyo(data?.filas || [], { anio, mes, por: 'concepto', hijo: clienteKey ? 'mes' : 'cliente' }), [data, anio, mes, clienteKey]);
   const tot = useMemo(() => totalesApoyo(data?.filas || [], { anio, mes }), [data, anio, mes]);
@@ -21,6 +22,13 @@ export default function ApoyoM({ anio, mes, clienteKey = null, style }) {
   const pctTot = pctSobre(tot.ytd, fb.ytd);
   const detalle = filas.find((f) => f.key === abierto) || null;
 
+  if (!pedido) {
+    return (
+      <ListaAgrupada titulo="Apoyo comercial" style={{ marginTop: 18, ...style }}>
+        <Fila titulo="Ver bonificaciones del año" sub={`Apoyo comercial de ${anio} por concepto${clienteKey ? '' : ' y cliente'}`} onClick={() => setPedido(true)} />
+      </ListaAgrupada>
+    );
+  }
   if (isLoading) return <div style={{ padding: '18px 16px 0', ...style }}><Skeleton h={160} r={12} /></div>;
 
   return (

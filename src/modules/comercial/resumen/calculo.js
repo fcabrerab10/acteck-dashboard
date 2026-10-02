@@ -113,59 +113,21 @@ export function calcularResumen(clienteKey, data, periodo) {
   const cumplYTDMin = pctDe(siYTD, cuotaYTDMin);
   const cumplYTDIdeal = pctDe(siYTD, cuotaYTDIdeal);
 
-  // Costo promedio por SKU (facturación de los 3 clientes, año del periodo y anterior)
-  const costoPromedioSku = {};
+  // Top SKUs del mes (para el texto de avance) · mv_resumen_top_sku_mes (2026-10-02; antes se agregaba
+  // facturacion_clientes por SKU aquí; misma regla: Σ piezas > 0, top 5).
+  const topSkus = data.topSkuMes.filter((r) => r.cliente_key === clienteKey && N(r.anio) === anio && N(r.mes) === mes)
+    .sort((a, b) => N(a.posicion) - N(b.posicion)).map((r) => ({ sku: r.sku, piezas: N(r.piezas) }));
+
+  // Inventario al corte ≤ fin de mes · mv_resumen_inventario_semana (piezas y valor ya calculados en Postgres con
+  // la regla de siempre: stock × costo promedio del SKU, si no valor, si no stock × costo convenio; PCEL con su
+  // costo_promedio). Aquí sólo se elige la última semana cuyo lunes cae ≤ fin de mes (reloj del navegador).
+  let inventarioValor = 0, inventarioPiezas = 0, inventarioSemana = null;
   {
-    const agg = new Map();
-    for (const r of data.facturacion) {
-      if (r.cliente_key !== clienteKey) continue;
-      const sku = String(r.sku || ''); if (!sku) continue;
-      const cur = agg.get(sku) || { p: 0, m: 0 };
-      cur.p += N(r.piezas); cur.m += N(r.monto); agg.set(sku, cur);
-    }
-    agg.forEach((v, k) => { if (v.p > 0 && v.m > 0) costoPromedioSku[k] = v.m / v.p; });
-  }
-
-  // Top SKUs del mes (para el texto de avance)
-  const topSkus = (() => {
-    const m = new Map();
-    for (const r of data.facturacion) {
-      if (r.cliente_key !== clienteKey || N(r.anio) !== anio || N(r.mes) !== mes) continue;
-      const sku = String(r.sku || ''); if (!sku) continue;
-      m.set(sku, (m.get(sku) || 0) + N(r.piezas));
-    }
-    return [...m.entries()].filter(([, p]) => p > 0).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([sku, piezas]) => ({ sku, piezas }));
-  })();
-
-  // Inventario al corte ≤ fin de mes
-  let inventarioValor = 0, inventarioPiezas = 0, inventarioSemana = null, costoInvPorSku = {};
-  if (clienteKey === 'pcel') {
-    const sem = ultimaSemanaHasta(data.selloutPcel, periodo);
-    if (sem) {
-      const vistos = new Set();
-      for (const r of data.selloutPcel) {
-        if (N(r.anio) !== sem.anio || N(r.semana) !== sem.semana) continue;
-        const sku = String(r.sku || ''); if (!sku || vistos.has(sku)) continue;
-        vistos.add(sku);
-        const stock = N(r.inventario), costo = N(r.costo_promedio);
-        if (costo > 0) costoInvPorSku[sku] = costo;
-        inventarioPiezas += stock;
-        inventarioValor += stock * (costo || costoPromedioSku[sku] || 0);
-      }
-      inventarioSemana = `${sem.anio}-${String(sem.semana).padStart(2, '0')}`;
-    }
-  } else {
-    const inv = data.inventarioCliente.filter((r) => r.cliente === clienteKey);
+    const inv = data.inventarioSemana.filter((r) => r.cliente === clienteKey);
     const sem = ultimaSemanaHasta(inv, periodo);
     if (sem) {
-      for (const r of inv) {
-        if (N(r.anio) !== sem.anio || N(r.semana) !== sem.semana) continue;
-        const sku = String(r.sku || '');
-        const stock = N(r.stock);
-        const cp = costoPromedioSku[sku];
-        inventarioPiezas += stock;
-        inventarioValor += cp != null ? stock * cp : (N(r.valor) > 0 ? N(r.valor) : stock * N(r.costo_convenio));
-      }
+      const fila = inv.find((r) => N(r.anio) === sem.anio && N(r.semana) === sem.semana);
+      inventarioPiezas = N(fila?.piezas); inventarioValor = N(fila?.valor);
       inventarioSemana = `${sem.anio}-${String(sem.semana).padStart(2, '0')}`;
     }
   }
@@ -174,13 +136,9 @@ export function calcularResumen(clienteKey, data, periodo) {
   // PCEL: v_sellout_pcel_sku_mes, la única valuación oficial (piezas × precio de lista),
   // ya calculada en Postgres — antes cada pantalla inventaba la suya (aquí era a costo).
   const selloutEstimado = clienteKey === 'pcel';
-  const soPorMes = new Map(); // `${a}-${m}` → monto
+  const soPorMes = new Map(); // `${a}-${m}` → monto · mv_resumen_sellout_mes (2026-10-02)
   const addSo = (a, m, v) => { const k = `${a}-${m}`; soPorMes.set(k, (soPorMes.get(k) || 0) + v); };
-  if (selloutEstimado) {
-    for (const r of data.selloutPcelMensual) addSo(N(r.anio), N(r.mes), N(r.monto));
-  } else {
-    for (const r of data.selloutSku) if (r.cliente === clienteKey) addSo(N(r.anio), N(r.mes), N(r.monto_pesos));
-  }
+  for (const r of data.selloutMes) if (r.cliente === clienteKey) addSo(N(r.anio), N(r.mes), N(r.monto));
   const soEn = (a, m) => soPorMes.get(`${a}-${m}`) || 0;
   const soMes = soEn(anio, mes);
   const soMesAnt = soEn(anio - 1, mes);

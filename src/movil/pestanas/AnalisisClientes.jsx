@@ -27,7 +27,8 @@ function useAnalisisClientes(anio, mes) {
     queryFn: async () => {
       const anios = [anio - 1, anio];
       const [mesRows, ytdRows, cuotaRows] = await Promise.all([
-        fetchAll('facturacion_clientes', 'cliente_nombre,cliente_key,canal,anio,monto,piezas', (q) => q.in('anio', anios).eq('mes', mes)),
+        // 2026-10-02: mv_analisis_cliente_mes (cliente × mes, misma Fact Neta) en vez de facturacion_clientes por SKU (6 páginas).
+        fetchAll('mv_analisis_cliente_mes', 'cliente_nombre,cliente_key,canal,anio,fact_neta,piezas_venta_neta', (q) => q.in('anio', anios).eq('mes', mes)).then((rows) => rows.map((r) => ({ ...r, monto: r.fact_neta, piezas: r.piezas_venta_neta }))),
         fetchAll('v_vision_factura_clientes', 'anio,canal,cliente_nombre,venta,piezas,meses_activos', (q) => q.in('anio', anios)),
         // Cuota por cliente del ERP (v_cuota_erp_mes). Esta pantalla agrupa por nombre, así que
         // los dos códigos de Ingram caen en la misma fila y sus cuotas se suman igual que su venta.

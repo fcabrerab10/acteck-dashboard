@@ -24,7 +24,8 @@ export default function ApoyoComercial({ anio, mes, clienteKey = null, nombreCli
   const anioPrev = anio - 1;
   const [por, setPor] = useState('concepto');
   const [abierta, setAbierta] = useState(null);
-  const { data, isLoading } = useApoyoComercial(anio, clienteKey);
+  const [panelAbierto, setPanelAbierto] = useState(false); // 2026-10-02: los datos (≈400 KB) se piden al abrir el panel
+  const { data, isLoading } = useApoyoComercial(anio, clienteKey, panelAbierto);
 
   const hijo = clienteKey ? (por === 'cliente' ? 'concepto' : 'mes') : (por === 'concepto' ? 'cliente' : 'concepto');
   const filas = useMemo(() => agruparApoyo(data?.filas || [], { anio, anioPrev, mes, por, hijo }), [data, anio, anioPrev, mes, por, hijo]);
@@ -58,7 +59,7 @@ export default function ApoyoComercial({ anio, mes, clienteKey = null, nombreCli
     : `${MESES_LARGO[mes - 1]} ${fmtMoneyShort(tot.mes)} · YTD ${fmtMoneyShort(tot.ytd)}${pctTot != null ? ` · ${fmtPct(pctTot, 1)} de la fact. bruta` : ''} · ${tot.conceptos} conceptos`;
 
   return (
-    <Panel titulo="Apoyo comercial" meta={meta} plegable abiertoInicial={false} padding="8px 10px 10px"
+    <Panel titulo="Apoyo comercial" meta={panelAbierto ? meta : 'toca para ver las bonificaciones del año'} plegable abiertoInicial={false} onToggle={(v) => { if (v) setPanelAbierto(true); }} padding="8px 10px 10px"
       acciones={!clienteKey ? <Segmented value={por} onChange={(v) => { setPor(v); setAbierta(null); }} options={EJES} /> : null}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontSize: 10.5, color: theme.textMuted }}>
