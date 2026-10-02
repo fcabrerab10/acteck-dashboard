@@ -33,10 +33,12 @@ import QueFaltaComprar from './proyectos/QueFaltaComprar';
 import HojaProyecto from './proyectos/HojaProyecto';
 import HojaSku from './proyectos/HojaSku';
 import Historial from './proyectos/Historial';
+import Forecast from './proyectos/Forecast';
 
 const VISTAS = [
   { id: 'tablero', label: 'Tablero' },
   { id: 'matriz',  label: 'Matriz SKU × mes' },
+  { id: 'forecast', label: 'Forecast' },
   { id: 'historial', label: 'Historial' },
 ];
 const MEDIDAS = [
@@ -228,6 +230,7 @@ export default function ProyectosAbasto({ inicial = null }) {
         </Panel>
       )}
 
+      {vista === 'forecast' && <Forecast yoId={perfil?.id || null} />}
       {vista === 'historial' && <Historial filas={hist.data} cargando={hist.isLoading} />}
 
       {/* Hojas laterales */}
