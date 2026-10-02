@@ -1,5 +1,6 @@
 // PreferenciasNotificaciones — vista ⚙️ dentro del panel del centro.
-// Por área: Segmented Inmediato / Resumen / Silencio. Clientes (pills, vacío =
+// Por tipo de alerta (2026-10-01, estilo Ajustes › Notificaciones de iOS): interruptor encendido/apagado y,
+// encendida, Segmented Inmediato / Resumen. Las apagadas para todos se listan en gris. Clientes (pills, vacío =
 // todos). Hora del resumen (select, sólo horas con cron). Correo del resumen y
 // correo de críticas (toggles iOS). Guardado optimista en perfiles.preferencias.notif
 // vía guardarPreferenciasNotif → store de preferencias (RPC set_preferencias).
@@ -10,16 +11,19 @@ import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { Segmented, Pill, toast } from '../kit';
 import {
-  AREAS, AREA_LABEL, HORAS_RESUMEN, NOMBRE_CLIENTE, usePreferenciasNotif, guardarPreferenciasNotif, normalizarPrefsNotif,
+  AREAS, AREA_LABEL, HORAS_RESUMEN, NOMBRE_CLIENTE, TIPOS_ALERTA, usePreferenciasNotif, guardarPreferenciasNotif, normalizarPrefsNotif,
 } from '../../lib/alertas';
 
 const CLIENTES_PREF = ['digitalife', 'pcel', 'dicotech', 'mayoreo', 'distribuidor', 'e_commerce', 'mostrador'];
-const MODOS = [{ id: 'inmediato', label: 'Inmediato' }, { id: 'resumen', label: 'Resumen' }, { id: 'silencio', label: 'Silencio' }];
+const MODOS = [{ id: 'inmediato', label: 'Inmediato' }, { id: 'resumen', label: 'Resumen' }];
 const AYUDA_MODO = {
-  inmediato: 'Aparece arriba en la campana en cuanto se genera.',
-  resumen: 'Va a la sección "Resumen programado" y al correo diario.',
-  silencio: 'Sólo en la pestaña Silenciadas. Las críticas siempre se muestran.',
+  inmediato: 'Arriba en la campana en cuanto se genera; crítica → correo al momento.',
+  resumen: 'En «Resumen programado» y en el correo diario.',
+  off: 'Apagada: no aparece en la campana ni en los correos.',
 };
+const TIPOS_ACTIVOS = TIPOS_ALERTA.filter((t) => t.def !== 'off');
+const TIPOS_APAGADOS = TIPOS_ALERTA.filter((t) => t.def === 'off');
+const AREAS_CON_TIPOS = AREAS.filter((a) => TIPOS_ACTIVOS.some((t) => t.area === a));
 
 export function ToggleIOS({ on, onChange, label }) {
   const { theme } = useTheme();
@@ -52,7 +56,9 @@ export default function PreferenciasNotificaciones({ onVolver, valor, onGuardar,
     try { if (controlado) await onGuardar?.(normalizarPrefsNotif(next)); else await guardarPreferenciasNotif(next); }
     catch (e) { console.error('prefs notif:', e); toast.error('No se pudieron guardar las preferencias'); if (prefsRemotas) setPrefs(prefsRemotas); }
   };
-  const setArea = (area, modo) => guardar({ ...prefs, areas: { ...prefs.areas, [area]: modo } });
+  const setTipo = (tipo, modo) => guardar({ ...prefs, tipos: { ...prefs.tipos, [tipo]: modo } });
+  const [verApagadas, setVerApagadas] = useState(false);
+  const encendidas = TIPOS_ACTIVOS.filter((t) => prefs.tipos?.[t.tipo] !== 'off').length;
   const toggleCliente = (ck) => {
     const cur = prefs.clientes || [];
     const next = cur.includes(ck) ? cur.filter((x) => x !== ck) : [...cur, ck];
@@ -74,16 +80,41 @@ export default function PreferenciasNotificaciones({ onVolver, valor, onGuardar,
         {isLoading && <span style={{ fontSize: 11, color: theme.textSubtle, marginLeft: 'auto' }}>Cargando…</span>}
       </div>}
 
-      <div style={secTitulo}>Por área</div>
-      {AREAS.map((area, i) => (
-        <div key={area} style={{ ...fila, borderTop: i === 0 ? 'none' : fila.borderTop, alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 10 }}>
-            <span style={lbl}>{AREA_LABEL[area]}</span>
-            <Segmented size="sm" value={prefs.areas[area]} onChange={(m) => setArea(area, m)} options={MODOS} />
-          </div>
-          <span style={sub}>{AYUDA_MODO[prefs.areas[area]]}</span>
+      <div style={{ ...secTitulo, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span>Alertas</span><span style={{ fontWeight: 500, letterSpacing: 0, textTransform: 'none', fontFamily: TYPO.fontText }}>{encendidas} de {TIPOS_ACTIVOS.length} encendidas</span></div>
+      {AREAS_CON_TIPOS.map((area, ai) => (
+        <div key={area}>
+          <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500, padding: ai === 0 ? '2px 16px 4px' : '12px 16px 4px' }}>{AREA_LABEL[area]}</div>
+          {TIPOS_ACTIVOS.filter((t) => t.area === area).map((t) => {
+            const modo = prefs.tipos?.[t.tipo] || t.def;
+            const on = modo !== 'off';
+            return (
+              <div key={t.tipo} style={{ ...fila, alignItems: 'center', opacity: on ? 1 : 0.6, transition: `opacity ${DUR.state}ms ${EASE}` }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={lbl}>{t.label}</div>
+                  <div style={sub}>{on ? t.sub : AYUDA_MODO.off}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  {on && <Segmented size="sm" value={modo} onChange={(m) => setTipo(t.tipo, m)} options={MODOS} />}
+                  <ToggleIOS on={on} label={t.label} onChange={(v) => setTipo(t.tipo, v ? t.def === 'off' ? 'resumen' : t.def : 'off')} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       ))}
+      <div style={{ padding: '8px 16px 2px', fontSize: 11, color: theme.textSubtle }}>Inmediato: {AYUDA_MODO.inmediato} Resumen: {AYUDA_MODO.resumen}</div>
+
+      <div style={{ ...secTitulo, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span>Apagadas para todos</span>
+        <button type="button" onClick={() => setVerApagadas((v) => !v)} style={{ border: 0, background: 'transparent', color: theme.accent || '#007AFF', fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 500, cursor: 'pointer', padding: 0, textTransform: 'none', letterSpacing: 0 }}>{verApagadas ? 'Ocultar' : `Ver ${TIPOS_APAGADOS.length}`}</button>
+      </div>
+      {verApagadas && TIPOS_APAGADOS.map((t) => (
+        <div key={t.tipo} style={{ ...fila, opacity: 0.55 }}>
+          <div style={{ minWidth: 0, flex: 1 }}><div style={lbl}>{t.label}</div><div style={sub}>{t.sub}</div></div>
+          <Pill tone="gray" size="xs">apagada</Pill>
+        </div>
+      ))}
+      {!verApagadas && <div style={{ padding: '0 16px 6px', fontSize: 11, color: theme.textSubtle }}>Fernando las apagó para todo el equipo (stock vs tránsito, cuota en riesgo, devoluciones, pedidos, equipo inactivo…). El sistema ya no las genera.</div>}
 
       <div style={secTitulo}>Clientes</div>
       <div style={{ padding: '2px 16px 10px' }}>

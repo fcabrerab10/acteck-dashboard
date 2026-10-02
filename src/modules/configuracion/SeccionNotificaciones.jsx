@@ -6,15 +6,16 @@ import React, { useState } from 'react';
 import { Pencil, Mail } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { AREAS, AREA_LABEL, NOMBRE_CLIENTE, normalizarPrefsNotif } from '../../lib/alertas';
+import { TIPOS_ALERTA, NOMBRE_CLIENTE, normalizarPrefsNotif } from '../../lib/alertas';
 import { AvatarImg } from '../../lib/avatar';
 import { Panel, Pill, Boton, toast } from '../../components/kit';
 import { HojaLateral, hairline } from '../../components/perfil/comun';
 import PreferenciasNotificaciones from '../../components/notificaciones/PreferenciasNotificaciones';
 import { tipoDe, estadoDe } from './comun';
 
-const MODO_TONE = { inmediato: 'blue', resumen: 'gray', silencio: 'orange' };
-const MODO_LABEL = { inmediato: 'Inmediato', resumen: 'Resumen', silencio: 'Silencio' };
+const MODO_TONE = { inmediato: 'blue', resumen: 'gray', off: 'orange' };
+const MODO_LABEL = { inmediato: 'Inmediato', resumen: 'Resumen', off: 'Apagada' };
+const TIPOS_ACTIVOS = TIPOS_ALERTA.filter((t) => t.def !== 'off');
 
 // Destinatarios de los recordatorios del cron (api/cron.js). Se cambian en Vercel → Environment Variables.
 const RECORDATORIOS = [
@@ -87,7 +88,7 @@ function FilaPrefs({ u, primera, onEditar }) {
       </div>
       <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {AREAS.map((a) => <Pill key={a} tone={MODO_TONE[p.areas[a]]} size="xs" title={`${AREA_LABEL[a]}: ${MODO_LABEL[p.areas[a]]}`}>{AREA_LABEL[a]} · {MODO_LABEL[p.areas[a]]}</Pill>)}
+          {TIPOS_ACTIVOS.map((t) => { const m = p.tipos?.[t.tipo] || t.def; return <Pill key={t.tipo} tone={MODO_TONE[m]} size="xs" title={`${t.label}: ${MODO_LABEL[m]}`}>{t.label} · {MODO_LABEL[m]}</Pill>; })}
         </div>
         <div style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
           Resumen a las {p.resumen.hora} · correo del resumen {p.resumen.correo ? 'sí' : 'no'} · críticas por correo {p.criticas_correo ? 'sí' : 'no'} · {p.clientes ? `sólo ${p.clientes.map((c) => NOMBRE_CLIENTE[c] || c).join(', ')}` : 'todos los clientes'}

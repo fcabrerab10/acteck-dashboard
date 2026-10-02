@@ -22,6 +22,54 @@ export const AREA_LABEL = { agenda: 'Agenda', inventario: 'Inventario', ventas: 
 // Agenda (V3): agenda_vencida · agenda_hoy · agenda_asignado van dirigidas a una persona (alertas.para_usuario).
 const AREA_POR_TIPO = { arribo_proximo_proyecto: 'forecast', arribo_hoy_proyecto: 'forecast', agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', reserva_3dias: 'forecast', reserva_dia: 'forecast', proyecto_sin_cobertura: 'forecast', arribo_tarde_proyecto: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking', equipo_inactivo: 'equipo', pago_por_solicitar: 'pagos', pago_sin_autorizar_5d: 'pagos', pago_sin_folio: 'pagos', pago_vence_7d: 'pagos', fondo_negativo: 'pagos' };
 export const MODOS_AREA = ['inmediato', 'resumen', 'silencio'];
+
+// ─── Catálogo de tipos (2026-10-01, Fernando: «como las notificaciones de un iPhone: encender y apagar cada
+// alerta y decidir cómo se muestra»). Cada tipo tiene etiqueta, área, modo por defecto y si va dirigida a
+// una persona. `TIPOS_DESACTIVADOS` son los que Fernando apagó para TODOS y el cron ya no genera
+// (stock vs tránsito, cuota en riesgo, devoluciones, equipo inactivo, factura sin OC, backorder, OC…).
+// Mantener en espejo con api/cron.js (TIPOS_DESACTIVADOS y prefsNotif).
+export const MODOS_TIPO = ['inmediato', 'resumen', 'off'];
+export const TIPOS_ALERTA = [
+  { tipo: 'agenda_vencida',        label: 'Pendientes vencidos',           area: 'agenda',  def: 'inmediato', sub: 'Tus pendientes de la Agenda que pasaron su fecha.' },
+  { tipo: 'agenda_hoy',            label: 'Agenda del día',                area: 'agenda',  def: 'inmediato', sub: 'Lo que tienes para hoy: pendientes y reuniones.' },
+  { tipo: 'agenda_asignado',       label: 'Pendiente asignado',            area: 'agenda',  def: 'inmediato', sub: 'Alguien te asignó un pendiente.' },
+  { tipo: 'cuenta_seguimiento',    label: 'Cuenta sin seguimiento',        area: 'agenda',  def: 'inmediato', sub: 'Una cuenta que sigues pasó su fecha de contacto.' },
+  { tipo: 'datos_sin_actualizar',  label: 'Datos sin actualizar',          area: 'datos',   def: 'resumen',   sub: 'Una fuente lleva más días sin cargarse que su cadencia.' },
+  { tipo: 'rebate_por_generar',    label: 'Rebate por generar',            area: 'pagos',   def: 'resumen',   sub: 'Cerró el mes y falta calcular el rebate del cliente.' },
+  { tipo: 'pago_por_solicitar',    label: 'Pago calculado sin solicitar',  area: 'pagos',   def: 'resumen',   sub: 'Hay un pago calculado que nadie ha solicitado.' },
+  { tipo: 'pago_sin_autorizar_5d', label: 'Solicitud sin autorizar',       area: 'pagos',   def: 'resumen',   sub: 'Una solicitud lleva 5 días sin autorización.' },
+  { tipo: 'pago_sin_folio',        label: 'Autorizado sin folio',          area: 'pagos',   def: 'resumen',   sub: 'Finanzas aún no asigna folio a un pago autorizado.' },
+  { tipo: 'fondo_negativo',        label: 'Fondo en negativo',             area: 'pagos',   def: 'resumen',   sub: 'Un fondo de marketing o promociones quedó en saldo negativo.' },
+  { tipo: 'arribo_proximo_proyecto', label: 'Arribo de proyecto en 3 días', area: 'forecast', def: 'resumen', sub: 'Un embarque reservado para un proyecto llega en 3 días hábiles.' },
+  { tipo: 'arribo_hoy_proyecto',   label: 'Arribo de proyecto hoy',        area: 'forecast', def: 'inmediato', sub: 'Hoy llega el embarque de un proyecto.' },
+  { tipo: 'arribo_tarde_proyecto', label: 'Arribo tarde para proyecto',    area: 'forecast', def: 'resumen',  sub: 'El embarque llega después del mes del proyecto.' },
+  // Apagadas para todos (no se generan):
+  { tipo: 'stock_vs_transito',     label: 'Stock vs tránsito',             area: 'inventario', def: 'off', sub: 'SKU sin stock para cubrir el ritmo hasta el próximo arribo.' },
+  { tipo: 'cuota_en_riesgo',       label: 'Cuota en riesgo',               area: 'ventas',  def: 'off', sub: 'El cliente va por debajo del ritmo de su cuota.' },
+  { tipo: 'devoluciones_anormales', label: 'Devoluciones anormales',       area: 'ventas',  def: 'off', sub: 'Las devoluciones del mes superan lo normal.' },
+  { tipo: 'proyecto_sin_cobertura', label: 'Proyecto sin cobertura',       area: 'forecast', def: 'off', sub: 'Faltan piezas para un proyecto del mes.' },
+  { tipo: 'oc_detenida',           label: 'Pedido detenido',               area: 'tracking', def: 'off', sub: 'Un pedido lleva más de 3 días sin avanzar de etapa.' },
+  { tipo: 'oc_backorder_sin_po',   label: 'Backorder sin PO',              area: 'tracking', def: 'off', sub: 'Un SKU en backorder no tiene compra en camino.' },
+  { tipo: 'factura_sin_oc',        label: 'Factura sin pedido',            area: 'tracking', def: 'off', sub: 'Una factura del ERP no está ligada a ningún pedido.' },
+  { tipo: 'oc_sin_actualizar',     label: 'Órdenes sin actualizar',        area: 'operacion', def: 'off', sub: 'La carga de órdenes de compra está atrasada.' },
+  { tipo: 'pago_vence_7d',         label: 'Pago por vencer',               area: 'pagos',   def: 'off', sub: 'Un pago programado vence en 7 días o ya venció.' },
+  { tipo: 'equipo_inactivo',       label: 'Equipo inactivo',               area: 'equipo',  def: 'off', sub: 'Alguien del equipo lleva días sin entrar al dashboard.' },
+  { tipo: 'reserva_3dias',         label: 'Reserva: arribo en 3 días',     area: 'forecast', def: 'off', sub: 'Forecast viejo (reservas).' },
+  { tipo: 'reserva_dia',           label: 'Reserva: arribo hoy',           area: 'forecast', def: 'off', sub: 'Forecast viejo (reservas).' },
+];
+export const TIPO_INFO = Object.fromEntries(TIPOS_ALERTA.map((t) => [t.tipo, t]));
+export const TIPOS_DESACTIVADOS = new Set(TIPOS_ALERTA.filter((t) => t.def === 'off').map((t) => t.tipo));
+/** Modo efectivo de una alerta para unas preferencias: 'inmediato' | 'resumen' | 'off'. */
+export function modoDe(a, prefs) {
+  const tipo = a?.tipo;
+  if (TIPOS_DESACTIVADOS.has(tipo)) return 'off';
+  const m = prefs?.tipos?.[tipo];
+  if (MODOS_TIPO.includes(m)) return m;
+  const porArea = prefs?.areas?.[areaAlerta(a)];
+  if (porArea === 'silencio') return 'off';
+  if (porArea === 'inmediato') return 'inmediato';
+  return TIPO_INFO[tipo]?.def || 'resumen';
+}
 export const HORAS_RESUMEN = ['09:00', '13:00', '18:00'];  // horas con cron en vercel.json (15:00 / 19:00 / 00:00 UTC)
 export const NOMBRE_CLIENTE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech', mayoreo: 'Mayoreo', distribuidor: 'Distribuidor', e_commerce: 'E-commerce', mostrador: 'Mostrador', retail_propios: 'Retail propios', retail_representados: 'Retail rep.', otros: 'Otros' };
 
@@ -153,7 +201,8 @@ export function useAlertas({ clienteKey = null, enabled = true } = {}) {
     refetchOnWindowFocus: true,
     enabled,
   });
-  const data = useMemo(() => (q.data ? filtrarAlertasPorPerfil(q.data, perfil) : q.data), [q.data, perfil]);
+  // Los tipos apagados para todos nunca llegan a la app (aunque queden filas viejas sin resolver).
+  const data = useMemo(() => (q.data ? filtrarAlertasPorPerfil(q.data, perfil).filter((a) => !TIPOS_DESACTIVADOS.has(a.tipo)) : q.data), [q.data, perfil]);
   return { ...q, data };
 }
 
@@ -265,6 +314,7 @@ export async function marcarLeidas(ids) {
 // ─── Preferencias (perfiles.preferencias.notif) ───
 export const PREFS_NOTIF_DEFAULT = Object.freeze({
   areas: Object.freeze(Object.fromEntries(AREAS.map((a) => [a, 'resumen']))),
+  tipos: Object.freeze(Object.fromEntries(TIPOS_ALERTA.map((t) => [t.tipo, t.def]))),
   clientes: null,
   resumen: Object.freeze({ hora: '13:00', correo: true }),
   criticas_correo: true,
@@ -274,8 +324,18 @@ export function normalizarPrefsNotif(n) {
   n = n && typeof n === 'object' ? n : {};
   const areas = {};
   for (const a of AREAS) areas[a] = MODOS_AREA.includes(n.areas?.[a]) ? n.areas[a] : 'resumen';
+  // Por tipo: lo guardado; si no hay, se hereda del área (silencio → off, inmediato → inmediato) o del default del catálogo.
+  const tipos = {};
+  for (const t of TIPOS_ALERTA) {
+    if (t.def === 'off') { tipos[t.tipo] = 'off'; continue; }
+    const g = n.tipos?.[t.tipo];
+    if (MODOS_TIPO.includes(g)) { tipos[t.tipo] = g; continue; }
+    const pa = n.areas?.[t.area];
+    tipos[t.tipo] = pa === 'silencio' ? 'off' : pa === 'inmediato' ? 'inmediato' : t.def;
+  }
   return {
     areas,
+    tipos,
     clientes: Array.isArray(n.clientes) && n.clientes.length ? n.clientes.slice() : null,
     resumen: { hora: n.resumen?.hora || '13:00', correo: n.resumen?.correo !== false },
     criticas_correo: n.criticas_correo !== false,

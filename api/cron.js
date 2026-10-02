@@ -1477,6 +1477,12 @@ async function reglaEquipoInactivo(hoy) {
 // ═══ /equipo_inactivo ═══════════════════════════════════════════════════════════
 
 export { taskResumenProgramado, enviarCriticasNuevas, taskAgendaHoy, taskAgendaCorreo };
+// Tipos apagados para todos (Fernando, 2026-10-01): el cron no los genera y resuelve los que queden vivos.
+// Espejo de TIPOS_DESACTIVADOS en src/lib/alertas.js.
+const TIPOS_DESACTIVADOS = new Set(['stock_vs_transito', 'cuota_en_riesgo', 'devoluciones_anormales', 'proyecto_sin_cobertura', 'oc_detenida', 'oc_backorder_sin_po', 'factura_sin_oc', 'oc_sin_actualizar', 'pago_vence_7d', 'equipo_inactivo', 'reserva_3dias', 'reserva_dia']);
+// Modo por defecto de cada tipo cuando la persona no lo ha configurado (espejo de TIPOS_ALERTA.def).
+const TIPO_DEF = { agenda_vencida: 'inmediato', agenda_hoy: 'inmediato', agenda_asignado: 'inmediato', cuenta_seguimiento: 'inmediato', datos_sin_actualizar: 'resumen', rebate_por_generar: 'resumen', pago_por_solicitar: 'resumen', pago_sin_autorizar_5d: 'resumen', pago_sin_folio: 'resumen', fondo_negativo: 'resumen', arribo_proximo_proyecto: 'resumen', arribo_hoy_proyecto: 'inmediato', arribo_tarde_proyecto: 'resumen' };
+
 export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
   const REGLAS = [
@@ -1507,10 +1513,11 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const errores = [];
   const tiposEvaluados = new Set();
   const candidatas = [];
-  const settled = await Promise.allSettled(REGLAS.map(([, fn]) => fn()));
+  const settled = await Promise.allSettled(REGLAS.map(([tipo, fn]) => (TIPOS_DESACTIVADOS.has(tipo) ? Promise.resolve([]) : fn())));
   settled.forEach((r, i) => {
     const tipo = REGLAS[i][0];
-    if (r.status === 'fulfilled') { tiposEvaluados.add(tipo); candidatas.push(...r.value); }
+    // Las apagadas cuentan como evaluadas sin candidatas: lo vivo de ese tipo se resuelve como 'sistema'.
+    if (r.status === 'fulfilled') { tiposEvaluados.add(tipo); candidatas.push(...r.value.filter((a) => !TIPOS_DESACTIVADOS.has(a.tipo))); }
     else errores.push({ tipo, error: String(r.reason?.message || r.reason).slice(0, 300) });
   });
 
@@ -1633,15 +1640,31 @@ function prefsNotif(perfil) {
   const n = perfil?.preferencias?.notif || {};
   const areas = {};
   for (const a of AREAS_NOTIF) areas[a] = ['inmediato', 'resumen', 'silencio'].includes(n.areas?.[a]) ? n.areas[a] : 'resumen';
+  const tipos = {};
+  for (const [tipo, def] of Object.entries(TIPO_DEF)) {
+    const g = n.tipos?.[tipo];
+    if (['inmediato', 'resumen', 'off'].includes(g)) { tipos[tipo] = g; continue; }
+    const pa = n.areas?.[areaDe({ tipo })];
+    tipos[tipo] = pa === 'silencio' ? 'off' : pa === 'inmediato' ? 'inmediato' : def;
+  }
   return {
     areas,
+    tipos,
     clientes: Array.isArray(n.clientes) && n.clientes.length ? n.clientes : null,
     resumen: { hora: n.resumen?.hora || '13:00', correo: n.resumen?.correo !== false },
     criticas_correo: n.criticas_correo !== false,
   };
 }
-const areaDe = (a) => a.area || ({ agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', cuenta_seguimiento: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion' })[a.tipo] || 'operacion';
+const areaDe = (a) => a.area || ({ agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', cuenta_seguimiento: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', pago_por_solicitar: 'pagos', pago_sin_autorizar_5d: 'pagos', pago_sin_folio: 'pagos', pago_vence_7d: 'pagos', fondo_negativo: 'pagos', arribo_proximo_proyecto: 'forecast', arribo_hoy_proyecto: 'forecast', arribo_tarde_proyecto: 'forecast', proyecto_sin_cobertura: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking', equipo_inactivo: 'equipo' })[a.tipo] || 'operacion';
 const aplicaCliente = (a, prefs) => !prefs.clientes || !a.cliente_key || prefs.clientes.includes(a.cliente_key);
+/** Modo efectivo de una alerta para una persona: 'inmediato' | 'resumen' | 'off'. */
+const modoDe = (a, prefs) => {
+  if (TIPOS_DESACTIVADOS.has(a.tipo)) return 'off';
+  const m = prefs.tipos?.[a.tipo];
+  if (m) return m;
+  const pa = prefs.areas?.[areaDe(a)];
+  return pa === 'silencio' ? 'off' : pa === 'inmediato' ? 'inmediato' : 'resumen';
+};
 // Alertas dirigidas (Agenda): sólo a su destinatario.
 const aplicaPersona = (a, p) => !a.para_usuario || a.para_usuario === p.user_id;
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1727,7 +1750,7 @@ async function enviarCriticasNuevas({ dryRun = esDryRun() } = {}) {
   for (const p of perfiles) {
     const prefs = prefsNotif(p);
     if (!prefs.criticas_correo) continue;
-    const mias = nuevas.filter((a) => prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
+    const mias = nuevas.filter((a) => modoDe(a, prefs) !== 'off' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
     if (!mias.length) continue;
     mias.forEach((a) => alcanzadas.add(a.id));
     const porArea = new Map();
@@ -1770,9 +1793,9 @@ async function taskResumenProgramado({ dryRun = esDryRun(), hora = null } = {}) 
     if (!prefs.resumen.correo) { omitidos.push({ to: p.email, motivo: 'resumen.correo = false' }); continue; }
     const horaPref = Number(String(prefs.resumen.hora).split(':')[0]);
     if (Number.isFinite(horaPref) && horaPref !== horaCDMX) { omitidos.push({ to: p.email, motivo: `hora ${prefs.resumen.hora} ≠ ${horaCDMX}:00` }); continue; }
-    const mias = activas.filter((a) => a.severidad !== 'critica' && prefs.areas[areaDe(a)] === 'resumen' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
-    const criticasPend = activas.filter((a) => a.severidad === 'critica' && prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
-    const resueltas = resueltasSolas.filter((a) => prefs.areas[areaDe(a)] !== 'silencio' && aplicaCliente(a, prefs));
+    const mias = activas.filter((a) => a.severidad !== 'critica' && modoDe(a, prefs) === 'resumen' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
+    const criticasPend = activas.filter((a) => a.severidad === 'critica' && modoDe(a, prefs) !== 'off' && aplicaCliente(a, prefs) && aplicaPersona(a, p));
+    const resueltas = resueltasSolas.filter((a) => modoDe(a, prefs) !== 'off' && aplicaCliente(a, prefs));
     if (!mias.length && !resueltas.length && !criticasPend.length) { omitidos.push({ to: p.email, motivo: 'sin alertas para su configuración' }); continue; }
 
     const porArea = new Map();

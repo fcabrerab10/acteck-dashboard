@@ -10,12 +10,12 @@
 //     total        → alertas activas visibles (según preferencias)
 import { useMemo } from 'react';
 import {
-  useAlertas, useNoLeidas, usePreferenciasNotif, agruparPorArea, areaAlerta, aplicaCliente,
+  useAlertas, useNoLeidas, usePreferenciasNotif, agruparPorArea, modoDe, aplicaCliente,
 } from '../../lib/alertas';
 
 export function visiblesSegunPrefs(alertas, prefs) {
   if (!prefs) return alertas || [];
-  return (alertas || []).filter((a) => prefs.areas?.[areaAlerta(a)] !== 'silencio' && aplicaCliente(a, prefs));
+  return (alertas || []).filter((a) => modoDe(a, prefs) !== 'off' && aplicaCliente(a, prefs));
 }
 
 export default function useContadorNotificaciones({ enabled = true } = {}) {

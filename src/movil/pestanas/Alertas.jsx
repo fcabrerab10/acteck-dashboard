@@ -10,7 +10,7 @@ import { EASE, DUR, reduceMotion } from '../../lib/motion';
 import { supabase } from '../../lib/supabase';
 import {
   useAlertas, useAlertasPospuestas, useNoLeidas, usePreferenciasNotif, resolverAlerta, posponerAlerta, marcarLeidas,
-  ejecutarAccion, accionAlerta, agruparPorArea, areaAlerta, aplicaCliente, esNueva, SEV_LABEL,
+  ejecutarAccion, accionAlerta, agruparPorArea, areaAlerta, aplicaCliente, esNueva, SEV_LABEL, modoDe,
 } from '../../lib/alertas';
 import { colorSev, horaRelativa } from '../../components/notificaciones/Pila';
 import { completarItem } from '../../modules/agenda/datos';
@@ -45,7 +45,7 @@ export default function Alertas() {
     const inm = [], res = [], sil = [];
     for (const a of activas) {
       if (!aplicaCliente(a, prefs)) continue;
-      const modo = prefs?.areas?.[areaAlerta(a)] || 'resumen';
+      const modo = modoDe(a, prefs);
       if (a.severidad === 'critica' || modo === 'inmediato') inm.push(a);
       else if (modo === 'resumen') res.push(a);
       else sil.push(a);

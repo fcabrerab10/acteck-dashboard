@@ -20,7 +20,7 @@ import { Segmented } from '../kit';
 import { supabase } from '../../lib/supabase';
 import {
   useAlertas, useAlertasPospuestas, useNoLeidas, usePreferenciasNotif,
-  resolverAlerta, posponerAlerta, marcarLeidas, ejecutarAccion, agruparPorArea, areaAlerta, aplicaCliente, esNueva,
+  resolverAlerta, posponerAlerta, marcarLeidas, ejecutarAccion, agruparPorArea, areaAlerta, aplicaCliente, esNueva, modoDe as modoTipo,
 } from '../../lib/alertas';
 import Pila from './Pila';
 import useContadorNotificaciones from './useContadorNotificaciones';
@@ -75,7 +75,7 @@ const CuerpoNotificaciones = forwardRef(function CuerpoNotificaciones({ onNavega
   // ─── Clasificación ───
   const hoyIso = useMemo(() => inicioHoyCDMX(), []);
   const activas = useMemo(() => alertas.filter((a) => !ocultas.has(a.id)), [alertas, ocultas]);
-  const modoDe = (a) => prefs?.areas?.[areaAlerta(a)] || 'resumen';
+  const modoDe = (a) => modoTipo(a, prefs);
   const enAlcance = (a) => aplicaCliente(a, prefs);
 
   const { inmediatas, resumen, silenciadas } = useMemo(() => {

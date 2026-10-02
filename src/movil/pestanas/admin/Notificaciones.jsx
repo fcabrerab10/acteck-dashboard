@@ -7,20 +7,21 @@ import { BellOff } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { AvatarImg } from '../../../lib/avatar';
-import { AREAS, AREA_LABEL, NOMBRE_CLIENTE, normalizarPrefsNotif } from '../../../lib/alertas';
+import { TIPOS_ALERTA, NOMBRE_CLIENTE, normalizarPrefsNotif } from '../../../lib/alertas';
 import PreferenciasNotificaciones from '../../../components/notificaciones/PreferenciasNotificaciones';
 import { tipoDe, estadoDe } from '../../../modules/configuracion/comun';
 import { useUsuariosAdmin } from '../../../modules/configuracion/useAdminData';
 import { useNav } from '../../nav';
 import { TituloGrande, ListaAgrupada, Fila, Cabecera, Vacio, toast } from '../../piezas';
 
-/** "Inventario y Cobranza al momento · Ventas en silencio · resumen 09:00" */
+/** "5 al momento · 3 apagadas · resumen 09:00" */
 function resumirPrefs(p) {
-  const inmediatas = AREAS.filter((a) => p.areas[a] === 'inmediato').map((a) => AREA_LABEL[a]);
-  const silencio = AREAS.filter((a) => p.areas[a] === 'silencio').map((a) => AREA_LABEL[a]);
+  const activos = TIPOS_ALERTA.filter((t) => t.def !== 'off');
+  const inm = activos.filter((t) => (p.tipos?.[t.tipo] || t.def) === 'inmediato').length;
+  const off = activos.filter((t) => p.tipos?.[t.tipo] === 'off').length;
   const partes = [];
-  if (inmediatas.length) partes.push(`${inmediatas.join(', ')} al momento`);
-  if (silencio.length) partes.push(`${silencio.join(', ')} en silencio`);
+  if (inm) partes.push(`${inm} al momento`);
+  if (off) partes.push(`${off} apagada${off === 1 ? '' : 's'}`);
   if (!partes.length) partes.push('todo en resumen');
   partes.push(`resumen ${p.resumen.hora}`);
   if (p.resumen.correo) partes.push('correo sí');
