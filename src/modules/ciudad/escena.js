@@ -14,7 +14,7 @@ const PAL = {
 };
 const ACC = { azul: 0x0A84FF, verde: 0x30D158, naranja: 0xFF9F0A, rojo: 0xFF453A, morado: 0xBF5AF2, gris: 0x8E8E93 };
 
-export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   let P = noche ? PAL.noche : PAL.dia;
@@ -263,6 +263,10 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false, 
   let viva = true; let ultimo = performance.now(); let tiempo = 0; let hovPrev = null;
   function frame(now) {
     if (!viva) return;
+    try { paso(now); } catch (e) { viva = false; console.error('[ciudad] frame', e); onError?.(e); return; }
+    requestAnimationFrame(frame);
+  }
+  function paso(now) {
     const dt = Math.min(.05, (now - ultimo) / 1000); ultimo = now; tiempo += dt;
     const v = 60 * dt * (vista.zoom / 34); const fw = { x: -Math.cos(vista.ang), z: -Math.sin(vista.ang) }; const rt = { x: -Math.sin(vista.ang), z: Math.cos(vista.ang) }; if (teclas.w || teclas.arrowup) { vista.cxObj += fw.x * v; vista.czObj += fw.z * v; } if (teclas.s || teclas.arrowdown) { vista.cxObj -= fw.x * v; vista.czObj -= fw.z * v; } if (teclas.d || teclas.arrowright) { vista.cxObj += rt.x * v; vista.czObj += rt.z * v; } if (teclas.a || teclas.arrowleft) { vista.cxObj -= rt.x * v; vista.czObj -= rt.z * v; }
     if (!drag && (Math.abs(inercia.x) + Math.abs(inercia.z)) > .01) { vista.cxObj += inercia.x; vista.czObj += inercia.z; inercia.x *= .9; inercia.z *= .9; }
@@ -275,7 +279,6 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false, 
     if (hov !== hovPrev) { hovPrev = hov; canvas.style.cursor = hov ? 'pointer' : 'grab'; }
     if (onHover) { if (hov) { const p = new THREE.Vector3(); hov.getWorldPosition(p); p.y += (hov.geometry?.parameters?.height || 1) + 1.2; const sp = p.project(cam); const r = canvas.getBoundingClientRect(); onHover(hov.userData.tag, { x: r.left + (sp.x + 1) / 2 * r.width, y: r.top + (1 - sp.y) / 2 * r.height }); } else onHover(null); }
     R.render(scene, cam);
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);

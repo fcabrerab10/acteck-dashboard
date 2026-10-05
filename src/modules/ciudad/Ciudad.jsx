@@ -45,7 +45,7 @@ export default function Ciudad({ onNavegar }) {
       if (!vivo) return;
       try {
         escenaRef.current = crearEscena(canvasRef.current, modelo, {
-          oscuro, clima,
+          oscuro, clima, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
           onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
           onClick: (tag) => setSel(tag),
         });
@@ -80,7 +80,7 @@ export default function Ciudad({ onNavegar }) {
     <div style={{ position: 'relative', height: 'calc(100vh - 92px)', minHeight: 520, borderRadius: 14, overflow: 'hidden', border: `1px solid ${theme.border}`, background: oscuro ? '#121722' : '#EAF2F7' }}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', opacity: listo ? 1 : 0, transition: 'opacity 600ms cubic-bezier(.32,.72,0,1)' }} />
       {!listo && !fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 13 }}>Dibujando la ciudad…</div>}
-      {fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 24 }}><pre style={{ ...card, padding: 16, maxWidth: 720, whiteSpace: 'pre-wrap', fontSize: 12, color: theme.red }}>No se pudo dibujar la ciudad:\n{fallo}</pre></div>}
+      {fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 24, zIndex: 9 }}><pre style={{ ...card, padding: 16, maxWidth: 720, whiteSpace: 'pre-wrap', fontSize: 12, color: theme.red }}>No se pudo dibujar la ciudad:\n{fallo}</pre></div>}
       {/* cabecera */}
       <div style={{ position: 'absolute', left: 14, top: 12, display: 'flex', gap: 8, alignItems: 'center', zIndex: 3 }}>
         <div style={{ ...card, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
