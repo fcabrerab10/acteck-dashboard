@@ -26,20 +26,23 @@ export default function Ciudad({ onNavegar }) {
   const [sel, setSel] = useState(null);
   const [busca, setBusca] = useState('');
   const [listo, setListo] = useState(false);
+  const [fallo, setFallo] = useState(null);
   const oscuro = theme.mode === 'dark';
 
   useEffect(() => {
     if (!modelo || !canvasRef.current) return undefined;
-    let vivo = true; setListo(false);
+    let vivo = true; setListo(false); setFallo(null);
     import('./escena').then(({ crearEscena }) => {
       if (!vivo) return;
-      escenaRef.current = crearEscena(canvasRef.current, modelo, {
-        oscuro,
-        onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
-        onClick: (tag) => setSel(tag),
-      });
-      setListo(true);
-    });
+      try {
+        escenaRef.current = crearEscena(canvasRef.current, modelo, {
+          oscuro,
+          onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
+          onClick: (tag) => setSel(tag),
+        });
+        setListo(true);
+      } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }
+    }).catch((e) => { console.error('[ciudad] carga', e); setFallo(String(e?.message || e)); });
     return () => { vivo = false; escenaRef.current?.destruir(); escenaRef.current = null; };
   }, [modelo, oscuro]);
 
@@ -67,7 +70,8 @@ export default function Ciudad({ onNavegar }) {
   return (
     <div style={{ position: 'relative', height: 'calc(100vh - 92px)', minHeight: 520, borderRadius: 14, overflow: 'hidden', border: `1px solid ${theme.border}`, background: oscuro ? '#121722' : '#EAF2F7' }}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', opacity: listo ? 1 : 0, transition: 'opacity 600ms cubic-bezier(.32,.72,0,1)' }} />
-      {!listo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 13 }}>Dibujando la ciudad…</div>}
+      {!listo && !fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 13 }}>Dibujando la ciudad…</div>}
+      {fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 24 }}><pre style={{ ...card, padding: 16, maxWidth: 720, whiteSpace: 'pre-wrap', fontSize: 12, color: theme.red }}>No se pudo dibujar la ciudad:\n{fallo}</pre></div>}
       {/* cabecera */}
       <div style={{ position: 'absolute', left: 14, top: 12, display: 'flex', gap: 8, alignItems: 'center', zIndex: 3 }}>
         <div style={{ ...card, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -104,7 +108,7 @@ export default function Ciudad({ onNavegar }) {
       </div>
       {/* KPIs */}
       <div style={{ position: 'absolute', left: 14, bottom: 14, display: 'flex', gap: 8, zIndex: 3, flexWrap: 'wrap' }}>
-        {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} facturas`], ['CEDIS', `${fmtM(modelo.cedis.valor)} · ${modelo.cedis.dias} d`], ['Oficina', `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reuniones`]].map(([l, v]) => (
+        {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} facturas`], ['CEDIS', `${fmtM(modelo.cedis.valor)} · ${Math.round(modelo.cedis.dias)} d`], ['Oficina', `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reuniones`]].map(([l, v]) => (
           <div key={l} style={{ ...card, padding: '8px 12px', minWidth: 110 }}><div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</div></div>
         ))}
       </div>
