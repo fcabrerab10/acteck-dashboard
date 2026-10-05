@@ -34,7 +34,7 @@ const Inicio   = lazy(() => import('./pestanas/Inicio'));
 const Clientes = lazy(() => import('./pestanas/Clientes'));
 const Alertas  = lazy(() => import('./pestanas/Alertas'));
 const Buscar   = lazy(() => import('./pestanas/Buscar'));
-const Agenda   = lazy(() => import('./pestanas/agenda/Agenda'));
+const Agenda   = lazy(() => import('./pestanas/agenda5/AgendaM')); // V5 (2026-10-04); la V4 sigue en pestanas/agenda
 const PreferenciasHoja = lazy(() => import('../components/perfil/PreferenciasHoja'));
 
 const RAIZ = { inicio: Inicio, clientes: Clientes, alertas: Alertas, buscar: Buscar, agenda: Agenda };
