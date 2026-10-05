@@ -11,13 +11,13 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { AvatarImg } from '../../../lib/avatar';
 import { fechaCorta } from '../../../lib/format';
-import { completarItem } from '../../../modules/agenda/datos';
+import { completarItem } from '../../../modules/agenda5/base/datos';
 import { isoDia, sumarDias, inicioSemana } from '../../../modules/interno/equipo/calculo.js';
 import { fmtHm, fmtHmCorto, fmtHora, fmtDiaLargo, plural, textoInactividad, PAGINA_LABEL, CLIENTE_LABEL } from '../../../modules/interno/equipo/textos.js';
 import { useInvalidarEquipo } from '../../../modules/interno/equipo/datos.js';
 import { useNav } from '../../nav';
 import { TituloGrande, HeroM, ListaAgrupada, Cabecera, Segmented, Pill, Vacio, toast } from '../../piezas';
-import { PalomitaM } from '../agenda/comun';
+import { PalomitaM } from '../agenda5/comun';
 import { ultimaEntrada } from './piezas';
 import EvaluacionM from './EvaluacionM';
 

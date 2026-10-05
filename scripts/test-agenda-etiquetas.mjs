@@ -2,7 +2,7 @@
 //   node scripts/test-agenda-etiquetas.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsearEtiquetas, tokenActivo, sugerencias, aplicarSugerencia, handleDe, conHandles, textoConEtiquetas, buscarCliente, buscarCategoria, normalizar } from '../src/modules/agenda/etiquetas.js';
+import { parsearEtiquetas, tokenActivo, sugerencias, aplicarSugerencia, handleDe, conHandles, textoConEtiquetas, buscarCliente, buscarCategoria, normalizar } from '../src/modules/agenda5/base/etiquetas.js';
 
 const P = [
   { user_id: 'u-fer', nombre: 'Fernando Cabrera', email: 'fernando.cabrera@acteck.com' },
@@ -68,7 +68,7 @@ test('textoConEtiquetas reconstruye el texto editable', () => {
 });
 
 // ─── fechaNatural (captura rápida móvil) ───
-import { fechaNatural } from '../src/modules/agenda/etiquetas.js';
+import { fechaNatural } from '../src/modules/agenda5/base/etiquetas.js';
 const HOY = new Date(2026, 8, 10, 9, 0); // jueves 10 sep 2026
 
 test('fechaNatural: hoy, mañana, pasado mañana', () => {

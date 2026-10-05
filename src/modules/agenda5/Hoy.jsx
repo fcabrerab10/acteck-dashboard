@@ -9,7 +9,7 @@ import { EASE, DUR } from '../../lib/motion';
 import { Panel, Boton, Pill, toast } from '../../components/kit';
 import { FilaTarea, Titulo, Seccion } from './comun';
 import { hoyDe, bloquesDia, conteosMes, fraseHoy, fmtMin, fmtHora, isoDia, sumarDias, siguienteDe } from './calculo';
-import { nombreClienteAgenda } from '../agenda/etiquetas';
+import { nombreClienteAgenda } from './base/etiquetas';
 import { completarItem, cronometro, moverA, posponer, estimar, actualizarItem } from './datos';
 
 const DIAS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];

@@ -10,7 +10,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { Pill } from '../../../components/kit';
 import { ClientePill, EtapaPill, FuentePill, Avance } from '../../../modules/comercial/tracking/ui';
 import { fmtInt, fmtFecha, fmtPct, normalizar, tokens as toks, nombreCliente } from '../../../modules/comercial/tracking/textos';
-import { FilaGesto, CampoM, BotonMic, ChipM, lbl } from '../agenda/comun';
+import { FilaGesto, CampoM, BotonMic, ChipM, lbl } from '../agenda5/comun';
 import { Fila } from '../../piezas';
 import { colorCliente } from '../../datos';
 import { MONO } from '../../util';

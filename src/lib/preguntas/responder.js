@@ -123,8 +123,8 @@ async function stock(i, ctx) {
 
 // ── Agenda: pendientes y reuniones ────────────────────────────────────────────
 async function agendaDatos() {
-  const { fetchAgenda } = await import('../../modules/agenda/datos');
-  const { bandeja } = await import('../../modules/agenda/calculo');
+  const { fetchAgenda } = await import('../../modules/agenda5/base/datos');
+  const { bandeja } = await import('../../modules/agenda5/base/calculo');
   const ag = await fetchAgenda();
   return { ...ag, bandeja };
 }

@@ -18,7 +18,7 @@ import { MESES, MESES_CORTO } from '../../../modules/interno/equipo/textos.js';
 import { useDetalleMes, upsertEvaluacion, useInvalidarEquipo } from '../../../modules/interno/equipo/datos.js';
 import { RATINGS, textoResumen } from '../../../modules/interno/equipo/Evaluacion.jsx';
 import { ListaAgrupada, TituloSeccionM, Segmented, Pill, BotonGrande, Skeleton, toast } from '../../piezas';
-import { CampoM } from '../agenda/comun';
+import { CampoM } from '../agenda5/comun';
 import { money, moneyCompact, MONO } from '../../util';
 
 const DEBOUNCE_MS = 600;

@@ -7,7 +7,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { toast } from '../../../components/kit';
 import { HojaM, BotonGrande, Segmented, Pill, Fila, ListaAgrupada, Vacio } from '../../piezas';
-import { CampoM } from '../agenda/comun';
+import { CampoM } from '../agenda5/comun';
 import { MONO } from '../../util';
 import {
   CLIENTES, PAQUETERIAS, ALMACENES, MOTIVOS_PERDIDA, ESTADO_COT_LABEL, isoDia, nombreCliente, fmtInt, fmtMoney, fmtFecha,

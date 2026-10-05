@@ -1,13 +1,13 @@
 // Agenda móvil · hoja «Enviar minuta por correo» (2026-09-22). Misma lógica que la web
-// (src/modules/agenda/EnviarMinuta.jsx): contactos del cliente como chips, alta rápida, mensaje y envío.
+// (src/modules/agenda5/base/EnviarMinuta.jsx): contactos del cliente como chips, alta rápida, mensaje y envío.
 import React, { useMemo, useState } from 'react';
 import { Mail, Plus, Check, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { relativo } from '../../../lib/format';
-import { useContactos, crearContacto, borrarContacto, enviarMinutaCorreo } from '../../../modules/agenda/datos';
-import { nombreClienteAgenda } from '../../../modules/agenda/etiquetas';
-import { parsearContacto } from '../../../modules/agenda/EnviarMinuta';
+import { useContactos, crearContacto, borrarContacto, enviarMinutaCorreo } from '../../../modules/agenda5/base/datos';
+import { nombreClienteAgenda } from '../../../modules/agenda5/base/etiquetas';
+import { parsearContacto } from '../../../modules/agenda5/base/EnviarMinuta';
 import { HojaM, BotonGrande, toast } from '../../piezas';
 import { ChipM, SeccionM } from './comun';
 

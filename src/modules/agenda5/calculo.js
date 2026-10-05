@@ -3,7 +3,7 @@
 //     pero con fecha_limite = hoy también sale en Hoy. Lo no hecho de días anteriores con cuando < hoy = «De ayer».
 //   · bandeja = capturado sin clasificar (bandeja=true) o sin cuando/fecha/proyecto.
 //   · carga del día = Σ duracion_min de lo pendiente de hoy + reuniones; hora de cierre = ahora + carga.
-import { isoDia, sumarDias, diasEntre, parseISO } from '../agenda/calculo.js';
+import { isoDia, sumarDias, diasEntre, parseISO } from './base/calculo.js';
 export { isoDia, sumarDias, diasEntre };
 
 const N = (v) => Number(v) || 0;

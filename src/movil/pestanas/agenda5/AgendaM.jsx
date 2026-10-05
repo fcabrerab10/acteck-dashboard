@@ -1,6 +1,7 @@
 // Agenda V5 · celular (2026-10-04 · rehecha 3.70.0): tira de semana estilo iOS Calendar, chips Día · Bandeja · Pendientes · Reuniones · Más,
 // Mismo motor que la web (modules/agenda5: calculo · datos · interpretar). Reuniones y la hoja de edición de un ítem se
-// reutilizan de la V4 móvil (src/movil/pestanas/agenda) a través del mismo AgendaCtx. Gestos: → hecha · ← mañana / 7 días.
+// comparten con la minuta (Reuniones · Minuta · Captura · comun, en esta misma carpeta desde 2026-10-05; antes en la V4 móvil) a través
+// del mismo AgendaCtx (comun.jsx). Gestos: → hecha · ← mañana / 7 días.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CalendarCheck, Check, CalendarClock, Sparkles, Play, Pause } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -13,19 +14,17 @@ import { interpretarCaptura } from '../../../modules/agenda5/interpretar';
 import { MiniMes, Ahora } from '../../../modules/agenda5/Hoy';
 import { siguienteDe } from '../../../modules/agenda5/calculo';
 import { Compass } from 'lucide-react';
-import { useGoogleEstado } from '../../../modules/agenda/google';
-import { fechaLarga } from '../../../modules/agenda/textos';
-import { nombreClienteAgenda } from '../../../modules/agenda/etiquetas';
+import { useGoogleEstado } from '../../../modules/agenda5/base/google';
+import { fechaLarga } from '../../../modules/agenda5/base/textos';
+import { nombreClienteAgenda } from '../../../modules/agenda5/base/etiquetas';
 import { useNav } from '../../nav';
 import { TituloGrande, Vacio, ListaAgrupada, Fila, FilaDeslizable, HojaM, BotonGrande, toast } from '../../piezas';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { bloquesDia } from '../../../modules/agenda5/calculo';
-import { useBottomOffset } from '../agenda/comun';
-import { AgendaCtx } from '../agenda/Agenda';
-import { PalomitaM } from '../agenda/comun';
-import CapturaHoja from '../agenda/Captura';
-import Reuniones from '../agenda/Reuniones';
-import Minuta from '../agenda/Minuta';
+import { useBottomOffset, AgendaCtx, PalomitaM } from './comun';
+import CapturaHoja from './Captura';
+import Reuniones from './Reuniones';
+import Minuta from './Minuta';
 
 const VISTAS = [{ id: 'hoy', label: 'Día' }, { id: 'bandeja', label: 'Bandeja' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'reuniones', label: 'Reuniones' }, { id: 'mas', label: 'Más' }];
 const DIAS_1 = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];

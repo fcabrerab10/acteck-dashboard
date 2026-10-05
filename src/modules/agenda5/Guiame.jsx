@@ -6,7 +6,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { Modal } from '../../components/perfil/comun';
 import { toast } from '../../components/kit';
-import { nombreClienteAgenda } from '../agenda/etiquetas';
+import { nombreClienteAgenda } from './base/etiquetas';
 import { hoyDe, siguienteDe, isoDia, sumarDias, fmtMin } from './calculo';
 import { completarItem, cronometro, moverA, posponer } from './datos';
 

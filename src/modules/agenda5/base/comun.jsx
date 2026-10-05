@@ -2,10 +2,10 @@
 // TagCliente · TagPersona · CatPill · FuenteLabel · Palomita · FilaItem · FilaAviso · Filtros · CampoEtiquetas
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, ChevronRight, ExternalLink, CalendarClock, CalendarPlus } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { Pill, toneColors, Boton, EASE, DUR } from '../../components/kit';
-import { elevation, bordeFlotante } from '../../lib/elevation';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { Pill, toneColors, Boton, EASE, DUR } from '../../../components/kit';
+import { elevation, bordeFlotante } from '../../../lib/elevation';
 import { CATEGORIAS, CATEGORIA_LABEL, CATEGORIA_TONE, nombreClienteAgenda, tokenActivo, sugerencias, aplicarSugerencia } from './etiquetas';
 import { cuando, vencido, vecesArrastrado, ordinal, conteos } from './calculo';
 

@@ -9,18 +9,18 @@
 //   await crearItem({ titulo:'… #pcel @karolina', tipo:'tarea', fecha_limite }, personas)
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase, DB_CONFIGURED } from '../../lib/supabase';
-import { queryClient } from '../../lib/queryClient';
-import { fetchAll, fetchPaged, invalidateDataCache } from '../../lib/queries';
+import { supabase, DB_CONFIGURED } from '../../../lib/supabase';
+import { queryClient } from '../../../lib/queryClient';
+import { fetchAll, fetchPaged, invalidateDataCache } from '../../../lib/queries';
 // Buzón de salida: en visita sin señal la captura se guarda en el dispositivo y se sube después.
-import { escribir } from '../../lib/buzon';
-import { useAlertas } from '../../lib/alertas';
-import { useTrackingDatos } from '../comercial/tracking/datos';
-import { calcularTodo } from '../comercial/tracking/calculo';
-import { useFuentesConfig } from '../settings/importador/fuentesConfig';
-import { useEstadoImportador } from '../settings/importador/useImportadorData';
-import { frescuraManual } from '../settings/importador/frescura';
-import { GRUPOS } from '../settings/importador/config';
+import { escribir } from '../../../lib/buzon';
+import { useAlertas } from '../../../lib/alertas';
+import { useTrackingDatos } from '../../comercial/tracking/datos';
+import { calcularTodo } from '../../comercial/tracking/calculo';
+import { useFuentesConfig } from '../../settings/importador/fuentesConfig';
+import { useEstadoImportador } from '../../settings/importador/useImportadorData';
+import { frescuraManual } from '../../settings/importador/frescura';
+import { GRUPOS } from '../../settings/importador/config';
 import { parsearEtiquetas, conHandles, asignables } from './etiquetas';
 import { bandeja as calcBandeja, avisosSistema, isoDia, sumarDias, progresoPorItem, registrarContacto, comentariosPorItem } from './calculo';
 import { filasAItems } from './reparto';
@@ -583,7 +583,7 @@ export async function borrarContacto(id) {
 }
 /** Manda la minuta por correo; devuelve el envío registrado y parcha reunion.envios en cache. */
 export async function enviarMinutaCorreo({ reunionId, para, cc = [], mensaje = '' }) {
-  const { apiFetch } = await import('../../lib/apiFetch');
+  const { apiFetch } = await import('../../../lib/apiFetch');
   const r = await apiFetch('/api/google-calendar?action=enviar-minuta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reunionId, para, cc, mensaje }) });
   const js = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(js.error || `HTTP ${r.status}`);

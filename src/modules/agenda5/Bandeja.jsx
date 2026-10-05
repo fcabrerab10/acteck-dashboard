@@ -8,7 +8,7 @@ import { Pill, toast } from '../../components/kit';
 import { Titulo, Seccion, Avatar } from './comun';
 import { bandejaDe, isoDia, sumarDias } from './calculo';
 import { triage, posponer, descartar } from './datos';
-import { nombreClienteAgenda } from '../agenda/etiquetas';
+import { nombreClienteAgenda } from './base/etiquetas';
 
 const K = ({ children }) => { const { theme } = useTheme(); return <kbd style={{ font: `600 10.5px ${TYPO.fontText}`, padding: '1px 6px', borderRadius: 5, background: 'rgba(120,120,128,0.18)', color: theme.text }}>{children}</kbd>; };
 

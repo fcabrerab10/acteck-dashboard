@@ -5,11 +5,11 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Mail, Plus, X, Check } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { Modal } from '../../components/perfil/comun';
-import { Boton, Pill, toast } from '../../components/kit';
-import { relativo } from '../../lib/format';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { Modal } from '../../../components/perfil/comun';
+import { Boton, Pill, toast } from '../../../components/kit';
+import { relativo } from '../../../lib/format';
 import { useContactos, crearContacto, borrarContacto, enviarMinutaCorreo } from './datos';
 import { nombreClienteAgenda } from './etiquetas';
 import { textoMinuta } from './textos';

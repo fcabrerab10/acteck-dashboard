@@ -5,10 +5,10 @@
 // anteriores cerradas del mismo cliente se arrastran (RPC agenda_arrastrar_pendientes, ver datos.js).
 import React, { useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { Modal, Interruptor } from '../../components/perfil/comun';
-import { Boton, Segmented, Pill, toast } from '../../components/kit';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { Modal, Interruptor } from '../../../components/perfil/comun';
+import { Boton, Segmented, Pill, toast } from '../../../components/kit';
 import { crearReunion, actualizarReunion, borrarReunion } from './datos';
 import { crearEventoGoogle, actualizarEventoGoogle, borrarEventoGoogle, MENSAJES_GOOGLE } from './google';
 import { CLIENTES_AGENDA } from './etiquetas';

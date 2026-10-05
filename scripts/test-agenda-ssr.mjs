@@ -1,6 +1,9 @@
-// Smoke SSR de la Agenda V4: carga con el pipeline de Vite todos los módulos que toca el rediseño
-// (web y móvil) y RENDERIZA a string las piezas que no necesitan red, con datos sembrados, para
-// atrapar imports rotos, JSX inválido y NaN/undefined antes de abrir el navegador.
+// Smoke SSR de la base de la Agenda (minuta, reuniones, hoja del ítem, subtareas, comentarios, correo): carga con el
+// pipeline de Vite todos los módulos de `src/modules/agenda5/base/` y `src/movil/pestanas/agenda5/` que heredó la V5
+// de la V4 (archivada el 2026-10-05 en src/_archivo/agenda-v4*), y RENDERIZA a string las piezas que no necesitan red,
+// con datos sembrados, para atrapar imports rotos, JSX inválido y NaN/undefined antes de abrir el navegador.
+// Las pantallas propias de la V5 (Hoy · Bandeja · Pendientes · Reuniones) se prueban en test-agenda5-ssr.mjs y
+// test-agenda5-movil-ssr.mjs.
 //   node --test scripts/test-agenda-ssr.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,6 +23,9 @@ globalThis.removeEventListener ??= () => {};
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
 test.after(async () => { await vite.close(); setTimeout(() => process.exit(process.exitCode || 0), 200).unref(); });
+
+const BASE = '/src/modules/agenda5/base';
+const MOVIL = '/src/movil/pestanas/agenda5';
 
 const HOY = new Date(2026, 8, 21, 11);   // lunes 21 sep 2026
 const PERSONAS = [
@@ -49,7 +55,6 @@ const CUENTAS = [
   { id: 'c1', nombre: 'Luis De Viana', empresa: null, telefono: '+52 55 1053 6205', tipo: 'mayorista', mayorista: 'CVA', vendedor: '', estado: 'activa', proximo_seguimiento: '2026-09-18', recordar_cada_dias: 14, ultimo_contacto: null, notas: 'Proyectos del Tec.' },
   { id: 'c2', nombre: 'Juan José', empresa: 'PSA Cómputo y Papelería', telefono: '+52 618 237 0717', tipo: 'mayorista', mayorista: 'CVA', vendedor: 'Sarahi', estado: 'activa', proximo_seguimiento: '2026-10-30', recordar_cada_dias: 14, ultimo_contacto: '2026-09-15', notas: null },
 ];
-const NOTAS = new Map([['c1', [{ id: 'n1', cuenta_id: 'c1', fecha: '2026-09-01', texto: 'Se presentó el portafolio.' }]]]);
 
 /** SSR intercala <!-- --> entre expresiones: para comparar frases hay que quitarlos. */
 const txt = (html) => String(html).replace(/<!--.*?-->/g, '');
@@ -59,29 +64,30 @@ const sano = (html, donde) => {
   assert.ok(!/\[object Object\]/.test(html), `${donde}: sale un [object Object]`);
 };
 
-test('cargan todos los módulos que toca la Agenda V4 (web y móvil)', async () => {
+test('cargan todos los módulos de la base de la Agenda (web y móvil)', async () => {
   const conDefault = [
-    '/src/modules/agenda/Agenda.jsx', '/src/modules/agenda/Calendario.jsx', '/src/modules/agenda/Mes.jsx',
-    '/src/modules/agenda/Semana.jsx', '/src/modules/agenda/Pendientes.jsx', '/src/modules/agenda/Cuentas.jsx',
-    '/src/modules/agenda/Archivados.jsx', '/src/modules/agenda/Subtareas.jsx', '/src/modules/agenda/HojaItem.jsx',
-    '/src/modules/agenda/Reuniones.jsx', '/src/modules/agenda/Minuta.jsx', '/src/modules/agenda/FormReunion.jsx',
-    '/src/modules/agenda/HojaReparto.jsx', '/src/movil/pestanas/agenda/Reparto.jsx', '/src/movil/pestanas/agenda/Minuta.jsx',
-    '/src/modules/agenda/Comentarios.jsx', '/src/modules/agenda/ReunionAnterior.jsx', '/src/movil/pestanas/agenda/Comentarios.jsx',
-    '/src/movil/pestanas/agenda/Agenda.jsx', '/src/movil/pestanas/agenda/Pendientes.jsx',
-    '/src/movil/pestanas/agenda/Cuentas.jsx', '/src/movil/pestanas/agenda/Archivados.jsx',
-    '/src/movil/pestanas/agenda/Semana.jsx', '/src/movil/pestanas/agenda/Captura.jsx',
-    '/src/modules/comercial/HomeClienteV3.jsx',
+    `${BASE}/Subtareas.jsx`, `${BASE}/HojaItem.jsx`, `${BASE}/Minuta.jsx`, `${BASE}/FormReunion.jsx`,
+    `${BASE}/HojaReparto.jsx`, `${BASE}/Comentarios.jsx`, `${BASE}/ReunionAnterior.jsx`, `${BASE}/EnviarMinuta.jsx`,
+    `${MOVIL}/AgendaM.jsx`, `${MOVIL}/Reuniones.jsx`, `${MOVIL}/Minuta.jsx`, `${MOVIL}/Captura.jsx`,
+    `${MOVIL}/Reparto.jsx`, `${MOVIL}/Comentarios.jsx`, `${MOVIL}/EnviarMinutaM.jsx`,
+    '/src/modules/agenda5/Agenda5.jsx', '/src/modules/comercial/HomeClienteV3.jsx',
   ];
   for (const m of conDefault) {
     const mod = await vite.ssrLoadModule(m);
     assert.equal(typeof mod.default, 'function', `${m} debe exportar default`);
   }
-  const datos = await vite.ssrLoadModule('/src/modules/agenda/datos.js');
-  for (const h of ['useAgendaV4', 'useSubtareas', 'useCuentas', 'useMinutasCliente', 'crearSubtarea', 'marcarSubtarea',
+  const datos = await vite.ssrLoadModule(`${BASE}/datos.js`);
+  for (const h of ['useAgendaDatos', 'useContadorAgenda', 'useSubtareas', 'useCuentas', 'useMinutasCliente', 'crearSubtarea', 'marcarSubtarea',
     'borrarSubtarea', 'moverSubtarea', 'crearCuenta', 'actualizarCuenta', 'borrarCuenta', 'agregarNotaCuenta',
-    'registrarContactoCuenta', 'crearPendienteDeCuenta', 'repartirAcuerdos',
+    'registrarContactoCuenta', 'crearPendienteDeCuenta', 'repartirAcuerdos', 'completarItem', 'fetchAgenda',
     'useComentarios', 'crearComentario', 'borrarComentario', 'traerPuntosDeReunion', 'crearPendienteDePunto', 'moverPunto']) {
     assert.equal(typeof datos[h], 'function', `datos.js debe exportar ${h}`);
+  }
+  // El contexto que comparten AgendaM, Reuniones y la hoja de captura del celular vive en comun.jsx (antes en la V4 móvil).
+  const comunM = await vite.ssrLoadModule(`${MOVIL}/comun.jsx`);
+  assert.ok(comunM.AgendaCtx && typeof comunM.useAgenda === 'function', 'comun.jsx móvil exporta AgendaCtx y useAgenda');
+  for (const p of ['FAB', 'PalomitaM', 'ChipM', 'CampoM', 'FilaGesto', 'BotonMic', 'lbl', 'useBottomOffset']) {
+    assert.ok(comunM[p], `comun.jsx móvil exporta ${p} (lo usan Tracking, Pagos, Equipo e Invitar)`);
   }
   const bloques = await vite.ssrLoadModule('/src/modules/comercial/home/bloques.jsx');
   assert.equal(typeof bloques.MinutasCliente, 'function', 'el Resumen del cliente necesita MinutasCliente');
@@ -89,52 +95,30 @@ test('cargan todos los módulos que toca la Agenda V4 (web y móvil)', async () 
   assert.equal(typeof inicio.agruparAvisos, 'function', 'el bloque Hoy de Inicio agrupa los avisos de SKUs');
 });
 
-test('la lista por horizonte renderiza con datos sembrados', async () => {
-  const { default: Pendientes } = await vite.ssrLoadModule('/src/modules/agenda/Pendientes.jsx');
-  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const { progresoPorItem } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
-  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Pendientes, {
-    items: ITEMS, personas: PERSONAS, personasPorId: PP, porId: new Map(ITEMS.map((i) => [i.id, i])),
-    reuniones: REUNIONES, hoy: HOY, uid: 'u-fer', progreso: progresoPorItem(SUBTAREAS), puedeEditar: true,
-    onAbrir: () => {}, onToggle: () => {}, onPosponer: () => {},
-  })));
-  sano(html, 'Pendientes');
-  assert.ok(html.includes('Vencidos'), 'el bloque de vencidos debe salir');
-  assert.ok(html.includes('Confirmar rebate Q3'), 'el vencido de Fernando aparece');
-  assert.ok(html.includes('Mandar propuesta a CT'), 'lo de hoy aparece');
-  assert.ok(!html.includes('Material POP'), 'lo de Karolina NO sale en "Mis pendientes"');
-  assert.ok(!html.includes('Subir el P&amp;L') && !html.includes('Subir el P&L'), 'lo hecho no sale en Pendientes');
-  assert.ok(html.includes('1/2'), 'el progreso de subtareas sale como pastilla');
-});
-
-test('archivados muestra lo hecho y lo cancelado, nunca lo abierto', async () => {
-  const { default: Archivados } = await vite.ssrLoadModule('/src/modules/agenda/Archivados.jsx');
-  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Archivados, {
-    items: ITEMS, personasPorId: PP, hoy: HOY, progreso: new Map(), puedeEditar: true, onAbrir: () => {},
-  })));
-  sano(html, 'Archivados');
-  assert.ok(html.includes('Cancelado'), 'lo cancelado se archiva');
-  assert.ok(html.includes('Desarchivar'), 'se puede desarchivar');
-  assert.ok(!html.includes('Confirmar rebate Q3'), 'lo abierto no se archiva');
-});
-
-test('la lista de cuentas pinta el semáforo, el teléfono y los enlaces', async () => {
-  const { default: Cuentas } = await vite.ssrLoadModule('/src/modules/agenda/Cuentas.jsx');
-  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Cuentas, {
-    cuentas: CUENTAS, notasPorCuenta: NOTAS, personas: PERSONAS, hoy: HOY, puedeEditar: true, onNavegarPendientes: () => {},
-  })));
-  sano(html, 'Cuentas');
-  assert.ok(html.includes('Luis De Viana'), 'la cuenta vencida sale');
-  assert.ok(html.includes('seguimiento vencido'), 'el encabezado cuenta los vencidos');
-  assert.ok(html.includes('wa.me/525510536205'), 'el enlace de WhatsApp está normalizado');
-  assert.ok(html.includes('tel:+525510536205'), 'el enlace de llamada está normalizado');
-  assert.ok(html.includes('Sarahi'), 'el vendedor que lleva la cuenta se ve');
+test('la V4 archivada no se importa desde el código que se compila', async () => {
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const raiz = fileURLToPath(new URL('../', import.meta.url));
+  const malos = [];
+  const recorrer = (dir) => {
+    for (const n of readdirSync(dir)) {
+      const p = join(dir, n);
+      if (n === '_archivo' || n === 'node_modules') continue;
+      if (statSync(p).isDirectory()) { recorrer(p); continue; }
+      if (!/\.(jsx?|mjs)$/.test(n)) continue;
+      const src = readFileSync(p, 'utf8');
+      if (/from\s+'[^']*\/agenda\/[^']*'|import\('[^']*\/agenda\/[^']*'\)|from\s+'[^']*\/agenda'/.test(src)) malos.push(p.slice(raiz.length));
+    }
+  };
+  recorrer(join(raiz, 'src'));
+  recorrer(join(raiz, 'api'));
+  recorrer(join(raiz, 'scripts'));
+  assert.deepEqual(malos, [], 'estos archivos siguen importando la Agenda V4 archivada');
 });
 
 test('el checklist de subtareas sugiere cerrar el pendiente pero no lo cierra solo', async () => {
-  const { default: Subtareas } = await vite.ssrLoadModule('/src/modules/agenda/Subtareas.jsx');
+  const { default: Subtareas } = await vite.ssrLoadModule(`${BASE}/Subtareas.jsx`);
   const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
   const parcial = renderToString(React.createElement(ThemeProvider, null, React.createElement(Subtareas, {
     item: ITEMS[0], subtareas: SUBTAREAS, puedeEditar: true, onMarcarHecho: () => {},
@@ -147,23 +131,6 @@ test('el checklist de subtareas sugiere cerrar el pendiente pero no lo cierra so
   })));
   assert.ok(completo.includes('¿marcar como hecho?'), 'con todo listo se sugiere, con botón');
   assert.ok(completo.includes('1/1'));
-});
-
-test('el calendario del mes pinta 42 celdas con reuniones, viajes y pendientes', async () => {
-  const { default: Mes } = await vite.ssrLoadModule('/src/modules/agenda/Mes.jsx');
-  const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const { FUENTES_CALENDARIO } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
-  const toggles = new Set(FUENTES_CALENDARIO.map((f) => f.id));
-  const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Mes, {
-    ini: new Date(2026, 8, 1), datos: { reuniones: REUNIONES, items: ITEMS, google: [] }, toggles, hoy: HOY,
-    onAbrir: () => {}, onDia: () => {}, puedeEditar: true, onSoltar: () => {},
-  })));
-  sano(html, 'Mes');
-  assert.ok(html.includes('Revisión de sell-out'), 'la reunión se pinta en su día');
-  assert.ok(html.includes('Viaje a Monterrey'), 'el viaje se pinta');
-  assert.ok((html.match(/Viaje a Monterrey/g) || []).length >= 3, 'el viaje ocupa sus tres días (24, 25 y 26)');
-  assert.ok(html.includes('Mandar propuesta a CT'), 'los pendientes con fecha se pintan');
-  assert.ok(!html.includes('Idea suelta'), 'lo que no tiene fecha no cae en ningún día');
 });
 
 test('los avisos de SKUs del bloque "Hoy" de Inicio se agrupan en una línea por área', async () => {
@@ -187,10 +154,17 @@ test('el correo de la Agenda se arma con lo correcto y no se manda vacío', asyn
     cuentas: [CUENTAS[0]], fuentes: [], hoy: '2026-09-21',
   });
   assert.equal(manana.titulo, 'Lo que dejaste');
+  // Orden del cron: reuniones del día (r1 es el 21-sep), vencidos, lo de hoy, cuentas por contactar.
   const titulos = manana.secciones.map((s) => s.titulo);
-  assert.deepEqual(titulos, ['Vencidos', 'Hoy', 'Cuentas por contactar']);
-  assert.equal(manana.secciones[0].filas[0].titulo, 'Confirmar rebate Q3');
-  assert.match(manana.secciones[2].filas[0].titulo, /Luis De Viana/);
+  assert.deepEqual(titulos, ['Reuniones de hoy', 'Vencidos', 'Hoy', 'Cuentas por contactar']);
+  assert.match(manana.secciones[0].filas[0].titulo, /Revisión de sell-out/);
+  assert.equal(manana.secciones[1].filas[0].titulo, 'Confirmar rebate Q3');
+  assert.equal(manana.secciones[2].filas[0].titulo, 'Mandar propuesta a CT');
+  assert.match(manana.secciones[3].filas[0].titulo, /Luis De Viana/);
+
+  // Sin reunión ese día la sección no aparece.
+  const sinReunion = armarCorreoAgenda({ momento: 'manana', userId: 'u-fer', items, reuniones: [REUNIONES[1]], cuentas: [], fuentes: [], hoy: '2026-09-21' });
+  assert.deepEqual(sinReunion.secciones.map((s) => s.titulo), ['Vencidos', 'Hoy']);
 
   const tarde = armarCorreoAgenda({
     momento: 'tarde', userId: 'u-kar', items, reuniones: REUNIONES,
@@ -225,9 +199,9 @@ test('los crones de la Agenda están declarados en vercel.json', async () => {
 });
 
 test('el reparto de la minuta pinta una fila por acuerdo y sabe cerrar', async () => {
-  const { default: Reparto } = await vite.ssrLoadModule('/src/modules/agenda/HojaReparto.jsx');
+  const { default: Reparto } = await vite.ssrLoadModule(`${BASE}/HojaReparto.jsx`);
   const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const { detectarAcuerdos } = await vite.ssrLoadModule('/src/modules/agenda/reparto.js');
+  const { detectarAcuerdos } = await vite.ssrLoadModule(`${BASE}/reparto.js`);
   const notas = [
     'Revisamos el avance del trimestre con Karolina.',
     '- Mandar la cotización actualizada',
@@ -261,9 +235,9 @@ const COMENTARIOS = [
 ];
 
 test('el hilo de comentarios de un punto se pinta con autor, tipo y campo de captura', async () => {
-  const { default: Hilo } = await vite.ssrLoadModule('/src/modules/agenda/Comentarios.jsx');
+  const { default: Hilo } = await vite.ssrLoadModule(`${BASE}/Comentarios.jsx`);
   const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const { hiloComentarios } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
+  const { hiloComentarios } = await vite.ssrLoadModule(`${BASE}/calculo.js`);
   const porId = new Map(PUNTOS.map((p) => [p.id, p]));
   const hilo = hiloComentarios(COMENTARIOS, PUNTOS[0], porId);
   const html = renderToString(React.createElement(ThemeProvider, null, React.createElement(Hilo, {
@@ -283,9 +257,9 @@ test('el hilo de comentarios de un punto se pinta con autor, tipo y campo de cap
 });
 
 test('el panel «Reunión anterior» lista los puntos de la previa y ofrece traer los abiertos', async () => {
-  const { default: ReunionAnterior } = await vite.ssrLoadModule('/src/modules/agenda/ReunionAnterior.jsx');
+  const { default: ReunionAnterior } = await vite.ssrLoadModule(`${BASE}/ReunionAnterior.jsx`);
   const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const { comentariosPorItem } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
+  const { comentariosPorItem } = await vite.ssrLoadModule(`${BASE}/calculo.js`);
   const props = {
     reunion: REU_HOY, reuniones: [REU_PREVIA, REU_HOY], items: PUNTOS, porId: new Map(PUNTOS.map((p) => [p.id, p])),
     comentariosPor: comentariosPorItem(COMENTARIOS), personasPorId: PP, hoy: HOY, puedeEditar: true,
@@ -304,9 +278,9 @@ test('el panel «Reunión anterior» lista los puntos de la previa y ofrece trae
 });
 
 test('la minuta monta el panel de la reunión anterior y un hilo por punto', async () => {
-  const { default: Minuta } = await vite.ssrLoadModule('/src/modules/agenda/Minuta.jsx');
+  const { default: Minuta } = await vite.ssrLoadModule(`${BASE}/Minuta.jsx`);
   const { ThemeProvider } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
-  const { comentariosPorItem } = await vite.ssrLoadModule('/src/modules/agenda/calculo.js');
+  const { comentariosPorItem } = await vite.ssrLoadModule(`${BASE}/calculo.js`);
   const puntosHoy = [
     { id: 'q1', tipo: 'punto', reunion_id: 'r9', estado: 'abierta', titulo: 'Alcance de compra Q3', orden: 0, responsables: ['u-fer'], cliente_key: 'digitalife', categoria: null, created_at: '2026-09-21', origen: { fuente: 'correo', enlace: { pagina: 'sellIn', clienteKey: 'digitalife' } } },
     { id: 'q2', tipo: 'punto', reunion_id: 'r9', estado: 'abierta', titulo: 'Camisas', orden: 1, responsables: ['u-fer'], cliente_key: 'digitalife', categoria: null, created_at: '2026-09-21', arrastrado_desde: 'p1' },
@@ -327,7 +301,7 @@ test('la minuta monta el panel de la reunión anterior y un hilo por punto', asy
 });
 
 test('la minuta ofrece «Correo» y el modal de envío se monta con los contactos del cliente', async () => {
-  const { default: EnviarMinuta, parsearContacto } = await vite.ssrLoadModule('/src/modules/agenda/EnviarMinuta.jsx');
+  const { default: EnviarMinuta, parsearContacto } = await vite.ssrLoadModule(`${BASE}/EnviarMinuta.jsx`);
   assert.deepEqual(parsearContacto('Ana López <Ana@Digitalife.mx>'), { nombre: 'Ana López', email: 'ana@digitalife.mx' });
   assert.deepEqual(parsearContacto('compras@digitalife.mx'), { nombre: null, email: 'compras@digitalife.mx' });
   assert.equal(parsearContacto('sin correo'), null);

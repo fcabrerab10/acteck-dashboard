@@ -1173,7 +1173,7 @@ async function reglaAgendaAsignado(hoy) {
 // ── V4 (2026-09-21) ────────────────────────────────────────────────────────────
 // Quién recibe agenda: sólo Fernando y Karolina. David Millán ve el dashboard pero NO la Agenda
 // (permisos.globales.agenda = 'oculto' y RLS agenda_puede_ver), así que tampoco recibe correos ni
-// alertas de agenda. Mismo criterio que CORREOS_SIN_AGENDA en src/modules/agenda/etiquetas.js.
+// alertas de agenda. Mismo criterio que CORREOS_SIN_AGENDA en src/modules/agenda5/base/etiquetas.js.
 const CORREOS_SIN_AGENDA = ['dmillan@acteck.com'];
 const conAgenda = (p) => p && !CORREOS_SIN_AGENDA.includes(String(p.email || '').toLowerCase());
 

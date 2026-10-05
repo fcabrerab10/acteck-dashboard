@@ -5,13 +5,13 @@ import React, { useMemo, useState } from 'react';
 import { Plus, Check } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { ordenarReuniones, resumenReunion, cuando, isoDia, fmtHora, vecesArrastrado, ordinal } from '../../../modules/agenda/calculo';
-import { CLIENTES_AGENDA, nombreClienteAgenda } from '../../../modules/agenda/etiquetas';
-import { LUGARES } from '../../../modules/agenda/textos';
-import { crearReunion, prepararReunion } from '../../../modules/agenda/datos';
+import { ordenarReuniones, resumenReunion, cuando, isoDia, fmtHora, vecesArrastrado, ordinal } from '../../../modules/agenda5/base/calculo';
+import { CLIENTES_AGENDA, nombreClienteAgenda } from '../../../modules/agenda5/base/etiquetas';
+import { LUGARES } from '../../../modules/agenda5/base/textos';
+import { crearReunion, prepararReunion } from '../../../modules/agenda5/base/datos';
 import { Segmented, Pill, HojaM, BotonGrande, Vacio, toast } from '../../piezas';
 import { MONO } from '../../util';
-import { useAgenda } from './Agenda';
+import { useAgenda } from './comun';
 import { CatPill, ChipM, CampoM, lbl, primerNombre, FAB } from './comun';
 
 const CLIENTES_SEG = [{ id: 'todas', label: 'Todas' }, { id: 'pcel', label: '#pcel' }, { id: 'digitalife', label: '#digitalife' }, { id: 'dicotech', label: '#dicotech' }, { id: 'interno', label: 'Internas' }];

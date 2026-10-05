@@ -20,7 +20,7 @@ import { invalidateDataCache } from '../lib/queries';
 import { usePreferencias } from '../lib/preferencias';
 import { construirArbol, buscarNodo, idNodo } from '../components/nav/arbol';
 import useContadorNotificaciones from '../components/notificaciones/useContadorNotificaciones';
-import { useContadorAgenda } from '../modules/agenda/datos';
+import { useContadorAgenda } from '../modules/agenda5/base/datos';
 import { NavContext, Pantalla } from './nav';
 import { HojaM, Skeleton, Proximamente } from './piezas';
 import { leerLS, guardarLS } from './util';
@@ -34,7 +34,7 @@ const Inicio   = lazy(() => import('./pestanas/Inicio'));
 const Clientes = lazy(() => import('./pestanas/Clientes'));
 const Alertas  = lazy(() => import('./pestanas/Alertas'));
 const Buscar   = lazy(() => import('./pestanas/Buscar'));
-const Agenda   = lazy(() => import('./pestanas/agenda5/AgendaM')); // V5 (2026-10-04); la V4 sigue en pestanas/agenda
+const Agenda   = lazy(() => import('./pestanas/agenda5/AgendaM')); // V5 (2026-10-04); la V4 quedó archivada en src/_archivo/agenda-v4-movil (2026-10-05)
 const PreferenciasHoja = lazy(() => import('../components/perfil/PreferenciasHoja'));
 
 const RAIZ = { inicio: Inicio, clientes: Clientes, alertas: Alertas, buscar: Buscar, agenda: Agenda };
