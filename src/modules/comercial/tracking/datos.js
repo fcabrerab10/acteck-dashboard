@@ -23,10 +23,11 @@ export async function cargarTodo({ forzar = false } = {}) {
   // última corrida de este navegador (localStorage) o si se pide explícitamente (forzar = true).
   let sync = null;
   const K = 'oc_sync_at', hace = Date.now() - Number(localStorage.getItem(K) || 0);
-  if (forzar || hace > 30 * 60 * 1000) {
-    try { const { data, error } = await supabase.rpc('oc_sincronizar_erp'); sync = error ? { error: error.message } : data; if (!error) try { localStorage.setItem(K, String(Date.now())); } catch { /* sin storage */ } }
-    catch (e) { sync = { error: String(e?.message || e) }; }
-  } else sync = { omitida: true, hace_min: Math.round(hace / 60000) };
+  // La RPC tarda 5-8 s (y con el rol de la app a veces contesta 500 por timeout): corre EN PARALELO con las lecturas
+  // (3.71.3) en vez de antes; si termina con ligas nuevas, cargarTodo se vuelve a llamar desde la pantalla al refrescar.
+  const pSync = (forzar || hace > 30 * 60 * 1000)
+    ? supabase.rpc('oc_sincronizar_erp').then(({ data, error }) => { if (!error) { try { localStorage.setItem(K, String(Date.now())); } catch { /* sin storage */ } } return error ? { error: error.message } : data; }).catch((e) => ({ error: String(e?.message || e) }))
+    : Promise.resolve({ omitida: true, hace_min: Math.round(hace / 60000) });
   const [ocs, ocSkus, envios, envioSkus, cotizaciones, facturas, facturaSkus, erpFacturas, transitoRows, stockRows, roadmapRows, almacenes] = await Promise.all([
     leer('oc_clientes'),
     leer('oc_clientes_skus'),
@@ -41,6 +42,7 @@ export async function cargarTodo({ forzar = false } = {}) {
     fetchAll('roadmap_sku', 'sku,descripcion,marca,familia'),
     fetchAll('almacenes_config', 'no_almacen,cedis'),
   ]);
+  sync = await pSync;
   const cedisDe = new Map((almacenes || []).map((a) => [String(a.no_almacen), /GUADALAJARA/i.test(a.cedis || '') ? 'GDL' : /MEXICO/i.test(a.cedis || '') ? 'CDMX' : null]));
   const transito = new Map();
   for (const t of transitoRows || []) {
