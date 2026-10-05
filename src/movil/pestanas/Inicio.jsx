@@ -56,7 +56,7 @@ function SelectorPeriodoM({ anio, mes, anioHoy, mesHoy, onChange }) {
   return (
     <>
       <button type="button" onClick={() => setAbierto(true)}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 32, padding: '0 10px 0 12px', borderRadius: 9, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 32, padding: '0 10px 0 12px', borderRadius: 9, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 }}>
         {label}<ChevronDown size={14} style={{ color: theme.textMuted }} />
       </button>
       <HojaM abierto={abierto} onClose={() => setAbierto(false)} titulo="Período" sub="Mes o año completo · se compara con el año anterior" alto="75vh">
@@ -134,7 +134,7 @@ export default function Inicio() {
     r.cartera.vencido > 0 ? `cartera vencida ${fmtM(r.cartera.vencido)}` : null,
   ].filter(Boolean).join(' · ') : '';
   const selector = sensible ? <SelectorPeriodoM anio={anio} mes={mes} anioHoy={anioHoy} mesHoy={mesHoy} onChange={elegirPeriodo} /> : null;
-  const sub = <><span>{diaLargo(hoy).replace(/^./, (c) => c.toUpperCase())}</span><span>·</span><FrescuraPill fuentes={FUENTES_INICIO} detallado /></>;
+  const sub = <><span>{diaLargo(hoy).replace(/^./, (c) => c.toUpperCase())}</span><span>·</span><FrescuraPill fuentes={FUENTES_INICIO} detallado fila /></>;
 
   if (error) {
     return (<><TituloGrande titulo={titulo} sub={sub} derecha={selector} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudieron cargar los datos" sub={error} /></>);

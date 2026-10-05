@@ -195,7 +195,7 @@ export default function SellInGlobal() {
 
   const top = r ? r.skus.slice(0, 10) : [];
   const maxTop = Math.max(0, ...top.map((o) => o.piezas));
-  const sub = <><span>Todos los clientes y canales</span><span>·</span><FrescuraPill pantalla="sellIn" detallado /></>;
+  const sub = <><span>Todos los clientes y canales</span><span>·</span><FrescuraPill pantalla="sellIn" detallado fila /></>;
   const etiquetaFiltro = `${canalSel ? canalLabel(canalSel) : 'Todos los canales'}${soloClave ? ' · clientes clave' : ''}`;
 
   if (error) return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Sell In" sub={sub} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudo cargar el Sell In" sub={error.message} /></>);

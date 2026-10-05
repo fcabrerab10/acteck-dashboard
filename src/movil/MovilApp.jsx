@@ -250,8 +250,10 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     if (activoId.includes(':')) return 'clientesPropios';
     return buscarNodo(arbol, activoId)?.grupo || null;
   }, [arbol, activoId]);
+  // Una pantalla empujada desde otra pestaña (p. ej. Sell In abierto desde la Agenda) resalta SU grupo, no la pestaña raíz.
+  const empujada = (pilas[tab] || []).length > 0 && activoId && activoId !== TAB_A_NODO[tab] && grupoActivo;
   const activoBarra = perfilAbierto ? 'perfil' : hojaAbierta && hoja?.grupo ? hoja.grupo
-    : tab === 'inicio' ? 'inicio' : tab === 'agenda' ? 'agenda' : tab === 'clientes' ? 'clientesPropios' : grupoActivo;
+    : empujada ? grupoActivo : tab === 'inicio' ? 'inicio' : tab === 'agenda' ? 'agenda' : tab === 'clientes' ? 'clientesPropios' : grupoActivo;
 
   return (
     <NavContext.Provider value={ctx}>

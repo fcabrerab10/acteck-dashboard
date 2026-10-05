@@ -120,7 +120,7 @@ export default function SellOutGlobal() {
   const onCompartir = async () => { if (await compartir(textoCompartir, { titulo: `Sell Out ${MESES_LARGO[sel.mes - 1]} ${sel.anio}` }) === 'share') toast.ok('Compartido'); };
   const onCopiar = async () => { if (await copiar(textoCompartir)) toast.ok('Resumen copiado'); else toast.error('No se pudo copiar'); };
 
-  const sub = <><span>Todas las cuentas · sin IVA</span><span>·</span><FrescuraPill pantalla="sellOutGlobal" detallado etiquetas={{ sellout_general: 'Puente', sellout_pcel: 'PCEL', inventario_cliente: 'Inv. clientes' }} /></>;
+  const sub = <><span>Todas las cuentas · sin IVA</span><span>·</span><FrescuraPill pantalla="sellOutGlobal" detallado fila etiquetas={{ sellout_general: 'Puente', sellout_pcel: 'PCEL', inventario_cliente: 'Inv. clientes' }} /></>;
 
   if (error) {
     return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Sell Out" sub={sub} />

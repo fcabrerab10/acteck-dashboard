@@ -50,7 +50,7 @@ function cuando(ts) {
   return formatFrescura(ts);
 }
 
-export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = false, onClick, style, detallado = false, etiquetas = null }) {
+export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = false, onClick, style, detallado = false, etiquetas = null, fila = false }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const slugs = fuentesDe(pantalla, clienteKey, fuentes);
@@ -91,7 +91,7 @@ export default function FrescuraPill({ pantalla, fuentes, clienteKey, inverso = 
   // Modo detallado: una pill por fuente con SU última carga (en vez de resumir en la más vieja).
   if (detallado && !cargando && !error) {
     return (
-      <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, ...style }} title={title}>
+      <span style={{ display: 'inline-flex', flexWrap: fila ? 'nowrap' : 'wrap', gap: 4, ...(fila ? { maxWidth: '100%', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', verticalAlign: 'bottom' } : null), ...style }} title={title}>
         {slugs.map((sl) => {
           const r = porFuente[sl];
           if (!r) return null;
