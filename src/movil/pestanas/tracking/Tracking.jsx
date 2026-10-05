@@ -31,7 +31,7 @@ import { useNav } from '../../nav';
 import {
   TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, CampoBusqueda, Segmented, Vacio, HojaM, BotonGrande, toast,
 } from '../../piezas';
-import { FAB } from '../agenda/comun';
+import { FAB } from '../agenda5/comun';
 import { MONO } from '../../util';
 import { FilaOC, ChipM } from './piezas';
 import { HojaOC, HojaEnvio, HojaCotizacion, HojaFactura } from './hojas';

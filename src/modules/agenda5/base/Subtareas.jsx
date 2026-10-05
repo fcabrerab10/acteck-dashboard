@@ -3,9 +3,9 @@
 // sólo aparece el aviso «todas las subtareas listas · ¿marcar como hecho?» con su botón.
 import React, { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Check } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { Pill, Boton, toast } from '../../components/kit';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { Pill, Boton, toast } from '../../../components/kit';
 import { Palomita, IconBtn } from './comun';
 import { subtareasDe, progresoSubtareas } from './calculo';
 import { crearSubtarea, marcarSubtarea, borrarSubtarea, moverSubtarea, actualizarSubtarea } from './datos';

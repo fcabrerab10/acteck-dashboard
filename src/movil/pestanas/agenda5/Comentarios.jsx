@@ -8,8 +8,8 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Pill, toast } from '../../piezas';
 import { relativo } from '../../../lib/format';
-import { TIPOS_COMENTARIO, TIPO_COMENTARIO_LABEL, TIPO_COMENTARIO_TONE } from '../../../modules/agenda/calculo';
-import { crearComentario, borrarComentario } from '../../../modules/agenda/datos';
+import { TIPOS_COMENTARIO, TIPO_COMENTARIO_LABEL, TIPO_COMENTARIO_TONE } from '../../../modules/agenda5/base/calculo';
+import { crearComentario, borrarComentario } from '../../../modules/agenda5/base/datos';
 import { ChipM } from './comun';
 
 export default function HiloM({ item, hilo = [], personasPorId, reunionId = null, puedeEditar = true, vacio = null }) {

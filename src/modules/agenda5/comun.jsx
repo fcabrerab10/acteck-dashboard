@@ -5,7 +5,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { Pill } from '../../components/kit';
-import { nombreClienteAgenda } from '../agenda/etiquetas';
+import { nombreClienteAgenda } from './base/etiquetas';
 import { fmtMin } from './calculo';
 
 export const inicial = (p) => String(p?.nombre || p?.email || '?').split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase();

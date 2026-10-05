@@ -13,7 +13,7 @@ import {
   ejecutarAccion, accionAlerta, agruparPorArea, areaAlerta, aplicaCliente, esNueva, SEV_LABEL, modoDe,
 } from '../../lib/alertas';
 import { colorSev, horaRelativa } from '../../components/notificaciones/Pila';
-import { completarItem } from '../../modules/agenda/datos';
+import { completarItem } from '../../modules/agenda5/base/datos';
 import { useNav } from '../nav';
 import { TituloGrande, Segmented, FilaDeslizable, Fila, Vacio, Skeleton, Pill, TituloSeccionM, toast } from '../piezas';
 import { idNodo } from '../../components/nav/arbol';

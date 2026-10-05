@@ -6,11 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { queryClient } from '../../lib/queryClient';
 import { escribir } from '../../lib/buzon';
-import { useAgendaDatos, usePersonas, actualizarItem, recargarAgenda, KEY_AGENDA, useSubtareas, useComentarios, useCuentas } from '../agenda/datos';
-import { useGoogleEstado, useGoogleEventos, conectarGoogle } from '../agenda/google';
+import { useAgendaDatos, usePersonas, actualizarItem, recargarAgenda, KEY_AGENDA, useSubtareas, useComentarios, useCuentas } from './base/datos';
+import { useGoogleEstado, useGoogleEventos, conectarGoogle } from './base/google';
 import { interpretarCaptura } from './interpretar';
 import { isoDia, sumarDias } from './calculo';
-export { actualizarItem, completarItem, borrarItem, crearReunion, actualizarReunion } from '../agenda/datos';
+export { actualizarItem, completarItem, borrarItem, crearReunion, actualizarReunion } from './base/datos';
 
 const KEY_EXTRA = ['agenda5', 'extra'];
 async function uid() { const { data } = await supabase.auth.getUser(); return data?.user?.id || null; }

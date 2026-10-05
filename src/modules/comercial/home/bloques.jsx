@@ -5,7 +5,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { moneyCompact as $c, money as $, int, fecha, fechaCorta } from '../../../lib/format';
 import { Panel, TablaCompacta, HeatCell, Pill, Boton, GraficaLineas, SelectorTrimestres, etiquetaTrimestres } from '../../../components/kit';
 import { MESES, META_INV_DIAS } from './config';
-import { useMinutasCliente } from '../../agenda/datos';
+import { useMinutasCliente } from '../../agenda5/base/datos';
 import { normalizarMarca, toneMarca } from '../../../lib/marcas';
 
 const signo = (v, d = 1) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);

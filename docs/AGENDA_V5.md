@@ -21,7 +21,8 @@ Fernando (sólo lectura); Fernando ve todas; David Millán no entra.
   `calculo.js` (puro: hoyDe, bandejaDe, pendientesDe, porProyecto, conteosMes, bloquesDia, fraseHoy), `datos.js`
   (useAgenda5 = useAgendaDatos V4 + áreas/proyectos/registro/check-ins + Google normalizado; crearDesdeCaptura, triage,
   posponer, moverA, estimar, cronometro, crearArea/Proyecto, guardarRegistroDia, guardarCheckin), `comun.jsx`.
-  Reuniones, Minuta, FormReunion y HojaItem se reutilizan de `src/modules/agenda/` (V4) dentro del armazón nuevo.
+  Reuniones, Minuta, FormReunion y HojaItem se reutilizan dentro del armazón nuevo desde `src/modules/agenda5/base/`
+  (ver «V5 autónoma» abajo).
 - Migración `20261004_agenda_v5_modelo.sql`: columnas nuevas en `agenda_items` (propietario, cuando, duracion_min,
   min_real, inicio_real, area_id, proyecto_id, bandeja, snooze_hasta, promovido_a, orden_dia) y tablas `agenda_areas`,
   `agenda_proyectos`, `agenda_registro_dia`, `agenda_checkins`, `agenda_objetivos_semana` (RLS agenda_puede_ver/editar,
@@ -38,7 +39,35 @@ Fernando (sólo lectura); Fernando ve todas; David Millán no entra.
 - Recordatorios en la campana (tipos `agenda_planear` 08:15 y `agenda_cierre` 17:00, dirigidos a cada persona, desde
   `taskAgendaCorreo` en api/cron.js); se apagan por persona en ⚙️ como cualquier alerta.
 
+## V5 autónoma · V4 archivada (2026-10-05)
+Sin cambiar comportamiento, todo lo que la V5 importaba de la V4 se movió (con `git mv`, historia conservada):
+- **Web → `src/modules/agenda5/base/`**: `datos.js` (useAgendaDatos, useContadorAgenda, useMinutasCliente, useBandejaHoy,
+  completarItem, fetchAgenda…), `calculo.js`, `textos.js`, `etiquetas.js` (CORREOS_SIN_AGENDA), `google.js`, `reparto.js`,
+  `comun.jsx` (TagCliente, CampoEtiquetas, FilaItem…), `Minuta.jsx`, `FormReunion.jsx`, `HojaItem.jsx`, `EnviarMinuta.jsx`,
+  `Comentarios.jsx`, `ReunionAnterior.jsx`, `Subtareas.jsx`, `HojaReparto.jsx`. Dentro de `agenda5/` se importan como
+  `./base/x`; `agenda5/calculo.js`, `datos.js` e `interpretar.js` conviven con los de `base/` sin chocar.
+- **Celular → `src/movil/pestanas/agenda5/`** (junto a `AgendaM.jsx`): `Reuniones.jsx`, `Minuta.jsx`, `Captura.jsx`
+  (hoja de edición de un ítem), `Reparto.jsx`, `Comentarios.jsx`, `EnviarMinutaM.jsx` y `comun.jsx` (FAB, PalomitaM, ChipM,
+  CampoM, FilaGesto, BotonMic, lbl, useBottomOffset). `AgendaCtx` / `useAgenda` se definen ahora en ese `comun.jsx`
+  (antes en `pestanas/agenda/Agenda.jsx`): `AgendaM` lo provee y `Reuniones` lo lee, igual que antes.
+- **Importadores fuera de la agenda que cambiaron de ruta**: `src/movil/MovilApp.jsx` (useContadorAgenda),
+  `src/movil/pestanas/Alertas.jsx` y `equipo/Persona.jsx` (completarItem), `src/modules/general/inicio/bloques.jsx`
+  (bloque Hoy: useBandejaHoy, FilaItem, isoDia), `src/modules/comercial/home/bloques.jsx` (MinutasCliente →
+  useMinutasCliente), `src/lib/modoVisita.js`, `src/lib/preguntas/responder.js`, `src/lib/prefetch.js` (precarga
+  `agenda5/Agenda5` en vez de la V4), y las pantallas móviles que toman piezas táctiles de `pestanas/agenda5/comun`:
+  `tracking/Tracking.jsx`, `tracking/hojas.jsx`, `tracking/piezas.jsx`, `pagos/Pagos.jsx`, `equipo/EvaluacionM.jsx`,
+  `admin/Invitar.jsx`. `api/cron.js` sólo cambió el comentario que apunta a `etiquetas.js`.
+- **Archivado (no se compila)**: `src/_archivo/agenda-v4/` (Agenda, Calendario, Mes, Semana, Pendientes, Cuentas,
+  Archivados, Reuniones web) y `src/_archivo/agenda-v4-movil/` (Agenda, Pendientes, Semana, Cuentas, Archivados).
+- **Pruebas**: `scripts/test-agenda-ssr.mjs` ahora prueba la base (carga de módulos web y móvil, Subtareas, Reparto,
+  Comentarios, ReunionAnterior, Minuta, EnviarMinuta, correo del cron, crones) y tiene un guardia que falla si algo
+  compilable vuelve a importar `…/agenda/`; las pruebas de Pendientes/Archivados/Cuentas/Mes V4 se retiraron con las
+  pantallas. La prueba del correo se alineó con `api/cron.js` (la sección «Reuniones de hoy» va primero cuando hay
+  reunión ese día). `test-agenda-calculo`, `test-agenda-etiquetas` y `test-agenda-reparto` apuntan a `agenda5/base/`.
+  Arranque medido: 181.6 KB gz → 181.2 KB gz (ya no se precarga el chunk de la V4).
+
 ## Pendiente
 1. Check-in semanal del lunes y «on this day».
-2. Celular: arrastrar al reloj (hoy sólo web) y hilo de reuniones V5 (hoy usa la lista V4 móvil).
-3. Archivar la V4 cuando la minuta se porte al armazón nuevo.
+2. Celular: arrastrar al reloj (hoy sólo web) y hilo de reuniones V5 (hoy usa la lista de reuniones heredada, en
+   `pestanas/agenda5/Reuniones.jsx`).
+3. Portar la minuta al armazón nuevo (hoy `agenda5/base/Minuta.jsx` es la de siempre dentro de la V5).

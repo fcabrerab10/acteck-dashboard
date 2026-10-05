@@ -6,9 +6,9 @@
 //   const { data: eventos } = useGoogleEventos(desde, hasta, conectado);
 //   const { id } = await crearEventoGoogle({ titulo, inicio, fin, lugar, descripcion, asistentes })
 import { useQuery } from '@tanstack/react-query';
-import { supabase, DB_CONFIGURED } from '../../lib/supabase';
-import { queryClient } from '../../lib/queryClient';
-import { apiFetch } from '../../lib/apiFetch';
+import { supabase, DB_CONFIGURED } from '../../../lib/supabase';
+import { queryClient } from '../../../lib/queryClient';
+import { apiFetch } from '../../../lib/apiFetch';
 
 export const KEY_GOOGLE = ['agenda', 'google'];
 

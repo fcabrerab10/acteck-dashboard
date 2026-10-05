@@ -18,7 +18,7 @@ import { usePerfil } from '../../../lib/perfilContext';
 import { TituloGrande, HeroM, ListaAgrupada, Fila, Segmented, Vacio, HojaM, toast } from '../../piezas';
 import { Cargando } from '../../../components/kit';
 import { money, moneyCompact, MESES_LARGO, N } from '../../util';
-import { FilaGesto, ChipM } from '../agenda/comun';
+import { FilaGesto, ChipM } from '../agenda5/comun';
 import { clientesVisibles, puedeEditarPagos, cambiarEstado } from '../../../modules/comercial/pagosv3/datos';
 import { CLIENTE_LABEL, CLIENTE_COLOR } from '../../../modules/comercial/pagosv3/reglas';
 import { ESTADO_META, TIPO_META, estaVencido, venceEn, diasParaPago } from '../../../modules/comercial/pagosv3/estados';

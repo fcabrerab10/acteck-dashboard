@@ -3,15 +3,15 @@
 // de persona (sólo internos con agenda) y de fecha (hoy · mañana · viernes · próxima semana · fecha…).
 // Pie: «Crear N pendientes y cerrar minuta» (crea los puntos y llama al RPC agenda_cerrar_reunion)
 // y «Sólo guardar notas» (las notas ya se guardaron solas; sólo cierra la hoja).
-// La detección y el armado de filas viven en src/modules/agenda/reparto.js (lo comparte la web).
+// La detección y el armado de filas viven en src/modules/agenda5/base/reparto.js (lo comparte la web).
 import React, { useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { cuando } from '../../../modules/agenda/calculo';
-import { nombreClienteAgenda } from '../../../modules/agenda/etiquetas';
-import { opcionesFecha, textoReparto } from '../../../modules/agenda/reparto';
-import { repartirAcuerdos } from '../../../modules/agenda/datos';
+import { cuando } from '../../../modules/agenda5/base/calculo';
+import { nombreClienteAgenda } from '../../../modules/agenda5/base/etiquetas';
+import { opcionesFecha, textoReparto } from '../../../modules/agenda5/base/reparto';
+import { repartirAcuerdos } from '../../../modules/agenda5/base/datos';
 import { HojaM, BotonGrande, Vacio, toast } from '../../piezas';
 import { PalomitaM, ChipM, TagCliente, primerNombre } from './comun';
 

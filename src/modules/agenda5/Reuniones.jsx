@@ -9,9 +9,9 @@ import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { Panel, Pill, Boton, toast } from '../../components/kit';
 import { Titulo, Seccion, Palomita, Avatar } from './comun';
-import { resumenReunion } from '../agenda/calculo';
-import { crearPendienteDePunto, actualizarItem } from '../agenda/datos';
-import { nombreClienteAgenda } from '../agenda/etiquetas';
+import { resumenReunion } from './base/calculo';
+import { crearPendienteDePunto, actualizarItem } from './base/datos';
+import { nombreClienteAgenda } from './base/etiquetas';
 
 const abierto = (it) => it.estado === 'abierta' || it.estado === 'arrastrada';
 const fmt = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) + (d.getHours() || d.getMinutes() ? ` ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : ''); };

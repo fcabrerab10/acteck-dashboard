@@ -4,21 +4,24 @@
 //   · useLongPress: mantener presionada una tarjeta (450 ms, se cancela al mover > 10 px)
 //   · TarjetaItem / TarjetaAviso / TarjetaReunion: tarjetas de tarea-punto, aviso del sistema y reunión
 //   · FAB, PalomitaM, ChipM, Tag* (pills de #cliente @persona /categoría reutilizadas de la web)
-// La lógica pura viene de src/modules/agenda (calculo.js · etiquetas.js · textos.js); aquí sólo hay layout táctil.
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+// La lógica pura viene de src/modules/agenda5/base (calculo.js · etiquetas.js · textos.js); aquí sólo hay layout táctil.
+// AgendaCtx: contexto que AgendaM provee a Reuniones y a la hoja de captura (vivía en la V4 móvil, archivada en src/_archivo/agenda-v4-movil).
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clock, Plus, ChevronRight, Mic, MicOff } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { EASE, DUR, reduceMotion } from '../../../lib/motion';
 import { elevation } from '../../../lib/elevation';
 import { Pill, toneColors } from '../../../components/kit';
-import { TagCliente, TagPersona, CatPill, TONE_FUENTE } from '../../../modules/agenda/comun';
-import { cuando, vencido, vecesArrastrado, ordinal, resumenReunion, isoDia, fmtHora } from '../../../modules/agenda/calculo';
-import { nombreClienteAgenda } from '../../../modules/agenda/etiquetas';
+import { TagCliente, TagPersona, CatPill, TONE_FUENTE } from '../../../modules/agenda5/base/comun';
+import { cuando, vencido, vecesArrastrado, ordinal, resumenReunion, isoDia, fmtHora } from '../../../modules/agenda5/base/calculo';
+import { nombreClienteAgenda } from '../../../modules/agenda5/base/etiquetas';
 import { useNav, ALTO_BARRA } from '../../nav';
 import { MONO } from '../../util';
 
 export { TagCliente, TagPersona, CatPill, TONE_FUENTE };
+export const AgendaCtx = createContext(null);
+export const useAgenda = () => useContext(AgendaCtx);
 export const primerNombre = (s) => String(s || '').split(' ')[0];
 
 /** Alto libre sobre la barra inferior (modo "barra") o sobre el borde (modo "cajón"). */

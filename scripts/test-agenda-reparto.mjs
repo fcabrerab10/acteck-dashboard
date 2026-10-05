@@ -2,7 +2,7 @@
 //   node --test scripts/test-agenda-reparto.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectarAcuerdos, esAcuerdo, analizarLinea, contarAcuerdos, lineasMarcadas, opcionesFecha, filasAItems, textoReparto } from '../src/modules/agenda/reparto.js';
+import { detectarAcuerdos, esAcuerdo, analizarLinea, contarAcuerdos, lineasMarcadas, opcionesFecha, filasAItems, textoReparto } from '../src/modules/agenda5/base/reparto.js';
 
 const P = [
   { user_id: 'u-fer', nombre: 'Fernando Cabrera', email: 'fernando.cabrera@acteck.com' },

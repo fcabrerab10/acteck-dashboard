@@ -122,7 +122,7 @@ export function pasosDeVisita(clienteKey, { anio = new Date().getFullYear() } = 
   pasos.push({
     label: 'Reuniones y minutas',
     run: async () => {
-      const { fetchAgenda, fetchPersonas, fetchComentarios, KEY_AGENDA, KEY_PERSONAS, KEY_COMENTARIOS } = await import('../modules/agenda/datos');
+      const { fetchAgenda, fetchPersonas, fetchComentarios, KEY_AGENDA, KEY_PERSONAS, KEY_COMENTARIOS } = await import('../modules/agenda5/base/datos');
       await Promise.all([
         queryClient.fetchQuery({ queryKey: KEY_AGENDA, queryFn: fetchAgenda, gcTime: SIETE_DIAS }),
         queryClient.fetchQuery({ queryKey: KEY_PERSONAS, queryFn: fetchPersonas, gcTime: SIETE_DIAS }),

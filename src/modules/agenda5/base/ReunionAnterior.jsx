@@ -5,9 +5,9 @@
 // (RPC agenda_traer_puntos vía datos.js#traerPuntosDeReunion) y saltar a la lista de reuniones.
 import React, { useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown, ArrowDownToLine, ExternalLink } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { Pill, Boton, toast } from '../../components/kit';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { Pill, Boton, toast } from '../../../components/kit';
 import { resumenReunion, reunionAnterior, reunionesDeCliente, hiloComentarios, cuando, isoDia, fmtHora } from './calculo';
 import { nombreClienteAgenda } from './etiquetas';
 import { traerPuntosDeReunion } from './datos';

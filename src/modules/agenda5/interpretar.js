@@ -5,7 +5,7 @@
 // Reusa parsearEtiquetas (#cliente @persona /categoría) y fechaNatural (hoy, mañana, lunes, 15 oct, en 3 días, a las 4…)
 // de la Agenda V4 y añade duración (30m · 1h · 1h30 · 45 min), prioridad (p1/p2/p3 · !!! · !!) y tipo
 // (idea: · nota: · reunión: · "idea de"). Sin fecha ni hora → va a la Bandeja; con "hoy" → Hoy.
-import { parsearEtiquetas, fechaNatural } from '../agenda/etiquetas.js';
+import { parsearEtiquetas, fechaNatural } from './base/etiquetas.js';
 
 const PRIORIDAD = { p1: 'alta', p2: 'media', p3: 'baja', '!!!': 'alta', '!!': 'media', '!': 'baja' };
 const TIPOS = [

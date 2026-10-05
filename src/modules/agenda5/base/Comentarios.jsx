@@ -9,10 +9,10 @@
 // El hilo llega ya calculado (calculo.js#hiloComentarios) para que la misma lista sirva en el móvil.
 import React, { useState } from 'react';
 import { Trash2, CornerDownRight } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { Pill, toast } from '../../components/kit';
-import { relativo } from '../../lib/format';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { Pill, toast } from '../../../components/kit';
+import { relativo } from '../../../lib/format';
 import { TIPOS_COMENTARIO, TIPO_COMENTARIO_LABEL, TIPO_COMENTARIO_TONE, fmtCorta, isoDia } from './calculo';
 import { crearComentario, borrarComentario } from './datos';
 import { Avatar } from './comun';

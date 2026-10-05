@@ -57,8 +57,8 @@ const HistorialCambios       = lazy(() => import('../modules/interno/HistorialCa
 const AxonMexico             = lazy(() => import('../modules/interno/AxonMexico'));
 const Configuracion          = lazy(() => import('../modules/configuracion/Configuracion'));
 const ActualizacionDatos     = lazy(() => import('../modules/settings/ActualizacionDatos'));
-const Agenda                 = lazy(() => import('../modules/agenda5/Agenda5'));
-const Ciudad                 = lazy(() => import('../modules/ciudad/Ciudad')); // Acteck Ciudad · three.js sólo aquí // V5 (2026-10-04); la V4 sigue en modules/agenda
+const Agenda                 = lazy(() => import('../modules/agenda5/Agenda5')); // V5 (2026-10-04); la V4 quedó archivada en src/_archivo/agenda-v4 (2026-10-05)
+const Ciudad                 = lazy(() => import('../modules/ciudad/Ciudad')); // Acteck Ciudad · three.js sólo aquí
 const BandejaAlertas         = lazy(() => import('./BandejaAlertas'));
 // Pantallas mobile (sólo se descargan en iPhone/iPad).
 const MobileEquipo            = lazy(() => import('./MobileEquipo'));

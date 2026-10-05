@@ -2,16 +2,16 @@
 // "en qué quedó", reunión de origen (abre la minuta), veces arrastrado, borrar.
 import React, { useState } from 'react';
 import { Trash2, Check, CalendarDays, ListPlus } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { HojaLateral, Grupo, Fila } from '../../components/perfil/comun';
-import { Pill, Boton, Segmented, toast } from '../../components/kit';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { HojaLateral, Grupo, Fila } from '../../../components/perfil/comun';
+import { Pill, Boton, Segmented, toast } from '../../../components/kit';
 import { guardarItemDesdeTexto, actualizarItem, borrarItem, crearPendienteDePunto } from './datos';
 import { textoConEtiquetas, nombreClienteAgenda } from './etiquetas';
 import { vecesArrastrado, ordinal, cuando, isoDia, hiloComentarios, pendientesDePunto } from './calculo';
 import { PRIORIDAD_LABEL, ESTADO_LABEL } from './textos';
 import { CampoEtiquetas, TagCliente, TagPersona, CatPill } from './comun';
-import { relativo } from '../../lib/format';
+import { relativo } from '../../../lib/format';
 import Subtareas from './Subtareas';
 import Hilo from './Comentarios';
 

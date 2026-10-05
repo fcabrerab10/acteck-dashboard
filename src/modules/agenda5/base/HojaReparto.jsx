@@ -2,13 +2,13 @@
 // Hoja lateral con una fila por acuerdo detectado en las Notas de la reunión: palomita para incluir,
 // responsable, fecha y #cliente. «Crear N pendientes y cerrar minuta» crea los puntos y cierra con el
 // mismo RPC (agenda_cerrar_reunion) que el botón de siempre; «Sólo guardar notas» no crea nada.
-// La detección vive en reparto.js y la comparte la app móvil (móvil: src/movil/pestanas/agenda/Reparto.jsx).
+// La detección vive en reparto.js y la comparte la app móvil (móvil: src/movil/pestanas/agenda5/Reparto.jsx).
 import React, { useMemo, useState } from 'react';
 import { Lock } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { HojaLateral } from '../../components/perfil/comun';
-import { Boton, Pill, toast } from '../../components/kit';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { HojaLateral } from '../../../components/perfil/comun';
+import { Boton, Pill, toast } from '../../../components/kit';
 import { cuando } from './calculo';
 import { opcionesFecha, textoReparto } from './reparto';
 import { repartirAcuerdos } from './datos';

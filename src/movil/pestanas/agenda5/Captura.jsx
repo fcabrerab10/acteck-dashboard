@@ -8,12 +8,12 @@ import { Check, Trash2, CalendarDays, ChevronRight, RotateCcw } from 'lucide-rea
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { HojaM, BotonGrande, Segmented, toast } from '../../piezas';
-import { crearItem, guardarItemDesdeTexto, actualizarItem, borrarItem, useComentarios } from '../../../modules/agenda/datos';
-import { parsearEtiquetas, fechaNatural, textoConEtiquetas, CLIENTES_AGENDA, CATEGORIAS, nombreClienteAgenda, conHandles } from '../../../modules/agenda/etiquetas';
-import { cuando, isoDia, sumarDias, fmtHora, proximaReunion, hiloComentarios } from '../../../modules/agenda/calculo';
-import { PRIORIDAD_LABEL } from '../../../modules/agenda/textos';
+import { crearItem, guardarItemDesdeTexto, actualizarItem, borrarItem, useComentarios } from '../../../modules/agenda5/base/datos';
+import { parsearEtiquetas, fechaNatural, textoConEtiquetas, CLIENTES_AGENDA, CATEGORIAS, nombreClienteAgenda, conHandles } from '../../../modules/agenda5/base/etiquetas';
+import { cuando, isoDia, sumarDias, fmtHora, proximaReunion, hiloComentarios } from '../../../modules/agenda5/base/calculo';
+import { PRIORIDAD_LABEL } from '../../../modules/agenda5/base/textos';
 import { ChipM, BotonMic, CampoM, lbl, primerNombre } from './comun';
-import Subtareas from '../../../modules/agenda/Subtareas';
+import Subtareas from '../../../modules/agenda5/base/Subtareas';
 import HiloM from './Comentarios';
 
 const TIPOS = [{ id: 'tarea', label: 'Tarea' }, { id: 'punto', label: 'Punto de reunión' }];

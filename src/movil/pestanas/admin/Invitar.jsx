@@ -15,7 +15,7 @@ import { apiFetch } from '../../../lib/apiFetch';
 import { CLIENTES, PESTANAS_CLIENTE, PESTANAS_GLOBALES } from '../../../lib/permisos';
 import { permisosVacios, normalizarPermisos, GLOBALES_EXTERNO, tipoDe, contarNiveles } from '../../../modules/configuracion/comun';
 import { HojaM, BotonGrande, Segmented, toast } from '../../piezas';
-import { CampoM, ChipM, lbl } from '../agenda/comun';
+import { CampoM, ChipM, lbl } from '../agenda5/comun';
 
 const TIPOS = [{ id: 'interno', label: 'Interno' }, { id: 'externo', label: 'Externo' }];
 const emailOk = (e) => /\S+@\S+\.\S+/.test(String(e || '').trim());

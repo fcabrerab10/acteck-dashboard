@@ -3,12 +3,12 @@
 // (avisos a responsables + arrastre a la siguiente del mismo cliente); compartir por WhatsApp y PDF.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Trash2, Share2, Check, Play, Lock, Pencil, Split, ChevronUp, ChevronDown, ArrowUpRight, MessageSquare, CalendarDays, Mail } from 'lucide-react';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
-import { HojaLateral, Campo } from '../../components/perfil/comun';
-import { Pill, Boton, Segmented, toast } from '../../components/kit';
-import ExportMenu from '../../components/ExportMenu';
-import { compartir } from '../../lib/whatsapp';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { HojaLateral, Campo } from '../../../components/perfil/comun';
+import { Pill, Boton, Segmented, toast } from '../../../components/kit';
+import ExportMenu from '../../../components/ExportMenu';
+import { compartir } from '../../../lib/whatsapp';
 import { guardarPunto, actualizarReunion, cerrarReunion, borrarItem, recargarAgenda, moverPunto } from './datos';
 import { resumenReunion, vecesArrastrado, ordinal, cuando, isoDia, hiloComentarios, pendientesDePunto, fmtCorta } from './calculo';
 import { textoConEtiquetas, CATEGORIAS, nombreClienteAgenda } from './etiquetas';
@@ -19,7 +19,7 @@ import HojaReparto from './HojaReparto';
 import Hilo from './Comentarios';
 import ReunionAnterior from './ReunionAnterior';
 import EnviarMinuta from './EnviarMinuta';
-import { relativo } from '../../lib/format';
+import { relativo } from '../../../lib/format';
 
 const DEBOUNCE_MS = 600;
 

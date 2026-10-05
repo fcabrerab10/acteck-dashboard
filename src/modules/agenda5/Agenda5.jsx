@@ -15,7 +15,7 @@ import { Cargando, Panel, Pill, Boton, toast } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { supabase } from '../../lib/supabase';
 import { useAgenda5, actualizarItem, completarItem, guardarRegistroDia, guardarCheckin, crearObjetivoSemana, marcarObjetivoSemana, borrarObjetivoSemana } from './datos';
-import { cuentasPendientes } from '../agenda/calculo';
+import { cuentasPendientes } from './base/calculo';
 import { hoyDe, bandejaDe, pendientesDe, isoDia, sumarDias, fmtMin, esDe, abierto } from './calculo';
 import { Avatar, FilaTarea, Titulo, Seccion, Palomita } from './comun';
 import Captura from './Captura';
@@ -23,10 +23,10 @@ import Hoy from './Hoy';
 import Bandeja from './Bandeja';
 import Pendientes from './Pendientes';
 import ReunionesV5 from './Reuniones';
-import HojaItem from '../agenda/HojaItem';
-import Minuta from '../agenda/Minuta';
-import FormReunion from '../agenda/FormReunion';
-import { comentariosPorItem } from '../agenda/calculo';
+import HojaItem from './base/HojaItem';
+import Minuta from './base/Minuta';
+import FormReunion from './base/FormReunion';
+import { comentariosPorItem } from './base/calculo';
 
 const MODULOS = [
   { id: 'hoy', label: 'Hoy', icon: Sun }, { id: 'bandeja', label: 'Bandeja', icon: Inbox }, { id: 'pendientes', label: 'Pendientes', icon: CheckSquare },

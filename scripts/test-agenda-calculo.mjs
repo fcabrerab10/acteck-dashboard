@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import {
   bandeja, segmento, conteos, equipo, cumplimiento, vecesArrastrado, resumenReunion, ordenarReuniones, proximaReunion,
   avisosSistema, columnasTablero, cambioAlSoltar, eventosCalendario, fraseHero, pasaFiltros, FILTROS_VACIOS, cuando, isoDia, diasEntre,
-} from '../src/modules/agenda/calculo.js';
-import { textoMinuta, textoBandeja, subReunion } from '../src/modules/agenda/textos.js';
+} from '../src/modules/agenda5/base/calculo.js';
+import { textoMinuta, textoBandeja, subReunion } from '../src/modules/agenda5/base/textos.js';
 
 const HOY = new Date(2026, 8, 10, 11); // jueves 10 sep 2026
 const P = [{ user_id: 'u-fer', nombre: 'Fernando Cabrera', handle: 'fernando' }, { user_id: 'u-kar', nombre: 'Karolina Veliz', handle: 'karolina' }];
@@ -172,8 +172,8 @@ test('hero y texto de bandeja', () => {
 import {
   HORIZONTES, horizonteDe, porHorizonte, archivados, progresoSubtareas, progresoPorItem, subtareasDe,
   estadoSeguimiento, cuentasOrdenadas, cuentasPendientes, registrarContacto, enlacesContacto, fraseAgenda,
-} from '../src/modules/agenda/calculo.js';
-import { asignables, CORREOS_SIN_AGENDA, buscarCliente } from '../src/modules/agenda/etiquetas.js';
+} from '../src/modules/agenda5/base/calculo.js';
+import { asignables, CORREOS_SIN_AGENDA, buscarCliente } from '../src/modules/agenda5/base/etiquetas.js';
 
 test('V4 · horizonteDe: vencido / hoy / esta semana / más adelante / sin fecha', () => {
   // HOY = jueves 10 sep 2026 → la semana corre lun 7 … dom 13.
@@ -285,7 +285,7 @@ test('V4 · David Millán no es asignable y #cliente acepta las cuentas del ERP'
 // ── Seguimiento por punto (2026-09-21) ────────────────────────────────────────
 test('el hilo de un punto no se pierde al arrastrarlo a la siguiente reunión', async () => {
   const { hiloComentarios, comentariosPorItem, cadenaItem, pendientesDePunto } =
-    await import('../src/modules/agenda/calculo.js');
+    await import('../src/modules/agenda5/base/calculo.js');
   // p1 (reunión r1) se arrastró a p2 (r2) y p2 a p3 (r3).
   const p1 = { id: 'p1', tipo: 'punto', reunion_id: 'r1', estado: 'arrastrada', titulo: 'Camisas' };
   const p2 = { id: 'p2', tipo: 'punto', reunion_id: 'r2', estado: 'arrastrada', titulo: 'Camisas', arrastrado_desde: 'p1' };
@@ -316,7 +316,7 @@ test('el hilo de un punto no se pierde al arrastrarlo a la siguiente reunión', 
 });
 
 test('reunionAnterior encuentra la previa del mismo cliente y sólo reuniones', async () => {
-  const { reunionAnterior, reunionesDeCliente } = await import('../src/modules/agenda/calculo.js');
+  const { reunionAnterior, reunionesDeCliente } = await import('../src/modules/agenda5/base/calculo.js');
   const R = [
     { id: 'r1', tipo: 'reunion', cliente_key: 'digitalife', fecha: '2026-08-11T16:00:00Z', estado: 'cerrada' },
     { id: 'r2', tipo: 'reunion', cliente_key: 'digitalife', fecha: '2026-09-01T16:00:00Z', estado: 'cerrada' },

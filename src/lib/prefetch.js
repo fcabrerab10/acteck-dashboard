@@ -53,7 +53,7 @@ const SELL_OUT = {
 const HOME_CLIENTE = () => import('../modules/comercial/HomeClienteV3');
 
 const GLOBALES = {
-  inicio:            [() => import('../modules/comercial/VisionGeneral'), () => import('../modules/agenda/Agenda')],
+  inicio:            [() => import('../modules/comercial/VisionGeneral'), () => import('../modules/agenda5/Agenda5')],
   agenda:            [() => import('../modules/general/Inicio'), () => import('../modules/comercial/VisionGeneral')],
   visionGeneral:     [() => import('../modules/comercial/AnalisisClientesGlobal'), () => import('../modules/comercial/SellInCliente')],
   analisisClientes:  [() => import('../modules/comercial/VisionGeneral'), HOME_CLIENTE],
