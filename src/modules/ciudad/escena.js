@@ -56,16 +56,25 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
 
   function irA(tag) { let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) p = distritoPos.get(tag.ciudad); if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
 
-  let viva = true; let ultimo = performance.now(); let tiempo = 0;
+  // Dibujar sólo cuando hace falta: con la pestaña del navegador oculta se pausa del todo; en calma (15 s sin gestos y la
+  // cámara quieta) baja a ~10 fps; cualquier gesto la regresa a 60 al instante.
+  const CALMA_MS = 15000, CALMA_CUADRO_MS = 100;
+  let viva = true; let ultimo = performance.now(); let tiempo = 0; let ultimoDibujo = 0; let pausada = false;
   function frame(now) {
     if (!viva) return;
+    if (document.hidden) { pausada = true; return; }
+    const calma = now - inter.st.ultimoInput > CALMA_MS && !camara.moviendose();
+    if (calma && now - ultimoDibujo < CALMA_CUADRO_MS) { requestAnimationFrame(frame); return; }
+    ultimoDibujo = now;
     try { paso(now); } catch (e) { viva = false; console.error('[ciudad] frame', e); onError?.(e); return; }
     requestAnimationFrame(frame);
   }
+  const onVisible = () => { if (!document.hidden && viva && pausada) { pausada = false; ultimo = performance.now(); requestAnimationFrame(frame); } };
+  document.addEventListener('visibilitychange', onVisible);
   function paso(now) {
     // El primer timestamp de rAF puede ser ANTERIOR al performance.now() de la construcción (Chrome fija la hora al inicio del
     // cuadro): sin el tope en 0, `tiempo` quedaba negativo y caminar() pedía ruta[-1] → «reading '0'» (3.76.3).
-    const dt = Math.max(0, Math.min(.05, (now - ultimo) / 1000)); ultimo = now; tiempo += dt;
+    const dt = Math.max(0, Math.min(.11, (now - ultimo) / 1000)); // tope .11: en calma (10 fps) el tiempo sigue a velocidad real ultimo = now; tiempo += dt;
     camara.mover(dt, inter.st);
     for (const f of animados) f(tiempo);
     escalarEtiquetas(sprites, vista.zoom);
@@ -76,6 +85,6 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);
   return {
     resize, irA,
-    destruir() { viva = false; ro.disconnect(); inter.quitar(); scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); } }); R.dispose(); },
+    destruir() { viva = false; ro.disconnect(); inter.quitar(); document.removeEventListener('visibilitychange', onVisible); scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); } }); R.dispose(); },
   };
 }

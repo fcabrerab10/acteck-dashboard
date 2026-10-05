@@ -16,5 +16,7 @@ export function crearCamara(canvas, R) {
     if (!st.drag && (Math.abs(st.inercia.x) + Math.abs(st.inercia.z)) > .01) { vista.cxObj += st.inercia.x; vista.czObj += st.inercia.z; st.inercia.x *= .9; st.inercia.z *= .9; }
     const k = 1 - Math.pow(.001, dt); vista.cx += (vista.cxObj - vista.cx) * k; vista.cz += (vista.czObj - vista.cz) * k; const z0 = vista.zoom; vista.zoom += (vista.zoomObj - vista.zoom) * k; if (Math.abs(z0 - vista.zoom) > 1e-4) resize(); colocarCam();
   }
-  return { cam, vista, resize, colocarCam, colocarCamEn, mover };
+  // ¿La cámara sigue acercándose a su objetivo (arrastre, inercia, irA, zoom)?
+  function moviendose() { return Math.abs(vista.cxObj - vista.cx) + Math.abs(vista.czObj - vista.cz) + Math.abs(vista.zoomObj - vista.zoom) > .01; }
+  return { cam, vista, resize, colocarCam, colocarCamEn, mover, moviendose };
 }
