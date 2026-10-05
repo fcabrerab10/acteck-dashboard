@@ -162,7 +162,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false, 
     const esGDL = d.ciudad === 'GUADALAJARA';
     const base = esGDL ? { x: esc.x - 4, z: esc.z + 16 } : d.pos;
     distritoPos.set(d.ciudad, base);
-    const n = d.tiendas.length; const cols = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(n * 1.5)))); const filas = Math.ceil(n / cols);
+    const n = d.tiendas.length; const cols = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(Math.max(1, n) * 1.5)))); const filas = Math.max(1, Math.ceil(n / cols));
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const ancho = cols * 2.7 + 1.6, largo = filas * 2.9 + 1.6;
     const piso = box(ancho, .3, largo, P.banqueta); piso.position.y = .15; g.add(piso);
@@ -180,9 +180,11 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false, 
       const vit = new THREE.Mesh(new THREE.BoxGeometry(1.1, .75, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .75, 1.05); tg.add(vit);
       const puerta = new THREE.Mesh(new THREE.BoxGeometry(.5, 1.1, .1), M(0x5A4636)); puerta.position.set(.6, .55, 1.05); tg.add(puerta);
       if (oscuro && t.vendio) { const l = new THREE.PointLight(col, .8, 6); l.position.set(0, 2.2, 1.8); tg.add(l); }
+      if (t.cartera && t.cartera.vencido > 0) { const palo = box(.1, 3.2, .1, 0x6b6e76); palo.position.set(-1.1, 1.6, -1.1); tg.add(palo); const bandera = box(.9, .55, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .3 }); bandera.position.set(-.65, 2.9, -1.1); tg.add(bandera); animados.push((tt) => { bandera.rotation.y = Math.sin(tt * 3) * .25; }); }
       g.add(tg);
-      interact.push(...(() => { const arr = []; tg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendio ? `vendió este mes $${fmtK(t.importe)}` : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, ciudad: d.ciudad }; arr.push(o); } }); return arr; })());
+      interact.push(...(() => { const arr = []; tg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, ciudad: d.ciudad }; arr.push(o); } }); return arr; })());
     });
+    for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const techo = new THREE.Mesh(new THREE.ConeGeometry(.95, .7, 4), M(P.tiendaTecho)); techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(new THREE.BoxGeometry(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); cg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad }; interact.push(o); } }); }
     // árboles y farol
     arbol(g, -ancho / 2 - 1.2, -largo / 2 - 1.2, .9); arbol(g, ancho / 2 + 1.2, largo / 2 + 1.2, 1); if (n > 6) arbol(g, ancho / 2 + 1.2, -largo / 2 - 1.2, .8);
     const farol = box(.12, 2.6, .12, 0x6b6e76); farol.position.set(ancho / 2 + .6, 1.3, largo / 2 + .6); g.add(farol); const foco = new THREE.Mesh(new THREE.SphereGeometry(.22, 8, 6), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.6 : .2 })); foco.position.set(ancho / 2 + .6, 2.7, largo / 2 + .6); g.add(foco);
@@ -202,10 +204,10 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false, 
   // ── Camiones (facturas) y vendedores del ERP (coches) por las carreteras ──
   modelo.camiones.forEach((c, i) => {
     const curva = rutas.get(c.ciudad); if (!curva) return;
-    const g = new THREE.Group(); const caja = box(2.6, 1.4, 1.2, P.camion); caja.position.set(-.4, .95, 0); g.add(caja); const cab = box(1, 1.1, 1.2, P.cabina); cab.position.set(1.5, .8, 0); g.add(cab);
+    const g = new THREE.Group(); const caja = box(2.6, 1.4, 1.2, c.envio ? 0xDCE6F2 : P.camion); caja.position.set(-.4, .95, 0); g.add(caja); const cab = box(1, 1.1, 1.2, c.envio ? ACC.azul : P.cabina); cab.position.set(1.5, .8, 0); g.add(cab);
     [[-1.1, .5], [-1.1, -.5], [1.4, .5], [1.4, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(new THREE.CylinderGeometry(.28, .28, .22, 10), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); g.add(r); });
     if (oscuro) { const f = new THREE.PointLight(0xFFF2C0, .9, 7); f.position.set(2.2, .8, 0); g.add(f); }
-    add(g, { tipo: 'camion', titulo: `Factura ${c.folio}`, sub: `${c.cliente} · $${fmtK(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${capital(c.ciudad)}`, pagina: 'ordenesCompra' });
+    add(g, { tipo: 'camion', titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}`, sub: c.envio ? `${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''} · salió ${c.fecha} · va a ${capital(c.ciudad)}` : `${c.cliente} · $${fmtK(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${capital(c.ciudad)}`, pagina: 'ordenesCompra' });
     animados.push((t) => { const p = (c.progreso + t * .025 + i * .07) % 1; const pt = curva.getPointAt(p); const q = curva.getPointAt(Math.min(1, p + .01)); g.position.set(pt.x, .1, pt.z); g.rotation.y = -Math.atan2(q.z - pt.z, q.x - pt.x); });
   });
   modelo.vendedoresRuta.forEach((v, i) => {

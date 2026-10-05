@@ -86,6 +86,8 @@ const ALIAS = {
   SINALOA: 'CULIACAN', YUCATAN: 'MERIDA', 'QUINTANA ROO': 'CANCUN', 'JUAREZ': 'CIUDAD JUAREZ', 'CD JUAREZ': 'CIUDAD JUAREZ', 'SLP': 'SAN LUIS POTOSI', TUXTLA: 'TUXTLA GUTIERREZ',
   VERACRUZ: 'VERACRUZ', 'EDO MEX': 'TOLUCA', 'ESTADO DE MEXICO': 'TOLUCA', PUEBLA: 'PUEBLA', MERIDA: 'MERIDA', 'SAN LUIS': 'SAN LUIS POTOSI',
 };
+/** Ciudad representativa de cada estado (para clientes finales, que vienen por estado). */
+export const CIUDAD_POR_ESTADO = (() => { const m = {}; for (const [k, v] of Object.entries(CIUDADES)) if (!m[v.estado]) m[v.estado] = k; m['ESTADO DE MEXICO'] = 'TOLUCA'; m.GUANAJUATO = 'LEON'; m['BAJA CALIFORNIA'] = 'TIJUANA'; m.COAHUILA = 'SALTILLO'; m.SINALOA = 'CULIACAN'; m.TAMAULIPAS = 'TAMPICO'; m.VERACRUZ = 'VERACRUZ'; return m; })();
 const VIRTUAL = /E-?COMMERCE|AMAZON|MERCADO ?LIBRE|ONLINE|EN LINEA|WEB|DIGITAL|CORPORATIVO|MATRIZ|GENERAL|CEDIS|SIN SUCURSAL/;
 
 /** Ciudad de una sucursal por su nombre. `null` si es virtual (e-commerce) o no se reconoce. */
@@ -166,7 +168,9 @@ export function construirModelo(d, hoy = new Date()) {
     const c = ciudadDeSucursal(s.sucursal);
     const sede = SEDE_POR_CUENTA[s.cuenta] || 'GUADALAJARA';
     const nombreCuenta = cuentas.get(s.cuenta)?.nombre || s.cuenta;
-    const t = { cuenta: s.cuenta, nombreCuenta, sucursal: s.sucursal, importe: s.actual, previo: s.previo, vendio: s.actual > 0, virtual: !!c?.virtual, vendedores: s.vendedores };
+    // Luz encendida = vendió este mes; los primeros 10 días del mes también cuenta el mes anterior (si no, la ciudad amanece apagada el día 1).
+    const activa = s.actual > 0 || (hoy.getDate() <= 10 && s.previo > 0);
+    const t = { cuenta: s.cuenta, nombreCuenta, sucursal: s.sucursal, importe: s.actual, previo: s.previo, vendio: activa, vendioMes: s.actual > 0, virtual: !!c?.virtual, vendedores: s.vendedores };
     cuentasConSucursal.add(s.cuenta);
     if (c?.virtual) { virtuales.push(t); tienda(sede, { ...t, sucursal: `${s.sucursal} (en línea)` }); continue; }
     tienda(c?.ciudad || sede, t);
@@ -177,7 +181,7 @@ export function construirModelo(d, hoy = new Date()) {
     const m = (d.cuentaMes || []).filter((r) => r.cuenta === c.cuenta);
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
-    tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: c.nombre, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0, virtual: false, vendedores: 0 });
+    tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: c.nombre, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
   }
   // vendedores de los mayoristas → en la ciudad de su sucursal (o la sede de la cuenta)
   const vm = new Map();
@@ -189,12 +193,24 @@ export function construirModelo(d, hoy = new Date()) {
     if (!porCiudad.has(ciudad)) tienda(ciudad, { cuenta: v.cuenta, nombreCuenta: cuentas.get(v.cuenta)?.nombre || v.cuenta, sucursal: 'Matriz', importe: 0, previo: 0, vendio: false, virtual: false, vendedores: 0 });
     porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: cuentas.get(v.cuenta)?.nombre || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
   }
+  // Cartera (propios): saldo vencido → bandera roja en su Matriz / primera tienda de la sede.
+  const carteraPor = new Map((d.cartera || []).map((c) => [c.cliente, { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: N(c.dso), corte: c.fecha_corte }]));
+  for (const [cuenta, c] of carteraPor) {
+    const sede = SEDE_POR_CUENTA[cuenta] || 'GUADALAJARA';
+    if (!porCiudad.has(sede)) continue;
+    const t = porCiudad.get(sede).tiendas.find((x) => x.cuenta === cuenta); if (t) t.cartera = c;
+  }
+  // Clientes finales por estado → ciudad representativa (casitas junto a la manzana).
+  const cfPor = new Map();
+  for (const r of d.clientesFinales || []) { const est = norm(r.estado); if (!est || est === 'SIN ESTADO') continue; const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad) continue; const o = cfPor.get(ciudad) || { n: 0, importe: 0, cuentas: new Set() }; o.n += 1; o.importe += N(r.importe); o.cuentas.add(r.cuenta); cfPor.set(ciudad, o); }
+  for (const [ciudad, o] of cfPor) { if (!porCiudad.has(ciudad)) porCiudad.set(ciudad, { ciudad, pos: posDe(CIUDADES[ciudad]), estado: CIUDADES[ciudad].estado, tiendas: [], vendedores: [] }); porCiudad.get(ciudad).clientesFinales = { n: o.n, importe: o.importe, cuentas: [...o.cuentas] }; }
   const distritos = [...porCiudad.values()].map((dist) => {
     dist.tiendas.sort((a, b) => b.importe - a.importe);
     dist.vendedores.sort((a, b) => b.importe - a.importe); dist.vendedores = dist.vendedores.slice(0, 6);
     dist.vendio = dist.tiendas.some((t) => t.vendio);
     dist.importe = dist.tiendas.reduce((s, t) => s + t.importe, 0);
     dist.cuentas = [...new Set(dist.tiendas.map((t) => t.cuenta))];
+    dist.casas = dist.clientesFinales ? Math.min(6, Math.max(1, Math.ceil(dist.clientesFinales.n / 60))) : 0;
     return dist;
   }).sort((a, b) => b.importe - a.importe);
 
@@ -206,6 +222,13 @@ export function construirModelo(d, hoy = new Date()) {
     const edad = dias(f.fecha, hoyIso);
     return { folio: f.folio, cliente: cuenta?.nombre || f.cliente_key, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + edad * 0.12) };
   }).sort((a, b) => b.monto - a.monto).slice(0, 14);
+  for (const e of d.envios || []) {
+    const salida = e.fecha_envio_erp || e.fecha_surtida; const entrega = e.fecha_entrega_erp || e.fecha_entregada;
+    if (!salida || entrega) continue;
+    const key = e.oc_clientes?.cliente_key || 'digitalife';
+    const edad = dias(salida, hoyIso); if (edad > 20) continue;
+    camiones.push({ folio: e.guia_rastreo ? `guía ${e.guia_rastreo}` : `envío OC ${e.oc_clientes?.numero_oc || ''}`.trim(), cliente: cuentas.get(key)?.nombre || key, ciudad: SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO', monto: 0, piezas: 0, fecha: salida, progreso: Math.min(0.9, 0.15 + edad * 0.15), envio: true, paqueteria: e.paqueteria || null });
+  }
 
   // ── Vendedores del ERP (equipo comercial): de la oficina a sus clientes ──
   const ve = new Map();
@@ -217,6 +240,7 @@ export function construirModelo(d, hoy = new Date()) {
     return { nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, total: v.total, clientes: v.clientes.size, destinos, fase: i / 10 };
   });
 
-  const kpis = { tiendas: distritos.reduce((s, x) => s + x.tiendas.length, 0), tiendasVendieron: distritos.reduce((s, x) => s + x.tiendas.filter((t) => t.vendio).length, 0), ciudades: distritos.length, barcos: puerto.barcos.length, camiones: camiones.length, vendedores: vendedoresRuta.length, enLinea: virtuales.length };
+  const clientesFinales = distritos.reduce((s, x) => s + (x.clientesFinales?.n || 0), 0);
+  const kpis = { clientesFinales, cartera: [...carteraPor.entries()].map(([k, c]) => ({ cuenta: k, ...c })), tiendas: distritos.reduce((s, x) => s + x.tiendas.length, 0), tiendasVendieron: distritos.reduce((s, x) => s + x.tiendas.filter((t) => t.vendio).length, 0), ciudades: distritos.length, barcos: puerto.barcos.length, camiones: camiones.length, vendedores: vendedoresRuta.length, enLinea: virtuales.length };
   return { hoyIso, anio, mes, oficina, cedis, puerto, distritos, camiones, vendedoresRuta, kpis, origen: posDe(ORIGEN), puertoPos: posDe(CIUDADES.MANZANILLO) };
 }

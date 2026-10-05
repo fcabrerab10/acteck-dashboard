@@ -19,7 +19,8 @@ export function useCiudadData(enabled = true) {
       const hace40 = iso(new Date(hoy.getTime() - 40 * 86400000));
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
       const seg = (p, nombre) => Promise.resolve(p).catch((e) => { console.warn(`[ciudad] ${nombre}:`, e?.message || e); return []; });
-      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes] = await Promise.all([
+      const mes = hoy.getMonth() + 1; const mesPrev = mes === 1 ? 12 : mes - 1;
+      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
@@ -31,8 +32,12 @@ export function useCiudadData(enabled = true) {
         seg(supabase.from('agenda_items').select('propietario,responsables,estado,titulo,cuando,fecha_limite,inicio_real').or(`cuando.eq.${hoyIso},fecha_limite.eq.${hoyIso}`).then((r) => r.data || []), 'agenda'),
         seg(supabase.from('agenda_reuniones').select('titulo,fecha,duracion_min,tipo,cliente_key').gte('fecha', `${hoyIso}T00:00:00`).lte('fecha', `${hoyIso}T23:59:59`).then((r) => r.data || []), 'reuniones'),
         seg(fetchAll('v_sellout_cuenta_mes', 'cuenta,anio,mes,importe', (q) => q.gte('anio', anio - 1)), 'cuenta mes'),
+        // Etapa 2: clientes finales (dos meses, por estado), cartera de los propios y envíos en tránsito del Tracking.
+        seg(fetchAll('mv_sellout_cliente_final_mes', 'cuenta,anio,mes,estado,importe', (q) => q.gte('anio', anio - (mes === 1 ? 1 : 0)).in('mes', [mes, mesPrev])), 'clientes finales'),
+        seg(fetchAll('v_vision_cartera_consolidada', 'cliente,fecha_corte,saldo_actual,saldo_vencido,dso'), 'cartera'),
+        seg(supabase.from('oc_envios').select('fecha_surtida,fecha_entregada,fecha_envio_erp,fecha_entrega_erp,guia_rastreo,paqueteria,oc_clientes(cliente_key,numero_oc)').or(`fecha_surtida.gte.${iso(new Date(hoy.getTime() - 30 * 86400000))},fecha_envio_erp.gte.${iso(new Date(hoy.getTime() - 30 * 86400000))}`).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'envíos'),
       ]);
-      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes }, hoy);
+      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios }, hoy);
     },
   });
 }
