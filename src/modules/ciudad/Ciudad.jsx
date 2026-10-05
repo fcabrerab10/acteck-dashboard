@@ -10,6 +10,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData } from './datos';
+import Carga from './Carga';
 import { COLOR_CUENTA, hexCss } from './modelo';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
@@ -27,6 +28,7 @@ export default function Ciudad({ onNavegar }) {
   const [busca, setBusca] = useState('');
   const [listo, setListo] = useState(false);
   const [fallo, setFallo] = useState(null);
+  const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
   useEffect(() => {
     // Clima real de Guadalajara (Open-Meteo, sin llave): manda sobre el tema para día/noche, nubes y lluvia.
@@ -73,15 +75,16 @@ export default function Ciudad({ onNavegar }) {
 
   if (!esSuper) return <SinAcceso motivo="Acteck Ciudad está en construcción y por ahora sólo la ve Fernando." />;
   if (error) return <div style={{ padding: 24, color: theme.red, fontFamily: TYPO.fontText }}>No se pudo cargar la ciudad: {String(error.message || error)}</div>;
-  if (isLoading || !modelo) return <Cargando pantalla="inicio" label="Construyendo la ciudad…" sub="Sucursales, contenedores, facturas y equipo" minHeight={520} />;
-  const k = modelo.kpis;
+  const k = modelo?.kpis;
+  const PASOS = ['Saliendo de órbita…', 'Bajando el motor 3D…', 'Trayendo tus sucursales…', 'Contando contenedores en el mar…', 'Leyendo el clima de Guadalajara…', 'Encendiendo las luces…'];
   const card = { background: oscuro ? 'rgba(28,28,30,.86)' : 'rgba(255,255,255,.88)', border: `1px solid ${theme.border}`, borderRadius: 12, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', fontFamily: TYPO.fontText, color: theme.text };
   return (
     <div style={{ position: 'relative', height: 'calc(100vh - 92px)', minHeight: 520, borderRadius: 14, overflow: 'hidden', border: `1px solid ${theme.border}`, background: oscuro ? '#121722' : '#EAF2F7' }}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', opacity: listo ? 1 : 0, transition: 'opacity 600ms cubic-bezier(.32,.72,0,1)' }} />
-      {!listo && !fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 13 }}>Dibujando la ciudad…</div>}
+      {!cargaFin && !fallo && <Carga pasos={PASOS} listo={listo} onFin={() => setCargaFin(true)} />}
       {fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 24, zIndex: 9 }}><pre style={{ ...card, padding: 16, maxWidth: 720, whiteSpace: 'pre-wrap', fontSize: 12, color: theme.red }}>No se pudo dibujar la ciudad:\n{fallo}</pre></div>}
       {/* cabecera */}
+      {modelo && <>
       <div style={{ position: 'absolute', left: 14, top: 12, display: 'flex', gap: 8, alignItems: 'center', zIndex: 3 }}>
         <div style={{ ...card, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Building2 size={16} style={{ color: theme.accent }} />
@@ -145,6 +148,7 @@ export default function Ciudad({ onNavegar }) {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }
