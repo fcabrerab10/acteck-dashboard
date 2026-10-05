@@ -32,17 +32,19 @@ export function entradasBarra(arbol, perfil) {
   return ENTRADAS.filter((e) => (e.pagina ? puedeVerPaginaGlobal(perfil, e.pagina) : e.grupos.some(tiene)));
 }
 
-export default function BarraGrupos({ arbol, activo, onEntrada, perfil, badgeAgenda = 0 }) {
+export default function BarraGrupos({ arbol, activo, onEntrada, perfil, badgeAgenda = 0, compacto = false, oculta = false }) {
   const { theme } = useTheme();
   const dark = theme.mode === 'dark';
   const marfil = theme.key === 'marfil';
   const entradas = entradasBarra(arbol, perfil);
   // Pastilla de vidrio deslizante (sustituye al fondo negro). La barra ya es de vidrio: variante translúcida.
-  const res = useResaltadoDeslizante(activo, { theme, radio: 999, deps: entradas.map((e) => e.id).join(',') });
+  const res = useResaltadoDeslizante(activo, { theme, radio: 999, deps: `${entradas.map((e) => e.id).join(',')}|${compacto}` });
+  const alto = compacto ? 44 : ALTO_BARRA;
   return (
     <nav ref={res.refContenedor} data-entrada-abajo aria-label="Menú" style={{
-      position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(12px + env(safe-area-inset-bottom))', zIndex: 60,
-      width: 'min(calc(100% - 24px), 440px)', height: ALTO_BARRA, padding: '0 6px', borderRadius: 999, boxSizing: 'border-box',
+      position: 'fixed', left: '50%', transform: oculta ? 'translate(-50%, calc(100% + 40px + env(safe-area-inset-bottom)))' : 'translateX(-50%)', bottom: 'calc(12px + env(safe-area-inset-bottom))', zIndex: 60,
+      width: compacto ? 'min(calc(100% - 64px), 380px)' : 'min(calc(100% - 24px), 440px)', height: alto, padding: '0 6px', borderRadius: 999, boxSizing: 'border-box',
+      transition: `height ${DUR.page}ms ${EASE}, width ${DUR.page}ms ${EASE}, transform ${DUR.page}ms ${EASE}`,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2,
       // Deslizador de vidrio (src/lib/vidrio.js); en "Opaco" no hay variables y queda el literal de siempre.
       background: `var(--vidrio-bg, ${dark ? 'rgba(28,28,30,0.82)' : marfil ? 'rgba(255,251,244,0.86)' : 'rgba(255,255,255,0.84)'})`,
@@ -58,12 +60,12 @@ export default function BarraGrupos({ arbol, activo, onEntrada, perfil, badgeAge
           <button key={id} ref={res.refItem(id)} type="button" onClick={() => onEntrada(id)} aria-current={on ? 'page' : undefined} aria-label={label}
             style={{
               position: 'relative',
-              flex: 1, height: 44, minWidth: 0, padding: '0 4px', border: 0, borderRadius: 999, cursor: 'pointer',
+              flex: 1, height: compacto ? 36 : 44, minWidth: 0, padding: '0 4px', border: 0, borderRadius: 999, cursor: 'pointer',
               display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
               background: 'transparent', color: on ? theme.text : theme.textMuted,
-              transition: `color ${DUR.state}ms ${EASE}`,
+              transition: `color ${DUR.state}ms ${EASE}, height ${DUR.page}ms ${EASE}`,
             }}>
-            <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <span style={{ position: 'relative', display: 'inline-flex', transform: compacto ? 'scale(1.08)' : 'none', transition: `transform ${DUR.page}ms ${EASE}` }}>
               <Icon size={20} strokeWidth={on ? 2.2 : 1.9} />
               {badge > 0 && (
                 <span aria-hidden style={{
@@ -72,12 +74,12 @@ export default function BarraGrupos({ arbol, activo, onEntrada, perfil, badgeAge
                 }}>{badge > 9 ? '9+' : badge}</span>
               )}
             </span>
-            <span style={{ fontSize: 10, fontWeight: on ? 600 : 500, letterSpacing: '0.01em', fontFamily: TYPO.fontDisplay, whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+            <span style={{ fontSize: 10, fontWeight: on ? 600 : 500, letterSpacing: '0.01em', fontFamily: TYPO.fontDisplay, whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '12px', maxHeight: compacto ? 0 : 12, opacity: compacto ? 0 : 1, transition: `max-height ${DUR.page}ms ${EASE}, opacity ${DUR.state}ms ${EASE}` }}>{label}</span>
           </button>
         );
       })}
       <button ref={res.refItem('perfil')} type="button" onClick={() => onEntrada('perfil')} aria-label="Perfil y preferencias" aria-current={activo === 'perfil' ? 'page' : undefined}
-        style={{ position: 'relative', width: 48, height: 44, flexShrink: 0, border: 0, borderRadius: 999, padding: 0, cursor: 'pointer', background: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        style={{ position: 'relative', width: 48, height: compacto ? 36 : 44, flexShrink: 0, border: 0, borderRadius: 999, padding: 0, cursor: 'pointer', background: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
         <AvatarImg perfil={perfil} size={28} />
       </button>
     </nav>

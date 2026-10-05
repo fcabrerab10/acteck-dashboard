@@ -226,6 +226,23 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta,
   }), [perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegar, abrirHoja, cerrarHoja, abrirProximamente, refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta]);
 
+  // Barras tipo Instagram (3.69.0): al bajar, la superior se esconde y la inferior se encoge; al subir, o al
+  // cambiar de pestaña / abrir otra pantalla, vuelven.
+  const [compacto, setCompacto] = useState(false);
+  useEffect(() => {
+    const h = (e) => setCompacto(e.detail?.dir === 'abajo');
+    window.addEventListener('acteck:movil-scroll', h);
+    return () => window.removeEventListener('acteck:movil-scroll', h);
+  }, []);
+  useEffect(() => { setCompacto(false); }, [tab, pilas, hojaAbierta, perfilAbierto, cajonAbierto]);
+  // Hojas abiertas (HojaM avisa): con una o más, la barra inferior se esconde del todo.
+  const [hojas, setHojas] = useState(0);
+  useEffect(() => {
+    const h = (e) => setHojas((n) => Math.max(0, n + (e.detail?.abierta ? 1 : -1)));
+    window.addEventListener('acteck:hoja', h);
+    return () => window.removeEventListener('acteck:hoja', h);
+  }, []);
+
   const sinBarra = modo === 'cajon';
   const grupoActivo = useMemo(() => {
     if (!activoId) return null;
@@ -267,10 +284,10 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
           );
         })}
 
-        <BarraSuperior modo={modo} tab={tab} badge={contador.pilas} badgeCritica={contador.criticaNueva} perfil={perfil}
+        <BarraSuperior modo={modo} tab={tab} badge={contador.pilas} badgeCritica={contador.criticaNueva} perfil={perfil} compacto={compacto}
           onMenu={() => setCajonAbierto(true)} onBuscar={() => alternarTab('buscar')} onAlertas={() => alternarTab('alertas')} onAvatar={() => setPerfilAbierto(true)} />
 
-        {modo === 'barra' && <BarraGrupos arbol={arbol} activo={activoBarra} onEntrada={onEntradaBarra} perfil={perfil} badgeAgenda={pendientesAgenda} />}
+        {modo === 'barra' && <BarraGrupos arbol={arbol} activo={activoBarra} onEntrada={onEntradaBarra} perfil={perfil} badgeAgenda={pendientesAgenda} compacto={compacto} oculta={hojas > 0} />}
         {modo === 'cajon' && <Cajon abierto={cajonAbierto} arrastre={arrastreCajon} onClose={() => setCajonAbierto(false)} onAbrirPerfil={() => setPerfilAbierto(true)} />}
 
         <HojaM abierto={hojaAbierta && !!hoja} onClose={cerrarHoja} titulo={hoja?.titulo} sub={hoja?.sub} alto={hoja?.alto || '78vh'} acciones={hoja?.acciones}>

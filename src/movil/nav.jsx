@@ -13,10 +13,30 @@ export const NavContext = createContext(null);
 export const useNav = () => useContext(NavContext);
 
 export const ALTO_BARRA = 56;
-export const ALTO_BARRA_SUP = 48;
+export const ALTO_BARRA_SUP = 44;
 export const PADDING_INFERIOR = `calc(${ALTO_BARRA + 34}px + env(safe-area-inset-bottom))`;
 export const PADDING_INFERIOR_SIN_BARRA = `calc(28px + env(safe-area-inset-bottom))`;
-export const PADDING_SUPERIOR = `calc(env(safe-area-inset-top) + ${ALTO_BARRA_SUP + 6}px)`;
+export const PADDING_SUPERIOR = `calc(env(safe-area-inset-top) + ${ALTO_BARRA_SUP + 4}px)`;
+
+// Dirección del scroll (3.69.0): como Instagram, al bajar la barra superior se esconde y la inferior se encoge; al
+// subir vuelven. Cada <Pantalla/> avisa con `acteck:movil-scroll` { dir: 'abajo' | 'arriba' } con histéresis
+// (24 px hacia abajo, 10 px hacia arriba) y «arriba» siempre al llegar al inicio de la pantalla.
+function vigilarScroll(el) {
+  let ultimo = el.scrollTop, acum = 0, dir = 'arriba';
+  const avisar = (d) => { if (d === dir) return; dir = d; window.dispatchEvent(new CustomEvent('acteck:movil-scroll', { detail: { dir: d } })); };
+  const onScroll = () => {
+    const y = el.scrollTop;
+    const max = el.scrollHeight - el.clientHeight;
+    if (y <= 8 || max < 120) { acum = 0; ultimo = y; avisar('arriba'); return; }
+    if (y >= max - 2) { ultimo = y; return; } // rebote al final: no cambia nada
+    const d = y - ultimo; ultimo = y;
+    acum = (d > 0) === (acum > 0) ? acum + d : d;
+    if (acum > 24) avisar('abajo');
+    else if (acum < -10) avisar('arriba');
+  };
+  el.addEventListener('scroll', onScroll, { passive: true });
+  return () => el.removeEventListener('scroll', onScroll);
+}
 
 const UMBRAL_REFRESCO = 72;
 
@@ -34,6 +54,8 @@ export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = fals
   const pullRef = useRef(0);
   const ponDx = (v) => { dxRef.current = v; setDx(v); };
   const ponPull = (v) => { pullRef.current = v; setPull(v); };
+
+  useEffect(() => { const el = scroll.current; return el ? vigilarScroll(el) : undefined; }, []);
 
   // ── Volver deslizando desde el borde izquierdo ──
   useEffect(() => {

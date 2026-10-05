@@ -19,8 +19,8 @@ import TablaAnual from '../sellout/TablaAnual';
 import { catalogoSkus, ultimosMeses } from '../SellInCliente';
 import FichaProducto from '../../FichaProducto';
 import Cuenta from '../selloutGlobal/Cuenta';
-import { useCuentas, useDias, useMensual, useCuotas, CUENTA_POR_ERP } from '../../../modules/comercial/sellout/datos';
-import { construirFilas, ultimoDiaConVenta, yoy } from '../../../modules/comercial/sellout/calculo';
+import { useCuentas, useDias, useMensual, useCuotas, CUENTA_POR_ERP, useDrillSkus } from '../../../modules/comercial/sellout/datos';
+import { construirFilas, ultimoDiaConVenta, yoy, skusDeCuenta, ultimosMeses as ultimosMesesSO } from '../../../modules/comercial/sellout/calculo';
 import { GraficaLineas, Pill } from '../../../components/kit';
 import { patronMes } from '../../../modules/comercial/analisis/ZoomDiario';
 import { cuotasPorTrimestre } from '../../../modules/comercial/analisis/CuotasTrimestre';
@@ -166,6 +166,9 @@ export function SellOutM({ clienteNombre, nombre, anio }) {
   const { data: dias = [], isLoading: lDias } = useDias(cuenta ? anio : null);
   const { data: mensual = [], isLoading: lMes } = useMensual(cuenta ? anio : null);
   const { data: cuotas = [] } = useCuotas(cuenta ? anio : null);
+  const skuQ = useDrillSkus(cuenta, anio, !!cuenta);
+  const [unidadSo, setUnidadSo] = useState('piezas');
+  const [buscaSo, setBuscaSo] = useState('');
 
   const propios = useMemo(() => mensual.filter((r) => r.cuenta === cuenta && N(r.anio) === anio), [mensual, cuenta, anio]);
   const mes = useMemo(() => {
@@ -185,6 +188,11 @@ export function SellOutM({ clienteNombre, nombre, anio }) {
 
   const soSi = act && N(act.sell_in) > 0 ? (N(act.importe) / N(act.sell_in)) * 100 : null;
   const dYoy = yoy(N(act?.importe), N(prev?.importe));
+  const skusSo = skusDeCuenta(skuQ.data || [], [], anio, mes, unidadSo === 'piezas' ? 'piezas' : 'importe');
+  const qSo = buscaSo.trim().toUpperCase();
+  const filasSo = skusSo.filter((s) => !qSo || s.sku.includes(qSo) || (s.marca || '').toUpperCase().includes(qSo) || (s.categoria || '').toUpperCase().includes(qSo));
+  const meses12So = ultimosMesesSO(anio, mes, 12);
+  const fmtSo = unidadSo === 'piezas' ? (n) => Math.round(n).toLocaleString('es-MX') : moneyCompact;
   return (
     <>
       <TituloSeccionM style={{ margin: '14px 0 0', padding: '0 28px 6px' }} meta={`${MESES[mes - 1]} ${anio}`}>Sell Out</TituloSeccionM>
@@ -195,6 +203,21 @@ export function SellOutM({ clienteNombre, nombre, anio }) {
         <KpiM eyebrow="Inventario" big={fila.invValor != null ? `${int(N(act?.inv_piezas))} pz` : '—'} sub={fila.invValor != null ? money(N(fila.invValor)) : 'no reporta'} />
       </KpiGrid>
       <ZoomDiarioM titulo="Sell out por día" filas={dias.filter((r) => r.cuenta === cuenta).map((r) => ({ anio: r.anio, mes: r.mes, dia: r.dia, valor: r.importe }))} anio={anio} mes={mes} />
+      <TituloSeccionM style={{ margin: '14px 0 0', padding: '0 28px 6px' }} meta={`${skusSo.length} SKUs · 12 meses`}>Detalle por SKU</TituloSeccionM>
+      <div style={{ padding: '0 16px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <CampoBusqueda value={buscaSo} onChange={setBuscaSo} placeholder="SKU, marca o categoría" style={{ flex: 1, minWidth: 0 }} />
+        <Segmented value={unidadSo} onChange={setUnidadSo} options={[{ id: 'piezas', label: 'Pz' }, { id: 'importe', label: '$' }]} />
+      </div>
+      <div style={{ padding: '0 16px' }}>
+        {skuQ.isLoading ? <Skeleton h={160} r={12} /> : !skusSo.length ? <Vacio icon={null} titulo="Sin sell out por SKU en los últimos 12 meses" /> : (
+          <TablaAnual columnas={meses12So.map((m) => `${MESES[m.mes - 1]}${m.anio !== anio ? ` ${String(m.anio).slice(2)}` : ''}`)}
+            filas={filasSo.slice(0, 80).map((s) => ({ sku: s.sku, label: s.sku, sub: [s.marca, s.categoria].filter(Boolean).join(' · '), valores: s.meses }))}
+            fmt={fmtSo} etiquetaFilas={filasSo.length > 80 ? 'top 80' : ''} totalLabel="Total" vacio="Ningún SKU coincide." />
+        )}
+        <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 12px 0', lineHeight: 1.4, fontFamily: TYPO.fontText }}>
+          {unidadSo === 'piezas' ? 'Piezas' : 'Importe sin IVA'} por mes de lo que esta cuenta vendió · <strong>Prom</strong> = promedio de los meses con venta.
+        </div>
+      </div>
       <div style={{ padding: '14px 16px 0' }}>
         <BotonGrande primario icon={ShoppingBag} onClick={() => nav.push(<Cuenta fila={fila} anio={anio} mes={mes} corteDia={corteDia} />, `sellout-cuenta-${cuenta}`)}>Abrir Sell Out completo</BotonGrande>
         <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '8px 4px 0', lineHeight: 1.4, fontFamily: TYPO.fontText }}>SKUs, inventario, sucursales, clientes finales y estados: sólo lo que la fuente de {nombre} alimenta.</div>

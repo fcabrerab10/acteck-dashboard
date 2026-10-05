@@ -13,11 +13,13 @@ import { ALTO_BARRA_SUP } from '../nav';
 // Buzón de salida, perezoso: no pesa en el arranque de la app móvil.
 const BuzonPill = lazy(() => import('../../components/BuzonPill'));
 
-export default function BarraSuperior({ modo, tab, badge = 0, badgeCritica = false, perfil, onMenu, onBuscar, onAlertas, onAvatar }) {
+export default function BarraSuperior({ modo, tab, badge = 0, badgeCritica = false, perfil, onMenu, onBuscar, onAlertas, onAvatar, compacto = false }) {
   const { theme } = useTheme();
   return (
     <header data-entrada-arriba style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 55, paddingTop: 'env(safe-area-inset-top)',
+      // Al bajar (compacto) la fila se esconde arriba y sólo queda el vidrio bajo la barra de estado.
+      transform: compacto ? `translateY(-${ALTO_BARRA_SUP}px)` : 'none', transition: `transform ${DUR.page}ms ${EASE}`, willChange: 'transform',
       ...vidrio(theme, 'chrome'), borderBottom: `1px solid ${hairline(theme)}`, color: theme.text, fontFamily: TYPO.fontText, userSelect: 'none', WebkitUserSelect: 'none',
     }}>
       <div style={{ height: ALTO_BARRA_SUP, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px 0 6px' }}>

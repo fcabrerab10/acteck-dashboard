@@ -27,6 +27,13 @@ export default function HojaM({ abierto, onClose, titulo, sub, alto = '78vh', ac
     return () => clearTimeout(t);
   }, [abierto]);
 
+  // Mientras una hoja está abierta la barra inferior se esconde (3.69.0): tapaba lo que emerge desde abajo.
+  useEffect(() => {
+    if (!abierto) return undefined;
+    window.dispatchEvent(new CustomEvent('acteck:hoja', { detail: { abierta: true } }));
+    return () => window.dispatchEvent(new CustomEvent('acteck:hoja', { detail: { abierta: false } }));
+  }, [abierto]);
+
   useEffect(() => {
     if (!abierto) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };

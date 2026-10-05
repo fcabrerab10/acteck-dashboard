@@ -39,13 +39,14 @@ export default function LoginPage({ onLogin }) {
   const [saliendo, setSaliendo] = useState(false);
   const [ahora, setAhora] = useState(() => new Date());
   const [angosto, setAngosto] = useState(() => typeof window !== 'undefined' && window.innerWidth < 700);
+  const [bajo, setBajo] = useState(() => typeof window !== 'undefined' && window.innerHeight < 720);
   const pillRef = useRef(null);
   const claro = temaClaro();
   const sinAnim = reduceMotion();
 
   useEffect(() => {
     const t = setInterval(() => setAhora(new Date()), 15000);
-    const r = () => setAngosto(window.innerWidth < 700);
+    const r = () => { setAngosto(window.innerWidth < 700); setBajo(window.innerHeight < 720); };
     window.addEventListener('resize', r);
     return () => { clearInterval(t); window.removeEventListener('resize', r); };
   }, []);
@@ -136,21 +137,23 @@ export default function LoginPage({ onLogin }) {
       <div className="login-fondo" aria-hidden style={{ position: 'absolute', inset: '-25%', pointerEvents: 'none', background: fondo, animation: `loginRespira 16s ease-in-out infinite alternate` }} />
 
       <form onSubmit={entrar} style={{
-        position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
-        padding: 'calc(40px + env(safe-area-inset-top)) 20px calc(44px + env(safe-area-inset-bottom))',
+        position: 'relative', zIndex: 1, height: '100dvh', minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
+        // Safe areas de cada iPhone (notch / Dynamic Island / home indicator); en pantallas bajas (SE) los márgenes se encogen.
+        padding: angosto ? 'calc(18px + env(safe-area-inset-top)) 20px calc(22px + env(safe-area-inset-bottom))' : 'calc(40px + env(safe-area-inset-top)) 20px calc(44px + env(safe-area-inset-bottom))',
+        boxSizing: 'border-box', overflow: 'hidden',
         transform: saliendo ? 'translateY(-16px) scale(0.97)' : 'none', opacity: saliendo ? 0 : 1,
         transition: `transform 500ms ${SUAVE}, opacity 350ms ${EASE}`,
       }}>
         {/* Reloj */}
         <div style={{ textAlign: 'center', textShadow: sombra, userSelect: 'none' }}>
           <div style={{ fontSize: angosto ? 16 : 17, fontWeight: 600, opacity: 0.85 }}>{fecha}</div>
-          <div style={{ fontSize: angosto ? 72 : 84, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hora}</div>
+          <div style={{ fontSize: bajo ? 60 : angosto ? 72 : 84, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hora}</div>
         </div>
 
         {/* Quién entra */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, width: '100%', maxWidth: 300 }}>
           <div style={{
-            width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', display: 'grid', placeItems: 'center',
+            width: bajo ? 60 : 72, height: bajo ? 60 : 72, borderRadius: '50%', overflow: 'hidden', display: 'grid', placeItems: 'center',
             background: perfilVis ? colorInicialesDe(perfilVis) : `linear-gradient(145deg, #8ec5ff, ${ACCENT})`,
             color: '#fff', fontSize: 26, fontWeight: 700, boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
           }}>

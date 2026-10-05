@@ -16,7 +16,7 @@ import { disponibilidadDeCampos } from '../../../lib/disponibilidad';
 import { compartir, copiar } from '../../../lib/whatsapp';
 import { useNav } from '../../nav';
 import {
-  TituloGrande, Cabecera, ListaAgrupada, Fila, Vacio, HojaM, BotonGrande, CampoBusqueda, Pill, HeatCell, toast,
+  TituloGrande, Cabecera, ListaAgrupada, Fila, Vacio, HojaM, BotonGrande, CampoBusqueda, Pill, HeatCell, toast, Segmented,
 } from '../../piezas';
 import { moneyCompact, int, deltaPct, tonoDelta, MESES, MESES_LARGO, MONO } from '../../util';
 import TablaAnual from '../sellout/TablaAnual';
@@ -44,6 +44,7 @@ export default function Cuenta({ fila, anio, mes, corteDia }) {
   const [q, setQ] = useState('');
   const [compartiendo, setCompartiendo] = useState(false);
   const [skuAbierto, setSkuAbierto] = useState(null);   // ficha del SKU como hoja desde abajo (igual que Sell Out de cliente propio)
+  const [unidad, setUnidad] = useState('piezas');      // pestaña SKUs: piezas o $ (3.69.0, pedido de Fernando)
 
   const skuQ = useDrillSkus(cuenta, anio, tab === 'resumen' || tab === 'skus');
   const invQ = useDrillInventario(cuenta, tab === 'resumen' || tab === 'skus' || tab === 'inventario');
@@ -56,6 +57,7 @@ export default function Cuenta({ fila, anio, mes, corteDia }) {
   const inv = invQ.data || [];
   const campos = useMemo(() => disponibilidadDeCampos(cuenta, inv, ['stock', 'valor', 'dias_sin_venta', 'fecha_ultima_venta'], { soloUltimaSemana: false }), [cuenta, inv]);
   const skus = useMemo(() => skusDeCuenta(skuQ.data || [], inv, anio, mes, 'piezas'), [skuQ.data, inv, anio, mes]);
+  const skusTabla = useMemo(() => (unidad === 'piezas' ? skus : skusDeCuenta(skuQ.data || [], inv, anio, mes, 'importe')), [skus, skuQ.data, inv, anio, mes, unidad]);
   const alertas = useMemo(() => alertasDeCuenta(skus, campos.hay('dias_sin_venta')), [skus, campos]);
   const estados = useMemo(() => porEstado(edoQ.data || [], anio, mes), [edoQ.data, anio, mes]);
 
@@ -99,7 +101,7 @@ export default function Cuenta({ fila, anio, mes, corteDia }) {
 
       {activa === 'skus' && (
         skuQ.isLoading ? <Cargando pantalla="sellInDrill" minHeight={220} /> : (
-          <TabSkus skus={skus} meses12={meses12} anio={anio} hayInv={hayInv} q={q} setQ={setQ}
+          <TabSkus skus={skusTabla} meses12={meses12} anio={anio} hayInv={hayInv} q={q} setQ={setQ} unidad={unidad} setUnidad={setUnidad}
             onSku={(s) => setSkuAbierto(s.sku)} />
         )
       )}
@@ -238,8 +240,9 @@ function Resumen({ fila, anio, mes, corteDia, skus, alertas, campos, hayInv, car
 }
 
 // ── SKUs ──────────────────────────────────────────────────────────────────────
-function TabSkus({ skus, meses12, anio, hayInv, q, setQ, onSku }) {
+function TabSkus({ skus, meses12, anio, hayInv, q, setQ, onSku, unidad = 'piezas', setUnidad }) {
   const { theme } = useTheme();
+  const fmtCelda = unidad === 'piezas' ? fmtInt : moneyCompact;
   const filtrados = useMemo(() => {
     const t = norm(q).trim();
     if (!t) return skus;
@@ -253,14 +256,15 @@ function TabSkus({ skus, meses12, anio, hayInv, q, setQ, onSku }) {
   }));
   return (
     <>
-      <div style={{ padding: '0 16px 12px' }}>
-        <CampoBusqueda value={q} onChange={setQ} placeholder="Buscar un SKU (código, marca, categoría)" />
+      <div style={{ padding: '0 16px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <CampoBusqueda value={q} onChange={setQ} placeholder="Buscar un SKU (código, marca, categoría)" style={{ flex: 1, minWidth: 0 }} />
+        {setUnidad && <Segmented value={unidad} onChange={setUnidad} options={[{ id: 'piezas', label: 'Pz' }, { id: 'importe', label: '$' }]} />}
       </div>
       <div style={{ padding: '0 16px' }}>
-        <TablaAnual columnas={columnas} filas={filas} fmt={fmtInt} etiquetaFilas={`${filtrados.length} SKUs`}
+        <TablaAnual columnas={columnas} filas={filas} fmt={fmtCelda} etiquetaFilas={`${filtrados.length} SKUs`}
           vacio="Sin SKUs con venta en los últimos 12 meses." />
         <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 12px 0', lineHeight: 1.4 }}>
-          Piezas por mes (12 meses) · <strong>Prom</strong> = promedio de los meses con venta · <strong>Total</strong> = suma de la fila.
+          {unidad === 'piezas' ? 'Piezas' : 'Importe sin IVA'} por mes (12 meses) · <strong>Prom</strong> = promedio de los meses con venta · <strong>Total</strong> = suma de la fila.
           {filtrados.length > 60 && ` Se muestran los 60 SKUs más vendidos de ${filtrados.length}; usa el buscador para el resto.`}
         </div>
       </div>
@@ -269,7 +273,7 @@ function TabSkus({ skus, meses12, anio, hayInv, q, setQ, onSku }) {
         {filtrados.slice(0, 30).map((s) => (
           <Fila key={s.sku} titulo={<span style={{ fontFamily: TYPO.fontDisplay }}>{s.sku}</span>}
             sub={[s.marca, s.categoria].filter(Boolean).join(' · ') || undefined}
-            valor={fmtInt(s.mesActual)} valorSub="pz del mes" onClick={() => onSku(s)} />
+            valor={fmtCelda(s.mesActual)} valorSub={unidad === 'piezas' ? 'pz del mes' : 'del mes'} onClick={() => onSku(s)} />
         ))}
         {filtrados.length === 0 && <Vacio icon={null} titulo="Sin coincidencias" style={{ padding: 18 }} />}
       </ListaAgrupada>
