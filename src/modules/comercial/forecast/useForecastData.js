@@ -64,12 +64,13 @@ export function useForecastData() {
       fetchAll(() => supabase.from('v_sku_metadata').select('sku,descripcion,supplier,familia,unit_price_usd_ultima,costo_promedio_mxn'), 5000).then((d) => ({ data: d })),
       fetchAll(() => supabase.from('v_demanda_sku').select('sku,anio,mes,cliente,piezas').gte('anio', anioCorte).in('cliente', ['digitalife', 'pcel'])),
       vacio,
-      fetchAll(() => supabase.from('roadmap_sku').select('sku,descripcion,rdmp,estado,estatus,marca,familia'), 5000).then((d) => ({ data: d })),
+      fetchAll(() => supabase.from('roadmap_sku').select('sku,descripcion,rdmp,marca,familia'), 5000).then((d) => ({ data: d })),
       // Master de embarques completo (timeline tránsito + histórico de compras). La tabla no tiene `eta` ni
       // `marca`: se usa eta_puerto / arribo_almacen y la marca sale de v_sku_metadata.
+      // OJO: en supabase-js `.or()` va DESPUÉS de `.select()` (from() no tiene .or: tiraba «.or is not a function» y el S&OP no cargaba).
       fetchAll(() => supabase.from('embarques_compras')
-        .or(`fecha_emision.gte.${hace36m},arribo_cedis.gte.${hace1m},arribo_almacen.gte.${hace1m},eta_puerto.gte.${hace1m}`)
-        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, po_qty, shp_qty, cbm, cbm_unitario, contenedor, estatus, supplier, familia, descripcion, unit_price, lt_dias, tipo_carga, tipo_contenedor, grupo')),
+        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, po_qty, shp_qty, cbm, cbm_unitario, contenedor, estatus, supplier, familia, descripcion, unit_price, lt_dias, tipo_carga, tipo_contenedor, grupo')
+        .or(`fecha_emision.gte.${hace36m},arribo_cedis.gte.${hace1m},arribo_almacen.gte.${hace1m},eta_puerto.gte.${hace1m}`)),
       vacio, // solicitudes_compra: las lee useSolicitudes (la copia de aquí no se usaba)
       vacio, // solicitudes_compra_lineas: ídem
       supabase.from('reporte_skus').select('sku, orden').eq('activo', true).order('orden'),
