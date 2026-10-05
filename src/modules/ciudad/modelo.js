@@ -54,7 +54,7 @@ export const CIUDADES = {
   IRAPUATO: { lat: 20.67, lon: -101.35, estado: 'GUANAJUATO' },
   CELAYA: { lat: 20.52, lon: -100.81, estado: 'GUANAJUATO' },
 };
-export const ESC = 7; // unidades de escena por grado de longitud (México ≈ 210 × 110 unidades)
+export const ESC = 11; // unidades de escena por grado de longitud (México ≈ 330 × 180 unidades; Fernando: «muy amontonado»)
 export const ORIGEN = CIUDADES.GUADALAJARA;
 // Proyección del mapa de Sell Out (sellout/mexico-estados.json, viewBox 1000 × 626.6), ajustada por mínimos cuadrados
 // contra los centroides de 16 estados (error medio 9.5 px): X = 32.1003·lon + 3792.67 · Y = −33.3885·lat + 1099.92.

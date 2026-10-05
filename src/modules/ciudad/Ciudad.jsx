@@ -27,16 +27,25 @@ export default function Ciudad({ onNavegar }) {
   const [busca, setBusca] = useState('');
   const [listo, setListo] = useState(false);
   const [fallo, setFallo] = useState(null);
+  const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
+  useEffect(() => {
+    // Clima real de Guadalajara (Open-Meteo, sin llave): manda sobre el tema para día/noche, nubes y lluvia.
+    const ctl = new AbortController();
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=20.67&longitude=-103.35&current=temperature_2m,weather_code,is_day,cloud_cover,precipitation&timezone=America%2FMexico_City', { signal: ctl.signal })
+      .then((r) => r.json()).then((j) => { const c = j?.current; if (!c) { setClima(null); return; } const code = Number(c.weather_code); setClima({ esDia: Number(c.is_day) === 1, nubes: Math.max(0, Math.min(1, Number(c.cloud_cover) / 100)), lluvia: Number(c.precipitation) > 0 || (code >= 51 && code <= 99), temp: Number(c.temperature_2m), code }); })
+      .catch(() => setClima(null));
+    return () => ctl.abort();
+  }, []);
   const oscuro = theme.mode === 'dark';
 
   useEffect(() => {
-    if (!modelo || !canvasRef.current) return undefined;
+    if (!modelo || !canvasRef.current || clima === undefined) return undefined;
     let vivo = true; setListo(false); setFallo(null);
     import('./escena').then(({ crearEscena }) => {
       if (!vivo) return;
       try {
         escenaRef.current = crearEscena(canvasRef.current, modelo, {
-          oscuro,
+          oscuro, clima,
           onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
           onClick: (tag) => setSel(tag),
         });
@@ -44,7 +53,7 @@ export default function Ciudad({ onNavegar }) {
       } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }
     }).catch((e) => { console.error('[ciudad] carga', e); setFallo(String(e?.message || e)); });
     return () => { vivo = false; escenaRef.current?.destruir(); escenaRef.current = null; };
-  }, [modelo, oscuro]);
+  }, [modelo, oscuro, clima]);
 
   const navegar = (tag) => {
     if (!tag?.pagina) return;
@@ -78,6 +87,7 @@ export default function Ciudad({ onNavegar }) {
           <Building2 size={16} style={{ color: theme.accent }} />
           <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, letterSpacing: '-0.02em' }}>acteck<span style={{ color: theme.accent }}>.</span> Ciudad</span>
           <Pill size="xs" tone="gray">etapa 1</Pill>
+          {clima && <span style={{ fontSize: 12, color: theme.textMuted }}>{clima.lluvia ? '🌧' : clima.nubes > .6 ? '☁️' : clima.nubes > .25 ? '⛅' : clima.esDia ? '☀️' : '🌙'} {Math.round(clima.temp)}° en Guadalajara</span>}
         </div>
         <div style={{ ...card, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
           <Search size={14} style={{ color: theme.textMuted }} />
@@ -90,7 +100,7 @@ export default function Ciudad({ onNavegar }) {
         </div>
         <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'cedis' })} title="Volver a Acteck" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Crosshair size={14} />Acteck</button>
       </div>
-      <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra · rueda o pellizco = zoom · clic derecho o Shift = girar · WASD</div>
+      <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas</div>
       {/* Leyenda: color por cliente */}
       <div style={{ position: 'absolute', right: 14, top: 52, zIndex: 3, ...card, padding: '8px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', maxWidth: 420, fontSize: 11 }}>
         {[...new Set(modelo.distritos.flatMap((d) => d.tiendas.map((t) => `${t.cuenta}|${t.nombreCuenta}`)))].map((k) => { const [c, n] = k.split('|'); return <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 3, background: hexCss(COLOR_CUENTA[c] || 0x8E8E93), display: 'inline-block' }} />{n}</span>; })}

@@ -14,23 +14,27 @@ const PAL = {
 };
 const ACC = { azul: 0x0A84FF, verde: 0x30D158, naranja: 0xFF9F0A, rojo: 0xFF453A, morado: 0xBF5AF2, gris: 0x8E8E93 };
 
-export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false } = {}) {
-  let P = oscuro ? PAL.noche : PAL.dia;
+export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false, clima = null } = {}) {
+  // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
+  const noche = clima ? !clima.esDia : oscuro;
+  let P = noche ? PAL.noche : PAL.dia;
+  const nubosidad = clima ? clima.nubes : .3;
+  oscuro = noche;
   const R = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   R.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap;
   R.outputColorSpace = THREE.SRGBColorSpace; R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.05;
   const scene = new THREE.Scene();
-  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 600);
-  const vista = { cx: 10, cz: -14, zoom: 48, ang: Math.PI / 4, zoomObj: 48, cxObj: 10, czObj: -14 };
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 900);
+  const vista = { cx: 20, cz: -24, zoom: 70, ang: Math.PI / 4, zoomObj: 70, cxObj: 20, czObj: -24 };
   const W = () => canvas.clientWidth || 800, H = () => canvas.clientHeight || 600;
   function resize() { const w = W(), h = H(); R.setSize(w, h, false); const a = w / h; cam.left = -vista.zoom * a; cam.right = vista.zoom * a; cam.top = vista.zoom; cam.bottom = -vista.zoom; cam.updateProjectionMatrix(); }
-  function colocarCam() { cam.position.set(vista.cx + Math.cos(vista.ang) * 220, 180, vista.cz + Math.sin(vista.ang) * 220); cam.lookAt(vista.cx, 0, vista.cz); }
+  function colocarCam() { cam.position.set(vista.cx + Math.cos(vista.ang) * 300, 240, vista.cz + Math.sin(vista.ang) * 300); cam.lookAt(vista.cx, 0, vista.cz); }
   resize(); colocarCam();
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x9a8c74, P.amb); scene.add(hemi);
-  const sol = new THREE.DirectionalLight(0xfff4e0, P.sol); sol.position.set(60, 110, 50); sol.castShadow = true; sol.shadow.mapSize.set(3072, 3072);
-  Object.assign(sol.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, near: 10, far: 420 }); sol.shadow.bias = -0.0006; sol.shadow.normalBias = .03; scene.add(sol);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x9a8c74, P.amb + nubosidad * .2); scene.add(hemi);
+  const sol = new THREE.DirectionalLight(0xfff4e0, P.sol * (1 - nubosidad * .45)); sol.castShadow = true; sol.shadow.mapSize.set(3072, 3072);
+  Object.assign(sol.shadow.camera, { left: -220, right: 220, top: 220, bottom: -220, near: 10, far: 600 }); sol.position.set(90, 160, 70); sol.shadow.bias = -0.0006; sol.shadow.normalBias = .03; scene.add(sol);
   const luzNoche = new THREE.Group(); scene.add(luzNoche);
 
   const mats = new Map();
@@ -46,7 +50,8 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
 
   // ── Terreno: tierra grande, agua al suroeste (Pacífico) y al este (Golfo), cerros al fondo ──
   // Mar: un plano grande con oleaje suave debajo de todo.
-  const aguaG = new THREE.PlaneGeometry(900, 700, 60, 48); const agua = new THREE.Mesh(aguaG, M(P.agua, { roughness: .35, metalness: .05, flatShading: true })); agua.rotation.x = -Math.PI / 2; agua.position.set(20, -.9, -10); raiz.add(agua);
+  scene.background = new THREE.Color(P.cielo).lerp(new THREE.Color(noche ? 0x0b0d12 : 0xC9D2DA), nubosidad * .7);
+  const aguaG = new THREE.PlaneGeometry(1300, 1000, 60, 48); const agua = new THREE.Mesh(aguaG, M(P.agua, { roughness: .35, metalness: .05, flatShading: true })); agua.rotation.x = -Math.PI / 2; agua.position.set(30, -.9, -20); raiz.add(agua);
   animados.push((t) => { const pos = aguaG.attributes.position; for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); pos.setZ(i, Math.sin(x * .08 + t * 1.1) * .35 + Math.cos(y * .11 + t * .8) * .3); } pos.needsUpdate = true; aguaG.computeVertexNormals(); });
   // Tierra: el contorno real de México (32 estados del mapa de Sell Out) extruido como una meseta baja.
   (function tierra() {
@@ -61,7 +66,9 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   // Sierras chicas en zonas sin ciudades (desiertos de Sonora/Chihuahua y Sierra Madre Occidental).
   [[-55, -45, 7], [-63, -53, 9], [-38, -71, 8], [-12, -72, 6], [-32, -47, 5], [-20, -12, 5], [-8, -36, 6], [-46, -36, 5]].forEach(([x, z, r], i) => { const c = new THREE.Mesh(new THREE.ConeGeometry(r, r * .9, 6), M(i % 2 ? P.cerro : P.cerro2, { roughness: 1 })); c.position.set(x, 0, z); c.receiveShadow = true; c.castShadow = true; g_cerros.add(c); });
   // nubes
-  for (let i = 0; i < 7; i++) { const g = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(2.2 + (k % 2) * 1.4, 8, 6), M(P.nube, { roughness: 1 })); s.position.set(k * 2.4 - 3, (k % 2) * .8, (k % 3) * .6); g.add(s); } g.position.set(-120 + i * 42, 34 + (i % 3) * 4, -60 + (i % 4) * 30); raiz.add(g); animados.push((t) => { g.position.x += .006; if (g.position.x > 160) g.position.x = -160; }); }
+  const nNubes = Math.round(2 + nubosidad * 14);
+  for (let i = 0; i < nNubes; i++) { const g = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(2.2 + (k % 2) * 1.4, 8, 6), M(P.nube, { roughness: 1 })); s.position.set(k * 2.4 - 3, (k % 2) * .8, (k % 3) * .6); g.add(s); } g.scale.setScalar(1 + (i % 3) * .35); g.position.set(-200 + i * (400 / nNubes), 62 + (i % 3) * 6, -90 + (i % 5) * 36); raiz.add(g); animados.push((t) => { g.position.x += .01; if (g.position.x > 220) g.position.x = -220; }); }
+  if (clima?.lluvia) { const n = 900; const geo = new THREE.BufferGeometry(); const pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { pos[i * 3] = -120 + Math.random() * 240; pos[i * 3 + 1] = Math.random() * 50; pos[i * 3 + 2] = -120 + Math.random() * 240; } geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); const lluvia = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x9fbbe0, size: .35, transparent: true, opacity: .7 })); raiz.add(lluvia); animados.push(() => { const p = geo.attributes.position; for (let i = 0; i < n; i++) { let y = p.getY(i) - .9; if (y < 0) y = 50; p.setY(i, y); } p.needsUpdate = true; }); }
 
   // ── Carreteras: de Acteck a cada ciudad (curvas) ──
   const rutas = new Map();
@@ -184,7 +191,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     raiz.add(g);
     if (n >= 3) { const cuantos = Math.min(4, Math.ceil(n / 3)); for (let i = 0; i < cuantos; i++) { const per = persona([0x9AA0AB, 0xC9B79C, 0x7A8AA6, 0xB58A7A][i % 4], .8); const o = { x: base.x - ancho / 2 + 1 + i * 2.4, z: base.z + largo / 2 + 1.1 }; per.position.set(o.x, .3, o.z); raiz.add(per); const ruta = [[0, 0], [ancho - 2, 0], [ancho - 2, .9], [0, .9]]; animados.push((t) => caminar(per, ruta, t * .12 + i * 1.7 + n, o, .8)); } }
     // etiqueta de ciudad (sprite de texto)
-    const et = etiqueta(d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); raiz.add(et);
+    const et = etiqueta(d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); et.userData.minZoom = n >= 4 ? 999 : 40; raiz.add(et);
     if (!esGDL) rutas.set(d.ciudad, carretera({ x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x, z: base.z + largo / 2 + 2.2 }));
     else rutas.set(d.ciudad, carretera({ x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x + ancho / 2 + 3, z: base.z }, 1.2));
   });
@@ -219,24 +226,32 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
 
   // ── interacción ──
   const ray = new THREE.Raycaster(); const vec = new THREE.Vector2(); let hov = null; let mouse = { x: -1, y: -1 }; let drag = null;
-  canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, cx: vista.cxObj, cz: vista.czObj, ang: vista.ang, m: false, btn: e.button, shift: e.shiftKey }; canvas.setPointerCapture?.(e.pointerId); });
+  const planoSuelo = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const aNDC = (cx, cy) => { const r = canvas.getBoundingClientRect(); return new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); };
+  // Punto del suelo bajo el cursor (la cámara es ortográfica: el rayo es paralelo a la vista).
+  const suelo = (cx, cy) => { ray.setFromCamera(aNDC(cx, cy), cam); const p = new THREE.Vector3(); return ray.ray.intersectPlane(planoSuelo, p) ? p : null; };
+  let inercia = { x: 0, z: 0 }; let ultimoMov = null;
+  canvas.addEventListener('pointerdown', (e) => { const p = suelo(e.clientX, e.clientY); drag = { x: e.clientX, y: e.clientY, p, cx: vista.cx, cz: vista.cz, ang: vista.ang, m: false, btn: e.button, shift: e.shiftKey, t: performance.now() }; inercia = { x: 0, z: 0 }; ultimoMov = null; canvas.setPointerCapture?.(e.pointerId); });
   canvas.addEventListener('pointermove', (e) => {
     mouse = { x: e.clientX, y: e.clientY };
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.m = true;
     if (drag.btn === 2 || drag.shift) { vista.ang = drag.ang - dx * .004; colocarCam(); return; }
-    const k = (vista.zoom * 2) / H(); // unidades por px
-    const ca = Math.cos(vista.ang), sa = Math.sin(vista.ang);
-    // arrastrar mueve el plano en la dirección de la cámara (ortográfica inclinada)
-    vista.cxObj = drag.cx - (dx * k) * sa * -1 - (dy * k) * ca * 1.6; vista.czObj = drag.cz + (dx * k) * ca * -1 - (dy * k) * sa * 1.6;
+    // El punto del suelo que agarraste se queda bajo el cursor: la cámara se mueve lo contrario.
+    colocarCamEn(drag.cx, drag.cz); const q = suelo(e.clientX, e.clientY); if (!q || !drag.p) return;
+    const nx = drag.cx - (q.x - drag.p.x), nz = drag.cz - (q.z - drag.p.z);
+    const ahora = performance.now(); if (ultimoMov) { const dt = Math.max(1, ahora - ultimoMov.t); inercia = { x: (nx - ultimoMov.x) / dt * 16, z: (nz - ultimoMov.z) / dt * 16 }; } ultimoMov = { x: nx, z: nz, t: ahora };
+    vista.cx = vista.cxObj = nx; vista.cz = vista.czObj = nz; colocarCam();
   });
-  const soltar = (e) => { if (drag && !drag.m) onClick?.(hov ? hov.userData.tag : null); drag = null; };
+  function colocarCamEn(cx, cz) { cam.position.set(cx + Math.cos(vista.ang) * 300, 240, cz + Math.sin(vista.ang) * 300); cam.lookAt(cx, 0, cz); }
+  const soltar = () => { if (drag && !drag.m) onClick?.(hov ? hov.userData.tag : null); if (drag && drag.m && performance.now() - (ultimoMov?.t || 0) > 80) inercia = { x: 0, z: 0 }; drag = null; };
   canvas.addEventListener('pointerup', soltar); canvas.addEventListener('pointercancel', () => { drag = null; });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  canvas.addEventListener('wheel', (e) => { e.preventDefault(); vista.zoomObj = Math.max(8, Math.min(90, vista.zoomObj * (e.deltaY > 0 ? 1.1 : .9))); }, { passive: false });
-  // pellizco (iPad) → zoom
+  // Rueda: zoom hacia el cursor (el punto bajo el mouse no se mueve).
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); const antes = suelo(e.clientX, e.clientY); const f = e.deltaY > 0 ? 1.1 : .9; const z = Math.max(8, Math.min(120, vista.zoom * f)); if (antes) { const k = z / vista.zoom; vista.cxObj = antes.x + (vista.cxObj - antes.x) * k; vista.czObj = antes.z + (vista.czObj - antes.z) * k; } vista.zoomObj = z; }, { passive: false });
+  // pellizco (iPad) → zoom; un dedo arrastra (pointer events)
   let pinch = null; canvas.addEventListener('touchstart', (e) => { if (e.touches.length === 2) pinch = { d: Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), z: vista.zoomObj }; }, { passive: true });
-  canvas.addEventListener('touchmove', (e) => { if (pinch && e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); vista.zoomObj = Math.max(8, Math.min(90, pinch.z * pinch.d / d)); } }, { passive: true });
+  canvas.addEventListener('touchmove', (e) => { if (pinch && e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); vista.zoomObj = Math.max(8, Math.min(120, pinch.z * pinch.d / d)); } }, { passive: true });
   canvas.addEventListener('touchend', () => { pinch = null; });
   const teclas = {}; const onKey = (e) => { if (/INPUT|TEXTAREA/.test(e.target?.tagName || '')) return; teclas[e.key.toLowerCase()] = e.type === 'keydown'; };
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
@@ -247,11 +262,12 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   function frame(now) {
     if (!viva) return;
     const dt = Math.min(.05, (now - ultimo) / 1000); ultimo = now; tiempo += dt;
-    const v = 60 * dt * (vista.zoom / 34); if (teclas.w || teclas.arrowup) { vista.czObj -= v * Math.sin(vista.ang) ; vista.cxObj -= v * Math.cos(vista.ang); } if (teclas.s || teclas.arrowdown) { vista.czObj += v * Math.sin(vista.ang); vista.cxObj += v * Math.cos(vista.ang); } if (teclas.a || teclas.arrowleft) { vista.cxObj += v * Math.sin(vista.ang); vista.czObj -= v * Math.cos(vista.ang); } if (teclas.d || teclas.arrowright) { vista.cxObj -= v * Math.sin(vista.ang); vista.czObj += v * Math.cos(vista.ang); }
+    const v = 60 * dt * (vista.zoom / 34); const fw = { x: -Math.cos(vista.ang), z: -Math.sin(vista.ang) }; const rt = { x: -Math.sin(vista.ang), z: Math.cos(vista.ang) }; if (teclas.w || teclas.arrowup) { vista.cxObj += fw.x * v; vista.czObj += fw.z * v; } if (teclas.s || teclas.arrowdown) { vista.cxObj -= fw.x * v; vista.czObj -= fw.z * v; } if (teclas.d || teclas.arrowright) { vista.cxObj += rt.x * v; vista.czObj += rt.z * v; } if (teclas.a || teclas.arrowleft) { vista.cxObj -= rt.x * v; vista.czObj -= rt.z * v; }
+    if (!drag && (Math.abs(inercia.x) + Math.abs(inercia.z)) > .01) { vista.cxObj += inercia.x; vista.czObj += inercia.z; inercia.x *= .9; inercia.z *= .9; }
     // suavizado de cámara (como iOS)
     const k = 1 - Math.pow(.001, dt); vista.cx += (vista.cxObj - vista.cx) * k; vista.cz += (vista.czObj - vista.cz) * k; const z0 = vista.zoom; vista.zoom += (vista.zoomObj - vista.zoom) * k; if (Math.abs(z0 - vista.zoom) > 1e-4) resize(); colocarCam();
     for (const f of animados) f(tiempo);
-    const fz = Math.max(.6, Math.min(2.2, vista.zoom / 30)); for (const sp of sprites) sp.scale.set(sp.userData.base.w * fz, sp.userData.base.h * fz, 1);
+    const fz = Math.max(.7, Math.min(2.6, vista.zoom / 30)); for (const sp of sprites) { sp.scale.set(sp.userData.base.w * fz, sp.userData.base.h * fz, 1); sp.visible = vista.zoom <= (sp.userData.minZoom ?? 999); }
     // hover
     if (mouse.x >= 0 && !drag) { const r = canvas.getBoundingClientRect(); vec.set(((mouse.x - r.left) / r.width) * 2 - 1, -((mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false); hov = hs.length ? hs[0].object : null; }
     if (hov !== hovPrev) { hovPrev = hov; canvas.style.cursor = hov ? 'pointer' : 'grab'; }
