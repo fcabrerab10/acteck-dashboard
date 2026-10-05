@@ -76,6 +76,7 @@ const MobileSellInGlobal      = lazy(() => import('./MobileSellInGlobal'));
 const MobileSellOutGlobal     = lazy(() => import('./MobileSellOutGlobal'));
 const MobileInventarioGlobal  = lazy(() => import('./MobileInventarioGlobal'));
 const MobileCobranzaGlobal    = lazy(() => import('./MobileCobranzaGlobal'));
+const CobranzaGlobal          = lazy(() => import('../modules/comercial/CobranzaGlobal')); // 2026-10-04
 const MobileSOP               = lazy(() => import('./MobileSOP'));
 const MobilePropuestas        = lazy(() => import('./MobilePropuestas'));
 const MobileEstrategiaPrecios = lazy(() => import('./MobileEstrategiaPrecios'));
@@ -244,13 +245,7 @@ export default function PaginaContenido({
         puedeVerPestanaGlobal(perfil, 'cobranza_global')
           ? (mobile
               ? <MobileCobranzaGlobal onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : (
-                <div className="p-12 text-center">
-                  <HandCoins className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Cobranza</h2>
-                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                </div>
-              ))
+              : <CobranzaGlobal onNavegar={onNavegar} />)
           : <SinAcceso motivo="No tienes acceso a Cobranza." />
       )}
       {pagina === 'forecastClientes' && (

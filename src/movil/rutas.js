@@ -25,6 +25,7 @@ const SellOutGlobal    = lazy(() => import('./pestanas/selloutGlobal/SellOutGlob
 const Equipo           = lazy(() => import('./pestanas/equipo/Equipo'));
 const Admin            = lazy(() => import('./pestanas/admin/Admin'));
 const Tracking         = lazy(() => import('./pestanas/tracking/Tracking'));
+const CobranzaGlobalM  = lazy(() => import('./pestanas/cobranza/CobranzaGlobalM')); // 2026-10-04
 const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
 const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
@@ -54,6 +55,7 @@ const GLOBALES = {
   sellIn:            () => ({ tipo: 'push', key: 'sellin-global', el: h(SellInGlobal) }), // Sell In consolidado (sin clienteKey)
   sellOut:           () => ({ tipo: 'push', key: 'sellout-global', el: h(SellOutGlobal) }), // Sell Out consolidado (sin clienteKey)
   analisisClientes:  () => ({ tipo: 'push', key: 'analisis', el: h(AnalisisClientes) }),
+  cobranzaGlobal:    () => ({ tipo: 'push', key: 'cobranza-global', el: h(CobranzaGlobalM) }), // Cobranza general (2026-10-04)
   forecastClientes:  () => ({ tipo: 'push', key: 'sop', el: h(SOP) }),
   propuestas:        () => ({ tipo: 'push', key: 'propuestas', el: h(Propuestas) }),
   // Tracking de pedidos (OCs de clientes). `extra.ocId` (alerta de tracking) abre la ficha de la OC.
