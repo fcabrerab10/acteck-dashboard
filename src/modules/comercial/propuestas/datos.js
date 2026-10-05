@@ -140,7 +140,8 @@ export async function fetchCatalogo(clienteKey) {
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
     invAckDataP,
     invCliQuery,
-    cachedQuery(supabase.from('v_estrategia_precios_lista').select('sku,lista,precio')),
+    // 9,653 filas: en una sola petición PostgREST corta en 5,000 y faltaban precios de media lista (2026-10-05) → paginado.
+    fetchAll('v_estrategia_precios_lista', 'sku,lista,precio').then((rows) => ({ data: rows })),
     // Costo promedio = medida del director (v_medidas_inventario_sku), la misma que Estrategia de Precios e Inventario.
     // Antes se pedía precios_sku.costo_promedio, columna que no existe: todo salía «sin costo» (2026-09-24).
     cachedQuery(supabase.from('v_medidas_inventario_sku').select('articulo,costo_promedio')),
