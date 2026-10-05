@@ -40,7 +40,7 @@ export default function BarraGrupos({ arbol, activo, onEntrada, perfil, badgeAge
   // Pastilla de vidrio deslizante (sustituye al fondo negro). La barra ya es de vidrio: variante translúcida.
   const res = useResaltadoDeslizante(activo, { theme, radio: 999, deps: entradas.map((e) => e.id).join(',') });
   return (
-    <nav ref={res.refContenedor} aria-label="Menú" style={{
+    <nav ref={res.refContenedor} data-entrada-abajo aria-label="Menú" style={{
       position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(12px + env(safe-area-inset-bottom))', zIndex: 60,
       width: 'min(calc(100% - 24px), 440px)', height: ALTO_BARRA, padding: '0 6px', borderRadius: 999, boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2,

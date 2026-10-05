@@ -77,7 +77,7 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
   const res = useResaltadoDeslizante(claveActiva, { theme, radio: 7, plano: true, deps: `${colapsada}-${compacta}-${clienteAbierto}-${favs.length}-${arbol.length}` });
 
   return (
-    <aside style={{
+    <aside data-entrada-lado style={{
       width: ancho, minWidth: ancho, height: '100vh', display: 'flex', flexDirection: 'column', flexShrink: 0,
       ...vidrio(theme, 'chrome'), borderRight: `1px solid ${hairline(theme)}`,
       color: theme.text, fontFamily: TYPO.fontText, overflow: 'hidden',

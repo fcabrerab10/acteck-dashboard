@@ -124,7 +124,7 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
         </div>}
       </Hero>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
+      <div data-entrada-kpis style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
         <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`Sell in · ${labelPeriodo}`} badge={r.yoy != null ? { l: `${signo(r.yoy)} ${r.yoyLabel}`, tone: toneDe(r.yoy) } : undefined}
           big={$c(c.fact_neta)} bigSmall={r.cuotaPeriodo ? `de ${$c(r.cuotaPeriodo)}` : ''} progress={r.pctCuota ?? undefined}
           sub={r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota${esMes && r.pctOtro != null ? ` · YTD ${Math.round(r.pctOtro)}% de ${$c(r.cuotaOtro)}` : ''}` : 'sin cuota cargada'} onClick={ir(null, PAGINAS.sellIn)} />

@@ -155,7 +155,7 @@ export default function Inicio() {
   const decision = r.decision.slice(0, MAX_ALERTAS);
 
   return (
-    <>
+    <div data-stagger>
       <TituloGrande titulo={titulo} sub={sub} derecha={selector} />
       {sensible && puedeVerPestanaGlobal(perfil, 'vision_general') && (
         <div style={{ padding: '0 20px 10px' }}>
@@ -179,7 +179,7 @@ export default function Inicio() {
         {sensible && <BarraCuotaM valor={r.cur.fact_neta} cuota={r.cuotaPeriodo} label={modo === 'mes' ? `cuota de ${r.mesL.toLowerCase()}` : (anio === anioHoy ? 'cuota a la fecha' : 'cuota anual')} />}
       </HeroM>
 
-      <KpiGrid style={{ marginTop: 12 }}>
+      <KpiGrid data-entrada-kpis style={{ marginTop: 12 }}>
         {sensible && <KpiM eyebrow={`Sell in · ${periodoLbl}`} big={fmtM(r.cur.fact_neta)} sub={r.yoy != null ? `${deltaPct(r.yoy)} ${r.yoyLabel}` : 'sin comparativo'} progress={r.pctCuota} pill={r.pctCuota != null ? { tone: tonoCuota(r.pctCuota), label: `${Math.round(r.pctCuota)}% cuota` } : undefined} onClick={() => nav.navegar({ pagina: 'sellIn', label: 'Sell In global' })} />}
         {sensible && <KpiM eyebrow={`Sell out · ${periodoLbl}`} big={so.total > 0 ? fmtM(so.total) : '—'} sub={so.total > 0 ? `${so.nCuentas} cuenta${so.nCuentas === 1 ? '' : 's'}${so.soSi != null ? ` · SO/SI ${so.soSi.toFixed(2)}` : ''}` : 'sin sell out en el período'} pill={so.yoy != null ? { tone: tonoDelta(so.yoy), label: deltaPct(so.yoy) } : undefined} onClick={() => nav.navegar({ pagina: 'sellOut' })} />}
         {sensible && veInventario && <KpiM eyebrow="En camino" big={fmtM(ec.valor)} sub={`${Math.round(ec.piezas).toLocaleString('es-MX')} pz · ${ec.pos} PO${ec.porMes[0] ? ` · ${ec.porMes[0].label} ${fmtM(ec.porMes[0].valor)}` : ''}`} pill={ec.atrasados.pos > 0 ? { tone: 'red', label: `${ec.atrasados.pos} PO atrasadas` } : ec.proximos[0] ? { tone: 'blue', label: fechaCorta(ec.proximos[0].eta) } : undefined} onClick={abrirFicha} />}
@@ -221,7 +221,7 @@ export default function Inicio() {
       </ListaAgrupada>}
 
       {sensible && <ComparativoM r={r} mes={mes} onMes={(m) => setMes(m)} />}
-    </>
+    </div>
   );
 }
 

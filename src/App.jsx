@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
 import { apiFetch } from './lib/apiFetch';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
@@ -23,6 +23,8 @@ import {
 // para que las pueda montar también el modo Paneles del monitor panorámico.
 // Auth y shell: estáticos (se necesitan antes de cualquier pantalla).
 import LoginPage from './modules/auth/LoginPage';
+import Arranque from './components/Arranque';
+import { iniciarEntrada, guardarUltimoUsuario } from './lib/entrada';
 const SetPasswordPage = lazy(() => import('./modules/auth/SetPasswordPage')); // sólo en #/set-password
 import SinAcceso from './components/SinAcceso';
 import {
@@ -314,17 +316,33 @@ export default function App() {
   // Ancho máximo del contenido: 1600 de toda la vida; sólo el panorámico lo puede cambiar.
   const anchoMax = disp.modo === 'panoramico' ? (Number(prefsDisp.anchoMax) || 0) : 1600;
 
+  // Arranque en frío (3.68.0): «acteck.» con el punto latiendo mientras se comprueba la sesión; se queda al menos
+  // 1.1 s y, si hay sesión, se desvanece mientras las tarjetas ya entran (iniciarEntrada). Sin sesión → login.
+  const [arranque, setArranque] = useState('visible'); // visible · saliendo · null
+  const t0Arranque = useRef(Date.now());
   useEffect(() => {
     // Check existing session
+    const listo = (conSesion) => {
+      const espera = Math.max(0, 1100 - (Date.now() - t0Arranque.current));
+      setTimeout(() => {
+        setAuthLoading(false);
+        if (conSesion) {
+          iniciarEntrada();
+          setArranque('saliendo');
+          setTimeout(() => setArranque(null), 550);
+        } else setArranque(null);
+      }, espera);
+    };
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         supabase.from("perfiles").select("*").eq("user_id", session.user.id).single()
           .then(({ data: p }) => {
-            if (p && p.activo) { setAuthUser(session.user); setPerfil(p); }
-            setAuthLoading(false);
+            const ok = !!(p && p.activo);
+            if (ok) { setAuthUser(session.user); setPerfil(p); guardarUltimoUsuario(p, session.user.email); }
+            listo(ok);
           });
       } else {
-        setAuthLoading(false);
+        listo(false);
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -481,7 +499,7 @@ export default function App() {
     && (window.location.hash || '').startsWith('#/set-password');
   if (isSetPasswordRoute) return <Suspense fallback={<Cargando fullscreen label="Cargando…" />}><SetPasswordPage /></Suspense>;
 
-  if (authLoading) return <Cargando fullscreen label="Cargando…" sub="Iniciando el dashboard" />;
+  if (authLoading) return <Arranque />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
 
   // Contenido de la pantalla activa. TODO pasa por <PaginaContenido>: con una columna
@@ -561,6 +579,7 @@ export default function App() {
 
       <Toaster />
       <OfflineBadge />
+      {arranque && <Arranque saliendo={arranque === 'saliendo'} />}
     </div>
     </ThemeProvider>
     </PerfilContext.Provider>

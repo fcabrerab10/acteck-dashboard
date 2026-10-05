@@ -6,8 +6,8 @@ import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { Pill } from '../../components/kit';
 
-export function KpiGrid({ children, cols = 2, style }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: 10, padding: '0 16px', ...style }}>{children}</div>;
+export function KpiGrid({ children, cols = 2, style, ...rest }) {
+  return <div {...rest} style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: 10, padding: '0 16px', ...style }}>{children}</div>;
 }
 
 export default function KpiM({ eyebrow, big, bigColor, sub, pill, progress, onClick, style }) {

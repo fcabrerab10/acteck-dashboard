@@ -52,7 +52,7 @@ export default function BarraApple({ arbol, favoritos, toggleFavorito, estado, o
   const res = useResaltadoDeslizante(grupoActivo, { theme, radio: 999, oscuro: true, deps: `${grupos.length}-${!!inicio}` });
 
   return (
-    <div ref={rootRef} style={{ position: 'sticky', top: 0, zIndex: 45 }} onMouseLeave={cerrarLuego} onMouseEnter={cancelar}>
+    <div ref={rootRef} data-entrada-arriba style={{ position: 'sticky', top: 0, zIndex: 45 }} onMouseLeave={cerrarLuego} onMouseEnter={cancelar}>
       <div ref={res.refContenedor} style={{
         position: 'relative',
         height: BARRA_ALTO, display: 'flex', alignItems: 'center', gap: 2, padding: '0 14px',

@@ -16,7 +16,7 @@ const BuzonPill = lazy(() => import('../../components/BuzonPill'));
 export default function BarraSuperior({ modo, tab, badge = 0, badgeCritica = false, perfil, onMenu, onBuscar, onAlertas, onAvatar }) {
   const { theme } = useTheme();
   return (
-    <header style={{
+    <header data-entrada-arriba style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 55, paddingTop: 'env(safe-area-inset-top)',
       ...vidrio(theme, 'chrome'), borderBottom: `1px solid ${hairline(theme)}`, color: theme.text, fontFamily: TYPO.fontText, userSelect: 'none', WebkitUserSelect: 'none',
     }}>

@@ -20,3 +20,4 @@ bridge/logs/
 bridge/node_modules/
 bridge/google-oauth-client.json
 bridge/google-oauth-token.json
+.claude/proto/
