@@ -24,11 +24,12 @@ const SellInGlobal     = lazy(() => import('./pestanas/sellin/SellInGlobal'));
 const SellOutGlobal    = lazy(() => import('./pestanas/selloutGlobal/SellOutGlobal'));
 const Equipo           = lazy(() => import('./pestanas/equipo/Equipo'));
 const Admin            = lazy(() => import('./pestanas/admin/Admin'));
-const Tracking         = lazy(() => import('./pestanas/tracking/Tracking'));
+const TrackingM        = lazy(() => import('./pestanas/tracking/TrackingM'));   // 2026-10-05 · V2 compacta (consulta)
 const CobranzaGlobalM  = lazy(() => import('./pestanas/cobranza/CobranzaGlobalM')); // 2026-10-04
 const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
 const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
+const InventarioM      = lazy(() => import('./pestanas/inventario/InventarioM')); // 2026-10-05 · Inventario global
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Sólo `inicio` y `agenda` son nodos del árbol. */
 export const TABS_RAIZ = ['inicio', 'agenda', 'clientes', 'alertas', 'buscar'];
@@ -45,7 +46,7 @@ const GLOBALES = {
   resumenClientes:   () => tab('clientes'),           // "Resumen de Clientes" = pestaña Clientes (propios · canales ERP)
   alertas:           () => tab('alertas'),            // no son nodos del árbol: los usan la barra superior y Buscar
   buscar:            () => tab('buscar'),
-  inventarioGlobal:  ficha,                           // Inventario → Ficha de producto (canasta de SKUs)
+  inventarioGlobal:  () => ({ tipo: 'push', key: 'inventario', el: h(InventarioM) }), // Inventario global (la Ficha de producto se abre desde la lista)
   estrategiaPrecios: ficha,                           // Estrategia de precios → Ficha de producto (precio por lista)
   historialCambios:  () => ({ tipo: 'push', key: 'historial', el: h(Historial) }),
   telemetria:        () => ({ tipo: 'push', key: 'equipo', el: h(Equipo) }),   // Actividad del equipo (sólo super admin)
@@ -61,7 +62,7 @@ const GLOBALES = {
   // Tracking de pedidos (OCs de clientes). `extra.ocId` (alerta de tracking) abre la ficha de la OC.
   ordenesCompra:     (extra) => (extra?.ocId
     ? { tipo: 'push', key: `oc-${extra.ocId}`, el: h(FichaOC, { ocId: extra.ocId }) }
-    : { tipo: 'push', key: 'tracking', el: h(Tracking) }),
+    : { tipo: 'push', key: 'tracking', el: h(TrackingM) }),
   // Proyectos y abasto (V3 · 2026-09-21): sustituye al Forecast de reservas en el celular.
   forecastReservas:  (extra) => ({ tipo: 'push', key: extra?.proyectoId ? `proyectos-${extra.proyectoId}` : 'proyectos', el: h(Proyectos, { inicial: extra || null }) }),
   // Agenda V4 · pestaña RAÍZ del shell (2026-09-22), con su propia pila: ya no se empuja sobre otra pestaña.

@@ -2,11 +2,11 @@
 // por PO con ETA dentro de 7 / 14 / 30 días (Segmented) o todos. Cruza con el estado de
 // cobertura calculado en pantalla: "resuelve N agotados/críticos". Click en una PO abre sus SKUs.
 import React, { useMemo, useState } from 'react';
-import { hoyISO } from '../../../lib/format';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Pill, Segmented, TablaCompacta } from '../../../components/kit';
-import { fmtInt, fmtFechaCorta, diasHasta, tonoCobertura, etiquetaCobertura, MONO } from './constantes';
+import { fmtInt, fmtFechaCorta, tonoCobertura, etiquetaCobertura, MONO } from './constantes';
+import { agruparPorPO } from './arribos';
 import { useEmbarquesTiempos, useNavieraPorContenedor, resumen as resumenEmbarques } from '../forecast/useEmbarquesTiempos';
 
 const HORIZONTES = [{ id: 7, label: '7 d' }, { id: 14, label: '14 d' }, { id: 30, label: '30 d' }, { id: 0, label: 'Todos' }];
@@ -23,35 +23,7 @@ export default function ProximosArribos({ transito, skuRows, descripciones, onVe
 
   const porSku = useMemo(() => new Map(skuRows.map((r) => [r.sku, r])), [skuRows]);
 
-  const pos = useMemo(() => {
-    const m = new Map();
-    transito.forEach((t, sku) => {
-      (t.pos || []).forEach((p) => {
-        if (!p.po || !(p.cantidad > 0)) return;
-        if (!m.has(p.po)) m.set(p.po, { po: p.po, eta: p.eta || null, etd: p.etd || null, cedis: p.cedis || '', estatus: p.estatus || '', contenedor: p.contenedor || '', piezas: 0, skus: [] });
-        const it = m.get(p.po);
-        if (p.eta && (!it.eta || p.eta < it.eta)) it.eta = p.eta;
-        it.piezas += p.cantidad;
-        if (!it.contenedor && p.contenedor) it.contenedor = p.contenedor;
-        if (p.etd && (!it.etd || p.etd < it.etd)) it.etd = p.etd;
-        const r = porSku.get(sku);
-        const d = descripciones.get(sku) || {};
-        const necesitado = !!r && (r.agotado || r.critico);
-        it.skus.push({ sku, descripcion: r?.descripcion || d.descripcion || '', piezas: p.cantidad, stock: r?.totalPz ?? null, coberturaDias: r?.coberturaDias ?? null, tieneStock: !!r?.tieneStock, demandaMes: r?.demandaMes || 0, necesitado, riesgo: !!r?.riesgo, eta: p.eta || null });
-      });
-    });
-    // diasEnTransito = días desde el ETD (lo que ya lleva navegando): sólo para lo que aún no llega.
-    const hoy = hoyISO();
-    return [...m.values()].map((it) => ({
-      ...it,
-      nSkus: it.skus.length,
-      resuelve: it.skus.filter((s) => s.necesitado).length,
-      dias: diasHasta(it.eta),
-      naviera: (it.contenedor && navieraPor.get(it.contenedor)) || null,
-      diasEnTransito: it.etd && it.etd <= hoy ? Math.round((Date.parse(`${hoy}T00:00:00`) - Date.parse(`${it.etd}T00:00:00`)) / 86400000) : null,
-    }))
-      .sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')) || b.piezas - a.piezas);
-  }, [transito, porSku, descripciones, navieraPor]);
+  const pos = useMemo(() => agruparPorPO({ transito, porSku, descripciones, navieraPor }), [transito, porSku, descripciones, navieraPor]);
 
   const visibles = useMemo(() => (horizonte ? pos.filter((p) => p.dias != null && p.dias <= horizonte) : pos), [pos, horizonte]);
   const totPz = visibles.reduce((s, p) => s + p.piezas, 0);

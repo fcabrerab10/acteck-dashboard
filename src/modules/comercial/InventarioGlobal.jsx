@@ -19,8 +19,8 @@ import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, Filtros, SkeletonPantalla, toast, elevation } from '../../components/kit';
 import { EASE, DUR } from '../../lib/motion';
 import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
-import { marcaDeSku, normalizarMarca } from '../../lib/marcas';
 import useInventarioDatos from './inventario/useInventarioDatos';
+import { agregarSkus } from './inventario/agregar';
 import SkuDrillDown from './inventario/SkuDrillDown';
 import ResumenSecundario from './inventario/ResumenSecundario';
 import ExcelClienteHoja from './inventario/ExcelClienteHoja';
@@ -29,11 +29,11 @@ import HistoricoPanel, { fotoHace } from './inventario/HistoricoPanel';
 import CompartirHoja from './inventario/CompartirHoja';
 import ApartadoPanel from './inventario/ApartadoPanel';
 import FueraDeVenta from './inventario/FueraDeVenta';
-import { FILTROS_VACIOS, ESTADOS, estadoDe, pasaTodos, facetas as calcularFacetas, nActivos as contarActivos } from './inventario/filtros';
+import { FILTROS_VACIOS, ESTADOS, pasaTodos, facetas as calcularFacetas, nActivos as contarActivos } from './inventario/filtros';
 import {
   CEDIS_CORTO, CEDIS_LISTA, ALMACENES_GRID, shortAlmacen, tipoDe,
   COBERTURA_CRITICA, COBERTURA_SOBRESTOCK, N,
-  fmtCompact, fmtInt, fmtDias, fmtFechaCorta, diasHasta, tonoCobertura, normalizar, tokensBusqueda,
+  fmtCompact, fmtInt, fmtDias, fmtFechaCorta, tonoCobertura, tokensBusqueda,
 } from './inventario/constantes';
 
 const MAX_FILAS = 300;
@@ -44,55 +44,6 @@ export default function InventarioGlobal() {
     return <SinAcceso motivo="No tienes acceso a Inventario." />;
   }
   return <InventarioGlobalPantalla sensible={puedeVerSensible(perfil)} />;
-}
-
-// SKU × almacén enriquecido (descripción, tránsito, lead time, demanda, cobertura, estado, índice de búsqueda)
-function agregarSkus(filas, { descripciones, transito, leadTime, demanda }) {
-  const m = new Map();
-  filas.forEach((r) => {
-    const sku = r.articulo;
-    if (!sku) return;
-    if (!m.has(sku)) m.set(sku, { sku, byAlm: {}, totalPz: 0, totalDisp: 0, totalRes: 0, valorRes: 0, valor: 0, costoRef: 0, cedisSet: new Set() });
-    const it = m.get(sku);
-    const alm = Number(r.no_almacen);
-    // res = apartado (inventario − disponible) · valorRes = su costo, exactamente como
-    // v_inventario_apartado_sku (costoinventario − costodisponible), no una estimación.
-    const pz = N(r.inventario), disp = N(r.disponible), res = Math.max(0, pz - disp), val = N(r.costoinventario);
-    const valRes = Math.max(0, val - N(r.costodisponible));
-    if (!it.byAlm[alm]) it.byAlm[alm] = { pz: 0, disp: 0, res: 0, valor: 0, valorRes: 0, cedis: r.cedis };
-    it.byAlm[alm].pz += pz; it.byAlm[alm].disp += disp; it.byAlm[alm].res += res; it.byAlm[alm].valor += val; it.byAlm[alm].valorRes += valRes;
-    it.totalPz += pz; it.totalDisp += disp; it.totalRes += res; it.valor += val; it.valorRes += valRes;
-    it.costoRef = Math.max(it.costoRef, N(r.costopromedio));
-    if (pz > 0 && r.cedis) it.cedisSet.add(r.cedis);
-  });
-  return Array.from(m.values()).map((it) => {
-    const d = descripciones.get(it.sku) || {};
-    const tr = transito.get(it.sku) || null;
-    const lt = leadTime.get(it.sku) || null;
-    const demandaMes = demanda.get(it.sku) || 0;
-    const costo = it.totalPz > 0 ? it.valor / it.totalPz : it.costoRef;
-    const transitoPz = tr ? tr.cantidad : 0;
-    const coberturaDias = demandaMes > 0 ? it.totalPz / (demandaMes / 30) : null;
-    const tieneStock = it.totalPz > 0;
-    const diasEta = tr?.eta ? diasHasta(tr.eta) : null;
-    const agotado = !tieneStock && demandaMes > 0;
-    const critico = tieneStock && coberturaDias != null && coberturaDias < COBERTURA_CRITICA;
-    const sobrestock = tieneStock && coberturaDias != null && coberturaDias > COBERTURA_SOBRESTOCK;
-    // Se agota antes de que llegue su tránsito: hay embarque pendiente y la cobertura no alcanza a la ETA
-    const riesgo = transitoPz > 0 && (agotado || (critico && diasEta != null && coberturaDias < Math.max(diasEta, 0)));
-    const row = {
-      ...it,
-      // Si roadmap_sku aún no trae la marca (SKU nuevo: los AV-* de Audive llegan primero
-      // en embarques_compras), se infiere del prefijo para que la faceta Marca la liste.
-      descripcion: d.descripcion || '', marca: normalizarMarca(d.marca) || marcaDeSku(it.sku) || '', familia: d.familia || '', rdmp: d.rdmp || '', categoria: d.categoria || '',
-      transito: tr, transitoPz, transitoPos: tr ? tr.pos.length : 0, transitoEta: tr?.eta || null, transitoValor: transitoPz * costo, costo,
-      leadTime: lt, demandaMes, coberturaDias, agotado, critico, sobrestock, riesgo, tieneStock,
-    };
-    row.estado = estadoDe(row);
-    // Índice de búsqueda: SKU + descripción + marca + familia + categoría, sin acentos ni mayúsculas
-    row.indice = normalizar(`${row.sku} ${row.descripcion} ${row.marca} ${row.familia} ${row.categoria}`);
-    return row;
-  });
 }
 
 function InventarioGlobalPantalla({ sensible }) {

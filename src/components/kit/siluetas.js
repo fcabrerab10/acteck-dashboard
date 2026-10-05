@@ -89,6 +89,7 @@ export const SILUETAS = {
   // Móvil · Tracking de pedidos: hero (3 stats) · 4 KPIs en 2×2 · segmented + chips + buscador · listas de OCs por etapa
   movilTracking: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), fila(1, 34), fila(1, 30), fila(1, 38), panel(6, { alto: 260 }), panel(4, { alto: 190 })],
   // Móvil · Ficha de la OC: título · hero (3 stats) · botones · recorrido · SKUs · envíos
+  movilInventario: [hero(3), kpis(4, 'repeat(2, minmax(0,1fr))'), fila(1, 34), fila(1, 38), panel(8, { alto: 420 })],
   movilTrackingOC: [hero(3), fila(1, 50), fila(1, 50), panel(5, { alto: 220 }), panel(5, { alto: 240 }), panel(3, { alto: 150 })],
   // Móvil · Administración: hero (3 stats) · segmented de 4 secciones · buscador · lista de internos · lista de externos · botón
   movilAdmin: [hero(3), fila(1, 34), fila(1, 38), panel(6, { alto: 300 }), panel(3, { alto: 150 }), panel(1, { alto: 50 })],
