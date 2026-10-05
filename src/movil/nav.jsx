@@ -120,15 +120,17 @@ export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = fals
   if (arrastrando) transform = `translateX(${dx}px)`;
   else if (fase === 'entrando' || fase === 'saliendo' || dx > 0) transform = 'translateX(100%)';
   else if (cubierta) transform = 'translateX(-30%)';
-  const transicion = arrastrando || sinAnim ? 'none' : `transform ${fase === 'saliendo' || dx > 0 ? DUR.page : DUR.page}ms ${EASE}, filter ${DUR.page}ms ${EASE}`;
+  const transicion = arrastrando || sinAnim ? 'none' : `transform ${DUR.page}ms ${EASE}`;
 
   return (
     <div ref={ref} data-pantalla={id} style={{
       position: 'absolute', inset: 0, background: theme.bg, transform, transition: transicion,
       boxShadow: puedeVolver && (arrastrando || fase !== 'activa') ? '-8px 0 24px rgba(0,0,0,0.18)' : 'none',
-      filter: cubierta && !arrastrando ? 'brightness(0.92)' : 'none', willChange: 'transform',
+      willChange: 'transform',
       pointerEvents: cubierta ? 'none' : 'auto', ...style,
     }}>
+      {/* Velo sobre la pantalla cubierta (sustituye a filter: brightness, que costaba un repintado por frame). */}
+      <div aria-hidden style={{ position: 'absolute', inset: 0, background: '#000', opacity: cubierta && !arrastrando ? 0.08 : 0, transition: sinAnim ? 'none' : `opacity ${DUR.page}ms ${EASE}`, pointerEvents: 'none', zIndex: 3 }} />
       {onRefrescar && (
         <div aria-hidden style={{ position: 'absolute', top: `calc(${PADDING_SUPERIOR} + 2px)`, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 2, opacity: pull > 8 ? Math.min(1, pull / UMBRAL_REFRESCO) : 0, transform: `translateY(${Math.max(0, pull - 28)}px)`, transition: pull === 0 ? `opacity ${DUR.state}ms ${EASE}, transform ${DUR.content}ms ${EASE}` : 'none' }}>
           <span style={{ width: 30, height: 30, borderRadius: 999, background: theme.surface, border: `1px solid ${theme.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: pull >= UMBRAL_REFRESCO || refrescando ? theme.accent : theme.textMuted }}>

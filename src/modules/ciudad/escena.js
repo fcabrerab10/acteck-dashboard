@@ -188,7 +188,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     else rutas.set(d.ciudad, carretera({ x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x + ancho / 2 + 3, z: base.z }, 1.2));
   });
   // etiquetas de Acteck y puerto
-  const etA = etiqueta('acteck. · Guadalajara', '#0A84FF'); etA.position.set(esc.x + 1, 13, esc.z - 2); raiz.add(etA);
+  const etA = etiqueta('acteck. · Guadalajara', '#0A84FF'); etA.position.set(esc.x + 1, 17, esc.z - 4); raiz.add(etA);
   const etP = etiqueta('Manzanillo', '#1D1D1F'); etP.position.set(puertoPos.x, 10, puertoPos.z + 2); raiz.add(etP);
 
   // ── Camiones (facturas) y vendedores del ERP (coches) por las carreteras ──
