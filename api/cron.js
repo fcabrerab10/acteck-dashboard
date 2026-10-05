@@ -1959,7 +1959,10 @@ async function taskPuenteVigilante({ dryRun = false } = {}) {
   const horasUltimo = horasDesde(prev.avisado_at);
   const estadoCambio = (prev.firma || '') !== firma;
   const resuelto = !problemas.length && prev.firma;
-  const debeAvisar = problemas.length ? (estadoCambio || horasUltimo >= 6) : Boolean(resuelto);
+  // Correo de prueba: se pide escribiendo sync_status.fuente='vigilante_prueba' con
+  // meta.pendiente=true (desde la Mac mini); sale en la siguiente corrida del cron.
+  const prueba = byKey.vigilante_prueba?.meta?.pendiente === true;
+  const debeAvisar = prueba || (problemas.length ? (estadoCambio || horasUltimo >= 6) : Boolean(resuelto));
 
   let enviado = null;
   if (debeAvisar && !dryRun) {
@@ -1969,8 +1972,10 @@ async function taskPuenteVigilante({ dryRun = false } = {}) {
     else {
       const { default: nodemailer } = await import('nodemailer');
       const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: SMTP_USER, pass: SMTP_PASS.replace(/\s+/g, '') } });
-      const asunto = problemas.length ? `🔴 Puente Acteck: ${problemas.length} fuente${problemas.length > 1 ? 's' : ''} sin actualizar` : '🟢 Puente Acteck: todo volvió a cargar';
-      const cuerpo = problemas.length
+      const asunto = prueba ? `🧪 Prueba del vigilante del puente · ${problemas.length ? problemas.length + ' problema(s)' : 'todo al día'}` : problemas.length ? `🔴 Puente Acteck: ${problemas.length} fuente${problemas.length > 1 ? 's' : ''} sin actualizar` : '🟢 Puente Acteck: todo volvió a cargar';
+      const cuerpo = prueba
+        ? `Fernando,\n\nEste es un correo de PRUEBA del vigilante del puente (${cdmx.toLocaleString('es-MX')} CDMX). Si lo recibes, las alertas sí te llegan.\n\nEstado actual:\n${problemas.length ? problemas.map((p) => '· ' + p).join('\n') : '· Todas las fuentes al día.'}\n${Number.isFinite(minLatido) ? '· Último latido de la Mac mini: hace ' + Math.round(minLatido) + ' min.' : '· Sin latido de la Mac mini.'}\n\n— Dashboard Acteck`
+        : problemas.length
         ? `Fernando,\n\nEl puente de la Mac mini tiene datos atrasados (${cdmx.toLocaleString('es-MX')} CDMX):\n\n${problemas.map((p) => '· ' + p).join('\n')}\n${detalleErrores.length ? '\nÚltimo error registrado:\n' + detalleErrores.map((p) => '· ' + p).join('\n') + '\n' : ''}\nQué revisar: Configuración → Actualización de datos → Cargas automáticas (botón "Pedir corrida").\nSi el latido no llega, la Mac mini está apagada o sin red. Si sólo falla Master Embarques, en la Mac mini: Scheduled → detener la corrida colgada → Run now, o configurar google-auth.mjs (docs/SYNC_SQL_BRIDGE.md).\n\nEste aviso se repite cada 6 h mientras siga el problema.\n— Dashboard Acteck`
         : `Fernando,\n\nTodas las fuentes del puente volvieron a cargar (${cdmx.toLocaleString('es-MX')} CDMX).\n\n— Dashboard Acteck`;
       try {
@@ -1980,10 +1985,13 @@ async function taskPuenteVigilante({ dryRun = false } = {}) {
     }
     await fetch(`${SB_URL}/rest/v1/sync_status?on_conflict=fuente`, {
       method: 'POST', headers: { ...H, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ fuente: 'vigilante', ultima_actualizacion: ahora.toISOString(), registros: problemas.length, meta: { firma, avisado_at: ahora.toISOString(), problemas, enviado } }),
+      body: JSON.stringify([
+        { fuente: 'vigilante', ultima_actualizacion: ahora.toISOString(), registros: problemas.length, meta: { firma, avisado_at: ahora.toISOString(), problemas, enviado } },
+        ...(prueba ? [{ fuente: 'vigilante_prueba', ultima_actualizacion: ahora.toISOString(), registros: 0, meta: { pendiente: false, enviado } }] : []),
+      ]),
     }).catch(() => {});
   }
-  return { ok: true, laboral, problemas, detalleErrores, latido_min: Number.isFinite(minLatido) ? Math.round(minLatido) : null, avisado: debeAvisar, enviado, dryRun };
+  return { ok: true, prueba, laboral, problemas, detalleErrores, latido_min: Number.isFinite(minLatido) ? Math.round(minLatido) : null, avisado: debeAvisar, enviado, dryRun };
 }
 
 export default async function handler(req, res) {
