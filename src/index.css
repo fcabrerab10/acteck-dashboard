@@ -183,6 +183,6 @@ html[data-entrada] [data-stagger] > [data-entrada-kpis] > *:nth-child(4) { anima
 html[data-entrada] [data-stagger] > [data-entrada-kpis] > *:nth-child(5) { animation-delay: 840ms; }
 html[data-entrada] [data-stagger] > [data-entrada-kpis] > *:nth-child(n+6) { animation-delay: 920ms; }
 html[data-entrada] [data-entrada-lado]   { animation: entradaLado 900ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both; }
-html[data-entrada] [data-entrada-arriba] { animation: entradaCae 800ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both; }
-html[data-entrada] [data-entrada-abajo]  { animation: entradaSube 800ms cubic-bezier(0.22, 1, 0.36, 1) 500ms both; }
+html[data-entrada] [data-entrada-arriba] { animation: entradaCae 600ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both; }
+html[data-entrada] [data-entrada-abajo]  { animation: entradaSube 600ms cubic-bezier(0.22, 1, 0.36, 1) 140ms both; } /* Fernando: «la del menú se tarda en entrar» */
 @media (prefers-reduced-motion: reduce) { html[data-entrada] [data-stagger] > *, html[data-entrada] [data-stagger] > [data-entrada-kpis] > *, html[data-entrada] [data-entrada-lado], html[data-entrada] [data-entrada-arriba], html[data-entrada] [data-entrada-abajo] { animation: none; } }

@@ -61,7 +61,7 @@ export default function BarraGrupos({ arbol, activo, onEntrada, perfil, badgeAge
             style={{
               position: 'relative',
               flex: 1, height: compacto ? 36 : 44, minWidth: 0, padding: '0 4px', border: 0, borderRadius: 999, cursor: 'pointer',
-              display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+              display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: compacto ? 0 : 2,
               background: 'transparent', color: on ? theme.text : theme.textMuted,
               transition: `color ${DUR.state}ms ${EASE}, height ${DUR.page}ms ${EASE}`,
             }}>

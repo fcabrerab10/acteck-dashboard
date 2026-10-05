@@ -65,8 +65,9 @@ export function useResaltadoDeslizante(activoKey, opts = {}) {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) { cajaRef.current = null; setCaja(null); setAnimar(false); return; }
     const nueva = {
-      x: Math.round(r.left - c.left + cont.scrollLeft) + inset,
-      y: Math.round(r.top - c.top + cont.scrollTop) + inset,
+      // La pastilla se posiciona dentro del padding box: se descuenta el borde del contenedor (1 px abajo en la barra móvil).
+      x: Math.round(r.left - c.left - (cont.clientLeft || 0) + cont.scrollLeft) + inset,
+      y: Math.round(r.top - c.top - (cont.clientTop || 0) + cont.scrollTop) + inset,
       w: Math.round(r.width) - inset * 2,
       h: Math.round(r.height) - inset * 2,
     };
