@@ -492,7 +492,6 @@ async function taskRecordatorioTracking() {
   const SMTP_USER = process.env.SMTP_USER;
   const SMTP_PASS = process.env.SMTP_PASS;
   const TO_KAROLINA = process.env.SMTP_TO_KAROLINA || 'karolina.veliz@acteck.com';
-  const CC_FERNANDO = process.env.SMTP_TO_FERNANDO || 'fernando.cabrera@acteck.com';
   if (!SMTP_USER || !SMTP_PASS) {
     return { error: 'SMTP_USER y SMTP_PASS no configurados', pendientes: pendientes.length };
   }
@@ -505,6 +504,26 @@ async function taskRecordatorioTracking() {
 
   const NOMBRE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech' };
   const diasSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+
+  // Informe (2026-10-05, Fernando: «cuando me comparta las notificaciones quiero un informe bien, no texto; este tipo
+  // de seguimiento es para Karolina, no para mí»): sólo a Karolina, en HTML, agrupado por cliente y de la más vieja a la
+  // más reciente, con el resumen arriba. El texto plano queda como alternativa para clientes de correo sin HTML.
+  const porCliente = new Map();
+  for (const oc of pendientes) { const k = oc.cliente_key || 'otro'; if (!porCliente.has(k)) porCliente.set(k, []); porCliente.get(k).push(oc); }
+  const grupos = [...porCliente.entries()].map(([k, ocs]) => ({ k, nombre: NOMBRE[k] || k, ocs: ocs.sort((x, y) => new Date(x.updated_at) - new Date(y.updated_at)) })).sort((x, y) => y.ocs.length - x.ocs.length);
+  const masVieja = Math.max(...pendientes.map((oc) => diasSince(oc.updated_at)));
+  const fuente = "-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif";
+  const tono = (d) => (d >= 30 ? '#FF453A' : d >= 7 ? '#FF9F0A' : '#6E6E73');
+  const resumen = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 12px"><tr>
+    ${[['OCs sin actualizar', String(pendientes.length)], ['Clientes', String(grupos.length)], ['La más vieja', `${masVieja} d`]].map(([l, v]) => `<td style="padding:0 6px 0 0;width:33%"><div style="background:#FFFFFF;border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:10px 12px"><div style="font:700 10px ${fuente};letter-spacing:.08em;text-transform:uppercase;color:#6E6E73">${l}</div><div style="font:700 20px ${fuente};color:#1D1D1F;letter-spacing:-.02em">${v}</div></div></td>`).join('')}
+  </tr></table>`;
+  const tablaGrupo = (g) => `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#FFFFFF;border:1px solid rgba(0,0,0,.06);border-radius:12px;margin:0 0 12px">
+    <tr><td colspan="3" style="padding:12px 14px 8px;border-bottom:1px solid rgba(0,0,0,.06)"><span style="font:600 14px ${fuente};color:#1D1D1F">${escapeHtml(g.nombre)}</span><span style="font:12px ${fuente};color:#6E6E73;margin-left:8px">${g.ocs.length} OC${g.ocs.length === 1 ? '' : 's'}</span></td></tr>
+    <tr><td style="padding:6px 14px;font:700 10px ${fuente};letter-spacing:.06em;text-transform:uppercase;color:#86868B">OC</td><td style="padding:6px 8px;font:700 10px ${fuente};letter-spacing:.06em;text-transform:uppercase;color:#86868B">Etapa</td><td style="padding:6px 14px;text-align:right;font:700 10px ${fuente};letter-spacing:.06em;text-transform:uppercase;color:#86868B">Sin cambios</td></tr>
+    ${g.ocs.slice(0, 25).map((oc) => { const d = diasSince(oc.updated_at); return `<tr><td style="padding:7px 14px;border-top:1px solid rgba(0,0,0,.05);font:13px ${fuente};color:#1D1D1F">${escapeHtml(oc.numero_oc || oc.numero_oc_cliente || '—')}</td><td style="padding:7px 8px;border-top:1px solid rgba(0,0,0,.05);font:12px ${fuente};color:#6E6E73">${escapeHtml(oc.etapa || oc.estatus || '')}</td><td style="padding:7px 14px;border-top:1px solid rgba(0,0,0,.05);text-align:right;font:600 12.5px ${fuente};color:${tono(d)};white-space:nowrap">${d} d</td></tr>`; }).join('')}
+    ${g.ocs.length > 25 ? `<tr><td colspan="3" style="padding:6px 14px 10px;font:12px ${fuente};color:#6E6E73">y ${g.ocs.length - 25} más en el dashboard</td></tr>` : ''}
+  </table>`;
+  const html = htmlCorreo({ titulo: `${pendientes.length} OC${pendientes.length === 1 ? '' : 's'} sin actualizar en Tracking`, intro: 'Llevan más de 24 h sin cambios. Revisa si ya avanzaron y actualiza factura, envío o entrega.', cuerpo: resumen + grupos.map(tablaGrupo).join('') });
 
   const lista = pendientes.slice(0, 20).map((oc) => {
     const d = diasSince(oc.updated_at);
@@ -530,10 +549,10 @@ https://acteck-dashboard.vercel.app/  →  Comercial  →  Tracking Pedidos
   try {
     const info = await transporter.sendMail({
       from: `"Dashboard Acteck" <${SMTP_USER}>`,
-      to: TO_KAROLINA,
-      cc: CC_FERNANDO,
+      to: TO_KAROLINA, // sólo Karolina: es seguimiento operativo, no va a Fernando (2026-10-05)
       subject: asunto,
       text: cuerpo,
+      html,
     });
     return { pendientes: pendientes.length, msg_id: info.messageId, muestra: pendientes.slice(0, 5).map((o) => o.numero_oc) };
   } catch (e) {
