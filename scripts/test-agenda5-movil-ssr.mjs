@@ -33,7 +33,7 @@ const d = { items: [
   { id: '2', estado: 'abierta', propietario: U, titulo: 'Idea bocinas CT', bandeja: true, tipo: 'idea', created_at: '2' },
   { id: '3', estado: 'abierta', propietario: U, titulo: 'Revisar forecast PCEL', fecha_limite: '2099-01-01', created_at: '3' },
 ], reuniones: [], google: [{ id: 'g1', titulo: 'Digitalife semanal', inicio: `${hoyIso}T09:00:00`, fin: `${hoyIso}T10:00:00` }], registros: [], checkins: [], personas: [], personasPorId: new Map() };
-const com = { d, uid: U, propietario: U, puedeEditar: true, esMia: true, hoy, abrirItem() {}, toggle() {}, posponerM() {}, personasPorId: new Map([[U, { nombre: 'Fernando' }]]), nav, dia: hoyIso, abrirMinuta() {} };
+const com = { d, uid: U, propietario: U, puedeEditar: true, esMia: true, hoy, abrirItem() {}, toggle() {}, posponerM() {}, personasPorId: new Map([[U, { nombre: 'Fernando' }]]), nav, dia: hoyIso, abrirMinuta() {}, abrirGuia() {} };
 const sano = (s, w) => { assert.ok(!/NaN|undefined|\[object Object\]/.test(s), `${w}: NaN/undefined`); };
 test('Día: horario en lista, pendientes sin hora', () => { const s = h(HoyM, com); sano(s, 'Día'); assert.match(s, /Horario/); assert.match(s, /09:00/); assert.match(s, /Digitalife semanal/); assert.match(s, /10:00/); assert.match(s, /Enviar propuesta Digitalife/); assert.match(s, /Llamar a Juan/); assert.match(s, /Pendientes de hoy/); assert.match(s, /Ahora|Lo que toca/); assert.match(s, /Guíame · 2 por hacer/); });
 test('Bandeja', () => { const s = h(BandejaM, com); sano(s, 'Bandeja'); assert.match(s, /Idea bocinas CT/); });
