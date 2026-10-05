@@ -249,7 +249,9 @@ export default function HistorialCambios() {
 
   // Query base: sólo el rango se aplica en el servidor
   const buildQuery = useCallback(() => {
-    let b = supabase.from('auditoria_cambios').select('*');
+    // v_auditoria_cambios (2026-10-05): misma tabla, pero los valores de más de 2 KB (lineas/propuesta/excel_final de
+    // propuestas) llegan como marcador con su tamaño y `cambios_recortado = true`; al abrir la fila se pide el jsonb completo.
+    let b = supabase.from('v_auditoria_cambios').select('*');
     const desde = desdeRango(rango);
     if (desde) b = b.gte('creado_at', desde);
     return b;
@@ -344,11 +346,20 @@ export default function HistorialCambios() {
   const hayFiltro = nActivos > 0;
   const limpiar = () => { setSel(selVacia()); setBusqueda(''); setQ(''); setMostrarPrefs(false); };
 
-  const toggle = (id) => setExpandidos((prev) => {
-    const n = new Set(prev);
-    if (n.has(id)) n.delete(id); else n.add(id);
-    return n;
-  });
+  const toggle = (id) => {
+    setExpandidos((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+    const fila = rows.find((r) => r.id === id);
+    if (fila?.cambios_recortado && !fila.cambiosCompletos) {
+      supabase.from('auditoria_cambios').select('cambios').eq('id', id).maybeSingle().then(({ data }) => {
+        if (!data) return;
+        setRows((prev) => prev.map((r) => (r.id === id ? enriquecer({ ...r, cambios: data.cambios, cambios_recortado: false, cambiosCompletos: true }) : r)));
+      });
+    }
+  };
 
   const tipoColor = (tipo) => (tipo === 'creado' ? P.green : tipo === 'borrado' ? P.red : P.blue);
 

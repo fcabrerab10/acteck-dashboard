@@ -37,7 +37,7 @@ export function useUsuariosAdmin() {
   return { usuarios: q.data || [], cargando: q.isLoading, error: q.error, refetch: q.refetch, actualizar };
 }
 
-/** Última actividad por usuario (eventos_usuario: RLS deja leer todo al super admin). Una consulta limit 1 por usuario. */
+/** Última actividad por usuario (v_eventos_ultimo_usuario sobre eventos_usuario: RLS deja leer todo al super admin). */
 export function useActividadUsuarios(usuarios) {
   const ids = useMemo(() => (usuarios || []).map((u) => u.user_id).filter(Boolean).sort(), [usuarios]);
   const q = useQuery({
@@ -45,11 +45,10 @@ export function useActividadUsuarios(usuarios) {
     enabled: ids.length > 0,
     staleTime: 5 * 60000,
     queryFn: async () => {
-      const filas = await Promise.all(ids.map(async (uid) => {
-        const { data } = await supabase.from('eventos_usuario').select('ts').eq('user_id', uid).order('ts', { ascending: false }).limit(1);
-        return [uid, data?.[0]?.ts || null];
-      }));
-      return Object.fromEntries(filas);
+      // Una sola consulta (v_eventos_ultimo_usuario = max(ts) por usuario; antes era una por usuario).
+      const { data } = await supabase.from('v_eventos_ultimo_usuario').select('user_id,ts').in('user_id', ids);
+      const por = new Map((data || []).map((r) => [r.user_id, r.ts]));
+      return Object.fromEntries(ids.map((uid) => [uid, por.get(uid) || null]));
     },
   });
   return { porUserId: q.data || {}, cargando: q.isLoading };
