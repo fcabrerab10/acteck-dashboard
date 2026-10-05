@@ -14,18 +14,19 @@ import { puedeVerPaginaGlobal, puedeEditarPestanaGlobal } from '../../lib/permis
 import { Cargando, Panel, Pill, Boton, toast } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { supabase } from '../../lib/supabase';
-import { useAgenda5, actualizarItem, completarItem, guardarRegistroDia, guardarCheckin } from './datos';
+import { useAgenda5, actualizarItem, completarItem, guardarRegistroDia, guardarCheckin, crearObjetivoSemana, marcarObjetivoSemana, borrarObjetivoSemana } from './datos';
+import { cuentasPendientes } from '../agenda/calculo';
 import { hoyDe, bandejaDe, pendientesDe, isoDia, sumarDias, fmtMin, esDe, abierto } from './calculo';
-import { Avatar, FilaTarea, Titulo, Seccion } from './comun';
+import { Avatar, FilaTarea, Titulo, Seccion, Palomita } from './comun';
 import Captura from './Captura';
 import Hoy from './Hoy';
 import Bandeja from './Bandeja';
 import Pendientes from './Pendientes';
+import ReunionesV5 from './Reuniones';
 import HojaItem from '../agenda/HojaItem';
-import Reuniones from '../agenda/Reuniones';
 import Minuta from '../agenda/Minuta';
 import FormReunion from '../agenda/FormReunion';
-import { ordenarReuniones, comentariosPorItem } from '../agenda/calculo';
+import { comentariosPorItem } from '../agenda/calculo';
 
 const MODULOS = [
   { id: 'hoy', label: 'Hoy', icon: Sun }, { id: 'bandeja', label: 'Bandeja', icon: Inbox }, { id: 'pendientes', label: 'Pendientes', icon: CheckSquare },
@@ -106,8 +107,7 @@ export default function Agenda5({ onNavegar, inicial = null }) {
         {modulo === 'hoy' && <Hoy {...comunes} />}
         {modulo === 'bandeja' && <Bandeja {...comunes} />}
         {modulo === 'pendientes' && <Pendientes {...comunes} />}
-        {modulo === 'reuniones' && !minuta && <Reuniones id="agenda5-reuniones" reunionesOrd={ordenarReuniones(d.reuniones, hoy)} items={d.items} personasPorId={d.personasPorId} porId={d.porId} hoy={hoy} puedeEditar={puedeEditar}
-          abrirMinuta={(r) => setMinutaId(typeof r === 'string' ? r : r.id)} editarReunion={(r) => setFormReunion({ reunion: r })} nuevaReunion={(extra) => setFormReunion({ ...(extra || {}) })} abrirItem={setHojaItem} />}
+        {modulo === 'reuniones' && !minuta && <ReunionesV5 d={d} uid={uid} puedeEditar={puedeEditar} personasPorId={d.personasPorId} onAbrirMinuta={(r) => setMinutaId(typeof r === 'string' ? r : r.id)} onNuevaReunion={(extra) => setFormReunion({ ...(extra || {}) })} onAbrirItem={setHojaItem} />}
         {modulo === 'reuniones' && minuta && <Minuta reunion={minuta} items={d.items} reuniones={d.reuniones} personas={d.personas} personasPorId={d.personasPorId} porId={d.porId} hoy={hoy} uid={uid} puedeEditar={puedeEditar} comentariosPor={comentariosPor}
           onClose={() => setMinutaId(null)} onEditar={(r) => setFormReunion({ reunion: r })} onNavegar={onNavegar} onVerReuniones={() => setMinutaId(null)} google={{ ...d.googleEstado, eventos: d.google }} />}
         {modulo === 'ideas' && <Ideas {...comunes} />}
@@ -170,9 +170,10 @@ function Registro({ d, uid, propietario, personasPorId, puedeEditar, onAbrirItem
 }
 
 // ── Semana: lo hecho y lo abierto por día + tiempo por área
-function Semana({ d, uid, propietario, personasPorId, onAbrirItem }) {
+function Semana({ d, uid, propietario, personasPorId, onAbrirItem, puedeEditar }) {
   const { theme } = useTheme();
   const hoy = useMemo(() => new Date(), []);
+  const [nuevoObj, setNuevoObj] = useState('');
   const lunes = useMemo(() => { const x = new Date(hoy); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }, [hoy]);
   const dias = Array.from({ length: 7 }, (_, i) => isoDia(sumarDias(lunes, i)));
   const porDia = dias.map((iso) => ({ iso, h: hoyDe(d.items, propietario, new Date(`${iso}T12:00:00`), { reuniones: d.reuniones, google: d.google }) }));
@@ -180,9 +181,28 @@ function Semana({ d, uid, propietario, personasPorId, onAbrirItem }) {
   const porArea = new Map();
   for (const x of porDia) for (const it of x.h.hechasHoy) { const a = d.areas.find((z) => z.id === it.area_id); const k = a?.nombre || 'Sin área'; porArea.set(k, (porArea.get(k) || 0) + (Number(it.min_real) || Number(it.duracion_min) || 0)); }
   const DL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const semanaIso = isoDia(lunes);
+  const objetivos = (d.objetivos || []).filter((o) => o.usuario === propietario && o.semana === semanaIso).sort((a, b) => (a.orden || 0) - (b.orden || 0) || String(a.created_at).localeCompare(String(b.created_at)));
+  const cumplidos = objetivos.filter((o) => o.cumplido).length;
+  const sinContacto = propietario === uid ? cuentasPendientes(d.cuentas || [], hoy) : [];
+  const acuerdosVencidos = d.items.filter((it) => it.tipo === 'punto' && (it.estado === 'abierta' || it.estado === 'arrastrada') && it.fecha_limite && it.fecha_limite < isoDia(hoy) && (it.responsables || []).includes(propietario));
+  const agregar = async () => { if (!nuevoObj.trim()) return; try { await crearObjetivoSemana(propietario, semanaIso, nuevoObj.trim()); setNuevoObj(''); } catch (e) { toast.error(e.message); } };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <Titulo meta={`${totHechas} hechas · ${fmtMin(totMin)} registradas · semana del ${lunes.getDate()}`}>Semana</Titulo>
+      <Titulo meta={`${totHechas} hechas · ${fmtMin(totMin)} registradas · ${cumplidos} de ${objetivos.length} objetivos · semana del ${lunes.getDate()}`}>Semana</Titulo>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
+        <Panel titulo="Objetivos de la semana" meta={objetivos.length ? `${cumplidos} cumplidos` : 'tres cosas que sí o sí'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {objetivos.map((o) => <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 9, background: theme.surface2 || 'rgba(120,120,128,0.06)' }}><Palomita hecha={!!o.cumplido} onClick={() => puedeEditar && marcarObjetivoSemana(o.id, !o.cumplido).catch((e) => toast.error(e.message))} /><span style={{ flex: 1, fontSize: 13, textDecoration: o.cumplido ? 'line-through' : 'none', color: o.cumplido ? theme.textMuted : theme.text }}>{o.texto}</span>{puedeEditar && <button type="button" onClick={() => borrarObjetivoSemana(o.id).catch((e) => toast.error(e.message))} style={{ border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer' }}>✕</button>}</div>)}
+            {puedeEditar && <div style={{ display: 'flex', gap: 6 }}><input value={nuevoObj} onChange={(e) => setNuevoObj(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }} placeholder="Nuevo objetivo…" style={{ flex: 1, height: 30, borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, padding: '0 8px', fontFamily: TYPO.fontText, fontSize: 12.5 }} /><Boton onClick={agregar}>Agregar</Boton></div>}
+          </div>
+        </Panel>
+        <Panel titulo="Qué revisar" meta="acuerdos vencidos y cuentas sin contacto">
+          {acuerdosVencidos.length === 0 && sinContacto.length === 0 && <div style={{ fontSize: 12.5, color: theme.textMuted }}>Nada atrasado. 🎉</div>}
+          {acuerdosVencidos.slice(0, 8).map((it) => <div key={it.id} onClick={() => onAbrirItem?.(it)} style={{ fontSize: 12.5, padding: '4px 0', cursor: 'pointer', color: theme.text }}><Pill size="xs" tone="red">acuerdo</Pill> {it.titulo} <span style={{ color: theme.textMuted }}>· venció {it.fecha_limite.slice(5)}</span></div>)}
+          {sinContacto.slice(0, 8).map((c) => <div key={c.id} style={{ fontSize: 12.5, padding: '4px 0', color: theme.text }}><Pill size="xs" tone="orange">cuenta</Pill> {c.nombre}{c.empresa ? ` (${c.empresa})` : ''} <span style={{ color: theme.textMuted }}>· toca contactar desde {c.proximo_seguimiento}</span></div>)}
+        </Panel>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0,1fr))', gap: 6 }}>
         {porDia.map((x, i) => <div key={x.iso} style={{ border: `1px solid ${x.iso === isoDia(hoy) ? theme.accent : theme.border}`, borderRadius: 10, padding: 8, background: theme.surface, minHeight: 120 }}>
           <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.text }}>{DL[i]} {x.iso.slice(8)}</div>

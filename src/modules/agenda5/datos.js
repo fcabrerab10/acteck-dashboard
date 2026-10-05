@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { queryClient } from '../../lib/queryClient';
 import { escribir } from '../../lib/buzon';
-import { useAgendaDatos, usePersonas, actualizarItem, recargarAgenda, KEY_AGENDA, useSubtareas, useComentarios } from '../agenda/datos';
+import { useAgendaDatos, usePersonas, actualizarItem, recargarAgenda, KEY_AGENDA, useSubtareas, useComentarios, useCuentas } from '../agenda/datos';
 import { useGoogleEstado, useGoogleEventos, conectarGoogle } from '../agenda/google';
 import { interpretarCaptura } from './interpretar';
 import { isoDia, sumarDias } from './calculo';
@@ -42,13 +42,14 @@ export function useAgenda5({ mesRef = new Date(), enabled = true } = {}) {
   const ex = useExtra5(enabled);
   const sub = useSubtareas({ enabled });
   const com = useComentarios({ enabled });
+  const cta = useCuentas({ enabled });
   const g = useGoogleEstado();
   const desde = useMemo(() => isoDia(new Date(mesRef.getFullYear(), mesRef.getMonth() - 1, 1)), [mesRef]);
   const hasta = useMemo(() => isoDia(new Date(mesRef.getFullYear(), mesRef.getMonth() + 2, 0)), [mesRef]);
   const gq = useGoogleEventos(desde, hasta, enabled && g.conectado);
   const google = useMemo(() => normalizarGoogle(gq.data || []), [gq.data]);
   return { ...d, ...(ex.data || { areas: [], proyectos: [], registros: [], checkins: [], objetivos: [] }), google, googleEstado: { ...g, cargando: gq.isLoading, conectar: conectarGoogle },
-    subtareas: sub.data || [], comentarios: com.data || [], cargando: d.cargando || ex.isLoading, error: d.error || ex.error || null };
+    subtareas: sub.data || [], comentarios: com.data || [], cuentas: cta.cuentas || [], cargando: d.cargando || ex.isLoading, error: d.error || ex.error || null };
 }
 
 /** Captura rápida → ítem. `propietario` = de quién es la agenda que se está viendo. */
@@ -97,6 +98,18 @@ export async function crearProyecto(nombre, { area_id = null, propietario = null
 }
 export async function guardarRegistroDia(usuario, fecha, campos) {
   const { error } = await supabase.from('agenda_registro_dia').upsert({ usuario, fecha, ...campos, updated_at: new Date().toISOString() }, { onConflict: 'usuario,fecha' });
+  if (error) throw error; await invalidarExtra();
+}
+export async function crearObjetivoSemana(usuario, semana, texto, area_id = null) {
+  const { error } = await supabase.from('agenda_objetivos_semana').insert({ usuario, semana, texto, area_id });
+  if (error) throw error; await invalidarExtra();
+}
+export async function marcarObjetivoSemana(id, cumplido) {
+  const { error } = await supabase.from('agenda_objetivos_semana').update({ cumplido, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error; await invalidarExtra();
+}
+export async function borrarObjetivoSemana(id) {
+  const { error } = await supabase.from('agenda_objetivos_semana').delete().eq('id', id);
   if (error) throw error; await invalidarExtra();
 }
 export async function guardarCheckin(usuario, fecha, tipo, respuesta) {

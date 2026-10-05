@@ -1390,7 +1390,7 @@ async function taskAgendaCorreo({ dryRun = esDryRun(), momento = null, para = nu
   const correosObjetivo = [...new Set(destinos.map((d) => d.email))];
   const [perfiles, items, reuniones, cuentas, fuentes] = await Promise.all([
     sbGetAll(`perfiles?select=user_id,nombre,email,tipo,activo,estado,preferencias&activo=eq.true&email=in.(${correosObjetivo.join(',')})`),
-    sbGetAll('agenda_items?select=id,tipo,titulo,estado,cliente_key,fecha_limite,responsables,creado_por,created_at&estado=eq.abierta', 2000),
+    sbGetAll('agenda_items?select=id,tipo,titulo,estado,cliente_key,fecha_limite,cuando,propietario,responsables,creado_por,created_at&estado=eq.abierta', 2000),
     sbGetAll('agenda_reuniones?select=id,titulo,cliente_key,fecha,fecha_fin,tipo,estado&estado=neq.cerrada', 500),
     cuentasParaHoy(hoy),
     destinos.some((d) => d.momento === 'tarde') ? cargasProximas() : Promise.resolve([]),
@@ -1415,7 +1415,26 @@ async function taskAgendaCorreo({ dryRun = esDryRun(), momento = null, para = nu
     try { const info = await transporte.transporter.sendMail({ from: transporte.from, to: dst.email, subject, text, html }); enviados.push({ to: dst.email, momento: dst.momento, subject, msg_id: info.messageId }); }
     catch (e) { enviados.push({ to: dst.email, momento: dst.momento, subject, error: e.message }); }
   }
-  return { ok: true, dryRun, ahora, hoy: hoy.iso, destinos, enviados, omitidos };
+  // Agenda V5 (2026-10-05): además del correo, recordatorios en la campana dirigidos a cada persona.
+  //   mañana → agenda_planear (lo de ayer, reuniones, carga) · tarde → agenda_cierre (hechas, abiertas, check-in).
+  const recordatorios = [];
+  for (const dst of destinos) {
+    const p = porEmail.get(dst.email.toLowerCase()); if (!p || !conAgenda(p)) continue;
+    const mios = items.filter((i) => (i.responsables || []).includes(p.user_id) || i.propietario === p.user_id);
+    const deAyer = mios.filter((i) => (i.cuando && i.cuando < hoy.iso) || (!i.cuando && i.fecha_limite && i.fecha_limite < hoy.iso)).length;
+    const deHoy = mios.filter((i) => i.cuando === hoy.iso || (!i.cuando && i.fecha_limite === hoy.iso)).length;
+    const reus = reuniones.filter((r) => String(r.fecha).slice(0, 10) === hoy.iso).length;
+    if (dst.momento === 'manana') recordatorios.push({ tipo: 'agenda_planear', severidad: deAyer ? 'media' : 'info', clave: `agenda_planear|${p.user_id}|${hoy.iso}`, para_usuario: p.user_id, area: 'agenda',
+      titulo: `Planea tu día: ${deHoy} para hoy${deAyer ? ` · ${deAyer} de ayer` : ''}${reus ? ` · ${reus} reunión${reus === 1 ? '' : 'es'}` : ''}`, detalle: 'Revisa lo que quedó, estima tiempos y ponle hora a lo importante en el reloj del día.', cliente_key: null, sku: null, accion: { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Abrir Hoy' }, caduca_at: `${hoy.iso}T23:59:59-06:00`, generada_at: new Date().toISOString() });
+    if (dst.momento === 'tarde' && enMinutos(ahora) >= enMinutos('16:30')) recordatorios.push({ tipo: 'agenda_cierre', severidad: 'info', clave: `agenda_cierre|${p.user_id}|${hoy.iso}`, para_usuario: p.user_id, area: 'agenda',
+      titulo: `Cierra el día: ${deHoy} abiertas`, detalle: 'Marca lo hecho, mueve lo que no se hizo, deja una línea de reflexión y tu check-in para el equipo.', cliente_key: null, sku: null, accion: { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Cerrar el día' }, caduca_at: `${hoy.iso}T23:59:59-06:00`, generada_at: new Date().toISOString() });
+  }
+  let recordUpsert = null;
+  if (recordatorios.length && !dryRun) {
+    const r = await fetch(`${SB_URL}/rest/v1/alertas?on_conflict=clave`, { method: 'POST', headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(normalizarFilasAlertas(recordatorios)) });
+    recordUpsert = r.ok ? 'ok' : `HTTP ${r.status} ${(await r.text()).slice(0, 200)}`;
+  }
+  return { ok: true, dryRun, ahora, hoy: hoy.iso, destinos, enviados, omitidos, recordatorios: recordatorios.length, recordUpsert };
 }
 
 // ═══ Actividad del equipo · equipo_inactivo (2026-09-11) ═══════════════════════
@@ -1500,7 +1519,7 @@ export { taskResumenProgramado, enviarCriticasNuevas, taskAgendaHoy, taskAgendaC
 // Espejo de TIPOS_DESACTIVADOS en src/lib/alertas.js.
 const TIPOS_DESACTIVADOS = new Set(['stock_vs_transito', 'cuota_en_riesgo', 'devoluciones_anormales', 'proyecto_sin_cobertura', 'oc_backorder_sin_po', 'factura_sin_oc', 'oc_sin_actualizar', 'pago_vence_7d', 'equipo_inactivo', 'reserva_3dias', 'reserva_dia']);
 // Modo por defecto de cada tipo cuando la persona no lo ha configurado (espejo de TIPOS_ALERTA.def).
-const TIPO_DEF = { oc_detenida: 'resumen', forecast_crm_captura: 'inmediato', agenda_vencida: 'inmediato', agenda_hoy: 'inmediato', agenda_asignado: 'inmediato', cuenta_seguimiento: 'inmediato', datos_sin_actualizar: 'resumen', rebate_por_generar: 'resumen', pago_por_solicitar: 'resumen', pago_sin_autorizar_5d: 'resumen', pago_sin_folio: 'resumen', fondo_negativo: 'resumen', arribo_proximo_proyecto: 'resumen', arribo_hoy_proyecto: 'inmediato', arribo_tarde_proyecto: 'resumen' };
+const TIPO_DEF = { oc_detenida: 'resumen', forecast_crm_captura: 'inmediato', agenda_planear: 'inmediato', agenda_cierre: 'inmediato', agenda_vencida: 'inmediato', agenda_hoy: 'inmediato', agenda_asignado: 'inmediato', cuenta_seguimiento: 'inmediato', datos_sin_actualizar: 'resumen', rebate_por_generar: 'resumen', pago_por_solicitar: 'resumen', pago_sin_autorizar_5d: 'resumen', pago_sin_folio: 'resumen', fondo_negativo: 'resumen', arribo_proximo_proyecto: 'resumen', arribo_hoy_proyecto: 'inmediato', arribo_tarde_proyecto: 'resumen' };
 
 export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
@@ -1675,7 +1694,7 @@ function prefsNotif(perfil) {
     criticas_correo: n.criticas_correo !== false,
   };
 }
-const areaDe = (a) => a.area || ({ agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', cuenta_seguimiento: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', pago_por_solicitar: 'pagos', pago_sin_autorizar_5d: 'pagos', pago_sin_folio: 'pagos', pago_vence_7d: 'pagos', fondo_negativo: 'pagos', arribo_proximo_proyecto: 'forecast', arribo_hoy_proyecto: 'forecast', arribo_tarde_proyecto: 'forecast', proyecto_sin_cobertura: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking', equipo_inactivo: 'equipo' })[a.tipo] || 'operacion';
+const areaDe = (a) => a.area || ({ agenda_planear: 'agenda', agenda_cierre: 'agenda', forecast_crm_captura: 'forecast', agenda_vencida: 'agenda', agenda_hoy: 'agenda', agenda_asignado: 'agenda', cuenta_seguimiento: 'agenda', stock_vs_transito: 'inventario', cuota_en_riesgo: 'ventas', devoluciones_anormales: 'ventas', rebate_por_generar: 'pagos', datos_sin_actualizar: 'datos', oc_sin_actualizar: 'operacion', pago_por_solicitar: 'pagos', pago_sin_autorizar_5d: 'pagos', pago_sin_folio: 'pagos', pago_vence_7d: 'pagos', fondo_negativo: 'pagos', arribo_proximo_proyecto: 'forecast', arribo_hoy_proyecto: 'forecast', arribo_tarde_proyecto: 'forecast', proyecto_sin_cobertura: 'forecast', oc_detenida: 'tracking', oc_backorder_sin_po: 'tracking', factura_sin_oc: 'tracking', equipo_inactivo: 'equipo' })[a.tipo] || 'operacion';
 const aplicaCliente = (a, prefs) => !prefs.clientes || !a.cliente_key || prefs.clientes.includes(a.cliente_key);
 /** Modo efectivo de una alerta para una persona: 'inmediato' | 'resumen' | 'off'. */
 const modoDe = (a, prefs) => {

@@ -43,6 +43,8 @@ export const TIPOS_ALERTA = [
   { tipo: 'arribo_proximo_proyecto', label: 'Arribo de proyecto en 3 días', area: 'forecast', def: 'resumen', sub: 'Un embarque reservado para un proyecto llega en 3 días hábiles.' },
   { tipo: 'arribo_hoy_proyecto',   label: 'Arribo de proyecto hoy',        area: 'forecast', def: 'inmediato', sub: 'Hoy llega el embarque de un proyecto.' },
   { tipo: 'arribo_tarde_proyecto', label: 'Arribo tarde para proyecto',    area: 'forecast', def: 'resumen',  sub: 'El embarque llega después del mes del proyecto.' },
+  { tipo: 'agenda_planear',        label: 'Planear el día',                area: 'agenda',  def: 'inmediato', sub: 'A las 8: lo que quedó de ayer, tus reuniones y la carga del día.' },
+  { tipo: 'agenda_cierre',         label: 'Cerrar el día',                 area: 'agenda',  def: 'inmediato', sub: 'A las 5: lo hecho, lo que se mueve a mañana y tu check-in.' },
   { tipo: 'forecast_crm_captura',  label: 'Forecast del CRM por capturar',  area: 'forecast', def: 'inmediato', sub: 'Desde el día 20: este mes no se ha exportado ningún forecast para el CRM.' },
   // Apagadas para todos (no se generan):
   { tipo: 'stock_vs_transito',     label: 'Stock vs tránsito',             area: 'inventario', def: 'off', sub: 'SKU sin stock para cubrir el ritmo hasta el próximo arribo.' },
@@ -86,6 +88,8 @@ export function destinoAlerta(a) {
     case 'agenda_vencida':
     case 'agenda_hoy':
     case 'agenda_asignado':       return { clienteKey: null, pagina: 'agenda' };
+    case 'agenda_planear':        return { clienteKey: null, pagina: 'agenda', extra: { vista: 'hoy' } };
+    case 'agenda_cierre':         return { clienteKey: null, pagina: 'agenda', extra: { vista: 'registro' } };
     case 'stock_vs_transito':      return { clienteKey: null, pagina: 'inventarioGlobal', sku: a.sku };
     case 'cuota_en_riesgo':        return { clienteKey: a.cliente_key, pagina: 'sellIn' };
     case 'devoluciones_anormales': return CLIENTES_CON_TAB.has(a.cliente_key)

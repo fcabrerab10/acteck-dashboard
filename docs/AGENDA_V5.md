@@ -28,10 +28,17 @@ Fernando (sólo lectura); Fernando ve todas; David Millán no entra.
   auditoría). Áreas sembradas para Fernando.
 - Pruebas: `scripts/test-agenda5-captura.mjs`, `test-agenda5-calculo.mjs`, `test-agenda5-ssr.mjs`.
 
-## Pendiente (en orden)
-1. Celular (barra de cinco pestañas: Hoy · Bandeja · Pendientes · Reuniones · Registro) con swipe y captura desde «+».
-2. Arrastrar una tarea al reloj para bloquear hora; estirar para duración.
-3. Reuniones V5: hilo por cliente con «lo que quedó de la anterior» y acuerdos → tareas con responsable (hoy usa la minuta V4).
-4. Revisión semanal completa (objetivos ✓/✗, cuentas sin contacto), check-in semanal del lunes, recordatorios por cron
-   (planeación 08:00, cierre 18:00, check-in 16:30).
-5. Archivar la V4 (`src/modules/agenda/` queda como proveedor de Reuniones/Minuta/HojaItem hasta el punto 3).
+## Hecho el 5-oct (3.67.0)
+- Reloj del día editable: soltar una tarea de la lista le da hora (pasos de 15 min, con línea fantasma), arrastrar un
+  bloque lo mueve, estirar el borde inferior cambia la duración. Los eventos de Google y las reuniones no se editan ahí.
+- Reuniones V5 (`agenda5/Reuniones.jsx`): hilos por cliente (`hilosDe`), acuerdos abiertos del hilo con palomita y
+  «→ Tarea» (crearPendienteDePunto), reuniones del hilo con abiertos/resueltos, «Nueva reunión · <hilo>». La minuta
+  sigue siendo la V4 (ya trae «Reunión anterior» y «Traer puntos abiertos»).
+- Semana: objetivos de la semana (✓/✗, `agenda_objetivos_semana`), acuerdos vencidos y cuentas sin contacto.
+- Recordatorios en la campana (tipos `agenda_planear` 08:15 y `agenda_cierre` 17:00, dirigidos a cada persona, desde
+  `taskAgendaCorreo` en api/cron.js); se apagan por persona en ⚙️ como cualquier alerta.
+
+## Pendiente
+1. Check-in semanal del lunes y «on this day».
+2. Celular: arrastrar al reloj (hoy sólo web) y hilo de reuniones V5 (hoy usa la lista V4 móvil).
+3. Archivar la V4 cuando la minuta se porte al armazón nuevo.
