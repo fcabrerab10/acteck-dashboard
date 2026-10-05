@@ -1,6 +1,6 @@
 # Acteck Ciudad · plan por etapas y pendientes del agente nocturno
 
-Lista viva para la tarea programada `acteck-ciudad-nocturno` (Mac mini, cada hora de 22:00 a 08:00).
+Lista viva para la tarea programada `acteck-ciudad-nocturno` (Mac mini, cada hora; ver horario y reserva de uso en CLAUDE.md).
 Cada corrida toma el **primer pendiente sin marcar** (de arriba hacia abajo), lo termina, lo publica y
 lo mueve a «Hecho» con fecha, versión y una línea de qué cambió. Si un pendiente no cabe en una
 corrida, se parte aquí mismo en sub-pasos `- [ ]` y se hace sólo el primero. Fernando puede reordenar o
