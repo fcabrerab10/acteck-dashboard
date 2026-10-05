@@ -12,6 +12,9 @@ import { TituloGrande, CampoBusqueda, ListaAgrupada, Fila, Vacio, Skeleton } fro
 import { useCatalogoBusqueda, colorCliente } from '../datos';
 import { leerLS, guardarLS, int, MONO } from '../util';
 import FichaCliente from './FichaCliente';
+import AnalisisFicha from './AnalisisFicha';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAll } from '../../lib/queries';
 import FichaProducto from '../FichaProducto';
 import RespuestaM, { SugerenciasM } from './buscar/RespuestaM';
 import { interpretar, pareceP, responder, SUGERENCIAS } from '../../lib/preguntas';
@@ -29,6 +32,12 @@ export default function Buscar() {
   const veSkus = !!perfilB?.es_super_admin || puedeVerPestanaGlobal(perfilB, 'inventario_global') || puedeVerPestanaGlobal(perfilB, 'resumen_clientes');
   const veErp = !!perfilB?.es_super_admin || puedeVerPestanaGlobal(perfilB, 'resumen_clientes') || puedeVerPestanaGlobal(perfilB, 'sell_in');
   const { data: catalogo, isLoading } = useCatalogoBusqueda(veSkus);
+  // Clientes del ERP (2026-10-04): abren su página (AnalisisFicha). mv_vision_factura_clientes, un nombre por fila.
+  const { data: clientesErp = [] } = useQuery({ queryKey: ['movil', 'buscar', 'clientes-erp'], staleTime: 30 * 60 * 1000, enabled: veErp, queryFn: async () => {
+    const rows = await fetchAll('v_vision_factura_clientes', 'cliente_nombre,canal,venta', (q) => q.gte('anio', new Date().getFullYear() - 1));
+    const m = new Map(); rows.forEach((r) => { const o = m.get(r.cliente_nombre) || { nombre: r.cliente_nombre, canal: r.canal, venta: 0 }; o.venta += Number(r.venta) || 0; m.set(r.cliente_nombre, o); });
+    return [...m.values()].sort((a, b) => b.venta - a.venta);
+  } });
   const nq = norm(q.trim());
   // «Buscar o preguntar» (2026-09-24): si el texto parece pregunta, se contesta arriba con la cifra.
   const [respuesta, setRespuesta] = useState(null);
@@ -57,9 +66,10 @@ export default function Buscar() {
     return {
       skus,
       clientes: clientes.filter((c) => coincide(`${c.label} ${c.key} ${c.sub}`)).slice(0, 6),
+      erp: clientesErp.filter((c) => coincide(`${c.nombre} ${c.canal || ''}`)).slice(0, 8),
       pestanas: pestanas.filter((n) => coincide(`${n.label} ${n.clienteKey ? CLIENTES_NAV[n.clienteKey]?.label : ''} ${n.grupoLabel || ''}`)).slice(0, 8),
     };
-  }, [nq, catalogo, clientes, pestanas]);
+  }, [nq, catalogo, clientes, pestanas, clientesErp]);
 
   const recordar = (item) => {
     const lista = [item, ...recientes.filter((r) => !(r.tipo === item.tipo && r.id === item.id))].slice(0, 8);
@@ -76,6 +86,7 @@ export default function Buscar() {
   const abrirReciente = (r) => {
     if (r.tipo === 'sku') return abrirSku(r.id, r.sub);
     if (r.tipo === 'cliente') return abrirCliente({ key: r.id, label: r.label, sub: r.sub, tipo: r.extra });
+    if (r.tipo === 'erp') return nav.push(<AnalisisFicha clienteNombre={r.id} canal={r.sub} />, `analisis-${r.id}`, 'analisisClientes');
     return irAPestana(r.extra, r.ck, r.label);
   };
   const borrarRecientes = () => { setRecientes([]); guardarLS(LS_RECIENTES, []); };
@@ -106,7 +117,7 @@ export default function Buscar() {
 
       {res && (
         <>
-          {res.skus.length + res.clientes.length + res.pestanas.length === 0 && !respuesta && !pensando && <Vacio icon={null} titulo={`Nada coincide con “${q}”`} sub={isLoading ? 'El catálogo todavía se está cargando…' : 'Prueba con parte del SKU o una palabra de la descripción.'} />}
+          {res.skus.length + res.clientes.length + (res.erp?.length || 0) + res.pestanas.length === 0 && !respuesta && !pensando && <Vacio icon={null} titulo={`Nada coincide con “${q}”`} sub={isLoading ? 'El catálogo todavía se está cargando…' : 'Prueba con parte del SKU o una palabra de la descripción.'} />}
           {res.skus.length > 0 && (
             <ListaAgrupada titulo="SKUs" meta={res.skus.length} pie="Toca un SKU para ver disponibilidad, tránsito y precio.">
               {res.skus.map((s) => (
@@ -118,6 +129,11 @@ export default function Buscar() {
           {res.clientes.length > 0 && (
             <ListaAgrupada titulo="Clientes" style={{ marginTop: 16 }}>
               {res.clientes.map((c) => <Fila key={c.key} icon={iconoDe.cliente} color={colorCliente(c.key, theme)} titulo={c.label} sub={c.sub} onClick={() => abrirCliente(c)} />)}
+            </ListaAgrupada>
+          )}
+          {res.erp?.length > 0 && (
+            <ListaAgrupada titulo="Clientes del ERP" style={{ marginTop: 16 }} pie="Abre la página del cliente: resumen, sell in y sell out.">
+              {res.erp.map((c) => <Fila key={c.nombre} icon={iconoDe.cliente} color={theme.accent} titulo={c.nombre} sub={c.canal || 'ERP'} onClick={() => { recordar({ tipo: 'erp', id: c.nombre, label: c.nombre, sub: c.canal || 'ERP' }); nav.push(<AnalisisFicha clienteNombre={c.nombre} canal={c.canal} />, `analisis-${c.nombre}`, 'analisisClientes'); }} />)}
             </ListaAgrupada>
           )}
           {res.pestanas.length > 0 && (

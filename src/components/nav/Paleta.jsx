@@ -121,7 +121,7 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
     resPestanas.forEach((n) => out.push({ tipo: 'pestana', key: `p:${n.id}`, nodo: n, label: etiquetaNodo(n), sub: n.tipo === 'cliente' ? 'Pestaña de cliente' : n.grupoLabel }));
     resClientes.forEach((c) => out.push({ tipo: 'cliente', key: `c:${c.key}`, cliente: c, label: c.label, sub: `Cliente · ${c.marca}` }));
     skus.forEach((s) => out.push({ tipo: 'sku', key: `s:${s.sku}`, sku: s, label: s.sku, sub: [s.marca, s.descripcion].filter(Boolean).join(' · ') }));
-    finales.forEach((f) => out.push({ tipo: 'final', key: `f:${f.nombre}`, final: f, label: f.nombre, sub: `Cliente final · ${f.canal || 'ERP'}` }));
+    finales.forEach((f) => out.push({ tipo: 'final', key: `f:${f.nombre}`, final: f, label: f.nombre, sub: `Cliente del ERP · ${f.canal || ''} · abre su página` }));
     return out;
   }, [resPestanas, resClientes, skus, finales, respuesta]);
 
@@ -147,6 +147,7 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
       const propio = ERP_A_CLIENTE[String(it.final.nombre).toUpperCase()];
       try { sessionStorage.setItem('nav_busqueda_cliente', it.final.nombre); } catch {}
       if (propio && nodos.some((n) => n.id === `${propio}:home`)) onNavegar?.(propio, 'home');
+      else if (nodos.some((n) => n.id === 'analisisClientes')) onNavegar?.(null, 'analisisClientes', { clienteNombre: it.final.nombre }); // 2026-10-04: página por cliente
       else onNavegar?.(null, 'sellIn');
     }
   };

@@ -16,6 +16,7 @@ import { construirLibro, nombreArchivoPlantilla } from '../reservas/plantillaCRM
 import { crearLoteDB, upsertCrmDB, invalidarCrm, invalidarLotes, useForecastCrm } from '../reservas/datos';
 import { clienteForecast, useVentasForecast, useStockForecast, useProyectosForecast, useForecastExistente, useClientesErp, PROPIOS } from './forecastDatos';
 import { ventana as ventanaDe, mesSiguiente, sugerir, validar, filasPlantilla, MIN_JUSTIFICACION } from './forecastCalc';
+import { LotesPanel, ForecastVsReal } from './ForecastSeguimiento';
 
 const CLIENTES = [{ id: 'digitalife', label: 'Digitalife' }, { id: 'pcel', label: 'PCEL' }, { id: 'dicotech', label: 'Dicotech' }, { id: 'erp', label: 'Otro cliente del ERP' }];
 const N = (v) => Number(v) || 0;
@@ -161,6 +162,8 @@ export default function Forecast({ yoId }) {
               Sugerido = ritmo de 3 meses cerrados × estacionalidad del año anterior − inventario en exceso en el cliente + proyectos probables/confirmados de la pestaña Proyectos. Múltiplos de 5 desde 20 pz. Los SKUs que ya tienen forecast en el CRM no se sugieren para no duplicar. Al exportar se guarda copia (forecast_crm) y el archivo se sube tal cual en el CRM con «Cargar Excel».
             </div>
           </Panel>
+          <LotesPanel clienteKey={cliente.key} />
+          <ForecastVsReal exportadas={exportadas} series={ventas?.series} fuente={ventas?.fuente} />
         </>
       )}
     </div>

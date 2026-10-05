@@ -115,12 +115,12 @@ try {
   qcCargado.setQueryData(['movil', 'pagos', 'digitalife,pcel,dicotech'], { pagos: pagosMovil, fondos, reglas: [] });
   const mov = hMovil(React.createElement(PagosMovil, {}), perfil, qcCargado);
   ok(mov.includes('Pagos'), 'título de la pantalla');
-  ok(['Hoy', 'Calendario', 'Fondos', 'Historial'].every((t) => mov.includes(t)), 'Segmented Hoy · Calendario · Fondos · Historial');
+  ok(['Hoy', 'Calendario', 'Fondo', 'Historial'].every((t) => mov.includes(t)), 'Segmented Hoy · Calendario · Fondo · Historial');
   ok(/comprometid/i.test(mov), 'hero con el comprometido del mes');
-  ok(['Por solicitar', 'Por autorizar', 'Sin folio', 'Por registrar (folio sin pago)', 'Vence en 7 días'].every((g) => mov.includes(g)),
-    'los grupos por acción de la bandeja');
+  // Desde 3.27 la bandeja móvil muestra UN cliente a la vez (Digitalife por defecto): se comprueban los grupos de ese cliente.
+  ok(['Por autorizar', 'Vence en 7 días'].every((g) => mov.includes(g)), 'los grupos por acción de la bandeja (cliente elegido)');
   ok(mov.includes('Digitalife') && mov.includes('PCEL') && mov.includes('Dicotech'), 'chips de cliente');
-  ok(mov.includes('Rebate agosto') && mov.includes('Protección de precio'), 'las filas de la bandeja');
+  ok(mov.includes('SPIFF sell in lejano') && mov.includes('Protección de precio'), 'las filas de la bandeja (Digitalife)');
 
   console.log('\nMóvil · calendario');
   const calM = renderToString(wrap(React.createElement(CalendarioM, {

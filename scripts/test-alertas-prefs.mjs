@@ -48,6 +48,6 @@ test('SSR de PreferenciasNotificaciones (controlado)', async () => {
   assert.match(html, /Pago calculado sin solicitar/);
   assert.match(html, /Cuenta sin seguimiento/);
   assert.match(html, /Apagadas para todos/);
-  assert.match(html.replace(/<!-- -->/g, ""), /12 de 13 encendidas/);
+  assert.match(html.replace(/<!-- -->/g, ""), new RegExp(`${A.TIPOS_ALERTA.filter((t) => t.def !== "off").length - 1} de ${A.TIPOS_ALERTA.filter((t) => t.def !== "off").length} encendidas`));
   assert.doesNotMatch(html, /Por área/);
 });

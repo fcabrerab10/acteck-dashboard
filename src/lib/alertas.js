@@ -43,12 +43,13 @@ export const TIPOS_ALERTA = [
   { tipo: 'arribo_proximo_proyecto', label: 'Arribo de proyecto en 3 días', area: 'forecast', def: 'resumen', sub: 'Un embarque reservado para un proyecto llega en 3 días hábiles.' },
   { tipo: 'arribo_hoy_proyecto',   label: 'Arribo de proyecto hoy',        area: 'forecast', def: 'inmediato', sub: 'Hoy llega el embarque de un proyecto.' },
   { tipo: 'arribo_tarde_proyecto', label: 'Arribo tarde para proyecto',    area: 'forecast', def: 'resumen',  sub: 'El embarque llega después del mes del proyecto.' },
+  { tipo: 'forecast_crm_captura',  label: 'Forecast del CRM por capturar',  area: 'forecast', def: 'inmediato', sub: 'Desde el día 20: este mes no se ha exportado ningún forecast para el CRM.' },
   // Apagadas para todos (no se generan):
   { tipo: 'stock_vs_transito',     label: 'Stock vs tránsito',             area: 'inventario', def: 'off', sub: 'SKU sin stock para cubrir el ritmo hasta el próximo arribo.' },
   { tipo: 'cuota_en_riesgo',       label: 'Cuota en riesgo',               area: 'ventas',  def: 'off', sub: 'El cliente va por debajo del ritmo de su cuota.' },
   { tipo: 'devoluciones_anormales', label: 'Devoluciones anormales',       area: 'ventas',  def: 'off', sub: 'Las devoluciones del mes superan lo normal.' },
   { tipo: 'proyecto_sin_cobertura', label: 'Proyecto sin cobertura',       area: 'forecast', def: 'off', sub: 'Faltan piezas para un proyecto del mes.' },
-  { tipo: 'oc_detenida',           label: 'Pedido detenido',               area: 'tracking', def: 'off', sub: 'Un pedido lleva más de 3 días sin avanzar de etapa.' },
+  { tipo: 'oc_detenida',           label: 'Pedido detenido',               area: 'tracking', def: 'resumen', sub: 'Un pedido lleva más de 3 días sin avanzar de etapa.' },   // encendida 2026-10-04
   { tipo: 'oc_backorder_sin_po',   label: 'Backorder sin PO',              area: 'tracking', def: 'off', sub: 'Un SKU en backorder no tiene compra en camino.' },
   { tipo: 'factura_sin_oc',        label: 'Factura sin pedido',            area: 'tracking', def: 'off', sub: 'Una factura del ERP no está ligada a ningún pedido.' },
   { tipo: 'oc_sin_actualizar',     label: 'Órdenes sin actualizar',        area: 'operacion', def: 'off', sub: 'La carga de órdenes de compra está atrasada.' },
@@ -102,6 +103,7 @@ export function destinoAlerta(a) {
     case 'arribo_tarde_proyecto':
     case 'arribo_proximo_proyecto':
     case 'arribo_hoy_proyecto':    return { clienteKey: null, pagina: 'forecastReservas', sku: a.sku, proyectoId: a.meta?.proyecto_id || null };
+    case 'forecast_crm_captura':   return { clienteKey: null, pagina: 'forecastReservas' };
     case 'oc_detenida':
     case 'oc_backorder_sin_po':
     case 'factura_sin_oc':         return { clienteKey: null, pagina: 'ordenesCompra', sku: a.sku };

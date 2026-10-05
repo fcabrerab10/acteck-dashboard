@@ -24,7 +24,8 @@ import ParetoPanel from './analisis/ParetoPanel';
 const MODOS = [{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD' }];
 const ORIGENES = [{ id: 'todos', label: 'Todos' }, { id: 'propios', label: 'Propios' }, { id: 'erp', label: 'ERP' }];
 
-export default function AnalisisClientesGlobal() {
+// `inicial.clienteNombre` (⌘K y búsqueda, 2026-10-04): abre directo la página completa de ese cliente del ERP.
+export default function AnalisisClientesGlobal({ inicial = null }) {
   const perfil = usePerfil();
   const { theme } = useTheme();
   const verSensible = puedeVerSensible(perfil);
@@ -48,6 +49,12 @@ export default function AnalisisClientesGlobal() {
   const cuotas = useMemo(() => mapaCuotas(cuotasRows), [cuotasRows]);
 
   useEffect(() => { if (anios.length && !anios.includes(anio)) setAnio(anios[0]); }, [anios, anio]);
+  useEffect(() => {
+    const nombre = inicial?.clienteNombre; if (!nombre || !rows?.length) return;
+    const n = String(nombre).toUpperCase();
+    const r = rows.find((x) => String(x.cliente_nombre || '').toUpperCase() === n) || rows.find((x) => String(x.cliente_nombre || '').toUpperCase().includes(n));
+    if (r?.cliente) setPaginaCliente(r.cliente);
+  }, [inicial, rows]);
   useEffect(() => { setMesSel(null); }, [anio]);
   useEffect(() => { setAbierto(null); }, [anio, modo, canalFiltro, origen, busqueda]);
 

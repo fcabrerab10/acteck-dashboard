@@ -724,6 +724,25 @@ async function reglaDevolucionesAnormales(hoy) {
 // `pagos` con cliente='dicotech', categoria='rebate' y concepto
 // 'Rebate MM <MesLargo> YYYY[ — override| — No aplica]'. Se revisan los 3 meses
 // cerrados previos con sell-in > 0 que no tengan registro (de cualquier estatus).
+// Forecast CRM (2026-10-04): desde el día 20, si en el mes no se ha exportado ningún lote de forecast para el CRM,
+// se avisa (el CRM captura la ventana que arranca el mes siguiente). Se resuelve sola cuando aparece un lote del mes.
+async function reglaForecastCrmCaptura(hoy) {
+  if (hoy.dia < 20) return [];
+  const ini = `${hoy.anio}-${String(hoy.mes).padStart(2, '0')}-01`;
+  const lotes = await sbGetAll(`forecast_crm_lotes?select=id,created_at&created_at=gte.${ini}T00:00:00`);
+  if (lotes.length) return [];
+  const sig = hoy.mes === 12 ? { anio: hoy.anio + 1, mes: 1 } : { anio: hoy.anio, mes: hoy.mes + 1 };
+  return [{
+    tipo: 'forecast_crm_captura', severidad: 'media',
+    clave: `forecast_crm_captura|${hoy.anio}-${String(hoy.mes).padStart(2, '0')}`,
+    titulo: `Forecast del CRM por capturar: ventana desde ${MESES_LARGO[sig.mes - 1].toLowerCase()} ${sig.anio}`,
+    detalle: `Ya es ${hoy.dia} de ${MESES_LARGO[hoy.mes - 1].toLowerCase()} y no se ha exportado ningún lote de forecast este mes. Proyectos y forecast › Forecast › Exportar plantilla del CRM.`,
+    cliente_key: null, sku: null, area: 'forecast',
+    accion: { tipo: 'navegar', clienteKey: null, pagina: 'forecastReservas', label: 'Ir al forecast' },
+    caduca_at: null, valor: null, meta: { mes: hoy.mes, anio: hoy.anio },
+  }];
+}
+
 async function reglaRebatePorGenerar(hoy) {
   const meses = [1, 2, 3].map((n) => mesAnterior(hoy.anio, hoy.mes, n));
   const [pagos, fact] = await Promise.all([
@@ -1479,9 +1498,9 @@ async function reglaEquipoInactivo(hoy) {
 export { taskResumenProgramado, enviarCriticasNuevas, taskAgendaHoy, taskAgendaCorreo };
 // Tipos apagados para todos (Fernando, 2026-10-01): el cron no los genera y resuelve los que queden vivos.
 // Espejo de TIPOS_DESACTIVADOS en src/lib/alertas.js.
-const TIPOS_DESACTIVADOS = new Set(['stock_vs_transito', 'cuota_en_riesgo', 'devoluciones_anormales', 'proyecto_sin_cobertura', 'oc_detenida', 'oc_backorder_sin_po', 'factura_sin_oc', 'oc_sin_actualizar', 'pago_vence_7d', 'equipo_inactivo', 'reserva_3dias', 'reserva_dia']);
+const TIPOS_DESACTIVADOS = new Set(['stock_vs_transito', 'cuota_en_riesgo', 'devoluciones_anormales', 'proyecto_sin_cobertura', 'oc_backorder_sin_po', 'factura_sin_oc', 'oc_sin_actualizar', 'pago_vence_7d', 'equipo_inactivo', 'reserva_3dias', 'reserva_dia']);
 // Modo por defecto de cada tipo cuando la persona no lo ha configurado (espejo de TIPOS_ALERTA.def).
-const TIPO_DEF = { agenda_vencida: 'inmediato', agenda_hoy: 'inmediato', agenda_asignado: 'inmediato', cuenta_seguimiento: 'inmediato', datos_sin_actualizar: 'resumen', rebate_por_generar: 'resumen', pago_por_solicitar: 'resumen', pago_sin_autorizar_5d: 'resumen', pago_sin_folio: 'resumen', fondo_negativo: 'resumen', arribo_proximo_proyecto: 'resumen', arribo_hoy_proyecto: 'inmediato', arribo_tarde_proyecto: 'resumen' };
+const TIPO_DEF = { oc_detenida: 'resumen', forecast_crm_captura: 'inmediato', agenda_vencida: 'inmediato', agenda_hoy: 'inmediato', agenda_asignado: 'inmediato', cuenta_seguimiento: 'inmediato', datos_sin_actualizar: 'resumen', rebate_por_generar: 'resumen', pago_por_solicitar: 'resumen', pago_sin_autorizar_5d: 'resumen', pago_sin_folio: 'resumen', fondo_negativo: 'resumen', arribo_proximo_proyecto: 'resumen', arribo_hoy_proyecto: 'inmediato', arribo_tarde_proyecto: 'resumen' };
 
 export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
@@ -1497,6 +1516,7 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['proyecto_sin_cobertura', () => reglaProyectoSinCobertura(hoy)],
     ['arribo_tarde_proyecto',  () => reglaArriboTardeProyecto(hoy)],
     ['arribos_proyecto',       () => reglasArribosProyecto(hoy)],
+    ['forecast_crm_captura',   () => reglaForecastCrmCaptura(hoy)],   // 2026-10-04 · recordatorio mensual de captura
     ['oc_detenida',            () => reglaOcDetenida(hoy)],
     ['oc_backorder_sin_po',    () => reglaOcBackorderSinPo(hoy)],
     ['factura_sin_oc',         () => reglaFacturaSinOc(hoy)],

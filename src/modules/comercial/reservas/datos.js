@@ -207,3 +207,20 @@ export async function filasDeLoteDB(loteId) {
   const rows = await fetchAllQ(() => supabase.from('forecast_crm').select('cliente_key,cliente_codigo,cliente_nombre,tipo,sku,anio,mes,piezas,justificacion').eq('lote_id', loteId), { orderCol: 'id', label: 'forecast_crm' });
   return rows || [];
 }
+
+/** «Ya lo cargué en el CRM» (2026-10-04): marca el lote y copia sus filas a forecast_crm_existente (la copia del CRM),
+ *  para que el sugerido no vuelva a proponer esos SKUs aunque la copia leída del CRM sea anterior. */
+export async function marcarLoteCargadoDB(loteId) {
+  const { data: filas, error } = await supabase.from('forecast_crm').select('cliente_codigo,cliente_nombre,sku,anio,mes,piezas,justificacion').eq('lote_id', loteId);
+  if (error) throw error;
+  const ahora = new Date().toISOString();
+  const rows = (filas || []).filter((r) => Number(r.piezas) > 0).map((r) => ({
+    cliente_codigo: r.cliente_codigo, cliente_nombre: r.cliente_nombre, kam: null, sku: r.sku,
+    mes: `${r.anio}-${String(r.mes).padStart(2, '0')}-01`, piezas: Number(r.piezas), justificacion: r.justificacion || null,
+    estado: 'Cargado desde dashboard', capturado_at: ahora, origen: 'dashboard',
+  }));
+  if (rows.length) { const { error: e2 } = await supabase.from('forecast_crm_existente').upsert(rows, { onConflict: 'cliente_codigo,sku,mes' }); if (e2) throw e2; }
+  const { error: e3 } = await supabase.from('forecast_crm_lotes').update({ cargado_crm_at: ahora }).eq('id', loteId);
+  if (e3) throw e3;
+  return rows.length;
+}

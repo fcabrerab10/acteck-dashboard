@@ -215,7 +215,7 @@ export default function PaginaContenido({
         puedeVerPestanaGlobal(perfil, 'analisis_clientes')
           ? (mobile
               ? <MobileAnalisisClientes onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <AnalisisClientesGlobal />)
+              : <AnalisisClientesGlobal inicial={extra} />)
           : <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />
       )}
       {!clienteKey && pagina === 'sellIn' && (
