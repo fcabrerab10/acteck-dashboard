@@ -30,7 +30,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   resize(); colocarCam();
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x9a8c74, P.amb); scene.add(hemi);
-  const sol = new THREE.DirectionalLight(0xfff4e0, P.sol); sol.position.set(60, 110, 50); sol.castShadow = true; sol.shadow.mapSize.set(4096, 4096);
+  const sol = new THREE.DirectionalLight(0xfff4e0, P.sol); sol.position.set(60, 110, 50); sol.castShadow = true; sol.shadow.mapSize.set(3072, 3072);
   Object.assign(sol.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, near: 10, far: 420 }); sol.shadow.bias = -0.0006; sol.shadow.normalBias = .03; scene.add(sol);
   const luzNoche = new THREE.Group(); scene.add(luzNoche);
 
@@ -112,6 +112,8 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     const techo = box(17, .7, 12, P.cedisTecho); techo.position.set(0, 6.6, -1); g.add(techo);
     for (let i = 0; i < 3; i++) { const cl = box(2.2, .4, 3, P.cedisTecho); cl.position.set(-5 + i * 5, 7.1, -1); g.add(cl); }
     for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, .14), M(0x4A4F5C)); p.position.set(-5 + i * 5, 1.5, 4.57); g.add(p); }
+    for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(new THREE.BoxGeometry(1.6, .8, .12), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .12, roughness: .4 })); v.position.set(-6.5 + i * 2.6, 4.6, 4.57); g.add(v); }
+    const rotulo = box(5.5, .9, .25, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); rotulo.position.set(0, 7.4, 4.6); g.add(rotulo);
     // racks al frente (altura por días de inventario) y tarimas descargando
     for (let i = 0; i < modelo.cedis.racks; i++) { const col = i % 2 ? 0xC58A3A : 0xD49A4A; for (let k = 0; k < 1 + (i % 3); k++) { const c = box(1.3, 1, 1.3, col); c.position.set(-9 + (i % 5) * 2.2, .75 + k * 1.05, 6.5 + Math.floor(i / 5) * 2); g.add(c); } }
     modelo.puerto.tarimas.slice(0, 6).forEach((tp, i) => { const c = box(1.3, 1, 1.3, 0xA86A2E); c.position.set(6 + (i % 3) * 2, .75, 6 + Math.floor(i / 3) * 2); g.add(c); });
@@ -179,7 +181,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     // vendedores del cliente en su ciudad
     d.vendedores.forEach((v, i) => { const per = persona(COLOR_CUENTA[v.cuenta] || ACC.gris, .85); per.position.set(base.x - ancho / 2 + 1 + i * 1.6, .3, base.z + largo / 2 + 2.6); add(per, { tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${v.activo ? 'vendiendo este mes' : 'sin venta reciente'} · $${fmtK(v.importe)} en el año`, pagina: 'sellOut', cuenta: v.cuenta }); const ruta = [[0, 0], [ancho * .6, 0], [ancho * .6, 1.2], [0, 1.2]]; animados.push((t) => caminar(per, ruta, t * .15 + i * .9, { x: base.x - ancho / 2 + 1 + i * 1.6, z: base.z + largo / 2 + 2.6 }, .85)); });
     raiz.add(g);
-    add(new THREE.Group(), null);
+    if (n >= 3) { const cuantos = Math.min(4, Math.ceil(n / 3)); for (let i = 0; i < cuantos; i++) { const per = persona([0x9AA0AB, 0xC9B79C, 0x7A8AA6, 0xB58A7A][i % 4], .8); const o = { x: base.x - ancho / 2 + 1 + i * 2.4, z: base.z + largo / 2 + 1.1 }; per.position.set(o.x, .3, o.z); raiz.add(per); const ruta = [[0, 0], [ancho - 2, 0], [ancho - 2, .9], [0, .9]]; animados.push((t) => caminar(per, ruta, t * .12 + i * 1.7 + n, o, .8)); } }
     // etiqueta de ciudad (sprite de texto)
     const et = etiqueta(d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); raiz.add(et);
     if (!esGDL) rutas.set(d.ciudad, carretera({ x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x, z: base.z + largo / 2 + 2.2 }));

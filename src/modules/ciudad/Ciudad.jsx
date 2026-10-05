@@ -86,6 +86,17 @@ export default function Ciudad({ onNavegar }) {
         <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'cedis' })} title="Volver a Acteck" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Crosshair size={14} />Acteck</button>
       </div>
       <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra · rueda o pellizco = zoom · clic derecho o Shift = girar · WASD</div>
+      {/* Hoy en la ciudad: lo que está pasando ahora mismo */}
+      <div style={{ position: 'absolute', right: 14, bottom: 14, width: 270, zIndex: 3, ...card, padding: '10px 12px', fontSize: 12, lineHeight: 1.45, maxHeight: '42%', overflowY: 'auto' }}>
+        <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>Hoy en la ciudad</div>
+        {modelo.oficina.reunionEnCurso && <div>🟡 En la sala: <b>{modelo.oficina.reunionEnCurso.titulo}</b></div>}
+        {modelo.oficina.personas.filter((p) => p.actividad).map((p) => <div key={p.id}>👤 <b>{p.nombre.split(' ')[0]}</b>: {p.actividad}</div>)}
+        {modelo.puerto.tarimas.slice(0, 3).map((t) => <div key={t.id}>📦 Descargando <b>{t.id}</b> · {t.piezas.toLocaleString('es-MX')} pz</div>)}
+        {modelo.puerto.barcos.slice(0, 3).map((b) => <div key={b.id}>🚢 <b>{b.id}</b> llega {b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias <= 0 ? 'hoy' : `en ${b.llegaEnDias} d`}</div>)}
+        {modelo.camiones.slice(0, 4).map((c) => <div key={c.folio}>🚚 <b>{c.folio}</b> → {c.cliente} · {fmtM(c.monto)}</div>)}
+        {modelo.distritos.slice(0, 3).map((d) => <div key={d.ciudad}>🏬 {capital(d.ciudad)}: {d.tiendas.filter((t) => t.vendio).length} de {d.tiendas.length} tiendas vendieron</div>)}
+        {!modelo.camiones.length && !modelo.puerto.barcos.length && <div style={{ color: theme.textMuted }}>Sin movimiento registrado hoy.</div>}
+      </div>
       {/* KPIs */}
       <div style={{ position: 'absolute', left: 14, bottom: 14, display: 'flex', gap: 8, zIndex: 3, flexWrap: 'wrap' }}>
         {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} facturas`], ['CEDIS', `${fmtM(modelo.cedis.valor)} · ${modelo.cedis.dias} d`], ['Oficina', `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reuniones`]].map(([l, v]) => (
