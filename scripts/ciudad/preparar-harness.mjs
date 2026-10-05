@@ -1,5 +1,5 @@
 // Acteck Ciudad · harness local sin sesión (2026-10-05).
-//   node scripts/ciudad/preparar-harness.mjs            → arma .claude/proto/ con escena.js, modelo.js, el mapa y harness
+//   node scripts/ciudad/preparar-harness.mjs            → arma .claude/proto/ con escena.js + escena/, modelo.js, el mapa y harness
 //   node scripts/ciudad/preparar-harness.mjs --real     → además baja tus datos reales (SUPABASE_ACCESS_TOKEN de .env.local)
 //                                                          y guarda modelo-real.json (NO se versiona: .claude/proto está en .gitignore)
 // Luego: Browser pane → perfil «prototipo» (.claude/launch.json) → http://localhost:4174/ciudad-dev.html  (añade #real para tus datos)
@@ -7,10 +7,11 @@ import fs from 'node:fs'; import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const out = path.join(raiz, '.claude/proto'); fs.mkdirSync(out, { recursive: true });
-const esc = fs.readFileSync(path.join(raiz, 'src/modules/ciudad/escena.js'), 'utf8')
-  .replace("from './modelo';", "from './modelo.js';")
-  .replace("from '../comercial/sellout/mexico-estados.json';", "from './mexico-estados.json' with { type: 'json' };");
-fs.writeFileSync(path.join(out, 'escena.js'), esc);
+// escena.js orquesta y los módulos viven en escena/ (2026-10-05): se copian todos con los imports listos para el navegador.
+const json = (s) => s.replace("from '../../comercial/sellout/mexico-estados.json';", "from '../mexico-estados.json' with { type: 'json' };");
+fs.writeFileSync(path.join(out, 'escena.js'), fs.readFileSync(path.join(raiz, 'src/modules/ciudad/escena.js'), 'utf8'));
+fs.mkdirSync(path.join(out, 'escena'), { recursive: true });
+for (const f of fs.readdirSync(path.join(raiz, 'src/modules/ciudad/escena'))) fs.writeFileSync(path.join(out, 'escena', f), json(fs.readFileSync(path.join(raiz, 'src/modules/ciudad/escena', f), 'utf8')));
 fs.copyFileSync(path.join(raiz, 'src/modules/ciudad/modelo.js'), path.join(out, 'modelo.js'));
 fs.copyFileSync(path.join(raiz, 'src/modules/comercial/sellout/mexico-estados.json'), path.join(out, 'mexico-estados.json'));
 fs.copyFileSync(path.join(raiz, 'scripts/ciudad/harness.html'), path.join(out, 'ciudad-dev.html'));
