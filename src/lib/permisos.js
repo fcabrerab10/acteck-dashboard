@@ -125,6 +125,7 @@ export const PAGINA_A_PERMISO_GLOBAL = {
   forecastReservas: "forecast_reservas",
   ordenesCompra:    "ordenes_compra",
   agenda:           "agenda",         // Agenda (V3) · migrado de admin_interna
+  ciudad:           "__super_admin_only__", // Acteck Ciudad (2026-10-05): en construcción, sólo super admin
   adminInterna:     "agenda",         // página vieja → mismo permiso
   telemetria:       "__super_admin_only__",
   propuestas:       "propuestas",

@@ -36,6 +36,7 @@ export default defineConfig({
           // sin esta línea caían en 'vendor-base' y viajaban en el arranque.
           if (id.includes('@supabase') || id.includes('/iceberg-js/') || id.includes('/tslib/')) return 'vendor-supabase';
           if (id.includes('xlsx')) return 'vendor-xlsx';
+          if (id.includes('/three/')) return 'vendor-three'; // Acteck Ciudad: sólo se baja al abrir esa pestaña
           // Recharts 3 arrastra redux + immer + reselect + es-toolkit + decimal.js-light…
           // (~90 KB · 30 KB gz). Antes caían en 'vendor', que el entry importa por
           // workbox-window, así que TODA la maquinaria de las gráficas se descargaba

@@ -41,6 +41,7 @@ const GRUPOS_BASE = [
     nodos: [
       { pagina: 'inicio', label: 'Inicio', icon: LayoutGrid },
       { pagina: 'agenda', label: 'Agenda', icon: CalendarCheck }, // V3 · tareas, reuniones con minuta y calendario (sustituye a Pendientes & Calendario)
+      { pagina: 'ciudad', label: 'Ciudad', icon: Building2, soloWeb: true, ver: (p) => !!p?.es_super_admin }, // Acteck Ciudad (etapa 1 · 2026-10-05): sólo Fernando mientras se construye
     ],
   },
   {
