@@ -3,7 +3,7 @@
 //   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), oscuro }) → { destruir(), resize(), irA(tag), setOscuro(b) }
 // Cámara isométrica (ortográfica) con arrastre, zoom con rueda y giro suave. Todo el estilo vive aquí (paleta, materiales, luz).
 import * as THREE from 'three';
-import { pxAEscena } from './modelo';
+import { pxAEscena, COLOR_CUENTA } from './modelo';
 import MEXICO from '../comercial/sellout/mexico-estados.json';
 
 const PAL = {
@@ -13,7 +13,6 @@ const PAL = {
            oficina: 0x3B3F4B, oficinaTecho: 0x4A4F5C, cedis: 0x5C4335, cedisTecho: 0x6B4E3E, tienda: 0x3C3F4A, tiendaTecho: 0x5A4030, ventana: 0x1D1F26, ventanaOn: 0xFFD66B, camion: 0xC9C6BE, cabina: 0xE05A45, barco: 0xC9C6BE, barcoCab: 0x2A2E38, nube: 0x2A3140, sol: .4, amb: .55, fog: 0x121722 },
 };
 const ACC = { azul: 0x0A84FF, verde: 0x30D158, naranja: 0xFF9F0A, rojo: 0xFF453A, morado: 0xBF5AF2, gris: 0x8E8E93 };
-const COLOR_CUENTA = { ct: 0x0A84FF, cva: 0xFF9F0A, dicotech: 0x30D158, digitalife: 0xBF5AF2, pcel: 0xFF453A, ingram: 0x5AC8FA, pch: 0xFFD60A, loma: 0x64D2FF, guc: 0xFF6482, kabik: 0xA2845E, dcmayorista: 0x7D8BFF, exel: 0x30B0C7, techsmart: 0xAC8E68, arroba: 0xD4A5FF, ingram_retail: 0x5AC8FA, directo: 0x8E8E93 };
 
 export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false } = {}) {
   let P = oscuro ? PAL.noche : PAL.dia;
@@ -38,6 +37,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   const M = (color, extra = {}) => { const k = `${color}|${JSON.stringify(extra)}`; if (!mats.has(k)) mats.set(k, new THREE.MeshStandardMaterial({ color, roughness: .9, metalness: 0, flatShading: true, ...extra })); return mats.get(k); };
   const interact = []; // { mesh, tag }
   const animados = [];
+  const sprites = []; // etiquetas (se declaran antes de usarse: las ciudades se dibujan antes que la función etiqueta)
   const raiz = new THREE.Group(); scene.add(raiz);
   const g_cerros = new THREE.Group(); raiz.add(g_cerros); // Sierra Madre, al norte de Guadalajara
   const add = (m, tag) => { raiz.add(m); if (tag) { m.traverse((o) => { if (o.isMesh) { o.userData.tag = tag; interact.push(o); } }); } return m; };
@@ -159,6 +159,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const ancho = cols * 2.7 + 1.6, largo = filas * 2.9 + 1.6;
     const piso = box(ancho, .3, largo, P.banqueta); piso.position.y = .15; g.add(piso);
+    piso.userData.tag = { tipo: 'ciudad', titulo: d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; interact.push(piso);
     const calleH = new THREE.Mesh(new THREE.PlaneGeometry(ancho + 2, 1.4), M(P.calle, { roughness: 1 })); calleH.rotation.x = -Math.PI / 2; calleH.position.set(0, .32, largo / 2 + .9); g.add(calleH);
     d.tiendas.forEach((t, i) => {
       const c = i % cols, f = Math.floor(i / cols);
@@ -212,7 +213,6 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   function arbol(g, x, z, s = 1) { const t = new THREE.Mesh(new THREE.CylinderGeometry(.14 * s, .2 * s, 1.1 * s, 6), M(P.tronco)); t.position.set(x, .55 * s, z); t.castShadow = true; g.add(t); const c = new THREE.Mesh(new THREE.ConeGeometry(.95 * s, 2 * s, 7), M(Math.random() > .5 ? P.arbol : P.arbol2)); c.position.set(x, 1.9 * s, z); c.castShadow = true; g.add(c); const c2 = new THREE.Mesh(new THREE.ConeGeometry(.7 * s, 1.4 * s, 7), M(P.arbol)); c2.position.set(x, 2.8 * s, z); c2.castShadow = true; g.add(c2); }
   function persona(col, s = 1) { const g = new THREE.Group(); const cuerpo = new THREE.Mesh(new THREE.CylinderGeometry(.32 * s, .38 * s, 1.1 * s, 8), M(col)); cuerpo.position.y = .95 * s; cuerpo.castShadow = true; const cab = new THREE.Mesh(new THREE.SphereGeometry(.3 * s, 10, 8), M(0xF3CFA8)); cab.position.y = 1.75 * s; cab.castShadow = true; const p1 = new THREE.Mesh(new THREE.CylinderGeometry(.11 * s, .11 * s, .5 * s, 6), M(0x3B4252)); p1.position.set(-.14 * s, .25 * s, 0); const p2 = p1.clone(); p2.position.x = .14 * s; g.add(cuerpo, cab, p1, p2); g.userData.piernas = [p1, p2]; return g; }
   function caminar(per, ruta, s, origen, esc) { const n = ruta.length; const k = Math.floor(s) % n, f = s % 1; const a = ruta[k], b = ruta[(k + 1) % n]; const x = a[0] + (b[0] - a[0]) * f, z = a[1] + (b[1] - a[1]) * f; per.position.set(origen.x + x, per.position.y, origen.z + z); per.rotation.y = Math.atan2(b[0] - a[0], b[1] - a[1]); const mov = Math.hypot(b[0] - a[0], b[1] - a[1]) > .01; const sw = mov ? Math.sin(s * 14) * .5 : 0; per.userData.piernas[0].rotation.x = sw; per.userData.piernas[1].rotation.x = -sw; }
-  const sprites = [];
   function etiqueta(texto, color) { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const f = 'bold 44px -apple-system, BlinkMacSystemFont, "SF Pro Display", Helvetica, Arial, sans-serif'; ctx.font = f; const w = Math.ceil(ctx.measureText(texto).width) + 48; c.width = w; c.height = 72; ctx.font = f; ctx.fillStyle = oscuro ? 'rgba(28,28,30,.92)' : 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.roundRect(0, 0, w, 72, 36); ctx.fill(); ctx.fillStyle = oscuro && color === '#1D1D1F' ? '#F5F5F7' : color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(texto, w / 2, 38); const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.scale.set(w / 72 * 2.3, 2.3, 1); sp.renderOrder = 10; sp.userData.base = { w: w / 72 * 2.3, h: 2.3 }; sprites.push(sp); return sp; }
   function fmtK(v) { return v >= 1e6 ? `${(v / 1e6).toFixed(1)} M` : v >= 1e3 ? `${Math.round(v / 1e3)} K` : String(Math.round(v)); }
   function capital(s) { return String(s).toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()); }

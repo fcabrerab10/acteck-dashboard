@@ -10,6 +10,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData } from './datos';
+import { COLOR_CUENTA, hexCss } from './modelo';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
@@ -86,6 +87,10 @@ export default function Ciudad({ onNavegar }) {
         <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'cedis' })} title="Volver a Acteck" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Crosshair size={14} />Acteck</button>
       </div>
       <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra · rueda o pellizco = zoom · clic derecho o Shift = girar · WASD</div>
+      {/* Leyenda: color por cliente */}
+      <div style={{ position: 'absolute', right: 14, top: 52, zIndex: 3, ...card, padding: '8px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', maxWidth: 420, fontSize: 11 }}>
+        {[...new Set(modelo.distritos.flatMap((d) => d.tiendas.map((t) => `${t.cuenta}|${t.nombreCuenta}`)))].map((k) => { const [c, n] = k.split('|'); return <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 3, background: hexCss(COLOR_CUENTA[c] || 0x8E8E93), display: 'inline-block' }} />{n}</span>; })}
+      </div>
       {/* Hoy en la ciudad: lo que está pasando ahora mismo */}
       <div style={{ position: 'absolute', right: 14, bottom: 14, width: 270, zIndex: 3, ...card, padding: '10px 12px', fontSize: 12, lineHeight: 1.45, maxHeight: '42%', overflowY: 'auto' }}>
         <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>Hoy en la ciudad</div>
@@ -117,6 +122,7 @@ export default function Ciudad({ onNavegar }) {
           <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', paddingRight: 28 }}>{sel.titulo}</div>
           <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2, lineHeight: 1.4 }}>{sel.sub}</div>
           {sel.persona && !sel.persona.generico && <div style={{ fontSize: 12.5, marginTop: 8 }}>{sel.persona.pendientes} pendientes hoy · {sel.persona.hechas} hechas</div>}
+          {sel.distrito && <div style={{ marginTop: 8, maxHeight: 180, overflowY: 'auto', fontSize: 12 }}>{sel.distrito.tiendas.slice(0, 14).map((t) => <div key={t.nombre} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', borderTop: `1px solid ${theme.border}` }}><span style={{ color: t.vendio ? theme.text : theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nombre}</span><b style={{ fontVariantNumeric: 'tabular-nums', color: t.vendio ? theme.green : theme.textMuted }}>{t.vendio ? `$${t.importe >= 1e6 ? `${(t.importe / 1e6).toFixed(1)} M` : `${Math.round(t.importe / 1e3)} K`}` : '—'}</b></div>)}</div>}
           {sel.barco && <div style={{ fontSize: 12.5, marginTop: 8 }}>{sel.barco.supplier}<br />ETA puerto {sel.barco.eta || '—'} · CEDIS {sel.barco.arribo || '—'} · {sel.barco.estatus}</div>}
           <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
             {sel.pagina && <button type="button" onClick={() => navegar(sel)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Abrir en el dashboard</button>}
