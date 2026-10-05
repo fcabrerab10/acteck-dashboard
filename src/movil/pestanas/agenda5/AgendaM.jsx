@@ -1,4 +1,4 @@
-// Agenda V5 · celular (2026-10-04). Pestaña raíz con Segmented Hoy · Bandeja · Pendientes · Reuniones · Más.
+// Agenda V5 · celular (2026-10-04 · rehecha 3.70.0): tira de semana estilo iOS Calendar, chips Día · Bandeja · Pendientes · Reuniones · Más,
 // Mismo motor que la web (modules/agenda5: calculo · datos · interpretar). Reuniones y la hoja de edición de un ítem se
 // reutilizan de la V4 móvil (src/movil/pestanas/agenda) a través del mismo AgendaCtx. Gestos: → hecha · ← mañana / 7 días.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -10,19 +10,25 @@ import { Cargando, Pill } from '../../../components/kit';
 import { useAgenda5, completarItem, crearDesdeCaptura, moverA, posponer, triage, descartar, cronometro, guardarRegistroDia, guardarCheckin } from '../../../modules/agenda5/datos';
 import { hoyDe, bandejaDe, pendientesDe, conteosMes, isoDia, sumarDias, fmtMin, fmtHora, fraseHoy, esDe, abierto } from '../../../modules/agenda5/calculo';
 import { interpretarCaptura } from '../../../modules/agenda5/interpretar';
-import { MiniMes, Reloj } from '../../../modules/agenda5/Hoy';
+import { MiniMes } from '../../../modules/agenda5/Hoy';
 import { useGoogleEstado } from '../../../modules/agenda/google';
 import { fechaLarga } from '../../../modules/agenda/textos';
 import { nombreClienteAgenda } from '../../../modules/agenda/etiquetas';
 import { useNav } from '../../nav';
-import { TituloGrande, Segmented, Vacio, ListaAgrupada, Fila, FilaDeslizable, HojaM, BotonGrande, toast } from '../../piezas';
+import { TituloGrande, Vacio, ListaAgrupada, Fila, FilaDeslizable, HojaM, BotonGrande, toast } from '../../piezas';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { bloquesDia } from '../../../modules/agenda5/calculo';
+import { useBottomOffset } from '../agenda/comun';
 import { AgendaCtx } from '../agenda/Agenda';
-import { FAB, PalomitaM } from '../agenda/comun';
+import { PalomitaM } from '../agenda/comun';
 import CapturaHoja from '../agenda/Captura';
 import Reuniones from '../agenda/Reuniones';
 import Minuta from '../agenda/Minuta';
 
-const VISTAS = [{ id: 'hoy', label: 'Hoy' }, { id: 'bandeja', label: 'Bandeja' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'reuniones', label: 'Reuniones' }, { id: 'mas', label: 'Más' }];
+const VISTAS = [{ id: 'hoy', label: 'Día' }, { id: 'bandeja', label: 'Bandeja' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'reuniones', label: 'Reuniones' }, { id: 'mas', label: 'Más' }];
+const DIAS_1 = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const lunesDe = (iso) => { const d = new Date(`${iso}T12:00:00`); return isoDia(sumarDias(d, -((d.getDay() + 6) % 7))); };
 const TONO = { fecha: ['rgba(10,132,255,0.14)', '#0A84FF'], hora: ['rgba(10,132,255,0.14)', '#0A84FF'], duracion: ['rgba(10,132,255,0.14)', '#0A84FF'], cliente: ['rgba(255,159,10,0.16)', '#C77700'], persona: ['rgba(191,90,242,0.16)', '#9D4EDD'], prioridad: ['rgba(255,69,58,0.14)', '#FF453A'], tipo: ['rgba(48,209,88,0.16)', '#1E9E46'], categoria: ['rgba(120,120,128,0.16)', '#6E6E73'] };
 
 export default function AgendaM({ inicial, raiz = false }) {
@@ -38,6 +44,11 @@ export default function AgendaM({ inicial, raiz = false }) {
   const [cap, setCap] = useState(null);       // hoja V4 (editar ítem)
   const [rapida, setRapida] = useState(false); // captura rápida V5
   const hoy = useMemo(() => new Date(), []);
+  const hoyIso = isoDia(hoy);
+  const [dia, setDia] = useState(hoyIso);           // día elegido en la tira de semana
+  const [verMes, setVerMes] = useState(false);
+  const [mes, setMes] = useState(() => new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+  const bottom = useBottomOffset();
   useEffect(() => { if (uid && !propietario) setPropietario(uid); }, [uid, propietario]);
   const visibles = useMemo(() => d.personas.filter((p) => p.user_id === uid || perfil?.es_super_admin || p.es_super_admin), [d.personas, uid, perfil]);
   const esMia = propietario === uid;
@@ -49,17 +60,54 @@ export default function AgendaM({ inicial, raiz = false }) {
   const posponerM = async (item, dias = 1) => { try { await moverA(item, isoDia(sumarDias(hoy, dias))); toast.ok(dias === 1 ? 'Para mañana' : `Pospuesto ${dias} días`); } catch (e) { toast.error(e.message); } };
   const ctx = useMemo(() => ({ ...d, uid, perfil, puedeEditar, google, abrirItem, abrirMinuta, capturar: () => setRapida(true), toggle, posponer: posponerM, navegarAviso: () => {}, setVista }), [d, uid, perfil, puedeEditar, google]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const conteos = useMemo(() => conteosMes(d.items || [], propietario, { reuniones: d.reuniones || [], google: d.google || [] }), [d.items, d.reuniones, d.google, propietario]);
+  const bandejaN = useMemo(() => (d.items ? bandejaDe(d.items, propietario, hoy).length : 0), [d.items, propietario, hoy]);
+  const pendN = useMemo(() => { if (!d.items) return 0; const g = pendientesDe(d.items, propietario, hoy); return g.vencidos.length + g.hoy.length + g.proximos.length; }, [d.items, propietario, hoy]);
+  const semana = useMemo(() => { const l = lunesDe(dia); return Array.from({ length: 7 }, (_, i) => isoDia(sumarDias(new Date(`${l}T12:00:00`), i))); }, [dia]);
+  const moverSemana = (n) => { setDia(isoDia(sumarDias(new Date(`${dia}T12:00:00`), 7 * n))); };
+  const irHoy = () => { setDia(hoyIso); setVista('hoy'); };
+  const fechaSel = new Date(`${dia}T12:00:00`);
+  const chip = (on) => ({ border: 0, borderRadius: 999, padding: '7px 13px', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', background: on ? theme.text : theme.surface, color: on ? theme.bg : theme.text, boxShadow: on ? 'none' : `inset 0 0 0 1px ${theme.border}`, display: 'inline-flex', alignItems: 'center', gap: 6, transition: 'background 220ms cubic-bezier(.32,.72,0,1), color 220ms' });
   const cabecera = (
     <>
-      <TituloGrande titulo="Agenda" sub={fechaLarga(hoy).replace(/^./, (c) => c.toUpperCase())} derecha={visibles.length > 1 ? (
-        <div style={{ display: 'flex', gap: 4 }}>{visibles.map((p) => <button key={p.user_id} type="button" onClick={() => setPropietario(p.user_id)} style={{ width: 30, height: 30, borderRadius: 15, border: `2px solid ${p.user_id === propietario ? theme.accent : 'transparent'}`, background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)', color: '#fff', fontSize: 11, fontWeight: 700, fontFamily: TYPO.fontDisplay }}>{String(p.nombre || '?').split(' ').map((x) => x[0]).slice(0, 2).join('')}</button>)}</div>) : null} />
-      <div style={{ padding: '0 16px 10px' }}><Segmented size="md" value={vista} onChange={setVista} options={VISTAS} style={{ display: 'flex', width: '100%' }} /></div>
+      <TituloGrande titulo={vista === 'hoy' ? (dia === hoyIso ? 'Hoy' : `${fechaSel.getDate()} ${MESES_C[fechaSel.getMonth()]}`) : VISTAS.find((v) => v.id === vista)?.label}
+        sub={vista === 'hoy' ? fechaLarga(fechaSel).replace(/^./, (c) => c.toUpperCase()) : fechaLarga(hoy).replace(/^./, (c) => c.toUpperCase())}
+        derecha={<div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {vista === 'hoy' && dia !== hoyIso && <button type="button" onClick={irHoy} style={{ ...chip(false), padding: '6px 11px' }}>Hoy</button>}
+          {visibles.length > 1 && visibles.map((p) => <button key={p.user_id} type="button" aria-label={p.nombre} onClick={() => setPropietario(p.user_id)} style={{ width: 32, height: 32, borderRadius: 16, padding: 0, border: `2px solid ${p.user_id === propietario ? theme.accent : 'transparent'}`, background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)', color: '#fff', fontSize: 11, fontWeight: 700, fontFamily: TYPO.fontDisplay, opacity: p.user_id === propietario ? 1 : 0.55 }}>{String(p.nombre || '?').split(' ').map((x) => x[0]).slice(0, 2).join('')}</button>)}
+        </div>} />
+      {/* Tira de la semana (iOS Calendar): L M M J V S D con puntos de carga; ‹ › cambian de semana. */}
+      {vista === 'hoy' && (
+        <div style={{ padding: '0 10px 6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button type="button" onClick={() => moverSemana(-1)} aria-label="Semana anterior" style={{ border: 0, background: 'transparent', color: theme.textMuted, width: 28, height: 44, display: 'grid', placeItems: 'center' }}><ChevronLeft size={18} /></button>
+            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+              {semana.map((iso, i) => { const on = iso === dia; const esH = iso === hoyIso; const c = conteos.get(iso); const n = c ? c.tareas + c.reuniones + c.google : 0; return (
+                <button key={iso} type="button" onClick={() => setDia(iso)} aria-label={iso} aria-current={on ? 'date' : undefined} style={{ border: 0, background: 'transparent', padding: '2px 0 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: esH ? theme.accent : theme.textMuted, fontFamily: TYPO.fontDisplay }}>{DIAS_1[i]}</span>
+                  <span style={{ width: 34, height: 34, borderRadius: 17, display: 'grid', placeItems: 'center', fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: on || esH ? 700 : 500, fontVariantNumeric: 'tabular-nums', background: on ? (esH ? theme.accent : theme.text) : 'transparent', color: on ? (esH ? '#fff' : theme.bg) : esH ? theme.accent : theme.text, transition: 'background 220ms cubic-bezier(.32,.72,0,1), color 220ms' }}>{Number(iso.slice(8))}</span>
+                  <span style={{ display: 'flex', gap: 2, height: 4 }}>{Array.from({ length: Math.min(3, n) }, (_, k) => <i key={k} style={{ width: 4, height: 4, borderRadius: 2, background: on ? theme.text : theme.textMuted, opacity: on ? 0.9 : 0.6 }} />)}</span>
+                </button>); })}
+            </div>
+            <button type="button" onClick={() => moverSemana(1)} aria-label="Semana siguiente" style={{ border: 0, background: 'transparent', color: theme.textMuted, width: 28, height: 44, display: 'grid', placeItems: 'center' }}><ChevronRight size={18} /></button>
+          </div>
+          {verMes && <div style={{ margin: '4px 6px 6px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '10px 12px' }}><MiniMes mes={mes} setMes={setMes} dia={dia} onDia={(iso) => { setDia(iso); setVerMes(false); }} conteos={conteos} hoyIso={hoyIso} /></div>}
+        </div>
+      )}
+      {/* Chips: Día · Bandeja n · Pendientes n · Reuniones · Más (+ Mes en Día) */}
+      <div style={{ display: 'flex', gap: 6, padding: '2px 16px 10px', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        {VISTAS.map((v) => { const n = v.id === 'bandeja' ? bandejaN : v.id === 'pendientes' ? pendN : 0; return (
+          <button key={v.id} type="button" onClick={() => setVista(v.id)} aria-pressed={vista === v.id} style={chip(vista === v.id)}>
+            {v.label}{n > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: vista === v.id ? `${theme.bg}33` : `${theme.accent}1f`, color: vista === v.id ? theme.bg : theme.accent, fontVariantNumeric: 'tabular-nums' }}>{n}</span>}
+          </button>); })}
+        {vista === 'hoy' && <button type="button" onClick={() => setVerMes((v) => !v)} aria-pressed={verMes} style={chip(verMes)}>Mes</button>}
+      </div>
     </>
   );
   if (!perfil || !puedeVer) return (<>{cabecera}<Vacio icon={CalendarCheck} color={theme.textMuted} titulo="Sin acceso" sub="Tu perfil no tiene la Agenda." /></>);
   if (d.error) return (<>{cabecera}<Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudo cargar la Agenda" sub={String(d.error.message || d.error)} /></>);
   if (d.cargando || !propietario) return (<>{cabecera}<div style={{ padding: '0 16px' }}><Cargando pantalla="movilAgenda" /></div></>);
-  const com = { d, uid, propietario, puedeEditar, esMia, hoy, abrirItem, toggle, posponerM, personasPorId: d.personasPorId, nav };
+  const com = { d, uid, propietario, puedeEditar, esMia, hoy, abrirItem, toggle, posponerM, personasPorId: d.personasPorId, nav, dia, abrirMinuta };
   return (
     <AgendaCtx.Provider value={ctx}>
       {cabecera}
@@ -68,7 +116,12 @@ export default function AgendaM({ inicial, raiz = false }) {
       {vista === 'pendientes' && <PendientesM {...com} />}
       {vista === 'reuniones' && <Reuniones />}
       {vista === 'mas' && <MasM {...com} />}
-      {puedeEditar && vista !== 'reuniones' && <FAB onClick={() => setRapida(true)} label="Captura rápida" />}
+      {/* Captura rápida como barra fija (Recordatorios de iOS): encima de la barra de grupos, se mueve con ella. */}
+      {puedeEditar && vista !== 'reuniones' && (
+        <button type="button" onClick={() => setRapida(true)} aria-label="Captura rápida" style={{ position: 'fixed', left: 16, right: 16, bottom, zIndex: 40, height: 48, borderRadius: 14, border: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, boxShadow: `0 8px 24px ${theme.accent}55`, cursor: 'pointer', transition: 'bottom 340ms cubic-bezier(.32,.72,0,1)' }}>
+          <Plus size={20} strokeWidth={2.6} />Captura rápida<span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 500, opacity: 0.8 }}>fecha · hora · #cliente</span>
+        </button>
+      )}
       <CapturaRapidaM abierto={rapida} onClose={() => setRapida(false)} personas={d.personas} propietario={propietario} hoy={hoy} />
       <CapturaHoja cfg={cap} personas={d.personas} reuniones={d.reuniones} hoy={hoy} subtareas={d.subtareas} puedeEditar={puedeEditar} onClose={() => setCap(null)} onAbrirMinuta={abrirMinuta} />
     </AgendaCtx.Provider>
@@ -112,39 +165,50 @@ function FilaItemM({ it, personasPorId, uid, puedeEditar, onToggle, onAbrir, onM
   return acciones.length ? <FilaDeslizable acciones={acciones}>{fila}</FilaDeslizable> : fila;
 }
 
-function HoyM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle, posponerM, personasPorId }) {
+export function HoyM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle, posponerM, personasPorId, dia, abrirMinuta }) {
   const { theme } = useTheme();
   const hoyIso = isoDia(hoy);
-  const [dia, setDia] = useState(hoyIso);
-  const [mes, setMes] = useState(() => new Date(hoy.getFullYear(), hoy.getMonth(), 1));
-  const [verMes, setVerMes] = useState(false);
   const fecha = useMemo(() => new Date(`${dia}T12:00:00`), [dia]);
   const esHoy = dia === hoyIso;
   const h = useMemo(() => hoyDe(d.items, propietario, fecha, { reuniones: d.reuniones, google: d.google, ahora: esHoy ? new Date() : fecha }), [d.items, d.reuniones, d.google, propietario, fecha, esHoy]);
-  const conteos = useMemo(() => conteosMes(d.items, propietario, { reuniones: d.reuniones, google: d.google }), [d.items, d.reuniones, d.google, propietario]);
+  const bloques = useMemo(() => bloquesDia(h, { hoyIso: dia }), [h, dia]);
+  const sinHora = h.deHoy.filter((it) => !it.hora);
   const crono = (it, acc) => cronometro(it, acc).catch((e) => toast.error(e.message));
+  const ahoraMin = esHoy ? new Date().getHours() * 60 + new Date().getMinutes() : -1;
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const colorDe = (b) => b.tipo === 'reunion' ? theme.accent : b.tipo === 'google' ? (theme.purple || '#5E5CE6') : b.tipo === 'hecha' ? theme.green : theme.orange;
+  const abrirBloque = (b) => { if (b.tipo === 'tarea' || b.tipo === 'hecha') abrirItem(b.ref); else if (b.tipo === 'reunion') abrirMinuta(b.ref); else if (b.ref?.url) window.open(b.ref.url, '_blank', 'noopener'); };
   return (
     <>
-      <div style={{ margin: '0 16px', background: theme.surface, borderRadius: 16, padding: '10px 12px', border: `1px solid ${theme.border}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700, color: theme.text }}>{esHoy ? 'Hoy' : dia.slice(5)}</div><button type="button" onClick={() => setVerMes((v) => !v)} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 500 }}>{verMes ? 'Ocultar mes' : 'Ver mes'}</button></div>
-        <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2 }}>{esHoy ? fraseHoy(h) : `${h.deHoy.length} pendientes · ${h.reunionesHoy.length + h.googleHoy.length} reuniones`}</div>
-        {verMes && <div style={{ marginTop: 10 }}><MiniMes mes={mes} setMes={setMes} dia={dia} onDia={(iso) => { setDia(iso); }} conteos={conteos} hoyIso={hoyIso} /></div>}
-      </div>
-      <div style={{ margin: '10px 16px 0', background: theme.surface, borderRadius: 16, padding: 8, border: `1px solid ${theme.border}` }}>
-        <Reloj h={h} hoyIso={dia} esHoy={esHoy} alto={300} h0={7} h1={20} onAbrir={(b) => { if (b.tipo === 'tarea' || b.tipo === 'hecha') abrirItem(b.ref); else if (b.ref?.url) window.open(b.ref.url, '_blank', 'noopener'); }} />
-      </div>
-      {h.deAyer.length > 0 && esHoy && <ListaAgrupada titulo="De días anteriores" meta={`${h.deAyer.length}`} style={{ marginTop: 14 }}>{h.deAyer.map((it) => <FilaItemM key={it.id} it={it} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onToggle={toggle} onAbrir={abrirItem} onManana={(x) => moverA(x, hoyIso)} onSemana={(x) => posponer(x, 7)} mostrarFecha />)}</ListaAgrupada>}
-      <ListaAgrupada titulo="Pendientes del día" meta={h.minTareas ? fmtMin(h.minTareas) : undefined} style={{ marginTop: 14 }} pie="Desliza a la izquierda para mover a mañana o 7 días.">
-        {h.deHoy.length === 0 && <Vacio icon={null} titulo="Nada planeado" sub="Toca + para capturar." style={{ padding: '18px 16px' }} />}
-        {h.deHoy.map((it) => <FilaItemM key={it.id} it={it} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onToggle={toggle} onAbrir={abrirItem} onManana={(x) => posponerM(x, 1)} onSemana={(x) => posponer(x, 7)} onCrono={puedeEditar ? crono : null} />)}
+      <div style={{ padding: '0 20px 8px', fontSize: 13, color: theme.textMuted, lineHeight: 1.4 }}>{esHoy ? fraseHoy(h) : `${h.deHoy.length} pendiente${h.deHoy.length === 1 ? '' : 's'} · ${h.reunionesHoy.length + h.googleHoy.length} reunión${h.reunionesHoy.length + h.googleHoy.length === 1 ? '' : 'es'}`}</div>
+
+      {/* Horario del día: reuniones, Google y tareas con hora, como la vista de lista de Calendario. */}
+      <ListaAgrupada titulo="Horario" meta={bloques.length ? `${bloques.length}` : undefined} style={{ marginTop: 4 }}>
+        {bloques.length === 0 && <Vacio icon={null} titulo="Sin horarios" sub="Las tareas con hora y las reuniones salen aquí." style={{ padding: '16px' }} />}
+        {bloques.map((b) => { const pasado = esHoy && b.fin < ahoraMin; const activo = esHoy && b.ini <= ahoraMin && ahoraMin < b.fin; const c = colorDe(b); return (
+          <button key={b.id} type="button" onClick={() => abrirBloque(b)} style={{ width: '100%', border: 0, background: activo ? `${theme.accent}10` : 'transparent', borderTop: `1px solid ${theme.border}`, padding: '10px 16px', display: 'flex', gap: 12, alignItems: 'stretch', textAlign: 'left', cursor: 'pointer', opacity: pasado && b.tipo !== 'hecha' ? 0.6 : 1 }}>
+            <div style={{ width: 44, flexShrink: 0, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', color: activo ? theme.accent : theme.textMuted, fontSize: 12.5, fontWeight: 600, lineHeight: 1.3 }}>{hhmm(b.ini)}<div style={{ fontWeight: 400, fontSize: 11, opacity: 0.8 }}>{hhmm(b.fin)}</div></div>
+            <div style={{ width: 3, borderRadius: 2, background: c, flexShrink: 0 }} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 15, color: theme.text, fontWeight: 500, textDecoration: b.tipo === 'hecha' ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.titulo}</div>
+              <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{b.tipo === 'reunion' ? `Reunión${b.ref?.cliente_key && b.ref.cliente_key !== 'interno' ? ` · ${nombreClienteAgenda(b.ref.cliente_key)}` : ''}` : b.tipo === 'google' ? 'Google Calendar' : b.tipo === 'hecha' ? 'Hecha' : `${fmtMin(b.fin - b.ini)}${b.ref?.cliente_key && b.ref.cliente_key !== 'interno' ? ` · ${nombreClienteAgenda(b.ref.cliente_key)}` : ''}`}</div>
+            </div>
+            {(b.tipo === 'tarea') && puedeEditar && <div onClick={(e) => { e.stopPropagation(); toggle(b.ref, true); }} style={{ alignSelf: 'center' }}><PalomitaM hecha={false} onClick={() => {}} /></div>}
+          </button>); })}
+      </ListaAgrupada>
+
+      {h.deAyer.length > 0 && esHoy && <ListaAgrupada titulo="De días anteriores" meta={`${h.deAyer.length}`} style={{ marginTop: 14 }} pie="Desliza a la izquierda: hoy o 7 días.">{h.deAyer.map((it) => <FilaItemM key={it.id} it={it} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onToggle={toggle} onAbrir={abrirItem} onManana={(x) => moverA(x, hoyIso).catch((e) => toast.error(e.message))} onSemana={(x) => posponer(x, 7).catch((e) => toast.error(e.message))} mostrarFecha />)}</ListaAgrupada>}
+      <ListaAgrupada titulo={esHoy ? 'Pendientes de hoy' : 'Pendientes del día'} meta={h.minTareas ? fmtMin(h.minTareas) : (sinHora.length ? `${sinHora.length}` : undefined)} style={{ marginTop: 14 }} pie={sinHora.length ? 'Desliza a la izquierda para mover a mañana o 7 días.' : undefined}>
+        {sinHora.length === 0 && <Vacio icon={null} titulo={h.deHoy.length ? 'Todo tiene hora' : 'Nada planeado'} sub={h.deHoy.length ? 'Lo ves arriba, en el horario.' : 'Toca «Captura rápida» o jala algo de la Bandeja.'} style={{ padding: '16px' }} />}
+        {sinHora.map((it) => <FilaItemM key={it.id} it={it} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onToggle={toggle} onAbrir={abrirItem} onManana={(x) => posponerM(x, 1)} onSemana={(x) => posponer(x, 7).catch((e) => toast.error(e.message))} onCrono={puedeEditar ? crono : null} />)}
       </ListaAgrupada>
       {h.hechasHoy.length > 0 && <ListaAgrupada titulo="Hechas" meta={h.minReales ? fmtMin(h.minReales) : `${h.hechasHoy.length}`} style={{ marginTop: 14 }}>{h.hechasHoy.map((it) => <FilaItemM key={it.id} it={it} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onToggle={toggle} onAbrir={abrirItem} />)}</ListaAgrupada>}
-      <div style={{ height: 90 }} />
+      <div style={{ height: 110 }} />
     </>
   );
 }
 
-function BandejaM({ d, uid, propietario, puedeEditar, hoy, abrirItem, personasPorId }) {
+export function BandejaM({ d, uid, propietario, puedeEditar, hoy, abrirItem, personasPorId }) {
   const { theme } = useTheme();
   const lista = useMemo(() => bandejaDe(d.items, propietario, hoy), [d.items, propietario, hoy]);
   const run = (fn, msg) => fn().then(() => toast.ok(msg)).catch((e) => toast.error(e.message));
@@ -161,12 +225,12 @@ function BandejaM({ d, uid, propietario, puedeEditar, hoy, abrirItem, personasPo
           </div>
         ))}
       </ListaAgrupada>
-      <div style={{ height: 90 }} />
+      <div style={{ height: 110 }} />
     </>
   );
 }
 
-function PendientesM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle, posponerM, personasPorId }) {
+export function PendientesM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle, posponerM, personasPorId }) {
   const g = useMemo(() => pendientesDe(d.items, propietario, hoy), [d.items, propietario, hoy]);
   const H = [['vencidos', 'Vencidos'], ['hoy', 'Hoy'], ['proximos', 'Próximos 7 días'], ['despues', 'Más adelante'], ['cuandoSea', 'Cuando sea'], ['algunDia', 'Algún día']];
   const total = Object.values(g).reduce((s, l) => s + l.length, 0);
@@ -174,7 +238,7 @@ function PendientesM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle,
     <>
       {total === 0 && <Vacio icon={null} titulo="Sin pendientes abiertos" style={{ padding: '26px 16px' }} />}
       {H.map(([k, label]) => g[k].length > 0 && <ListaAgrupada key={k} titulo={label} meta={`${g[k].length}`} style={{ marginTop: 14 }}>{g[k].map((it) => <FilaItemM key={it.id} it={it} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onToggle={toggle} onAbrir={abrirItem} onManana={(x) => posponerM(x, 1)} onSemana={(x) => posponer(x, 7)} mostrarFecha={k !== 'hoy'} />)}</ListaAgrupada>)}
-      <div style={{ height: 90 }} />
+      <div style={{ height: 110 }} />
     </>
   );
 }
@@ -209,7 +273,7 @@ function MasM({ d, uid, propietario, puedeEditar, hoy, abrirItem, personasPorId,
         {ideas.length === 0 && <Vacio icon={null} titulo="Sin ideas guardadas" sub="Escribe «idea: …» en la captura." style={{ padding: '16px' }} />}
         {ideas.map((it) => <Fila key={it.id} titulo={it.titulo} sub={it.cliente_key && it.cliente_key !== 'interno' ? nombreClienteAgenda(it.cliente_key) : undefined} chevron={false} alto={48} onClick={() => abrirItem(it)} pill={puedeEditar ? { tone: 'blue', label: '→ hoy' } : undefined} />)}
       </ListaAgrupada>
-      <div style={{ height: 90 }} />
+      <div style={{ height: 110 }} />
     </>
   );
 }
