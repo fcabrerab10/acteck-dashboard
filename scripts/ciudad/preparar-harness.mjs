@@ -4,7 +4,8 @@
 //                                                          y guarda modelo-real.json (NO se versiona: .claude/proto está en .gitignore)
 // Luego: Browser pane → perfil «prototipo» (.claude/launch.json) → http://localhost:4174/ciudad-dev.html  (añade #real para tus datos)
 import fs from 'node:fs'; import path from 'node:path';
-const raiz = path.resolve(new URL('../..', import.meta.url).pathname);
+import { fileURLToPath } from 'node:url';
+const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const out = path.join(raiz, '.claude/proto'); fs.mkdirSync(out, { recursive: true });
 const esc = fs.readFileSync(path.join(raiz, 'src/modules/ciudad/escena.js'), 'utf8')
   .replace("from './modelo';", "from './modelo.js';")
@@ -35,7 +36,7 @@ if (process.argv.includes('--real')) {
     cartera: await q('select cliente,fecha_corte,saldo_actual,saldo_vencido,dso from v_vision_cartera_consolidada'),
     envios: await q("select e.fecha_surtida,e.fecha_entregada,e.fecha_envio_erp,e.fecha_entrega_erp,e.guia_rastreo,e.paqueteria, json_build_object('cliente_key',c.cliente_key,'numero_oc',c.numero_oc) as oc_clientes from oc_envios e join oc_clientes c on c.id=e.oc_id where coalesce(e.fecha_surtida,e.fecha_envio_erp) >= current_date - 30"),
   };
-  const { construirModelo } = await import(path.join(raiz, 'src/modules/ciudad/modelo.js'));
+  const { construirModelo } = await import(new URL('../../src/modules/ciudad/modelo.js', import.meta.url));
   const m = construirModelo(d, hoy);
   fs.writeFileSync(path.join(out, 'modelo-real.json'), JSON.stringify(m));
   console.log('modelo real:', m.kpis);
