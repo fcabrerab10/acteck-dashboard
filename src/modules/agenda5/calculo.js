@@ -89,6 +89,23 @@ export function bloquesDia(h, { hoyIso }) {
   return out.sort((a, b) => a.ini - b.ini);
 }
 
+/** La Agenda dirige (3.71.0, Fernando: «que me vaya diciendo qué ir haciendo»): qué toca AHORA y la cola del día.
+ *  actual = bloque con hora en curso (reunión, Google o tarea) · proximo = siguiente bloque con hora ·
+ *  cola = lo abierto en orden de ataque: vencidos → tareas de hoy con hora (por hora) → sin hora (p1 primero, luego orden). */
+export function siguienteDe(h, ahora = new Date(), { hoyIso = h.hoyIso } = {}) {
+  const min = ahora.getHours() * 60 + ahora.getMinutes();
+  const bloques = bloquesDia(h, { hoyIso }).filter((b) => b.tipo !== 'hecha');
+  const actual = bloques.find((b) => b.ini <= min && min < b.fin) || null;
+  const proximo = bloques.find((b) => b.ini > min && b !== actual) || null;
+  const peso = (it) => (it.prioridad === 'alta' || it.prioridad === 'p1' ? 0 : it.prioridad === 'baja' ? 2 : 1);
+  const sinHora = h.deHoy.filter((it) => !it.hora).sort((a, b) => peso(a) - peso(b) || N(a.orden_dia) - N(b.orden_dia) || String(a.created_at).localeCompare(String(b.created_at)));
+  const conHora = h.deHoy.filter((it) => it.hora).sort((a, b) => String(a.hora).localeCompare(String(b.hora)));
+  const vistos = new Set();
+  const cola = [...h.deAyer, ...conHora, ...sinHora].filter((it) => { if (vistos.has(it.id)) return false; vistos.add(it.id); return true; });
+  const enCurso = actual && (actual.tipo === 'tarea') ? actual.ref : null;
+  return { actual, proximo, cola: enCurso ? [enCurso, ...cola.filter((it) => it.id !== enCurso.id)] : cola, vencidos: h.deAyer.length, minutosLibres: proximo ? proximo.ini - min : null };
+}
+
 export const fmtMin = (m) => { m = Math.round(N(m)); if (m < 60) return `${m} min`; const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${r} min` : `${h} h`; };
 export const fmtHora = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hoyDe, bandejaDe, pendientesDe, porProyecto, conteosMes, bloquesDia, fraseHoy } from '../src/modules/agenda5/calculo.js';
+import { hoyDe, bandejaDe, pendientesDe, porProyecto, conteosMes, bloquesDia, fraseHoy, siguienteDe } from '../src/modules/agenda5/calculo.js';
 const hoy = new Date(2026, 9, 4, 9, 0); const U = 'u-f';
 const items = [
   { id: '1', estado: 'abierta', propietario: U, titulo: 'Propuesta', cuando: '2026-10-04', hora: '10:00', duracion_min: 45, created_at: '1' },
@@ -28,4 +28,15 @@ test('bandeja, pendientes, proyectos, conteos', () => {
   const pr = porProyecto(items, [{ id: 'p1', nombre: 'Bocinas', area_id: 'a1' }], [{ id: 'a1', nombre: 'Digitalife' }], U);
   assert.equal(pr[0].proyectos[0].items.length, 1); assert.equal(pr[0].abiertos, 1);
   const c = conteosMes(items, U); assert.equal(c.get('2026-10-04').tareas, 3); assert.equal(c.get('2026-10-04').hechas, 1); assert.equal(c.get('2026-10-09').tareas, 1);
+});
+test('siguienteDe: qué toca ahora y la cola del día', () => {
+  const h = hoyDe(items, U, hoy, { reuniones: [{ id: 'r', fecha: '2026-10-04T12:30:00', duracion_min: 30, titulo: '1:1' }], ahora: hoy });
+  const s = siguienteDe(h, new Date(2026, 9, 4, 10, 10), { hoyIso: '2026-10-04' });
+  assert.equal(s.actual?.id, 't-1');                       // la tarea de las 10:00 está en curso
+  assert.equal(s.cola[0].id, '1');                          // y encabeza la cola
+  assert.ok(s.cola.some((i) => i.id === '3'));              // el vencido va antes que lo sin hora
+  assert.ok(s.cola.findIndex((i) => i.id === '3') < s.cola.findIndex((i) => i.id === '2'));
+  assert.equal(new Set(s.cola.map((i) => i.id)).size, s.cola.length);
+  const t = siguienteDe(h, new Date(2026, 9, 4, 7, 0), { hoyIso: '2026-10-04' });
+  assert.equal(t.actual, null); assert.equal(t.proximo?.id, 't-1'); assert.equal(t.minutosLibres, 180);
 });

@@ -7,7 +7,8 @@ import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { Panel, Boton, Pill, toast } from '../../components/kit';
 import { FilaTarea, Titulo, Seccion } from './comun';
-import { hoyDe, bloquesDia, conteosMes, fraseHoy, fmtMin, fmtHora, isoDia, sumarDias } from './calculo';
+import { hoyDe, bloquesDia, conteosMes, fraseHoy, fmtMin, fmtHora, isoDia, sumarDias, siguienteDe } from './calculo';
+import { nombreClienteAgenda } from '../agenda/etiquetas';
 import { completarItem, cronometro, moverA, posponer, estimar, actualizarItem } from './datos';
 
 const DIAS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -95,6 +96,62 @@ export function Reloj({ h, hoyIso, esHoy, onAbrir, h0 = 7, h1 = 20, alto = 420, 
   );
 }
 
+/** «Ahora» (3.71.0): la Agenda dirige. Qué está en curso o qué toca ya, qué sigue y cuánto hay en la cola. */
+export function Ahora({ h, hoyIso, puedeEditar, onAbrirItem, onAbrirReunion, onToggle, onCrono, compacta = false }) {
+  const { theme } = useTheme();
+  const [tick, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 60000); return () => clearInterval(t); }, []);
+  const s = useMemo(() => siguienteDe(h, new Date(), { hoyIso }), [h, hoyIso, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const abrirBloque = (b) => { if (!b) return; if (b.tipo === 'tarea') onAbrirItem?.(b.ref); else if (b.tipo === 'reunion') onAbrirReunion?.(b.ref); else if (b.ref?.url) window.open(b.ref.url, '_blank', 'noopener'); };
+  const siguienteTarea = s.cola.find((it) => !(s.actual && s.actual.tipo === 'tarea' && s.actual.ref.id === it.id)) || null;
+  const nada = !s.actual && !s.proximo && !s.cola.length;
+  const nombreBloque = (b) => (b.tipo === 'reunion' ? `Reunión · ${b.titulo}` : b.titulo);
+  const cli = (k) => (k && k !== 'interno' ? nombreClienteAgenda(k) : null);
+  return (
+    <div style={{ background: theme.surfaceInverse || theme.text, color: theme.textOnInverse || theme.bg, borderRadius: 14, padding: compacta ? '12px 14px' : '14px 16px', display: 'flex', flexDirection: 'column', gap: 8, fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', opacity: 0.6 }}>{s.actual ? 'Ahora' : 'Lo que toca'}</span>
+        {s.vencidos > 0 && <span style={{ fontSize: 11.5, fontWeight: 600, color: '#FF453A' }}>{s.vencidos} vencido{s.vencidos === 1 ? '' : 's'}</span>}
+      </div>
+      {nada ? <div style={{ fontSize: 14.5, fontWeight: 500 }}>Nada pendiente ahora. {h.hechasHoy.length ? `Llevas ${h.hechasHoy.length} hecha${h.hechasHoy.length === 1 ? '' : 's'}.` : 'Captura o jala algo de la Bandeja.'}</div> : (
+        <>
+          {s.actual ? (
+            <div onClick={() => abrirBloque(s.actual)} style={{ cursor: 'pointer' }}>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: compacta ? 17 : 19, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>{nombreBloque(s.actual)}</div>
+              <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 2 }}>hasta las {hhmm(s.actual.fin)}{cli(s.actual.ref?.cliente_key) ? ` · ${cli(s.actual.ref.cliente_key)}` : ''}</div>
+            </div>
+          ) : siguienteTarea ? (
+            <div onClick={() => onAbrirItem?.(siguienteTarea)} style={{ cursor: 'pointer' }}>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: compacta ? 17 : 19, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>{siguienteTarea.titulo}</div>
+              <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 2 }}>{[siguienteTarea.hora ? `a las ${siguienteTarea.hora}` : null, siguienteTarea.duracion_min ? fmtMin(siguienteTarea.duracion_min) : null, cli(siguienteTarea.cliente_key), h.deAyer.some((x) => x.id === siguienteTarea.id) ? 'venía de días anteriores' : null].filter(Boolean).join(' · ') || 'sin hora ni estimado'}</div>
+            </div>
+          ) : (
+            <div onClick={() => abrirBloque(s.proximo)} style={{ cursor: 'pointer' }}><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700 }}>{nombreBloque(s.proximo)}</div><div style={{ fontSize: 12.5, opacity: 0.7 }}>a las {hhmm(s.proximo.ini)}</div></div>
+          )}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {puedeEditar && !s.actual && siguienteTarea && <>
+              <BotonInv onClick={() => onCrono?.(siguienteTarea, siguienteTarea.inicio_real ? 'parar' : 'iniciar')}>{siguienteTarea.inicio_real ? 'Parar' : 'Empezar'}</BotonInv>
+              <BotonInv onClick={() => onToggle?.(siguienteTarea, true)}>Hecha</BotonInv>
+            </>}
+            {puedeEditar && s.actual?.tipo === 'tarea' && <>
+              <BotonInv onClick={() => onCrono?.(s.actual.ref, s.actual.ref.inicio_real ? 'parar' : 'iniciar')}>{s.actual.ref.inicio_real ? 'Parar' : 'Empezar'}</BotonInv>
+              <BotonInv onClick={() => onToggle?.(s.actual.ref, true)}>Hecha</BotonInv>
+            </>}
+            <span style={{ fontSize: 12, opacity: 0.7, marginLeft: 'auto' }}>
+              {s.proximo && s.actual ? `Luego: ${s.proximo.titulo} a las ${hhmm(s.proximo.ini)}` : s.proximo && siguienteTarea ? `Después: ${s.proximo.titulo} ${hhmm(s.proximo.ini)}${s.minutosLibres != null ? ` · ${fmtMin(s.minutosLibres)} libres` : ''}` : s.cola.length > 1 ? `${s.cola.length - 1} más en la cola` : s.cola.length === 1 && siguienteTarea ? 'Es lo último del día' : ''}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+function BotonInv({ children, onClick }) {
+  const { theme } = useTheme();
+  return <button type="button" onClick={(e) => { e.stopPropagation(); onClick?.(); }} style={{ border: 0, borderRadius: 999, padding: '6px 12px', background: `${theme.bg}26`, color: 'inherit', fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>{children}</button>;
+}
+
 export default function Hoy({ d, uid, propietario, personasPorId, puedeEditar, onAbrirItem, onCapturar, onAbrirReunion }) {
   const { theme } = useTheme();
   const hoy = useMemo(() => new Date(), []);
@@ -114,6 +171,7 @@ export default function Hoy({ d, uid, propietario, personasPorId, puedeEditar, o
       <Titulo meta={frase} acciones={<div style={{ display: 'flex', gap: 8 }}>{!esHoy && <Boton onClick={() => { setDia(hoyIso); setMes(new Date(hoy.getFullYear(), hoy.getMonth(), 1)); }}>Volver a hoy</Boton>}{puedeEditar && <Boton primario icon={CalendarCheck} onClick={onCapturar}>Capturar (N)</Boton>}</div>}>{titulo}{esHoy ? <span style={{ fontWeight: 500, color: theme.textMuted, fontSize: 14 }}> · {DIAS_LARGO[hoy.getDay()]} {hoy.getDate()} de {MESES[hoy.getMonth()].toLowerCase()}</span> : null}</Titulo>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 1fr) 250px', gap: 12, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {esHoy && <div style={{ marginBottom: 10 }}><Ahora h={h} hoyIso={hoyIso} puedeEditar={puedeEditar} onAbrirItem={onAbrirItem} onAbrirReunion={onAbrirReunion} onToggle={toggle} onCrono={crono} /></div>}
           {h.deAyer.length > 0 && esHoy && (<>
             <Seccion meta={`${h.deAyer.length}`}>De días anteriores</Seccion>
             {h.deAyer.map((it) => <div key={it.id} draggable={puedeEditar} onDragStart={(e) => { e.dataTransfer.setData('agenda/item', it.id); }}><FilaTarea item={it} personasPorId={personasPorId} uid={uid} onToggle={toggle} onAbrir={onAbrirItem} mostrarFecha

@@ -10,7 +10,9 @@ import { Cargando, Pill } from '../../../components/kit';
 import { useAgenda5, completarItem, crearDesdeCaptura, moverA, posponer, triage, descartar, cronometro, guardarRegistroDia, guardarCheckin } from '../../../modules/agenda5/datos';
 import { hoyDe, bandejaDe, pendientesDe, conteosMes, isoDia, sumarDias, fmtMin, fmtHora, fraseHoy, esDe, abierto } from '../../../modules/agenda5/calculo';
 import { interpretarCaptura } from '../../../modules/agenda5/interpretar';
-import { MiniMes } from '../../../modules/agenda5/Hoy';
+import { MiniMes, Ahora } from '../../../modules/agenda5/Hoy';
+import { siguienteDe } from '../../../modules/agenda5/calculo';
+import { Compass } from 'lucide-react';
 import { useGoogleEstado } from '../../../modules/agenda/google';
 import { fechaLarga } from '../../../modules/agenda/textos';
 import { nombreClienteAgenda } from '../../../modules/agenda/etiquetas';
@@ -43,6 +45,7 @@ export default function AgendaM({ inicial, raiz = false }) {
   const [propietario, setPropietario] = useState(null);
   const [cap, setCap] = useState(null);       // hoja V4 (editar ítem)
   const [rapida, setRapida] = useState(false); // captura rápida V5
+  const [guia, setGuia] = useState(false);     // modo «Guíame»: uno por uno
   const hoy = useMemo(() => new Date(), []);
   const hoyIso = isoDia(hoy);
   const [dia, setDia] = useState(hoyIso);           // día elegido en la tira de semana
@@ -107,7 +110,7 @@ export default function AgendaM({ inicial, raiz = false }) {
   if (!perfil || !puedeVer) return (<>{cabecera}<Vacio icon={CalendarCheck} color={theme.textMuted} titulo="Sin acceso" sub="Tu perfil no tiene la Agenda." /></>);
   if (d.error) return (<>{cabecera}<Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudo cargar la Agenda" sub={String(d.error.message || d.error)} /></>);
   if (d.cargando || !propietario) return (<>{cabecera}<div style={{ padding: '0 16px' }}><Cargando pantalla="movilAgenda" /></div></>);
-  const com = { d, uid, propietario, puedeEditar, esMia, hoy, abrirItem, toggle, posponerM, personasPorId: d.personasPorId, nav, dia, abrirMinuta };
+  const com = { d, uid, propietario, puedeEditar, esMia, hoy, abrirItem, toggle, posponerM, personasPorId: d.personasPorId, nav, dia, abrirMinuta, abrirGuia: () => setGuia(true) };
   return (
     <AgendaCtx.Provider value={ctx}>
       {cabecera}
@@ -123,6 +126,7 @@ export default function AgendaM({ inicial, raiz = false }) {
         </button>
       )}
       <CapturaRapidaM abierto={rapida} onClose={() => setRapida(false)} personas={d.personas} propietario={propietario} hoy={hoy} />
+      <GuiameM abierto={guia} onClose={() => setGuia(false)} d={d} propietario={propietario} hoy={hoy} puedeEditar={puedeEditar} abrirItem={abrirItem} />
       <CapturaHoja cfg={cap} personas={d.personas} reuniones={d.reuniones} hoy={hoy} subtareas={d.subtareas} puedeEditar={puedeEditar} onClose={() => setCap(null)} onAbrirMinuta={abrirMinuta} />
     </AgendaCtx.Provider>
   );
@@ -165,7 +169,7 @@ function FilaItemM({ it, personasPorId, uid, puedeEditar, onToggle, onAbrir, onM
   return acciones.length ? <FilaDeslizable acciones={acciones}>{fila}</FilaDeslizable> : fila;
 }
 
-export function HoyM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle, posponerM, personasPorId, dia, abrirMinuta }) {
+export function HoyM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle, posponerM, personasPorId, dia, abrirMinuta, abrirGuia }) {
   const { theme } = useTheme();
   const hoyIso = isoDia(hoy);
   const fecha = useMemo(() => new Date(`${dia}T12:00:00`), [dia]);
@@ -180,6 +184,16 @@ export function HoyM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle,
   const abrirBloque = (b) => { if (b.tipo === 'tarea' || b.tipo === 'hecha') abrirItem(b.ref); else if (b.tipo === 'reunion') abrirMinuta(b.ref); else if (b.ref?.url) window.open(b.ref.url, '_blank', 'noopener'); };
   return (
     <>
+      {esHoy && (
+        <div style={{ padding: '0 16px 10px' }}>
+          <Ahora h={h} hoyIso={hoyIso} puedeEditar={puedeEditar} compacta onAbrirItem={abrirItem} onAbrirReunion={abrirMinuta} onToggle={toggle} onCrono={crono} />
+          {puedeEditar && h.deHoy.length + h.deAyer.length > 0 && abrirGuia && (
+            <button type="button" onClick={abrirGuia} style={{ marginTop: 8, width: '100%', height: 42, borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+              <Compass size={17} style={{ color: theme.accent }} />Guíame · {h.deHoy.length + h.deAyer.length} por hacer
+            </button>
+          )}
+        </div>
+      )}
       <div style={{ padding: '0 20px 8px', fontSize: 13, color: theme.textMuted, lineHeight: 1.4 }}>{esHoy ? fraseHoy(h) : `${h.deHoy.length} pendiente${h.deHoy.length === 1 ? '' : 's'} · ${h.reunionesHoy.length + h.googleHoy.length} reunión${h.reunionesHoy.length + h.googleHoy.length === 1 ? '' : 'es'}`}</div>
 
       {/* Horario del día: reuniones, Google y tareas con hora, como la vista de lista de Calendario. */}
@@ -205,6 +219,55 @@ export function HoyM({ d, uid, propietario, puedeEditar, hoy, abrirItem, toggle,
       {h.hechasHoy.length > 0 && <ListaAgrupada titulo="Hechas" meta={h.minReales ? fmtMin(h.minReales) : `${h.hechasHoy.length}`} style={{ marginTop: 14 }}>{h.hechasHoy.map((it) => <FilaItemM key={it.id} it={it} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onToggle={toggle} onAbrir={abrirItem} />)}</ListaAgrupada>}
       <div style={{ height: 110 }} />
     </>
+  );
+}
+
+/** Modo «Guíame» (3.71.0): la Agenda lleva de la mano, un pendiente a la vez, en el orden de ataque de siguienteDe. */
+export function GuiameM({ abierto, onClose, d, propietario, hoy, puedeEditar, abrirItem }) {
+  const { theme } = useTheme();
+  const [saltados, setSaltados] = useState([]);
+  useEffect(() => { if (abierto) setSaltados([]); }, [abierto]);
+  const h = useMemo(() => hoyDe(d.items, propietario, hoy, { reuniones: d.reuniones, google: d.google, ahora: new Date() }), [d.items, d.reuniones, d.google, propietario, hoy]);
+  const s = useMemo(() => siguienteDe(h, new Date(), { hoyIso: isoDia(hoy) }), [h, hoy]);
+  const cola = s.cola.filter((it) => !saltados.includes(it.id));
+  const it = cola[0] || null;
+  const total = s.cola.length + h.hechasHoy.length;
+  const pos = h.hechasHoy.length + (s.cola.length - cola.length) + 1;
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const run = (fn, msg) => fn().then(() => { if (msg) toast.ok(msg); }).catch((e) => toast.error(e.message));
+  const btn = (primario) => ({ flex: 1, height: 48, borderRadius: 12, border: primario ? 0 : `1px solid ${theme.border}`, background: primario ? theme.accent : theme.surface, color: primario ? '#fff' : theme.text, fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 600, cursor: 'pointer' });
+  return (
+    <HojaM abierto={abierto} onClose={onClose} titulo="Guíame" sub={it ? `${pos} de ${total} · ${s.vencidos ? `${s.vencidos} vencidos primero` : 'en orden de ataque'}` : 'Día completo'} alto="62vh">
+      <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 12, height: '100%', boxSizing: 'border-box' }}>
+        {!it ? (
+          <Vacio icon={Check} color={theme.green} titulo="No queda nada por hacer hoy" sub={h.hechasHoy.length ? `Cerraste ${h.hechasHoy.length}. Cierra el día en «Más».` : 'Captura algo o jala de la Bandeja.'} style={{ padding: '26px 8px' }} />
+        ) : (
+          <>
+            {s.actual && s.actual.tipo !== 'tarea' && <div style={{ fontSize: 12.5, color: theme.textMuted }}>Ahora estás en <b style={{ color: theme.text }}>{s.actual.titulo}</b> hasta las {hhmm(s.actual.fin)}. Lo siguiente:</div>}
+            <div onClick={() => abrirItem(it)} style={{ background: theme.surfaceInverse || theme.text, color: theme.textOnInverse || theme.bg, borderRadius: 16, padding: '18px 18px 16px', cursor: 'pointer', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+              {h.deAyer.some((x) => x.id === it.id) && <span style={{ fontSize: 11, fontWeight: 700, color: '#FF453A', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Vencido</span>}
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>{it.titulo}</div>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>{[it.hora ? `a las ${it.hora}` : null, it.duracion_min ? fmtMin(it.duracion_min) : 'sin estimado', it.cliente_key && it.cliente_key !== 'interno' ? nombreClienteAgenda(it.cliente_key) : null, it.prioridad === 'alta' ? 'prioridad alta' : null].filter(Boolean).join(' · ')}</div>
+              {it.notas && <div style={{ fontSize: 12.5, opacity: 0.8, marginTop: 4, whiteSpace: 'pre-wrap', maxHeight: 72, overflow: 'hidden' }}>{it.notas}</div>}
+              {it.inicio_real && <div style={{ fontSize: 12, color: theme.green, fontWeight: 600 }}>En curso · cronómetro corriendo</div>}
+            </div>
+            {puedeEditar && (
+              <>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" style={btn(true)} onClick={() => run(() => completarItem(it, true), 'Hecha')}>Hecha ✓</button>
+                  <button type="button" style={btn(false)} onClick={() => run(() => cronometro(it, it.inicio_real ? 'parar' : 'iniciar'))}>{it.inicio_real ? 'Parar' : 'Empezar'}</button>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" style={{ ...btn(false), height: 40, fontSize: 13.5 }} onClick={() => setSaltados((x) => [...x, it.id])}>Saltar</button>
+                  <button type="button" style={{ ...btn(false), height: 40, fontSize: 13.5 }} onClick={() => run(() => moverA(it, isoDia(sumarDias(hoy, 1))), 'Para mañana')}>Mañana</button>
+                  <button type="button" style={{ ...btn(false), height: 40, fontSize: 13.5 }} onClick={() => run(() => posponer(it, 7), '7 días')}>7 días</button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </HojaM>
   );
 }
 
