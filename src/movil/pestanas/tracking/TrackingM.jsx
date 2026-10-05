@@ -35,7 +35,7 @@ import { useNav } from '../../nav';
 import {
   TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, FilaDeslizable, Cabecera, CampoBusqueda, Segmented, Vacio, HojaM, Pill, toast,
 } from '../../piezas';
-import { ChipM } from '../agenda/comun';
+import { ChipM } from '../agenda5/comun';
 import { colorCliente } from '../../datos';
 import { MONO } from '../../util';
 import { HojaEnvio } from './hojas';
