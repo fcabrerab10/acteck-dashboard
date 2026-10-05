@@ -270,10 +270,10 @@ test('pictogramas y posiciones: rectángulos normalizados por hueco', () => {
 
 test('shell móvil sólo en teléfono o en táctil hasta 1439 px; una computadora a media pantalla es escritorio', async () => {
   const { debeUsarShellMovil } = await import('../src/lib/useBreakpoint.js');
-  assert.equal(debeUsarShellMovil('mobile', false), true);
-  assert.equal(debeUsarShellMovil('tablet', false), false, 'Chrome en Windows a 950 px sin táctil');
-  assert.equal(debeUsarShellMovil('laptop', false), false);
-  assert.equal(debeUsarShellMovil('tablet', true), true, 'iPad vertical');
-  assert.equal(debeUsarShellMovil('laptop', true), true, 'iPad horizontal');
-  assert.equal(debeUsarShellMovil('desktop', true), false);
+  assert.equal(debeUsarShellMovil('mobile', true, 430), true, 'iPhone 16 Pro Max');
+  assert.equal(debeUsarShellMovil('mobile', true, 375), true, 'iPhone SE');
+  assert.equal(debeUsarShellMovil('mobile', false, 1440), false, 'ventana angosta en una Mac: escritorio');
+  assert.equal(debeUsarShellMovil('tablet', true, 744), false, 'iPad mini: escritorio (2026-10-05)');
+  assert.equal(debeUsarShellMovil('laptop', true, 1024), false, 'iPad Pro: escritorio');
+  assert.equal(debeUsarShellMovil('desktop', true, 1080), false);
 });
