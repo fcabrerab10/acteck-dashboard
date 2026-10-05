@@ -1,7 +1,8 @@
 // Agenda V5 · Hoy: lista del día (tiempo estimado vs real, cronómetro) + reloj del día (Google, reuniones, bloques) +
 // mes completo en pequeño (Fernando: «me gusta ver el calendario de mes completo, pero en pequeño»).
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, CalendarCheck, Link2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarCheck, Link2, Compass, Bell } from 'lucide-react';
+import Guiame from './Guiame';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
@@ -102,6 +103,19 @@ export function Ahora({ h, hoyIso, puedeEditar, onAbrirItem, onAbrirReunion, onT
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 60000); return () => clearInterval(t); }, []);
   const s = useMemo(() => siguienteDe(h, new Date(), { hoyIso }), [h, hoyIso, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  // «Te toca»: al empezar un bloque con hora avisa con toast y, si diste permiso, notificación del sistema.
+  const [avisos, setAvisos] = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'granted');
+  const ultimoAviso = React.useRef(null);
+  useEffect(() => {
+    const id = s.actual?.id || null;
+    if (!id || ultimoAviso.current === id) return;
+    if (ultimoAviso.current !== null) { // la primera vez (al abrir) no avisa
+      toast.ok(`Te toca: ${s.actual.titulo}`, { ms: 8000 });
+      if (avisos && typeof Notification !== 'undefined') { try { new Notification('Agenda · te toca', { body: s.actual.titulo, tag: `agenda-${id}` }); } catch { /* sin permiso */ } }
+    }
+    ultimoAviso.current = id;
+  }, [s.actual?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pedirAvisos = () => { if (typeof Notification === 'undefined') return; Notification.requestPermission().then((p) => { setAvisos(p === 'granted'); if (p === 'granted') toast.ok('Te avisaré cuando toque algo con hora'); }); };
   const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   const abrirBloque = (b) => { if (!b) return; if (b.tipo === 'tarea') onAbrirItem?.(b.ref); else if (b.tipo === 'reunion') onAbrirReunion?.(b.ref); else if (b.ref?.url) window.open(b.ref.url, '_blank', 'noopener'); };
   const siguienteTarea = s.cola.find((it) => !(s.actual && s.actual.tipo === 'tarea' && s.actual.ref.id === it.id)) || null;
@@ -138,6 +152,7 @@ export function Ahora({ h, hoyIso, puedeEditar, onAbrirItem, onAbrirReunion, onT
               <BotonInv onClick={() => onCrono?.(s.actual.ref, s.actual.ref.inicio_real ? 'parar' : 'iniciar')}>{s.actual.ref.inicio_real ? 'Parar' : 'Empezar'}</BotonInv>
               <BotonInv onClick={() => onToggle?.(s.actual.ref, true)}>Hecha</BotonInv>
             </>}
+            {!compacta && !avisos && typeof Notification !== 'undefined' && <BotonInv onClick={pedirAvisos}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bell size={12} />Avisarme</span></BotonInv>}
             <span style={{ fontSize: 12, opacity: 0.7, marginLeft: 'auto' }}>
               {s.proximo && s.actual ? `Luego: ${s.proximo.titulo} a las ${hhmm(s.proximo.ini)}` : s.proximo && siguienteTarea ? `Después: ${s.proximo.titulo} ${hhmm(s.proximo.ini)}${s.minutosLibres != null ? ` · ${fmtMin(s.minutosLibres)} libres` : ''}` : s.cola.length > 1 ? `${s.cola.length - 1} más en la cola` : s.cola.length === 1 && siguienteTarea ? 'Es lo último del día' : ''}
             </span>
@@ -164,14 +179,16 @@ export default function Hoy({ d, uid, propietario, personasPorId, puedeEditar, o
   const conteos = useMemo(() => conteosMes(d.items, propietario, { reuniones: d.reuniones, google: d.google }), [d.items, d.reuniones, d.google, propietario]);
   const toggle = (it, hecha) => completarItem(it, hecha).catch((e) => toast.error(e.message));
   const crono = (it, acc) => cronometro(it, acc).catch((e) => toast.error(e.message));
+  const [guia, setGuia] = useState(false);
   const titulo = esHoy ? 'Hoy' : `${DIAS_LARGO[fecha.getDay()][0].toUpperCase()}${DIAS_LARGO[fecha.getDay()].slice(1)} ${fecha.getDate()}`;
   const frase = esHoy ? fraseHoy(h) : `${h.deHoy.length} pendiente${h.deHoy.length === 1 ? '' : 's'} · ${h.reunionesHoy.length + h.googleHoy.length} reunión(es)`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Titulo meta={frase} acciones={<div style={{ display: 'flex', gap: 8 }}>{!esHoy && <Boton onClick={() => { setDia(hoyIso); setMes(new Date(hoy.getFullYear(), hoy.getMonth(), 1)); }}>Volver a hoy</Boton>}{puedeEditar && <Boton primario icon={CalendarCheck} onClick={onCapturar}>Capturar (N)</Boton>}</div>}>{titulo}{esHoy ? <span style={{ fontWeight: 500, color: theme.textMuted, fontSize: 14 }}> · {DIAS_LARGO[hoy.getDay()]} {hoy.getDate()} de {MESES[hoy.getMonth()].toLowerCase()}</span> : null}</Titulo>
+      <Titulo meta={frase} acciones={<div style={{ display: 'flex', gap: 8 }}>{!esHoy && <Boton onClick={() => { setDia(hoyIso); setMes(new Date(hoy.getFullYear(), hoy.getMonth(), 1)); }}>Volver a hoy</Boton>}{esHoy && puedeEditar && h.deHoy.length + h.deAyer.length > 0 && <Boton icon={Compass} onClick={() => setGuia(true)}>Guíame</Boton>}{puedeEditar && <Boton primario icon={CalendarCheck} onClick={onCapturar}>Capturar (N)</Boton>}</div>}>{titulo}{esHoy ? <span style={{ fontWeight: 500, color: theme.textMuted, fontSize: 14 }}> · {DIAS_LARGO[hoy.getDay()]} {hoy.getDate()} de {MESES[hoy.getMonth()].toLowerCase()}</span> : null}</Titulo>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 1fr) 250px', gap: 12, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {esHoy && <div style={{ marginBottom: 10 }}><Ahora h={h} hoyIso={hoyIso} puedeEditar={puedeEditar} onAbrirItem={onAbrirItem} onAbrirReunion={onAbrirReunion} onToggle={toggle} onCrono={crono} /></div>}
+          <Guiame abierto={guia} onClose={() => setGuia(false)} d={d} propietario={propietario} hoy={hoy} puedeEditar={puedeEditar} onAbrirItem={onAbrirItem} />
           {h.deAyer.length > 0 && esHoy && (<>
             <Seccion meta={`${h.deAyer.length}`}>De días anteriores</Seccion>
             {h.deAyer.map((it) => <div key={it.id} draggable={puedeEditar} onDragStart={(e) => { e.dataTransfer.setData('agenda/item', it.id); }}><FilaTarea item={it} personasPorId={personasPorId} uid={uid} onToggle={toggle} onAbrir={onAbrirItem} mostrarFecha
