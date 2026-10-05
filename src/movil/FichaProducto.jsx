@@ -120,9 +120,10 @@ function TarjetaSku({ it, ean, lista, onQuitar, theme }) {
             {dato('Próximo arribo', it.proximoArribo ? fechaCorta(it.proximoArribo.fecha) : '—', it.proximoArribo ? `${int(it.proximoArribo.piezas)} pz · ${ESTATUS_CORTO[it.proximoArribo.estatus] || it.proximoArribo.estatus || 'PO ' + it.proximoArribo.po}` : 'sin tránsito')}
             {dato('Precio de lista', p ? fmtPrecio(p.precio) : lista ? '—' : 'Elige', p ? `+ IVA · ${p.moneda === 'PESOS' ? 'MXN' : p.moneda}` : lista ? 'sin precio en esta lista' : 'una lista', p ? theme.text : theme.orange)}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 11.5, color: theme.textMuted }}>
-            <Ship size={13} />{it.enCamino > 0 ? `${int(it.enCamino)} pz en camino en ${it.embarques} embarque${it.embarques === 1 ? '' : 's'}${it.proximoArribo?.po ? ` · próximo PO ${it.proximoArribo.po}` : ''}` : 'Nada en camino'}
-            {it.demandaMes > 0 && <span style={{ marginLeft: 'auto' }}>{int(it.demandaMes)} pz/mes ERP</span>}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 11.5, color: theme.textMuted, lineHeight: 1.3 }}>
+            <Ship size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>{it.enCamino > 0 ? `${int(it.enCamino)} pz en camino en ${it.embarques} embarque${it.embarques === 1 ? '' : 's'}${it.proximoArribo?.po ? ` · próximo PO ${it.proximoArribo.po}` : ''}` : 'Nada en camino'}</span>
+            {it.demandaMes > 0 && <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{int(it.demandaMes)} pz/mes ERP</span>}
           </div>
         </div>
       </FilaDeslizable>
