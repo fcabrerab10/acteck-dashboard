@@ -42,7 +42,7 @@ export default function Agenda5({ onNavegar, inicial = null }) {
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUid(data?.user?.id || null)); }, []);
   const [modulo, setModulo] = useState(inicial?.vista || 'hoy');
   const [propietario, setPropietario] = useState(null);
-  const [captura, setCaptura] = useState(false);
+  const [captura, setCaptura] = useState(!!inicial?.captura); // el correo de la Agenda trae #/ir/agenda?captura=1
   const [hojaItem, setHojaItem] = useState(null);
   const [minutaId, setMinutaId] = useState(inicial?.reunionId || null);
   const [formReunion, setFormReunion] = useState(null);

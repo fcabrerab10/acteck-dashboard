@@ -352,6 +352,17 @@ export default function App() {
   }, []);
 
   const handleLogin = ({ user, perfil: p }) => { setAuthUser(user); setPerfil(p); };
+  // Enlace profundo desde los correos (2026-10-05): https://…/#/ir/agenda?captura=1 → navega a esa pestaña con `extra`
+  // y limpia el hash. Se atiende una vez que hay sesión y perfil (si no, el login lo conserva hasta entrar).
+  useEffect(() => {
+    if (!authUser || !perfil) return;
+    const h = window.location.hash || '';
+    const m = h.match(/^#\/ir\/([a-zA-Z]+)(?:\?(.*))?$/);
+    if (!m) return;
+    const extra = {}; for (const [k, v] of new URLSearchParams(m[2] || '')) extra[k] = v === '1' ? true : v;
+    history.replaceState(null, '', window.location.pathname);
+    setTimeout(() => window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: { pagina: m[1], clienteKey: extra.cliente || null, extra } })), 400);
+  }, [authUser, perfil]);
   const handleLogout = async () => { await supabase.auth.signOut(); setAuthUser(null); setPerfil(null); };
 
   

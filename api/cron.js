@@ -1427,7 +1427,12 @@ async function taskAgendaCorreo({ dryRun = esDryRun(), momento = null, para = nu
     const c = armarCorreoAgenda({ momento: dst.momento, userId: p.user_id, items, reuniones, cuentas: suyas, fuentes, hoy: hoy.iso });
     if (!c) { omitidos.push({ to: dst.email, momento: dst.momento, motivo: 'nada que contar' }); continue; }
     const cuerpo = c.secciones.map((sec) => htmlSeccion(sec.titulo, sec.sub, sec.filas)).join('');
-    const html = htmlCorreo({ titulo: c.titulo, intro: c.intro, cuerpo });
+    const nombreCorto = String(p.nombre || '').split(' ')[0] || 'Hola';
+    const saludo = dst.momento === 'manana' ? `Buenos días, ${nombreCorto}` : `Buenas tardes, ${nombreCorto}`;
+    const fechaLarga = new Date(`${hoy.iso}T12:00:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+    const resumen = c.secciones.map((sec) => ({ l: sec.titulo, v: sec.filas.length, color: /vencid/i.test(sec.titulo) ? '#FF453A' : /hoy|mañana/i.test(sec.titulo) ? '#0A84FF' : '#1D1D1F' })).slice(0, 4);
+    const botones = [{ label: 'Abrir mi Agenda', href: `${APP_URL}/#/ir/agenda` }, { label: '+ Capturar pendiente', href: `${APP_URL}/#/ir/agenda?captura=1` }];
+    const html = htmlCorreoAgenda({ saludo, titulo: c.titulo, fecha: fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1), resumen, cuerpo, botones });
     const text = `${c.titulo}\n${c.intro}\n\n${c.secciones.map((sec) => `${sec.titulo.toUpperCase()} (${sec.filas.length})\n${sec.filas.map((f) => `• ${f.titulo}${f.detalle ? ` — ${f.detalle}` : ''}`).join('\n')}`).join('\n\n')}\n\n${APP_URL}`;
     const subject = `${c.titulo}: ${c.intro} · Agenda Acteck`;
     if (dryRun || !transporte) { enviados.push({ to: dst.email, momento: dst.momento, subject, dryRun: true }); continue; }
@@ -1778,6 +1783,26 @@ function htmlSeccion(titulo, sub, alertas, max = 12) {
       <span style="font:600 14px -apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#1D1D1F;letter-spacing:-.01em">${escapeHtml(titulo)}</span>
       ${sub ? `<span style="font:12px -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#6E6E73;margin-left:8px">${escapeHtml(sub)}</span>` : ''}
     </td></tr>${filas}${mas}</table>`;
+}
+/** Correo de la Agenda (2026-10-05, Fernando: «un informe con mejor diseño y un botón para ir al dashboard»). */
+function htmlCorreoAgenda({ saludo, titulo, fecha, resumen = [], cuerpo, botones = [] }) {
+  const F = "-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif";
+  const tiles = resumen.length ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 14px"><tr>${resumen.map((r) => `<td style="padding:0 6px 0 0"><div style="background:#FFFFFF;border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:10px 12px"><div style="font:700 10px ${F};letter-spacing:.08em;text-transform:uppercase;color:#6E6E73">${escapeHtml(r.l)}</div><div style="font:700 22px ${F};color:${r.color || '#1D1D1F'};letter-spacing:-.02em">${escapeHtml(String(r.v))}</div>${r.sub ? `<div style="font:11.5px ${F};color:#86868B">${escapeHtml(r.sub)}</div>` : ''}</div></td>`).join('')}</tr></table>` : '';
+  const btns = botones.map((b, i) => `<a href="${b.href}" style="display:inline-block;padding:11px 18px;border-radius:12px;font:600 14px ${F};text-decoration:none;margin:0 8px 8px 0;${i === 0 ? 'background:#0A84FF;color:#FFFFFF' : 'background:#FFFFFF;color:#1D1D1F;border:1px solid rgba(0,0,0,.1)'}">${escapeHtml(b.label)}</a>`).join('');
+  return `<!doctype html><html><body style="margin:0;background:#F5F5F7;padding:24px 12px">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
+  <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%">
+    <tr><td style="padding:0 4px 16px">
+      <div style="font:700 12px ${F};letter-spacing:.08em;text-transform:uppercase;color:#0A84FF">acteck. · Agenda</div>
+      <div style="font:700 26px ${F};color:#1D1D1F;letter-spacing:-.03em;margin-top:6px">${escapeHtml(saludo)}</div>
+      <div style="font:14px ${F};color:#6E6E73;margin-top:4px">${escapeHtml(titulo)} · ${escapeHtml(fecha)}</div>
+    </td></tr>
+    <tr><td style="padding:0 0 4px">${btns}</td></tr>
+    <tr><td>${tiles}</td></tr>
+    <tr><td>${cuerpo}</td></tr>
+    <tr><td style="padding:14px 0 0">${btns}</td></tr>
+    <tr><td style="padding:12px 4px 0;font:11.5px ${F};color:#86868B">Este correo lo arma el dashboard cada mañana y cada tarde con tu Agenda. Cambia qué recibes en ⚙️ del centro de notificaciones.</td></tr>
+  </table></td></tr></table></body></html>`;
 }
 function htmlCorreo({ titulo, intro, cuerpo }) {
   return `<!doctype html><html><body style="margin:0;background:#F5F5F7;padding:24px 12px">
