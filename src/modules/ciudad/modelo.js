@@ -54,9 +54,18 @@ export const CIUDADES = {
   IRAPUATO: { lat: 20.67, lon: -101.35, estado: 'GUANAJUATO' },
   CELAYA: { lat: 20.52, lon: -100.81, estado: 'GUANAJUATO' },
 };
-export const ESC = 3.4; // unidades de escena por grado
+export const ESC = 7; // unidades de escena por grado de longitud (México ≈ 210 × 110 unidades)
 export const ORIGEN = CIUDADES.GUADALAJARA;
-export const posDe = (c) => ({ x: (c.lon - ORIGEN.lon) * ESC, z: -(c.lat - ORIGEN.lat) * ESC });
+// Proyección del mapa de Sell Out (sellout/mexico-estados.json, viewBox 1000 × 626.6), ajustada por mínimos cuadrados
+// contra los centroides de 16 estados (error medio 9.5 px): X = 32.1003·lon + 3792.67 · Y = −33.3885·lat + 1099.92.
+// La escena usa esos píxeles escalados (K unidades por px) con Guadalajara en el origen, así el terreno (contorno real
+// de México) y las ciudades caen en el mismo sistema.
+export const PX = { a: 32.1003, b: 3792.67, c: -33.3885, d: 1099.92 };
+export const K = ESC / PX.a;
+export const aPx = (lon, lat) => ({ X: PX.a * lon + PX.b, Y: PX.c * lat + PX.d });
+export const PX_ORIGEN = aPx(ORIGEN.lon, ORIGEN.lat);
+export const pxAEscena = (X, Y) => ({ x: (X - PX_ORIGEN.X) * K, z: (Y - PX_ORIGEN.Y) * K });
+export const posDe = (c) => { const p = aPx(c.lon, c.lat); return pxAEscena(p.X, p.Y); };
 
 /** Sede de cada cuenta de sell out (de dónde es el cliente). Las que reportan estado en el sell out lo usan primero. */
 export const SEDE_POR_CUENTA = {

@@ -3,12 +3,14 @@
 //   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), oscuro }) → { destruir(), resize(), irA(tag), setOscuro(b) }
 // Cámara isométrica (ortográfica) con arrastre, zoom con rueda y giro suave. Todo el estilo vive aquí (paleta, materiales, luz).
 import * as THREE from 'three';
+import { pxAEscena } from './modelo';
+import MEXICO from '../comercial/sellout/mexico-estados.json';
 
 const PAL = {
   dia:   { cielo: 0xEAF2F7, suelo: 0xE8DCC2, suelo2: 0xDFCFAE, calle: 0xCDBFA3, banqueta: 0xE6DCC8, agua: 0x6FB1E8, agua2: 0x5AA0DA, cerro: 0xC9D8C3, cerro2: 0xB4C8B0, arbol: 0x7FA66B, arbol2: 0x6B9458, tronco: 0x8B6D4B,
            oficina: 0xF6EEDC, oficinaTecho: 0xE0C6A2, cedis: 0xE8A77A, cedisTecho: 0xD98F63, tienda: 0xF3E7D3, tiendaTecho: 0xC98B5B, ventana: 0x3B4252, ventanaOn: 0xFFE9A8, camion: 0xF4F1EA, cabina: 0xE05A45, barco: 0xF4F1EA, barcoCab: 0x3B4252, nube: 0xFFFFFF, sol: 1.35, amb: .85, fog: 0xEAF2F7 },
-  noche: { cielo: 0x121722, suelo: 0x2A2A33, suelo2: 0x25252D, calle: 0x1B1C22, banqueta: 0x33343C, agua: 0x18324D, agua2: 0x15293F, cerro: 0x25303A, cerro2: 0x1E272F, arbol: 0x2E4A33, arbol2: 0x27402C, tronco: 0x3A2E24,
-           oficina: 0x3B3F4B, oficinaTecho: 0x4A4F5C, cedis: 0x5C4335, cedisTecho: 0x6B4E3E, tienda: 0x3C3F4A, tiendaTecho: 0x5A4030, ventana: 0x1D1F26, ventanaOn: 0xFFD66B, camion: 0xC9C6BE, cabina: 0xE05A45, barco: 0xC9C6BE, barcoCab: 0x2A2E38, nube: 0x2A3140, sol: .35, amb: .35, fog: 0x121722 },
+  noche: { cielo: 0x121722, suelo: 0x343644, suelo2: 0x25252D, calle: 0x1B1C22, banqueta: 0x33343C, agua: 0x18324D, agua2: 0x15293F, cerro: 0x25303A, cerro2: 0x1E272F, arbol: 0x2E4A33, arbol2: 0x27402C, tronco: 0x3A2E24,
+           oficina: 0x3B3F4B, oficinaTecho: 0x4A4F5C, cedis: 0x5C4335, cedisTecho: 0x6B4E3E, tienda: 0x3C3F4A, tiendaTecho: 0x5A4030, ventana: 0x1D1F26, ventanaOn: 0xFFD66B, camion: 0xC9C6BE, cabina: 0xE05A45, barco: 0xC9C6BE, barcoCab: 0x2A2E38, nube: 0x2A3140, sol: .4, amb: .55, fog: 0x121722 },
 };
 const ACC = { azul: 0x0A84FF, verde: 0x30D158, naranja: 0xFF9F0A, rojo: 0xFF453A, morado: 0xBF5AF2, gris: 0x8E8E93 };
 const COLOR_CUENTA = { ct: 0x0A84FF, cva: 0xFF9F0A, dicotech: 0x30D158, digitalife: 0xBF5AF2, pcel: 0xFF453A, ingram: 0x5AC8FA, pch: 0xFFD60A, loma: 0x64D2FF, guc: 0xFF6482, kabik: 0xA2845E, dcmayorista: 0x7D8BFF, exel: 0x30B0C7, techsmart: 0xAC8E68, arroba: 0xD4A5FF, ingram_retail: 0x5AC8FA, directo: 0x8E8E93 };
@@ -21,15 +23,15 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   R.outputColorSpace = THREE.SRGBColorSpace; R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.05;
   const scene = new THREE.Scene();
   const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 600);
-  const vista = { cx: 0, cz: 0, zoom: 34, ang: Math.PI / 4, zoomObj: 34, cxObj: 0, czObj: 0 };
+  const vista = { cx: 10, cz: -14, zoom: 48, ang: Math.PI / 4, zoomObj: 48, cxObj: 10, czObj: -14 };
   const W = () => canvas.clientWidth || 800, H = () => canvas.clientHeight || 600;
   function resize() { const w = W(), h = H(); R.setSize(w, h, false); const a = w / h; cam.left = -vista.zoom * a; cam.right = vista.zoom * a; cam.top = vista.zoom; cam.bottom = -vista.zoom; cam.updateProjectionMatrix(); }
-  function colocarCam() { cam.position.set(vista.cx + Math.cos(vista.ang) * 160, 130, vista.cz + Math.sin(vista.ang) * 160); cam.lookAt(vista.cx, 0, vista.cz); }
+  function colocarCam() { cam.position.set(vista.cx + Math.cos(vista.ang) * 220, 180, vista.cz + Math.sin(vista.ang) * 220); cam.lookAt(vista.cx, 0, vista.cz); }
   resize(); colocarCam();
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x9a8c74, P.amb); scene.add(hemi);
-  const sol = new THREE.DirectionalLight(0xfff4e0, P.sol); sol.position.set(60, 110, 50); sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048);
-  Object.assign(sol.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120, near: 10, far: 320 }); sol.shadow.bias = -0.0006; sol.shadow.normalBias = .03; scene.add(sol);
+  const sol = new THREE.DirectionalLight(0xfff4e0, P.sol); sol.position.set(60, 110, 50); sol.castShadow = true; sol.shadow.mapSize.set(4096, 4096);
+  Object.assign(sol.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, near: 10, far: 420 }); sol.shadow.bias = -0.0006; sol.shadow.normalBias = .03; scene.add(sol);
   const luzNoche = new THREE.Group(); scene.add(luzNoche);
 
   const mats = new Map();
@@ -37,15 +39,27 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   const interact = []; // { mesh, tag }
   const animados = [];
   const raiz = new THREE.Group(); scene.add(raiz);
+  const g_cerros = new THREE.Group(); raiz.add(g_cerros); // Sierra Madre, al norte de Guadalajara
   const add = (m, tag) => { raiz.add(m); if (tag) { m.traverse((o) => { if (o.isMesh) { o.userData.tag = tag; interact.push(o); } }); } return m; };
   const box = (w, h, d, color, extra) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(color, extra)); m.castShadow = true; m.receiveShadow = true; m.position.y = h / 2; return m; };
   const esc = { x: modelo.origen.x, z: modelo.origen.z };
 
   // ── Terreno: tierra grande, agua al suroeste (Pacífico) y al este (Golfo), cerros al fondo ──
-  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(420, 320, 1, 1), M(P.suelo, { roughness: 1 })); suelo.rotation.x = -Math.PI / 2; suelo.position.set(0, 0, -10); suelo.receiveShadow = true; raiz.add(suelo);
-  const aguaG = new THREE.PlaneGeometry(480, 140, 48, 14); const agua = new THREE.Mesh(aguaG, M(P.agua, { roughness: .35, metalness: .05, flatShading: true })); agua.rotation.x = -Math.PI / 2; agua.position.set(-40, .08, 80); raiz.add(agua);
-  animados.push((t) => { const pos = aguaG.attributes.position; for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); pos.setZ(i, Math.sin(x * .18 + t * 1.2) * .25 + Math.cos(y * .22 + t * .9) * .2); } pos.needsUpdate = true; aguaG.computeVertexNormals(); });
-  for (let i = 0; i < 9; i++) { const c = new THREE.Mesh(new THREE.ConeGeometry(16 + (i % 3) * 7, 14 + (i % 4) * 5, 6), M(i % 2 ? P.cerro : P.cerro2, { roughness: 1 })); c.position.set(-150 + i * 38, 0, -120 - (i % 2) * 18); c.receiveShadow = true; raiz.add(c); }
+  // Mar: un plano grande con oleaje suave debajo de todo.
+  const aguaG = new THREE.PlaneGeometry(900, 700, 60, 48); const agua = new THREE.Mesh(aguaG, M(P.agua, { roughness: .35, metalness: .05, flatShading: true })); agua.rotation.x = -Math.PI / 2; agua.position.set(20, -.9, -10); raiz.add(agua);
+  animados.push((t) => { const pos = aguaG.attributes.position; for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); pos.setZ(i, Math.sin(x * .08 + t * 1.1) * .35 + Math.cos(y * .11 + t * .8) * .3); } pos.needsUpdate = true; aguaG.computeVertexNormals(); });
+  // Tierra: el contorno real de México (32 estados del mapa de Sell Out) extruido como una meseta baja.
+  (function tierra() {
+    const g = new THREE.Group();
+    for (const e of MEXICO.estados) {
+      const cmds = e.d.match(/[MLZ][^MLZ]*/gi) || []; let shape = null; const shapes = [];
+      for (const c of cmds) { const t = c[0].toUpperCase(); const nums = (c.slice(1).match(/-?\d+(\.\d+)?/g) || []).map(Number); if (t === 'M') { shape = new THREE.Shape(); shapes.push(shape); const p = pxAEscena(nums[0], nums[1]); shape.moveTo(p.x, -p.z); } else if (t === 'L' && shape) { for (let i = 0; i + 1 < nums.length; i += 2) { const p = pxAEscena(nums[i], nums[i + 1]); shape.lineTo(p.x, -p.z); } } }
+      for (const sh of shapes) { if (sh.curves.length < 3) continue; const geo = new THREE.ExtrudeGeometry(sh, { depth: 1.2, bevelEnabled: false }); const m = new THREE.Mesh(geo, M(P.suelo, { roughness: 1, flatShading: false })); m.rotation.x = -Math.PI / 2; m.position.y = -1.2; m.receiveShadow = true; g.add(m); }
+    }
+    raiz.add(g);
+  })();
+  // Sierras chicas en zonas sin ciudades (desiertos de Sonora/Chihuahua y Sierra Madre Occidental).
+  [[-55, -45, 7], [-63, -53, 9], [-38, -71, 8], [-12, -72, 6], [-32, -47, 5], [-20, -12, 5], [-8, -36, 6], [-46, -36, 5]].forEach(([x, z, r], i) => { const c = new THREE.Mesh(new THREE.ConeGeometry(r, r * .9, 6), M(i % 2 ? P.cerro : P.cerro2, { roughness: 1 })); c.position.set(x, 0, z); c.receiveShadow = true; c.castShadow = true; g_cerros.add(c); });
   // nubes
   for (let i = 0; i < 7; i++) { const g = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(2.2 + (k % 2) * 1.4, 8, 6), M(P.nube, { roughness: 1 })); s.position.set(k * 2.4 - 3, (k % 2) * .8, (k % 3) * .6); g.add(s); } g.position.set(-120 + i * 42, 34 + (i % 3) * 4, -60 + (i % 4) * 30); raiz.add(g); animados.push((t) => { g.position.x += .006; if (g.position.x > 160) g.position.x = -160; }); }
 
@@ -125,7 +139,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     const proa = new THREE.Mesh(new THREE.ConeGeometry(.9, 1.6, 4), M(P.barco)); proa.rotation.z = -Math.PI / 2; proa.rotation.y = Math.PI / 4; proa.position.set(3.1, .55, 0); proa.castShadow = true; g.add(proa);
     const cab = box(1.3, 1.3, 1.5, P.barcoCab); cab.position.set(-1.6, 1.65, 0); g.add(cab);
     for (let k = 0; k < 3; k++) { const c = box(1, .7, 1.4, [ACC.azul, ACC.naranja, ACC.verde, ACC.morado][(k + i) % 4]); c.position.set(.2 + k * -.0 + (k - 1) * 1.1, 1.4, 0); g.add(c); }
-    const ini = { x: puertoPos.x - 70 - (i % 4) * 8, z: puertoPos.z + 40 + (i % 3) * 7 }; const fin = { x: puertoPos.x - 2, z: puertoPos.z + 4 };
+    const ini = { x: puertoPos.x - 52 - (i % 4) * 9, z: puertoPos.z + 46 + (i % 3) * 8 }; const fin = { x: puertoPos.x - 3, z: puertoPos.z + 5 };
     g.position.set(ini.x + (fin.x - ini.x) * b.progreso, 0, ini.z + (fin.z - ini.z) * b.progreso); g.rotation.y = -Math.atan2(fin.z - ini.z, fin.x - ini.x);
     add(g, { tipo: 'barco', titulo: `Contenedor ${b.id}`, sub: `${b.naviera || b.supplier} · ${b.piezas.toLocaleString('es-MX')} pz · ${b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias <= 0 ? 'llegó' : `llega en ${b.llegaEnDias} d`}`, pagina: 'inventarioGlobal', barco: b });
     const base = g.position.clone();
@@ -139,22 +153,22 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     const esGDL = d.ciudad === 'GUADALAJARA';
     const base = esGDL ? { x: esc.x - 4, z: esc.z + 16 } : d.pos;
     distritoPos.set(d.ciudad, base);
-    const n = d.tiendas.length; const cols = Math.min(6, Math.max(2, Math.ceil(Math.sqrt(n * 1.6)))); const filas = Math.ceil(n / cols);
+    const n = d.tiendas.length; const cols = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(n * 1.5)))); const filas = Math.ceil(n / cols);
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
-    const ancho = cols * 3.2 + 2, largo = filas * 3.4 + 2;
+    const ancho = cols * 2.7 + 1.6, largo = filas * 2.9 + 1.6;
     const piso = box(ancho, .3, largo, P.banqueta); piso.position.y = .15; g.add(piso);
     const calleH = new THREE.Mesh(new THREE.PlaneGeometry(ancho + 2, 1.4), M(P.calle, { roughness: 1 })); calleH.rotation.x = -Math.PI / 2; calleH.position.set(0, .32, largo / 2 + .9); g.add(calleH);
     d.tiendas.forEach((t, i) => {
       const c = i % cols, f = Math.floor(i / cols);
-      const x = -ancho / 2 + 2.6 + c * 3.2, z = -largo / 2 + 2.6 + f * 3.4;
+      const x = -ancho / 2 + 2.1 + c * 2.7, z = -largo / 2 + 2.1 + f * 2.9;
       const col = COLOR_CUENTA[t.cuenta] || ACC.gris;
       const tg = new THREE.Group(); tg.position.set(x, .3, z);
-      const cuerpo = box(2.4, 2.2, 2.4, P.tienda); cuerpo.position.y = 1.1; tg.add(cuerpo);
-      const techo = box(2.7, .35, 2.7, P.tiendaTecho); techo.position.y = 2.35; tg.add(techo);
-      const toldo = box(2.6, .18, .9, col); toldo.position.set(0, 1.75, 1.6); tg.add(toldo);
-      const letrero = box(1.8, .4, .12, t.vendio ? col : P.ventana, { emissive: t.vendio ? col : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.6 : .3) : 0 }); letrero.position.set(0, 2.05, 1.27); tg.add(letrero);
-      const vit = new THREE.Mesh(new THREE.BoxGeometry(1.4, .9, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .9, 1.26); tg.add(vit);
-      const puerta = new THREE.Mesh(new THREE.BoxGeometry(.6, 1.3, .1), M(0x5A4636)); puerta.position.set(.75, .65, 1.26); tg.add(puerta);
+      const cuerpo = box(2, 1.9, 2, P.tienda); cuerpo.position.y = .95; tg.add(cuerpo);
+      const techo = box(2.3, .3, 2.3, P.tiendaTecho); techo.position.y = 2.05; tg.add(techo);
+      const toldo = box(2.2, .16, .8, col); toldo.position.set(0, 1.5, 1.35); tg.add(toldo);
+      const letrero = box(1.5, .34, .12, t.vendio ? col : P.ventana, { emissive: t.vendio ? col : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.6 : .3) : 0 }); letrero.position.set(0, 1.78, 1.06); tg.add(letrero);
+      const vit = new THREE.Mesh(new THREE.BoxGeometry(1.1, .75, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .75, 1.05); tg.add(vit);
+      const puerta = new THREE.Mesh(new THREE.BoxGeometry(.5, 1.1, .1), M(0x5A4636)); puerta.position.set(.6, .55, 1.05); tg.add(puerta);
       if (oscuro && t.vendio) { const l = new THREE.PointLight(col, .8, 6); l.position.set(0, 2.2, 1.8); tg.add(l); }
       g.add(tg);
       interact.push(...(() => { const arr = []; tg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendio ? `vendió este mes $${fmtK(t.importe)}` : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, ciudad: d.ciudad }; arr.push(o); } }); return arr; })());
@@ -167,7 +181,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
     raiz.add(g);
     add(new THREE.Group(), null);
     // etiqueta de ciudad (sprite de texto)
-    const et = etiqueta(d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 4.2 + (n > 12 ? 1 : 0), base.z - largo / 2 - 1.2); raiz.add(et);
+    const et = etiqueta(d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); raiz.add(et);
     if (!esGDL) rutas.set(d.ciudad, carretera({ x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x, z: base.z + largo / 2 + 2.2 }));
     else rutas.set(d.ciudad, carretera({ x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x + ancho / 2 + 3, z: base.z }, 1.2));
   });
@@ -196,7 +210,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, oscuro = false }
   function arbol(g, x, z, s = 1) { const t = new THREE.Mesh(new THREE.CylinderGeometry(.14 * s, .2 * s, 1.1 * s, 6), M(P.tronco)); t.position.set(x, .55 * s, z); t.castShadow = true; g.add(t); const c = new THREE.Mesh(new THREE.ConeGeometry(.95 * s, 2 * s, 7), M(Math.random() > .5 ? P.arbol : P.arbol2)); c.position.set(x, 1.9 * s, z); c.castShadow = true; g.add(c); const c2 = new THREE.Mesh(new THREE.ConeGeometry(.7 * s, 1.4 * s, 7), M(P.arbol)); c2.position.set(x, 2.8 * s, z); c2.castShadow = true; g.add(c2); }
   function persona(col, s = 1) { const g = new THREE.Group(); const cuerpo = new THREE.Mesh(new THREE.CylinderGeometry(.32 * s, .38 * s, 1.1 * s, 8), M(col)); cuerpo.position.y = .95 * s; cuerpo.castShadow = true; const cab = new THREE.Mesh(new THREE.SphereGeometry(.3 * s, 10, 8), M(0xF3CFA8)); cab.position.y = 1.75 * s; cab.castShadow = true; const p1 = new THREE.Mesh(new THREE.CylinderGeometry(.11 * s, .11 * s, .5 * s, 6), M(0x3B4252)); p1.position.set(-.14 * s, .25 * s, 0); const p2 = p1.clone(); p2.position.x = .14 * s; g.add(cuerpo, cab, p1, p2); g.userData.piernas = [p1, p2]; return g; }
   function caminar(per, ruta, s, origen, esc) { const n = ruta.length; const k = Math.floor(s) % n, f = s % 1; const a = ruta[k], b = ruta[(k + 1) % n]; const x = a[0] + (b[0] - a[0]) * f, z = a[1] + (b[1] - a[1]) * f; per.position.set(origen.x + x, per.position.y, origen.z + z); per.rotation.y = Math.atan2(b[0] - a[0], b[1] - a[1]); const mov = Math.hypot(b[0] - a[0], b[1] - a[1]) > .01; const sw = mov ? Math.sin(s * 14) * .5 : 0; per.userData.piernas[0].rotation.x = sw; per.userData.piernas[1].rotation.x = -sw; }
-  function etiqueta(texto, color) { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const f = 'bold 44px -apple-system, BlinkMacSystemFont, "SF Pro Display", Helvetica, Arial, sans-serif'; ctx.font = f; const w = Math.ceil(ctx.measureText(texto).width) + 48; c.width = w; c.height = 72; ctx.font = f; ctx.fillStyle = oscuro ? 'rgba(28,28,30,.92)' : 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.roundRect(0, 0, w, 72, 36); ctx.fill(); ctx.fillStyle = oscuro && color === '#1D1D1F' ? '#F5F5F7' : color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(texto, w / 2, 38); const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.scale.set(w / 72 * 3.2, 3.2, 1); sp.renderOrder = 10; return sp; }
+  function etiqueta(texto, color) { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const f = 'bold 44px -apple-system, BlinkMacSystemFont, "SF Pro Display", Helvetica, Arial, sans-serif'; ctx.font = f; const w = Math.ceil(ctx.measureText(texto).width) + 48; c.width = w; c.height = 72; ctx.font = f; ctx.fillStyle = oscuro ? 'rgba(28,28,30,.92)' : 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.roundRect(0, 0, w, 72, 36); ctx.fill(); ctx.fillStyle = oscuro && color === '#1D1D1F' ? '#F5F5F7' : color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(texto, w / 2, 38); const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.scale.set(w / 72 * 2.3, 2.3, 1); sp.renderOrder = 10; return sp; }
   function fmtK(v) { return v >= 1e6 ? `${(v / 1e6).toFixed(1)} M` : v >= 1e3 ? `${Math.round(v / 1e3)} K` : String(Math.round(v)); }
   function capital(s) { return String(s).toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()); }
 
