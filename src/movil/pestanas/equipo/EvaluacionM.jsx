@@ -1,4 +1,5 @@
-// Evaluación mensual en el celular (sólo perfiles.se_evalua). Mismos campos y misma tabla que la web
+// Evaluación mensual en el celular (sólo perfiles.se_evalua) · 3.88.0: hero con el resultado del mes y el bono, dictado
+// en el comentario y «Cerrar evaluación». Mismos campos y misma tabla que la web
 // (src/modules/interno/equipo/Evaluacion.jsx): calificaciones 1-5, comentarios, tareas del mes, ajustes al
 // bono, "Cerrar y pagar" e historial de 12 meses. Se reutilizan sus helpers (RATINGS, textoResumen),
 // `upsertEvaluacion` y `serieBonos`.
@@ -17,8 +18,9 @@ import { BONO_BASE, BONO_PCT, serieBonos } from '../../../modules/interno/equipo
 import { MESES, MESES_CORTO } from '../../../modules/interno/equipo/textos.js';
 import { useDetalleMes, upsertEvaluacion, useInvalidarEquipo } from '../../../modules/interno/equipo/datos.js';
 import { RATINGS, textoResumen } from '../../../modules/interno/equipo/Evaluacion.jsx';
-import { ListaAgrupada, TituloSeccionM, Segmented, Pill, BotonGrande, Skeleton, toast } from '../../piezas';
-import { CampoM } from '../agenda5/comun';
+import { ListaAgrupada, TituloSeccionM, Segmented, Pill, BotonGrande, Skeleton, HeroM, toast } from '../../piezas';
+import { CampoM, BotonMic } from '../agenda5/comun';
+import { fraseEvaluacion, subEvaluacion, promedioRatings } from './calculo';
 import { money, moneyCompact, MONO } from '../../util';
 
 const DEBOUNCE_MS = 600;
@@ -96,6 +98,12 @@ export default function EvaluacionM({ u, agenda, evaluaciones, mesActual }) {
 
   const texto = () => textoResumen({ user: u, anio: mesRef.anio, mes: mesRef.mes, facturacion, cuota, cuotaPct, evaluacion: local, agenda });
   const serie = useMemo(() => serieBonos(evaluaciones, u.user_id, { hoy }), [evaluaciones, u.user_id, hoy]);
+  // Promedio de calificaciones de los 3 meses anteriores al elegido (para el sub del hero).
+  const historialRatings = useMemo(() => {
+    const out = []; let a = mesRef.anio, m = mesRef.mes;
+    for (let i = 0; i < 3; i++) { m -= 1; if (m < 1) { m = 12; a -= 1; } const e = (evaluaciones || []).find((x) => x.user_id === u.user_id && x.anio === a && x.mes === m); out.push(e ? promedioRatings(e, RATINGS.map((r) => r.key)) : null); }
+    return out;
+  }, [evaluaciones, u.user_id, mesRef.anio, mesRef.mes]);
   const datosGrafica = useMemo(() => serie.map((s) => ({ x: MESES_CORTO[s.mes - 1], bono: s.bono })), [serie]);
 
   const sub = { fontSize: 11.5, color: theme.textMuted };
@@ -112,6 +120,13 @@ export default function EvaluacionM({ u, agenda, evaluaciones, mesActual }) {
       </div>
 
       {detalle.isLoading && <div style={{ padding: '0 16px' }}><Skeleton h={150} r={12} /></div>}
+
+      {/* Hero: resultado del mes y bono (3.88.0, mockup 2c58bf4c) */}
+      {!detalle.isLoading && (
+        <HeroM eyebrow={`${MESES[mesRef.mes - 1]} ${mesRef.anio} · ${cerrada ? 'cerrada' : 'sin cerrar'}`}
+          frase={fraseEvaluacion({ ratings: RATINGS.map((r) => Number(local?.[r.key]) || 0), tareas: local?.tareas || [], pctATiempo: agenda?.pctATiempo ?? null, bonoTotal, ajustes: ajustesTotal, cerrada, fmt: money })}
+          sub={subEvaluacion({ ratings: RATINGS.map((r) => Number(local?.[r.key]) || 0), historial: historialRatings, nRubros: RATINGS.length })} />
+      )}
 
       {/* Bono del mes */}
       <section style={{ padding: '0 16px' }}>
@@ -160,7 +175,10 @@ export default function EvaluacionM({ u, agenda, evaluaciones, mesActual }) {
       {/* Comentarios */}
       <section style={{ padding: '0 16px' }}>
         <TituloSeccionM>Comentarios del mes</TituloSeccionM>
-        <CampoM multiline value={local?.comentarios || ''} onChange={(v) => guardar({ comentarios: v })} placeholder="Feedback del mes…" disabled={cerrada} style={{ minHeight: 84 }} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <CampoM multiline value={local?.comentarios || ''} onChange={(v) => guardar({ comentarios: v })} placeholder="Feedback del mes… (o dicta con el micrófono)" disabled={cerrada} style={{ minHeight: 84, flex: 1 }} />
+          {!cerrada && <BotonMic onTexto={(t) => guardar({ comentarios: `${local?.comentarios ? `${local.comentarios} ` : ''}${t}` })} />}
+        </div>
       </section>
 
       {/* Tareas */}
@@ -183,7 +201,7 @@ export default function EvaluacionM({ u, agenda, evaluaciones, mesActual }) {
       <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <BotonGrande icon={Share2} onClick={() => compartir(texto(), { titulo: `Evaluación · ${MESES[mesRef.mes - 1]}` })}>Compartir resumen</BotonGrande>
         <BotonGrande icon={Copy} onClick={async () => { const ok = await copiar(texto()); if (ok) toast.ok('Resumen copiado'); else toast.error('No se pudo copiar'); }}>Copiar resumen</BotonGrande>
-        {!cerrada && !confirmar && <BotonGrande primario icon={Lock} onClick={() => setConfirmar(true)}>Cerrar y pagar</BotonGrande>}
+        {!cerrada && !confirmar && <BotonGrande primario icon={Lock} onClick={() => setConfirmar(true)}>Cerrar evaluación</BotonGrande>}
         {!cerrada && confirmar && (
           <>
             <div style={{ ...sub, textAlign: 'center' }}>Se congela el bono de {MESES[mesRef.mes - 1]} en {money(bonoTotal)}. No se podrá editar.</div>

@@ -1,72 +1,134 @@
-// Ficha de una persona en el celular (pantalla empujada desde Equipo.jsx).
-//   Hero: última entrada · sesiones y tiempo de la semana · cumplimiento de pendientes a 30 días.
-//   Segmented: Semana · Pendientes · Evaluación (esta última sólo si perfiles.se_evalua).
-//     · Semana    → día por día: sesiones (hora, minutos, pantallas) y acciones traducidas de la auditoría.
-//     · Pendientes→ ítems abiertos de Agenda: palomita para cerrarlos y toque para abrirlos en la Agenda móvil.
-//     · Evaluación→ EvaluacionM.jsx (captura con guardado al momento, cierre y historial de 12 meses).
-// Todo el cálculo viene de src/modules/interno/equipo/calculo.js (el mismo de la web). Sin costos ni márgenes.
+// Ficha de una persona en el celular (pantalla empujada desde Equipo.jsx) · 3.88.0 (2026-10-06, mockup 2c58bf4c):
+//   TituloGrande (nombre · puesto · ritmo · «activa hace 8 min») → chips Su día · Semana · Pendientes · Evaluación →
+//   HeroM «Hoy» (armó su día, hechos, plan vs real, vencidos; si cerró: hora, energía y reflexión) → 4 KpiM (Hoy · Esta
+//   semana · A tiempo · Vencidos) → la vista del chip:
+//     · Su día     → SuDia (Mi ritmo, la lista de hoy con hora y estado, la reflexión del cierre).
+//     · Semana     → entradas por día (L–D con minutos) + «lo que más tocó» + día por día con sesiones y acciones.
+//     · Pendientes → abiertos por fecha: palomita cierra, tocar abre en la Agenda, deslizar = Reasignar (HojaM con el equipo).
+//     · Evaluación → EvaluacionM.jsx (sólo perfiles.se_evalua).
+//   Botones: «Mandar mensaje» (texto con sus vencidos y lo de hoy por la hoja de compartir → WhatsApp; perfiles no guarda
+//   teléfono) · «Reasignar pendientes» (todos los vencidos a otra persona del equipo).
+// Todo el cálculo viene de src/modules/interno/equipo/calculo.js (web) y ./calculo.js (celular). Sin costos ni márgenes.
 import React, { useMemo, useState } from 'react';
-import { CalendarCheck, ChevronRight } from 'lucide-react';
+import { CalendarCheck, ChevronRight, MessageCircle, UserPlus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { AvatarImg } from '../../../lib/avatar';
 import { fechaCorta } from '../../../lib/format';
-import { completarItem } from '../../../modules/agenda5/base/datos';
+import { compartir } from '../../../lib/whatsapp';
+import { completarItem, actualizarItem } from '../../../modules/agenda5/base/datos';
 import { isoDia, sumarDias, inicioSemana } from '../../../modules/interno/equipo/calculo.js';
-import { fmtHm, fmtHmCorto, fmtHora, fmtDiaLargo, plural, textoInactividad, PAGINA_LABEL, CLIENTE_LABEL } from '../../../modules/interno/equipo/textos.js';
+import { fmtHm, fmtHmCorto, fmtHora, fmtDiaLargo, plural, nombreCorto, PAGINA_LABEL, CLIENTE_LABEL } from '../../../modules/interno/equipo/textos.js';
 import { useInvalidarEquipo } from '../../../modules/interno/equipo/datos.js';
+import SuDia, { datosSuDia } from '../../../modules/interno/equipo/SuDia';
 import { useNav } from '../../nav';
-import { TituloGrande, HeroM, ListaAgrupada, Cabecera, Segmented, Pill, Vacio, toast } from '../../piezas';
-import SuDia from '../../../modules/interno/equipo/SuDia';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Cabecera, Segmented, Pill, Vacio, BotonGrande, HojaM, Fila, FilaDeslizable, toast } from '../../piezas';
 import { PalomitaM } from '../agenda5/comun';
-import { ultimaEntrada } from './piezas';
+import { subPersona, frasePersonaHoy, subPersonaHoy, vencidosPorGrupo, diasSemana, loQueMasToco, textoMensaje } from './calculo';
 import EvaluacionM from './EvaluacionM';
 
-export default function Persona({ u, datos, agendaDisponible, evaluaciones, mesActual, registrosHoy = [] }) {
+export default function Persona({ u, datos, agendaDisponible, evaluaciones, mesActual, registrosHoy = [], internos = [] }) {
   const nav = useNav();
   const hoy = useMemo(() => new Date(), []);
-  const hoyIso = isoDia(hoy);
-  const { tele, acc, agenda, inact } = datos || {};
-  const [vista, setVista] = useState('semana');
-  const inactTxt = u?.tipo === 'externo' ? null : textoInactividad(inact);
-
-  const opciones = [{ id: 'semana', label: 'Semana' }, { id: 'pendientes', label: 'Pendientes', badge: agenda?.abiertos || 0 }];
-  if (u?.se_evalua) opciones.push({ id: 'evaluacion', label: 'Evaluación' });
-
+  const invalidar = useInvalidarEquipo();
+  const [reasignar, setReasignar] = useState(null);   // null | { items: [...] }
   if (!u) return null;
+
+  const mandarMensaje = async () => {
+    const s = datosSuDia({ u, agenda: datos?.agenda, registrosHoy });
+    const ok = await compartir(textoMensaje({ u, vencidos: datos?.vencidos || [], deHoy: s.deHoy, hoy }), { titulo: `Pendientes de ${nombreCorto(u.nombre || u.email)}` });
+    if (!ok) toast.info('Texto copiado: pégalo en WhatsApp');
+  };
+  const reasignarA = async (destino) => {
+    const items = reasignar?.items || [];
+    setReasignar(null);
+    if (!items.length || !destino) return;
+    try {
+      for (const it of items) await actualizarItem(it.id, { responsables: [destino.user_id] }, { prevResponsables: it.responsables || [] });
+      toast.ok(`${plural(items.length, 'pendiente')} ahora de ${nombreCorto(destino.nombre || destino.email)}`);
+      invalidar(); nav.pop();
+    } catch (e) { toast.error(`No se pudo reasignar: ${e.message || e}`); }
+  };
 
   return (
     <>
-      <Cabecera onVolver={nav.pop} />
-      <TituloGrande titulo={u.nombre || u.email} sub={u.puesto || u.rol || '—'}
-        derecha={<AvatarImg perfil={u} size={44} />} />
+      <Cabecera onVolver={nav.pop} etiqueta="Equipo" />
+      <PersonaVista u={u} datos={datos} agendaDisponible={agendaDisponible} evaluaciones={evaluaciones} mesActual={mesActual} registrosHoy={registrosHoy} hoy={hoy}
+        nav={nav} invalidar={invalidar} onMensaje={mandarMensaje} onReasignar={(items) => setReasignar({ items })} />
+      <HojaM abierto={!!reasignar} onClose={() => setReasignar(null)} titulo="Reasignar" sub={reasignar ? `${plural(reasignar.items.length, 'pendiente')} de ${nombreCorto(u.nombre || u.email)} · ¿a quién?` : ''} alto="60vh">
+        <ListaAgrupada pie="La persona recibe el aviso de «asignado» de la Agenda.">
+          {internos.filter((p) => p.user_id !== u.user_id).map((p) => (
+            <Fila key={p.user_id} avatar={<AvatarImg perfil={p} size={32} />} titulo={p.nombre || p.email} sub={p.puesto || p.rol || '—'} onClick={() => reasignarA(p)} />
+          ))}
+          {internos.filter((p) => p.user_id !== u.user_id).length === 0 && <Vacio icon={null} titulo="No hay a quién" sub="No hay más internos activos." style={{ padding: 16 }} />}
+        </ListaAgrupada>
+      </HojaM>
+    </>
+  );
+}
 
+/** Vista pura: la prueba SSR la renderiza con datos de ejemplo. */
+export function PersonaVista({ u, datos, agendaDisponible, evaluaciones, mesActual, registrosHoy = [], hoy, nav, invalidar, onMensaje, onReasignar, vistaInicial = 'dia' }) {
+  const { theme } = useTheme();
+  const hoyIso = isoDia(hoy);
+  const { tele, acc, agenda, vencidos = [] } = datos || {};
+  const externo = u?.tipo === 'externo';
+  const [vista, setVista] = useState(vistaInicial);
+  const s = useMemo(() => datosSuDia({ u, agenda, registrosHoy }), [u, agenda, registrosHoy]);
+
+  const opciones = externo ? [{ id: 'semana', label: 'Semana' }] : [{ id: 'dia', label: 'Su día' }, { id: 'semana', label: 'Semana' }, { id: 'pendientes', label: 'Pendientes', badge: agenda?.abiertos || 0 }];
+  if (u?.se_evalua) opciones.push({ id: 'evaluacion', label: 'Evaluación' });
+  const vistaActiva = opciones.some((o) => o.id === vista) ? vista : opciones[0].id;
+  const totalHoy = s.deHoy.length + s.hechas.length;
+
+  return (
+    <>
+      <TituloGrande titulo={u.nombre || u.email} sub={subPersona({ u, tele, hoy })} derecha={<AvatarImg perfil={u} size={44} />} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 8 }}>
-        <HeroM eyebrow="Última entrada"
-          frase={ultimaEntrada(tele?.ultimo, hoyIso)}
-          sub={inactTxt ? `Atención · ${inactTxt}` : tele?.activoHoy ? 'Activo hoy.' : `${plural(tele?.diasActivosSemana ?? 0, 'día')} de 5 esta semana.`}
-          stats={[
-            { k: 'Sesiones', v: tele?.sesionesSemana ?? 0, sub: 'esta semana' },
-            { k: 'Tiempo', v: fmtHmCorto(tele?.minutosSemana || 0), sub: 'esta semana' },
-            { k: 'A tiempo', v: agenda?.pctATiempo != null ? `${agenda.pctATiempo}%` : '—', sub: '30 días' },
-          ]} />
-
         <div style={{ padding: '0 16px' }}>
-          <Segmented size="md" value={vista} onChange={setVista} options={opciones} style={{ display: 'flex', width: '100%' }} />
+          <Segmented size="md" value={vistaActiva} onChange={setVista} options={opciones} style={{ display: 'flex', width: '100%' }} />
         </div>
 
-        {vista === 'semana' && agendaDisponible && <ListaAgrupada titulo="Su día" meta="Mi ritmo · hoy"><div style={{ padding: '8px 16px 10px' }}><SuDia u={u} agenda={agenda} registrosHoy={registrosHoy} compacto /></div></ListaAgrupada>}
-        {vista === 'semana' && <Semana tele={tele} acc={acc} hoy={hoy} />}
-        {vista === 'pendientes' && <Pendientes agenda={agenda} agendaDisponible={agendaDisponible} hoyIso={hoyIso} nav={nav} />}
-        {vista === 'evaluacion' && u.se_evalua && <EvaluacionM u={u} agenda={agenda} evaluaciones={evaluaciones} mesActual={mesActual} />}
+        {externo ? (
+          <HeroM eyebrow="Externo" frase={tele?.ultimo ? `Entró por última vez ${fmtDiaLargo(isoDia(tele.ultimo))}${tele.clienteTop ? ` y ve sobre todo ${CLIENTE_LABEL[tele.clienteTop]}` : ''}.` : 'No ha entrado en los últimos 28 días.'}
+            sub={`${plural(tele?.sesionesSemana || 0, 'sesión', 'sesiones')} esta semana · ${fmtHmCorto(tele?.minutosSemana || 0)}`} />
+        ) : (
+          <HeroM eyebrow={`Hoy · ${fmtDiaLargo(hoyIso)}`} frase={frasePersonaHoy({ u, s, vencidos, registro: s.registro, hoy })} sub={subPersonaHoy({ registro: s.registro, tele })} />
+        )}
+
+        {!externo && (
+          <KpiGrid>
+            <KpiM eyebrow="Hoy" big={<>{s.hechas.length} <span style={{ fontSize: 13, color: theme.textMuted, fontWeight: 500 }}>de {totalHoy}</span></>}
+              sub={s.plan > 0 ? `${fmtHmCorto(s.real || 0)} de ${fmtHmCorto(s.plan)} planeadas` : totalHoy ? 'sin tiempos planeados' : 'sin armar su día'} progress={totalHoy ? Math.round((s.hechas.length / totalHoy) * 100) : undefined} />
+            <KpiM eyebrow="Esta semana" big={fmtHmCorto(tele?.minutosSemana || 0)} sub={`${plural(tele?.sesionesSemana || 0, 'sesión', 'sesiones')} · ${plural(tele?.diasActivosSemana || 0, 'día')} de 5`} />
+            <KpiM eyebrow="A tiempo" big={agenda?.pctATiempo != null ? `${agenda.pctATiempo} %` : '—'} sub={agenda ? `últimos 30 días · ${plural(agenda.cerrados || 0, 'cerrado')}` : 'Agenda no disponible'} progress={agenda?.pctATiempo ?? undefined} />
+            <KpiM eyebrow="Vencidos" big={vencidos.length} bigColor={vencidos.length ? theme.red : theme.green} sub={vencidos.length ? vencidosPorGrupo(vencidos) : 'ninguno'} onClick={vencidos.length ? () => setVista('pendientes') : undefined} />
+          </KpiGrid>
+        )}
+
+        {vistaActiva === 'dia' && (agendaDisponible
+          ? <ListaAgrupada titulo="Su día" meta={totalHoy ? `${totalHoy} · ${s.hechas.length} hechos` : 'Mi ritmo'}><div style={{ padding: '8px 16px 10px' }}><SuDia u={u} agenda={agenda} registrosHoy={registrosHoy} compacto /></div></ListaAgrupada>
+          : <Vacio icon={CalendarCheck} color={theme.textMuted} titulo="Agenda no disponible" sub="No se pudieron leer sus pendientes en este dispositivo." />)}
+        {vistaActiva === 'semana' && <Semana tele={tele} acc={acc} hoy={hoy} />}
+        {vistaActiva === 'pendientes' && <Pendientes agenda={agenda} agendaDisponible={agendaDisponible} hoyIso={hoyIso} nav={nav} invalidar={invalidar} onReasignar={onReasignar} />}
+        {vistaActiva === 'evaluacion' && u.se_evalua && <EvaluacionM u={u} agenda={agenda} evaluaciones={evaluaciones} mesActual={mesActual} />}
+
+        {!externo && vistaActiva !== 'evaluacion' && (
+          <div style={{ display: 'flex', gap: 8, padding: '0 16px' }}>
+            <BotonGrande primario icon={MessageCircle} onClick={onMensaje} style={{ flex: 1 }}>Mandar mensaje</BotonGrande>
+            <BotonGrande icon={UserPlus} disabled={!vencidos.length} onClick={() => onReasignar?.(vencidos)} style={{ flex: 1 }}>Reasignar vencidos</BotonGrande>
+          </div>
+        )}
       </div>
     </>
   );
 }
 
-// ─── Semana: últimos 7 días (hoy arriba) con sesiones y acciones ───
+// ─── Semana: L–D con minutos, lo que más tocó, y día por día (hoy arriba) con sesiones y acciones ───
 function Semana({ tele, acc, hoy }) {
   const { theme } = useTheme();
+  const inicio = useMemo(() => inicioSemana(hoy), [hoy]);
+  const semana = useMemo(() => diasSemana(tele, { hoy, inicio }), [tele, hoy, inicio]);
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => isoDia(sumarDias(hoy, -i))), [hoy]);
   const sesPorDia = useMemo(() => {
     const m = new Map();
@@ -76,19 +138,35 @@ function Semana({ tele, acc, hoy }) {
   const accPorDia = useMemo(() => new Map((acc?.porDia || []).map((d) => [d.dia, d.items])), [acc]);
   const sub = { fontSize: 11, color: theme.textMuted };
   const hoyIso = isoDia(hoy);
-  const semIso = isoDia(inicioSemana(hoy));
+  const semIso = isoDia(inicio);
 
   return (
     <>
-      <div style={{ padding: '0 20px', display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={sub}>Pantallas de la semana:</span>
-        {tele?.paginasTop?.length
-          ? tele.paginasTop.map(([p, n]) => <Pill key={p} tone="gray" size="xs">{PAGINA_LABEL[p] || `p${p}`} · {fmtHmCorto(n)}</Pill>)
-          : <span style={sub}>sin registro</span>}
-        {tele?.clienteTop && <Pill tone="blue" size="xs">{CLIENTE_LABEL[tele.clienteTop]} · {tele.pctClienteTop}%</Pill>}
-      </div>
+      <section style={{ padding: '0 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text }}>Semana</span>
+          <span style={sub}>entradas por día</span>
+        </div>
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 10px 10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, textAlign: 'center' }}>
+            {semana.map((d) => (
+              <div key={d.dia} style={{ opacity: d.futuro ? 0.45 : 1 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 999, margin: '0 auto', display: 'grid', placeItems: 'center', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
+                  background: d.minutos > 0 ? theme.green : d.futuro ? 'transparent' : `${theme.red}22`, color: d.minutos > 0 ? '#FFF' : d.futuro ? theme.textMuted : theme.red, border: d.hoy ? `2px solid ${theme.accent}` : '2px solid transparent' }}>{d.letra}</div>
+                <div style={{ ...sub, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{d.minutos > 0 ? fmtHmCorto(d.minutos) : d.futuro ? '' : '—'}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: theme.text, marginTop: 10, lineHeight: 1.4 }}>{loQueMasToco(acc, tele, { paginaLabel: PAGINA_LABEL })}</div>
+          {tele?.clienteTop && <div style={{ ...sub, marginTop: 4 }}>Cliente que más ve: {CLIENTE_LABEL[tele.clienteTop]} · {tele.pctClienteTop} % del tiempo</div>}
+        </div>
+      </section>
 
       <section style={{ padding: '0 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text }}>Día por día</span>
+          <span style={sub}>últimos 7 días</span>
+        </div>
         <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
           {dias.map((d, i) => {
             const ses = sesPorDia.get(d) || [];
@@ -132,10 +210,9 @@ function topPaginas(paginas) {
   return top.length ? ` · ${top.join(', ')}` : '';
 }
 
-// ─── Pendientes de Agenda (abiertos) ───
-function Pendientes({ agenda, agendaDisponible, hoyIso, nav }) {
+// ─── Pendientes de Agenda (abiertos): palomita cierra · tocar abre en la Agenda · deslizar = Reasignar ───
+function Pendientes({ agenda, agendaDisponible, hoyIso, nav, invalidar, onReasignar }) {
   const { theme } = useTheme();
-  const invalidar = useInvalidarEquipo();
   const [cerrados, setCerrados] = useState(() => new Set());
 
   if (!agendaDisponible) return <Vacio icon={CalendarCheck} color={theme.textMuted} titulo="Agenda no disponible" sub="No se pudieron leer los pendientes en este dispositivo." />;
@@ -144,10 +221,10 @@ function Pendientes({ agenda, agendaDisponible, hoyIso, nav }) {
 
   const cerrar = async (item) => {
     setCerrados((s) => new Set(s).add(item.id));
-    try { await completarItem(item, true); toast.ok('Pendiente cerrado'); invalidar(); }
+    try { await completarItem(item, true); toast.ok('Pendiente cerrado'); invalidar?.(); }
     catch (e) { setCerrados((s) => { const n = new Set(s); n.delete(item.id); return n; }); toast.error(e.message || String(e)); }
   };
-  const abrirEnAgenda = (item) => nav.navegar({ pagina: 'agenda', label: 'Agenda', extra: { itemId: item.id } });
+  const abrirEnAgenda = (item) => nav?.navegar?.({ pagina: 'agenda', label: 'Agenda', extra: { itemId: item.id } });
 
   const vencidos = lista.filter((i) => i.fecha_limite && String(i.fecha_limite).slice(0, 10) < hoyIso);
   const resto = lista.filter((i) => !vencidos.includes(i));
@@ -156,18 +233,20 @@ function Pendientes({ agenda, agendaDisponible, hoyIso, nav }) {
   const bloque = (titulo, items, tone) => items.length > 0 && (
     <ListaAgrupada titulo={titulo} meta={String(items.length)}>
       {items.map((i) => (
-        <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', minHeight: 56, boxSizing: 'border-box' }}>
-          <PalomitaM hecha={false} onClick={() => cerrar(i)} />
-          <div role="button" onClick={() => abrirEnAgenda(i)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-            <div style={{ fontSize: 14.5, fontWeight: 500, letterSpacing: '-0.01em', color: theme.text, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{i.titulo || '—'}</div>
-            <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {[i.cliente_key || null, i.fecha_limite ? `límite ${fechaCorta(i.fecha_limite)}` : 'sin fecha', i.tipo === 'punto' ? 'punto de reunión' : null].filter(Boolean).join(' · ')}
+        <FilaDeslizable key={i.id} acciones={[{ label: 'Reasignar', icon: UserPlus, color: theme.accent, onClick: () => onReasignar?.([i]) }]}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', minHeight: 56, boxSizing: 'border-box', background: theme.surface }}>
+            <PalomitaM hecha={false} onClick={() => cerrar(i)} />
+            <div role="button" onClick={() => abrirEnAgenda(i)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+              <div style={{ fontSize: 14.5, fontWeight: 500, letterSpacing: '-0.01em', color: theme.text, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{i.titulo || '—'}</div>
+              <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {[i.cliente_key || null, i.fecha_limite ? `límite ${fechaCorta(i.fecha_limite)}` : 'sin fecha', i.tipo === 'punto' ? 'punto de reunión' : null].filter(Boolean).join(' · ')}
+              </div>
             </div>
+            {i.prioridad === 'alta' && <Pill tone="red" size="xs" dot>alta</Pill>}
+            {tone && <Pill tone={tone} size="xs">vencido</Pill>}
+            <ChevronRight size={15} style={{ color: theme.textSubtle || theme.textMuted, flexShrink: 0 }} />
           </div>
-          {i.prioridad === 'alta' && <Pill tone="red" size="xs" dot>alta</Pill>}
-          {tone && <Pill tone={tone} size="xs">vencido</Pill>}
-          <ChevronRight size={15} style={{ color: theme.textSubtle || theme.textMuted, flexShrink: 0 }} />
-        </div>
+        </FilaDeslizable>
       ))}
     </ListaAgrupada>
   );
@@ -176,8 +255,8 @@ function Pendientes({ agenda, agendaDisponible, hoyIso, nav }) {
     <>
       {bloque('Vencidos', vencidos, 'red')}
       {bloque('Abiertos', resto, null)}
-      <div style={{ padding: '0 20px', fontSize: 11.5, color: theme.textSubtle || theme.textMuted, display: 'flex', alignItems: 'center', gap: 4 }}>
-        Toca un pendiente para abrirlo en la Agenda <ChevronRight size={13} />
+      <div style={{ padding: '0 20px', fontSize: 11.5, color: theme.textSubtle || theme.textMuted, lineHeight: 1.4 }}>
+        Palomita = hecho · tocar = abrir en la Agenda · deslizar a la izquierda = reasignar a otra persona.
       </div>
     </>
   );

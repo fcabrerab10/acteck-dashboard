@@ -1,7 +1,8 @@
 // Piezas de "Actividad del equipo" en el celular.
 //   · Deslizable: fila que se desliza (izquierda = acción, derecha = abrir) y REGRESA sola (no se colapsa,
 //     a diferencia de FilaGesto de la Agenda, pensada para tareas que desaparecen al cerrarlas).
-//   · FilaPersona: avatar · nombre y puesto · última entrada · pendientes · acciones de la semana.
+//   · FilaPersona (3.88.0): avatar · nombre · ritmo · día armado · plan vs real · vencidos · pill de estado (activo /
+//     hace N min / N d sin entrar). Externos: puesto · cliente que más ve · última entrada.
 //   · Avatar: perfiles.avatar_url si existe; si no, iniciales con su color estable.
 import React, { useRef, useState } from 'react';
 import { Bell, ChevronRight } from 'lucide-react';
@@ -11,7 +12,8 @@ import { EASE, DUR, reduceMotion } from '../../../lib/motion';
 import { relativo } from '../../../lib/format';
 import { AvatarImg } from '../../../lib/avatar';
 import { Pill } from '../../piezas';
-import { fmtHmCorto, plural, textoInactividad, CLIENTE_LABEL } from '../../../modules/interno/equipo/textos.js';
+import { plural, CLIENTE_LABEL } from '../../../modules/interno/equipo/textos.js';
+import { lineaPersona, estadoPersona } from './calculo';
 
 const UMBRAL_MIN = 72;
 
@@ -80,14 +82,15 @@ export function ultimaEntrada(iso, hoyIso) {
   return relativo(iso);
 }
 
-export function FilaPersona({ u, datos, hoyIso, externo = false, onAbrir, recordado }) {
+export function FilaPersona({ u, datos, hoy, hoyIso, externo = false, onAbrir, recordado }) {
   const { theme } = useTheme();
-  const { tele, acc, agenda, inact } = datos || {};
-  const inactTxt = externo ? null : textoInactividad(inact);
+  const { tele, agenda, vencidos = [] } = datos || {};
+  const estado = estadoPersona({ datos, hoy, externo });
   const sub = { fontSize: 11.5, color: theme.textMuted };
+  const nVenc = externo ? null : vencidos.length;
 
   return (
-    <div role="button" onClick={onAbrir} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '11px 12px', width: '100%', boxSizing: 'border-box', textAlign: 'left', background: 'transparent', color: theme.text, fontFamily: TYPO.fontText, cursor: 'pointer' }}>
+    <div role="button" onClick={onAbrir} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', width: '100%', minHeight: 56, boxSizing: 'border-box', textAlign: 'left', background: 'transparent', color: theme.text, fontFamily: TYPO.fontText, cursor: 'pointer' }}>
       <AvatarImg perfil={u} size={38} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -95,28 +98,19 @@ export function FilaPersona({ u, datos, hoyIso, externo = false, onAbrir, record
           {tele?.activoHoy && <span style={{ width: 7, height: 7, borderRadius: 999, background: theme.green, flexShrink: 0 }} />}
         </div>
         <div style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {u.puesto || u.rol || (externo ? 'externo' : '—')} · {ultimaEntrada(tele?.ultimo, hoyIso)}
+          {externo
+            ? [u.puesto || u.rol || 'externo', tele?.clienteTop ? CLIENTE_LABEL[tele.clienteTop] : null, tele?.ultimo ? `entró ${ultimaEntrada(tele.ultimo, hoyIso)}` : 'sin entrar en 28 días'].filter(Boolean).join(' · ')
+            : lineaPersona({ u, datos, hoy })}
         </div>
-
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
-          {inactTxt && <Pill tone={inact.sinEntrar ? 'red' : 'orange'} size="xs" dot>{inactTxt}</Pill>}
-          {!externo && agenda?.vencidos > 0 && <Pill tone="red" size="xs">{plural(agenda.vencidos, 'vencido', 'vencidos')}</Pill>}
-          {!externo && agenda && agenda.vencidos === 0 && agenda.abiertos > 0 && <Pill tone="gray" size="xs">{plural(agenda.abiertos, 'pendiente', 'pendientes')}</Pill>}
-          {externo && tele?.paginasTop?.length > 0 && <Pill tone="gray" size="xs">{tele.paginasTop.length === 1 ? 'usa 1 pantalla' : `usa ${tele.paginasTop.length} pantallas`}</Pill>}
-          {externo && tele?.clienteTop && <Pill tone="blue" size="xs">{CLIENTE_LABEL[tele.clienteTop]}</Pill>}
-          {recordado && <Pill tone="blue" size="xs" dot>recordado hoy</Pill>}
-        </div>
-
-        {!externo && (
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted, whiteSpace: 'nowrap' }}>
-              {acc?.semana ? `${plural(acc.semana, 'acción', 'acciones')} · ` : 'sin acciones · '}{fmtHmCorto(tele?.minutosSemana || 0)}
-            </span>
-            {(acc?.principales || []).map((p) => <Pill key={p.label} tone="gray" size="xs">{p.label} · {p.n}</Pill>)}
-          </div>
+        {!externo && agenda && !agenda.deHoy?.length && !agenda.hechasHoy?.length && agenda.abiertos > 0 && (
+          <div style={{ ...sub, fontSize: 11, color: theme.textSubtle || theme.textMuted }}>{plural(agenda.abiertos, 'pendiente abierto', 'pendientes abiertos')}</div>
         )}
       </div>
-      <ChevronRight size={15} style={{ color: theme.textSubtle || theme.textMuted, flexShrink: 0, marginTop: 12 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+        {nVenc != null && <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: nVenc > 0 ? theme.red : theme.textMuted }}>{nVenc > 0 ? `${nVenc} venc.` : '—'}</span>}
+        <Pill tone={recordado ? 'blue' : estado.tone} size="xs" dot={estado.tone === 'red' || recordado}>{recordado ? 'recordado hoy' : estado.label}</Pill>
+      </div>
+      <ChevronRight size={15} style={{ color: theme.textSubtle || theme.textMuted, flexShrink: 0 }} />
     </div>
   );
 }
