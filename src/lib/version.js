@@ -8,5 +8,12 @@ export function versionLabel() {
   return COMMIT ? `v${APP_VERSION} · ${COMMIT}` : `v${APP_VERSION}`;
 }
 
-// Buster del cache persistido de React Query: cambia con cada build distinto.
+// Identificador del build (versión + commit): etiqueta y telemetría.
 export const BUILD_ID = COMMIT ? `${APP_VERSION}+${COMMIT}` : APP_VERSION;
+
+// Buster del cache persistido de React Query (3.89.0 · 2026-10-06). ANTES era BUILD_ID: cada deploy borraba toda la
+// caché de datos del iPad/celular y todas las pestañas volvían a bajar todo («cada rato carga»). Las llaves de la
+// caché ya llevan la URL con sus columnas, así que un cambio de consulta es una llave nueva por sí solo. Sólo hay que
+// subir esta generación a mano si cambia la FORMA de algo cacheado sin cambiar su URL (p. ej. una vista con las
+// mismas columnas pero otro significado).
+export const CACHE_GEN = 'rq-2026-10-06';

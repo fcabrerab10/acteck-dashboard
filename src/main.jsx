@@ -6,7 +6,7 @@ import './index.css'
 import App from './App.jsx'
 import { registerSW } from 'virtual:pwa-register'
 import { queryClient, createIDBPersister } from './lib/queryClient'
-import { BUILD_ID } from './lib/version'
+import { CACHE_GEN } from './lib/version'
 import { toast } from './components/kit/Toast'
 
 // Aviso de versión nueva (V3). El SW se registra en modo 'prompt' (vite.config.js):
@@ -30,11 +30,23 @@ const updateSW = registerSW({
 })
 // Con registerType 'autoUpdate' el SW nuevo se activa solo; cuando toma el control, esta pestaña sigue con
 // el código viejo. Si nadie la está mirando se recarga sola; si está en primer plano, se avisa con el toast.
+// 3.89.0 (2026-10-06, Fernando en el iPad: «cada rato carga»): recargar la pestaña escondida en cuanto llega un SW
+// nuevo hacía que cada deploy tirara la sesión abierta en otra app; al volver, arranque en frío. Ahora sólo se recarga
+// sola si lleva ≥ 10 min escondida (nadie está a medio trabajo); si no, al volver se avisa con el toast y él decide.
 let recargaPendiente = false
+let escondidaDesde = document.hidden ? Date.now() : null
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { escondidaDesde = Date.now(); return }
+  escondidaDesde = null
+  if (recargaPendiente) toast.info('Ya está instalada la versión nueva del dashboard', { accion: 'Recargar', onAccion: () => window.location.reload(), ms: 0 })
+})
 navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
   if (recargaPendiente) return
   recargaPendiente = true
-  if (document.hidden) { window.location.reload(); return }
+  if (document.hidden) {
+    if (escondidaDesde && Date.now() - escondidaDesde >= 10 * 60 * 1000) window.location.reload()
+    return
+  }
   toast.info('Ya está instalada la versión nueva del dashboard', { accion: 'Recargar', onAccion: () => window.location.reload(), ms: 0 })
 })
 
@@ -113,7 +125,7 @@ createRoot(document.getElementById('root')).render(
         persistOptions={{
           persister,
           maxAge: 7 * 24 * 60 * 60 * 1000, // 1 semana
-          buster: BUILD_ID,                 // invalida cache al cambiar versión/commit
+          buster: CACHE_GEN,                // generación fija: un deploy NO borra la caché de datos (ver version.js)
           dehydrateOptions: {
             // No persistir queries que están fallando
             shouldDehydrateQuery: (q) => q.state.status === 'success',

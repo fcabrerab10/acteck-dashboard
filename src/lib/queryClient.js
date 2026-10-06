@@ -1,5 +1,5 @@
 // QueryClient central + persister IndexedDB.
-// Cache SWR: 5min stale, 30min gc. Persistencia 1 semana en IndexedDB.
+// Cache SWR: 5 min stale, 6 h gc. Persistencia 1 semana en IndexedDB (buster fijo CACHE_GEN, ver version.js).
 import { QueryClient } from '@tanstack/react-query';
 import { get, set, del } from 'idb-keyval';
 
@@ -7,7 +7,7 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000,       // 5 min — SWR
-      gcTime: 30 * 60 * 1000,          // 30 min — evict de memoria
+      gcTime: 6 * 60 * 60 * 1000,      // 6 h (3.89.0; era 30 min: al volver a una pestaña tras media hora todo iba a la red)
       refetchOnWindowFocus: false,
       retry: 2,
     },

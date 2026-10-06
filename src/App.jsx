@@ -323,7 +323,10 @@ export default function App() {
   useEffect(() => {
     // Check existing session
     const listo = (conSesion) => {
-      const espera = Math.max(0, 1100 - (Date.now() - t0Arranque.current));
+      // 3.89.0: en una recarga (versión nueva, iPad que vuelve de otra app) no se esperan los 1.1 s del logo.
+      let recarga = false;
+      try { recarga = performance.getEntriesByType('navigation')[0]?.type === 'reload'; } catch { /* sin API */ }
+      const espera = recarga ? 0 : Math.max(0, 1100 - (Date.now() - t0Arranque.current));
       setTimeout(() => {
         setAuthLoading(false);
         if (conSesion) {

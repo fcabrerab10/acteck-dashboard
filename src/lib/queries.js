@@ -120,9 +120,26 @@ export function orderColFromSelect(select) {
 // una queryKey. Pasa por queryClient.fetchQuery → dedupe de requests
 // concurrentes, staleTime 5 min, gcTime 30 min y persistencia IndexedDB
 // (misma semántica que los hooks useFacturacion/useRoadmap).
-// Si la data está fresca se devuelve sin red; si está stale se refetchea
-// y se espera (nunca se muestra data vieja > 5 min).
+// 3.89.0 (2026-10-06): SWR de verdad. Si hay dato en caché con menos de CACHE_USABLE_MS se devuelve AL INSTANTE y,
+// si ya pasó CACHE_STALE_MS, se refresca en segundo plano para la próxima vez. Antes, pasados 5 min, cada pestaña
+// esperaba a la red y pintaba su silueta otra vez (Fernando en el iPad: «cada rato carga»). Las tablas que la app
+// escribe no pasan por aquí (regla de CLAUDE.md) y, si una lectura cacheada se invalida tras un write
+// (invalidateDataCache), `isInvalidated` obliga a esperar la red.
 const CACHE_STALE_MS = 5 * 60 * 1000;
+const CACHE_USABLE_MS = 12 * 60 * 60 * 1000;
+const CACHE_GC_MS = 12 * 60 * 60 * 1000;
+
+function fetchSWR(queryKey, run) {
+  const st = queryClient.getQueryState(queryKey);
+  const edad = st?.dataUpdatedAt ? Date.now() - st.dataUpdatedAt : Infinity;
+  if (st?.status === 'success' && st.data !== undefined && !st.isInvalidated && edad < CACHE_USABLE_MS) {
+    if (edad > CACHE_STALE_MS && st.fetchStatus !== 'fetching') {
+      queryClient.prefetchQuery({ queryKey, queryFn: run, staleTime: CACHE_STALE_MS, gcTime: CACHE_GC_MS }).catch(() => {});
+    }
+    return Promise.resolve(st.data);
+  }
+  return queryClient.fetchQuery({ queryKey, queryFn: run, staleTime: CACHE_STALE_MS, gcTime: CACHE_GC_MS });
+}
 
 function cacheKeyFromBuilder(q) {
   try {
@@ -167,7 +184,7 @@ async function fetchAll(table, select, extra = (q) => q) {
   const key = cacheKeyFromBuilder(makePage(0, pageSize - 1, false));
   const run = () => fetchPaged(makePage, { pageSize, label: table });
   if (!key) return run();
-  return queryClient.fetchQuery({ queryKey: ['fetchAll', key], queryFn: run, staleTime: CACHE_STALE_MS });
+  return fetchSWR(['fetchAll', key], run);
 }
 
 // Variante para módulos que arman el builder ellos mismos:
@@ -188,7 +205,7 @@ export async function fetchAllQ(qFactory, { pageSize = 5000, orderCol = null, la
   const key = cacheKeyFromBuilder(makePage(0, pageSize - 1, false));
   const run = () => fetchPaged(makePage, { pageSize, label });
   if (!key) return run();
-  return queryClient.fetchQuery({ queryKey: ['fetchAll', key], queryFn: run, staleTime: CACHE_STALE_MS });
+  return fetchSWR(['fetchAll', key], run);
 }
 
 // Cache para lecturas puntuales (no paginadas): .single(), .limit(), .maybeSingle()…
@@ -202,14 +219,10 @@ export async function cachedQuery(builder) {
     if (String(builder.method || 'GET').toUpperCase() === 'GET') key = cacheKeyFromBuilder(builder) + '&' + (builder.url.searchParams.get('limit') || '') + '&' + (builder.url.searchParams.get('offset') || '');
   } catch { key = null; }
   if (!key) return builder;
-  const res = await queryClient.fetchQuery({
-    queryKey: ['q', key],
-    staleTime: CACHE_STALE_MS,
-    queryFn: async () => {
-      const r = await builder;
-      if (r.error) throw r.error;
-      return { data: r.data, count: r.count ?? null, status: r.status, statusText: r.statusText };
-    },
+  const res = await fetchSWR(['q', key], async () => {
+    const r = await builder;
+    if (r.error) throw r.error;
+    return { data: r.data, count: r.count ?? null, status: r.status, statusText: r.statusText };
   });
   return { ...res, error: null };
 }
