@@ -20,7 +20,8 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] Clientes propios (celular): ficha nueva Resumen · Sell In · Sell Out · Marketing · Cobranza para Digitalife, PCEL y Dicotech con las reglas de Fernando (3.84.0–3.84.2; verificada con su sesión el 6-oct).
 
 ## Aprobado, por construir
-- [ ] **Pagos del cliente propio (celular)**: Fernando (6-oct) quiere rebates, apoyos y pagos en su propia pestaña dentro del cliente (no en el Resumen). Mockup primero.
+- [ ] **Pagos del cliente propio (celular)**: Fernando (6-oct) quiere rebates, apoyos y pagos en su propia pestaña dentro del cliente (no en el Resumen). Mockup listo para revisar: artifact f2336912 (pantallas 1 y 1b).
+- [ ] **Cobranza general (celular)**: rehacer con TODA la cartera. Mockup listo para revisar: artifact f2336912 (pantallas 2 y 2b).
 - [ ] Revisión de Fernando (7-oct temprano) de 3.83–3.84: S&OP, Proyectos y forecast, ficha de clientes propios.
 - [ ] ~~Sell Out global (celular)~~, mockup 2b9599a5: hero, 4 tarjetas, gráfica vs año anterior, pay del mix, **tabla de detalle por SKU × 12 m** con Piezas · $, ordenar por cualquier columna y buscador que entiende (chips con lo entendido). Sin cuentas.
 - [ ] Sell In global (celular): mismo esqueleto con cuota, margen y clientes que compraron; tabla por SKU igual. Sin tabla de clientes.
@@ -33,7 +34,6 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 ## Reportado el 5-oct, por atender
 - [ ] S&OP en el celular «ni siquiera me deja verla»: reproducir con la sesión de Fernando y corregir.
-- [ ] Cobranza en el celular: rehacer con TODA la cobranza (no sólo clientes propios), mismo formato estándar; mockup antes.
 
 ## Pendientes de Fernando
 - [ ] Semana de ensambles 31 ago–6 sep 2026 (está en el correo de Alejandro del 7-sep; Google pide verificación para bajarla desde Chrome).
