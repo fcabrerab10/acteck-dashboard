@@ -33,7 +33,9 @@ export function resumenPagos({ pagos = [], anio, mes, hoy = new Date() } = {}) {
   };
 }
 function agrupaTipo(pagos) { const m = new Map(); for (const p of pagos) { const t = tipoCorto(p); m.set(t, N(m.get(t)) + N(p.monto)); } return [...m].sort((a, b) => b[1] - a[1]); }
-export const tipoCorto = (p) => ({ rebate: 'rebate', spiff: 'SPIFF', apoyo_producto: 'apoyos', proteccion_precio: 'protección de precio', marketing: 'marketing', fijo: 'fijos', dinamica: 'dinámica', fondo: 'fondo' }[p.tipo] || p.categoria || p.tipo || 'otros');
+const TIPO_TXT = { rebate: 'rebate', spiff: 'SPIFF', apoyo_producto: 'apoyos', proteccion_precio: 'protección de precio', marketing: 'marketing', fijo: 'fijos', dinamica: 'dinámica', fondo: 'fondo', otro: 'otros' };
+const CAT_TXT = { pagosFijos: 'fijos', pagosVariables: 'variables', promociones: 'apoyos', rebates: 'rebate', spiffs: 'SPIFF', marketing: 'marketing' };
+export const tipoCorto = (p) => TIPO_TXT[p.tipo] || CAT_TXT[p.categoria] || String(p.categoria || p.tipo || 'otros').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 
 /**
  * Cómo va el rebate con la regla del cliente: mensual (Dicotech), trimestral por niveles (PCEL) o por categoría (Digitalife).
