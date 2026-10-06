@@ -19,6 +19,8 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] «Resumen de Clientes» fuera del menú web (3.83.0).
 - [x] Clientes propios (celular): ficha nueva Resumen · Sell In · Sell Out · Marketing · Cobranza para Digitalife, PCEL y Dicotech con las reglas de Fernando (3.84.0–3.84.2; verificada con su sesión el 6-oct).
 
+- [x] Velocidad y «cada rato carga» en el iPad (3.89.0): la caché de datos ya sobrevive a los deploys, las pestañas abren al instante con lo cacheado y refrescan atrás, y un deploy ya no recarga la pestaña que está en otra app.
+
 ## Aprobado, por construir
 - [x] Pagos del cliente propio (celular): pestaña Pagos en la ficha con flujo del mes, rebate según la regla, apoyo por producto, apoyos por costo convenio y reglas editables (% y base) (3.85.0–3.85.1).
 - [x] Cobranza general (celular) rehecha con el formato estándar sobre los tres propios (3.86.0).
