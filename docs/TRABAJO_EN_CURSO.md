@@ -23,7 +23,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] Pagos del cliente propio (celular): pestaña Pagos en la ficha con flujo del mes, rebate según la regla, apoyo por producto, apoyos por costo convenio y reglas editables (% y base) (3.85.0–3.85.1).
 - [x] Cobranza general (celular) rehecha con el formato estándar sobre los tres propios (3.86.0).
 - [ ] **Cartera de TODO el ERP**: la base sólo tiene estados de cuenta de los tres propios; falta una vista de cuentas por cobrar del ERP por el puente (no tocar `bridge/` en el viaje). Cuando exista, Cobranza general la toma sin cambiar de formato.
-- [ ] **Propuestas (celular)**: mockup 792b61a8 aprobado el 6-oct con un cambio: en Revisar, cambiar la lista de precios por SKU y ver los otros precios de ese SKU. Por construir.
+- [x] Propuestas (celular) rehechas: lista estándar, sugeridos en el armador, Revisar con lista por SKU y sus otros precios, WhatsApp · Excel · Enviar (3.87.0).
 - [ ] **Actividad del equipo (celular)**: Fernando pidió rediseñarla; mockup primero.
 - [x] Correos: plantilla del dashboard en todos (vigilante, reservas y arribos pasaban en texto plano) (3.85.2); prueba del vigilante pedida para la corrida de las 07:20.
 - [ ] Revisión de Fernando (7-oct temprano) de 3.83–3.84: S&OP, Proyectos y forecast, ficha de clientes propios.

@@ -27,6 +27,12 @@ import { TituloGrande, Cabecera, HeroM, ListaAgrupada, Fila, BotonGrande, CampoB
 import { useCatalogoBusqueda, colorCliente } from '../datos';
 import { money, int, MONO, N } from '../util';
 import { CampoCantidad } from './SOPExport';
+import RevisarM from './propuestas/RevisarM';
+import { useDrillSkus, useDrillInventario } from '../../modules/comercial/sellout/datos';
+import { useNuestroStock } from './cliente/datos';
+import { sugeridosArmador, lineaSugerido } from './propuestas/calculo';
+import { textoPropuesta } from '../../modules/comercial/propuestas/textos';
+import { compartir, copiar } from '../../lib/whatsapp';
 
 export const QK_PROPUESTAS = ['movil', 'propuestas'];
 export const TONO_ESTADO = { borrador: 'gray', enviada: 'blue', cerrada: 'green' };
@@ -136,8 +142,18 @@ export default function PropuestaEditor({ id, skusIniciales = null, clienteInici
   const skus = useMemo(() => Object.keys(lineas), [lineas]);
   const { data: info } = useSkusPropuesta(skus);
   const { data: sellout } = useSelloutCliente(clienteKey, cargado && modo === 'editar');
+  // Sugeridos del armador (3.87.0): SKUs que el cliente vende en 3 meses cerrados y tiene agotados o con < 30 días en piso,
+  // topados a nuestro disponible (misma regla que sugeridos.js del escritorio, con datos chicos: sell out y stock de la cuenta).
+  const anioHoy = hoy.getFullYear();
+  const { data: soRows = [] } = useDrillSkus(clienteKey, anioHoy, cargado && modo === 'editar');
+  const { data: invCli = [] } = useDrillInventario(clienteKey, cargado && modo === 'editar');
+  const sellout3m = useMemo(() => { const keys = new Set(mesesCerrados().map((m) => `${m.anio}-${m.mes}`)); const m = new Map(); soRows.forEach((r) => { if (keys.has(`${N(r.anio)}-${N(r.mes)}`)) m.set(r.sku, (m.get(r.sku) || 0) + N(r.cantidad)); }); return m; }, [soRows]);
+  const stockCli = useMemo(() => { const m = new Map(); invCli.forEach((r) => { if (r.sku) m.set(r.sku, (m.get(r.sku) || 0) + N(r.stock)); }); return m; }, [invCli]);
+  const descCli = useMemo(() => new Map(invCli.filter((r) => r.sku && r.titulo).map((r) => [r.sku, r.titulo])), [invCli]);
+  const { data: nuestro } = useNuestroStock([...sellout3m.keys()], cargado && modo === 'editar');
   const cli = CLIENTES.find((c) => c.key === clienteKey) || CLIENTES[0];
   const color = colorCliente(clienteKey, theme);
+  const sug = useMemo(() => sugeridosArmador({ sellout3m, stockCliente: stockCli, nuestro: nuestro || new Map(), descripciones: descCli, enLineas: new Set(skus) }), [sellout3m, stockCli, nuestro, descCli, skus]);
 
   const listasDisponibles = useMemo(() => {
     const s = new Set();
@@ -223,6 +239,29 @@ export default function PropuestaEditor({ id, skusIniciales = null, clienteInici
     } finally { setOcupado(false); }
   };
 
+  // Revisar y enviar (3.87.0): Excel comparte el libro sin cambiar el estado; Enviar marca la propuesta como enviada.
+  const exportarExcel = async () => {
+    if (propuestaLista.some((r) => !(r.precio > 0))) { toast.error('Hay líneas sin precio'); return; }
+    setOcupado(true);
+    try {
+      const { blob, filename } = await propuestaExcelBlob({ cliente: cli, propuestaLista, nombre, vigencia: vigencia || vigenciaDeMes(mes) });
+      const r = await compartirArchivo(blob, filename, { titulo: filename, texto: `Propuesta ${cli.label} · ${propuestaLista.length} SKUs · ${money(total)}` });
+      if (!r) { toast.info('Se canceló el envío'); return; }
+      await guardar(estado, { exported_filename: filename }); setExportado(filename);
+      toast.ok(r === 'share' ? 'Excel compartido' : 'Excel descargado');
+    } catch (e) { toast.error(`No se pudo exportar: ${e?.message || e}`); }
+    finally { setOcupado(false); }
+  };
+  const enviar = async () => {
+    if (propuestaLista.some((r) => !(r.precio > 0))) { toast.error('Hay líneas sin precio'); return; }
+    setOcupado(true);
+    try { await guardar(estado === 'cerrada' ? 'cerrada' : 'enviada', { enviada_at: new Date().toISOString() }); setModo('detalle'); toast.ok('Propuesta enviada · se cerrará sola cuando el cliente facture'); }
+    catch (e) { toast.error(`No se pudo enviar: ${e?.message || e}`); }
+    finally { setOcupado(false); }
+  };
+  const textoWa = textoPropuesta({ clienteLabel: cli.label, nombre, anio: Number(mes.slice(0, 4)), mes: Number(mes.slice(5, 7)), lineas: propuestaLista, vigencia: vigencia || vigenciaDeMes(mes) });
+  const porWhatsApp = async () => { const r = await compartir(textoWa, { titulo: `Propuesta ${cli.label}` }); if (r === 'share') toast.ok('Compartido'); else if (r) toast.ok('Texto copiado'); };
+
   if (id && (cargandoRow || !cargado) && !errorRow) {
     return (<><Cabecera onVolver={nav.pop} etiqueta="Propuestas" /><TituloGrande titulo="Propuesta" sub="Cargando…" /><div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={140} r={12} /><Skeleton h={220} r={12} /></div></>);
   }
@@ -251,12 +290,30 @@ export default function PropuestaEditor({ id, skusIniciales = null, clienteInici
     );
   }
 
+  // ── Revisar y enviar ──
+  if (modo === 'revisar') {
+    return (
+      <div style={{ paddingBottom: 24 }}>
+        <Cabecera onVolver={() => setModo('editar')} etiqueta="Armar" />
+        <TituloGrande titulo="Revisar" sub={subTitulo} />
+        <RevisarM cli={cli} nombre={nombre} mes={mes} vigencia={vigencia || vigenciaDeMes(mes)} lineas={propuestaLista} precios={info?.precios || new Map()} inventario={info?.inventario || new Map()} stockCliente={stockCli} texto={textoWa} total={total} piezas={piezas} ocupado={ocupado} soporteShare={soporteShare}
+          onLinea={(sku, cambios) => editar(sku, cambios)} onWhatsApp={porWhatsApp} onExcel={exportarExcel} onEnviar={enviar} onCopiar={async () => { if (await copiar(textoWa)) toast.ok('Texto copiado'); }} />
+      </div>
+    );
+  }
+
   // ── Editor ──
   const tituloVista = id ? (nombre || 'Cierre') : 'Nueva propuesta';
   return (
     <>
       <Cabecera onVolver={nav.pop} etiqueta="Propuestas" derecha={sucio ? <Pill tone="orange" size="xs">Sin guardar</Pill> : null} />
       <TituloGrande titulo={tituloVista} sub={subTitulo} />
+      {propuestaLista.length > 0 && (
+        <div style={{ margin: '0 16px 10px', padding: '12px 14px', borderRadius: 12, background: theme.surfaceInverse || theme.surfaceDark, color: theme.textOnInverse || theme.textOnDark, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+          <div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.65 }}>Mi propuesta</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums' }}>{money(total)}</div></div>
+          <div style={{ fontSize: 11.5, opacity: 0.75, textAlign: 'right', lineHeight: 1.4 }}>{int(propuestaLista.length)} SKUs · {int(piezas)} pz<br />{listaShort(lista)}{piezas > 0 ? ` · ${money(total / piezas)} prom.` : ''}</div>
+        </div>
+      )}
 
       <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Segmented size="md" value={clienteKey} onChange={cambiarCliente} style={{ width: '100%', display: 'flex' }} options={CLIENTES.map((c) => ({ id: c.key, label: c.label }))} />
@@ -274,6 +331,15 @@ export default function PropuestaEditor({ id, skusIniciales = null, clienteInici
         <BotonGrande icon={Plus} onClick={() => setBuscando(true)}>{propuestaLista.length ? 'Agregar otro SKU' : 'Agregar SKU'}</BotonGrande>
       </div>
 
+      {sug.total > 0 && (
+        <ListaAgrupada titulo="Sugeridos" meta={`${sug.total} · ${sug.aceptables} con stock`} style={{ marginTop: 14 }}
+          accion={sug.aceptables > 0 ? <Pill tone="blue" onClick={() => { sug.lista.filter((x) => !x.sinStock).forEach((x) => { agregar({ sku: x.sku, descripcion: x.descripcion }); editar(x.sku, { piezas: x.piezas }); }); toast.ok(`${sug.lista.filter((x) => !x.sinStock).length} sugeridos aceptados`); }} style={{ cursor: 'pointer' }}>Aceptar todos</Pill> : null}
+          pie={`Vende en ${cli.label} en los 3 meses cerrados y está agotado o con menos de 30 días en su piso; piezas = lo que le falta para un mes, topado a lo que tenemos (múltiplos de 5).`}>
+          {sug.lista.map((x) => <Fila key={x.sku} titulo={<span style={{ fontFamily: TYPO.fontDisplay }}>{x.sku}{x.descripcion ? <span style={{ fontWeight: 400, color: theme.textMuted }}> {x.descripcion}</span> : null}</span>} sub={lineaSugerido(x, cli.label)} valor={x.sinStock ? '—' : `${int(x.piezas)} pz`} chevron={false}
+            pill={x.sinStock ? { tone: 'red', label: x.arribo?.fecha ? `llega ${x.arribo.fecha}` : 'sin stock' } : null}
+            trailing={x.sinStock ? null : <button type="button" onClick={() => { agregar({ sku: x.sku, descripcion: x.descripcion }); editar(x.sku, { piezas: x.piezas }); }} style={{ flexShrink: 0, height: 30, padding: '0 10px', borderRadius: 999, border: 0, background: `${theme.accent}1A`, color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Aceptar</button>} />)}
+        </ListaAgrupada>
+      )}
       {propuestaLista.length === 0 && <Vacio icon={ClipboardList} color={theme.textMuted} titulo="Sin líneas todavía" sub="Busca un SKU: la línea toma las piezas del sell-out promedio de 3 meses y el precio de la lista elegida; puedes editar ambos." style={{ padding: '24px 20px 8px' }} />}
       {propuestaLista.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '16px 28px 6px' }}>
@@ -303,14 +369,8 @@ export default function PropuestaEditor({ id, skusIniciales = null, clienteInici
         </div>
       ))}
 
-      {propuestaLista.length > 0 && (
-        <div style={{ margin: '6px 16px 0', padding: '12px 14px', borderRadius: 12, background: theme.surfaceInverse || theme.surfaceDark, color: theme.textOnInverse || theme.textOnDark, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>{int(propuestaLista.length)} SKUs · {int(piezas)} pz{piezas > 0 ? ` · ${money(total / piezas)} prom.` : ''}</div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums' }}>{money(total)}</div>
-        </div>
-      )}
       <div style={{ padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <BotonGrande primario icon={Share2} disabled={ocupado || !propuestaLista.length} onClick={exportar}>{ocupado ? 'Generando…' : soporteShare ? 'Exportar y enviar' : 'Exportar Excel'}</BotonGrande>
+        <BotonGrande primario icon={Share2} disabled={ocupado || !propuestaLista.length} onClick={() => setModo('revisar')}>Revisar y enviar</BotonGrande>
         <BotonGrande icon={Save} disabled={ocupado || !propuestaLista.length} onClick={onGuardar}>Guardar borrador</BotonGrande>
         <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, textAlign: 'center', lineHeight: 1.4 }}>Se exportará como <b>Propuesta {cli.label} {(nombre || 'Cierre').trim()} {MES_FULL[hoy.getMonth()]} {hoy.getFullYear()}.xlsx</b> con vigencia al {vigenciaTexto(vigencia)}, el mismo Excel que la computadora. Al compartirlo la propuesta queda como enviada; cuando el cliente facture se cierra sola.</div>
       </div>
