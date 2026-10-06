@@ -271,6 +271,7 @@ https://acteck-dashboard.vercel.app/  → Administración Interna → Actividad 
         to: [TO_FERNANDO, TO_KAROLINA].join(','),
         subject: asunto,
         text: cuerpo,
+        html: htmlDesdeTexto({ titulo: asunto.replace(/^\S+\s/, ''), texto: cuerpo }),
       });
       enviados.push({ para: p.nombre, msg_id: info.messageId, dia });
     } catch (e) {
@@ -411,6 +412,7 @@ async function taskForecastAvisos() {
       to: [TO_FERNANDO, TO_KAROLINA].join(','),
       subject,
       text: texto,
+      html: htmlDesdeTexto({ titulo: subject.replace(/^\S+\s/, ''), texto }),
       html,
     });
     // Marcar todos los avisos como enviados
@@ -1804,7 +1806,29 @@ function htmlCorreoAgenda({ saludo, titulo, fecha, resumen = [], cuerpo, botones
     <tr><td style="padding:12px 4px 0;font:11.5px ${F};color:#86868B">Este correo lo arma el dashboard cada mañana y cada tarde con tu Agenda. Cambia qué recibes en ⚙️ del centro de notificaciones.</td></tr>
   </table></td></tr></table></body></html>`;
 }
-function htmlCorreo({ titulo, intro, cuerpo }) {
+// Texto plano → plantilla del dashboard (2026-10-06, Fernando: «quiero que se aplique en todos los correos»):
+// el saludo («Fernando,») queda como intro, las líneas «· …» se vuelven viñetas y el resto párrafos.
+export function htmlDesdeTexto({ titulo, texto, pie }) {
+  const lineas = String(texto || '').replace(/\r/g, '').split('\n');
+  let intro = '';
+  if (/^[A-ZÁÉÍÓÚÑ][^\n]{0,40},\s*$/.test(lineas[0] || '')) intro = lineas.shift().trim();
+  const bloques = []; let lista = null; let parrafo = [];
+  const cierraP = () => { if (parrafo.length) { bloques.push(`<p style="margin:0 0 10px;font:14px/1.5 -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#1D1D1F">${escapeHtml(parrafo.join(' '))}</p>`); parrafo = []; } };
+  const cierraL = () => { if (lista) { bloques.push(`<ul style="margin:0 0 10px;padding-left:18px;font:14px/1.5 -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#1D1D1F">${lista.map((x) => `<li style="margin:2px 0">${escapeHtml(x)}</li>`).join('')}</ul>`); lista = null; } };
+  for (const raw of lineas) {
+    const l = raw.trim();
+    if (!l) { cierraP(); cierraL(); continue; }
+    if (/^—/.test(l)) { cierraP(); cierraL(); continue; } // firma «— Dashboard Acteck»: la pone la plantilla
+    if (/^[·•\-]\s+/.test(l)) { cierraP(); (lista ||= []).push(l.replace(/^[·•\-]\s+/, '')); continue; }
+    if (/:$/.test(l)) { cierraP(); cierraL(); bloques.push(`<div style="font:600 11px -apple-system,BlinkMacSystemFont,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6E6E73;margin:14px 0 4px">${escapeHtml(l.slice(0, -1))}</div>`); continue; }
+    cierraL(); parrafo.push(l);
+  }
+  cierraP(); cierraL();
+  const cuerpo = `<div style="background:#FFF;border-radius:12px;padding:16px 18px">${bloques.join('')}</div>`;
+  return htmlCorreo({ titulo, intro, cuerpo, pie });
+}
+
+function htmlCorreo({ titulo, intro, cuerpo, pie }) {
   return `<!doctype html><html><body style="margin:0;background:#F5F5F7;padding:24px 12px">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
   <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%">
@@ -1814,7 +1838,7 @@ function htmlCorreo({ titulo, intro, cuerpo }) {
     </td></tr>
     <tr><td>${cuerpo}</td></tr>
     <tr><td style="padding:10px 4px 0;font:11.5px -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#86868B">
-      Abre el <a href="${APP_URL}" style="color:#007AFF;text-decoration:none">dashboard</a> y toca la campana para resolver o posponer. Cambia qué recibes en ⚙️ del centro de notificaciones.
+      ${pie != null ? pie : `Abre el <a href="${APP_URL}" style="color:#007AFF;text-decoration:none">dashboard</a> y toca la campana para resolver o posponer. Cambia qué recibes en ⚙️ del centro de notificaciones.`}
     </td></tr>
   </table></td></tr></table></body></html>`;
 }
@@ -1979,7 +2003,7 @@ async function taskPuenteVigilante({ dryRun = false } = {}) {
         ? `Fernando,\n\nEl puente de la Mac mini tiene datos atrasados (${cdmx.toLocaleString('es-MX')} CDMX):\n\n${problemas.map((p) => '· ' + p).join('\n')}\n${detalleErrores.length ? '\nÚltimo error registrado:\n' + detalleErrores.map((p) => '· ' + p).join('\n') + '\n' : ''}\nQué revisar: Configuración → Actualización de datos → Cargas automáticas (botón "Pedir corrida").\nSi el latido no llega, la Mac mini está apagada o sin red. Si sólo falla Master Embarques, en la Mac mini: Scheduled → detener la corrida colgada → Run now, o configurar google-auth.mjs (docs/SYNC_SQL_BRIDGE.md).\n\nEste aviso se repite cada 6 h mientras siga el problema.\n— Dashboard Acteck`
         : `Fernando,\n\nTodas las fuentes del puente volvieron a cargar (${cdmx.toLocaleString('es-MX')} CDMX).\n\n— Dashboard Acteck`;
       try {
-        const info = await transporter.sendMail({ from: `"Dashboard Acteck" <${SMTP_USER}>`, to: TO, subject: asunto, text: cuerpo });
+        const info = await transporter.sendMail({ from: `"Dashboard Acteck" <${SMTP_USER}>`, to: TO, subject: asunto, text: cuerpo, html: htmlDesdeTexto({ titulo: asunto.replace(/^\S+\s/, ''), texto: cuerpo, pie: `Vigilante del puente · <a href="${APP_URL}" style="color:#007AFF;text-decoration:none">Configuración › Actualización de datos</a> para pedir una corrida.` }) });
         enviado = { to: TO, asunto, msg_id: info.messageId };
       } catch (e) { enviado = { error: e.message }; }
     }
