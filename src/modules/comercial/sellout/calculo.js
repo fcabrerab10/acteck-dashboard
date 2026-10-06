@@ -266,6 +266,11 @@ export function construirFilas({ cuentas = [], mensual = [], dias = [], anio, me
       cuota,
       pctCuota,
       faltaCuota: cuota == null ? null : cuota - N(sellIn),
+      // Ticket promedio (2026-10-06, Fernando: «el ticket promedio de cada cliente que comparte sell out»): monto del mes
+      // entre facturas distintas de la fuente (mv_sellout_dim_cuenta_mes.facturas). PCH no trae folio y los propios sin
+      // detalle de factura (Digitalife, PCEL) quedan en null → «—».
+      facturas: fila.facturas == null ? null : N(fila.facturas),
+      ticket: !sinFuente && N(fila.facturas) > 0 ? a.importe / N(fila.facturas) : null,
       sucursales: fila.sucursales == null ? null : N(fila.sucursales),
       // Estados distintos que reporta la fuente ese mes; 0 = la fuente no trae estado (CT, Ingram, Dicotech…).
       estados: fila.estados == null ? null : N(fila.estados),

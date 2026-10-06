@@ -55,7 +55,10 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
 
   const mesActualKey = `${MES_ACTUAL.anio}-${String(MES_ACTUAL.mes).padStart(2, '0')}`;
   const delMes = propuestas.filter((p) => `${p.anio}-${String(p.mes).padStart(2, '0')}` === mesActualKey);
-  const conEf = propuestas.map((p) => efectividades.get(p.id)).filter((e) => e && e.pct != null);
+  // Conversión ⌀ (2026-10-06, misma regla que el celular): sólo propuestas con la ventana de efectividad COMPLETA,
+  // enviadas en los últimos 3 meses, ponderadas por el monto propuesto (una enviada ayer no «convierte 0 %»).
+  const lim3 = new Date(); lim3.setMonth(lim3.getMonth() - 3); lim3.setDate(1);
+  const conEf = propuestas.map((p) => ({ p, e: efectividades.get(p.id) })).filter((x) => x.e && x.e.pct != null && x.e.completa && x.e.montoProp > 0 && Date.parse(x.p.enviadaAt || 0) >= lim3.getTime()).map((x) => x.e);
   const convProm = conEf.length ? conEf.reduce((s, e) => s + e.montoProp, 0) > 0
     ? (conEf.reduce((s, e) => s + Math.min(e.montoFact, e.montoProp), 0) / conEf.reduce((s, e) => s + e.montoProp, 0)) * 100 : null : null;
   const totalMes = delMes.reduce((s, p) => s + (Number(p.resumen?.total) || 0), 0);
@@ -69,7 +72,7 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
         stats={[
           { k: 'Este mes', v: int(delMes.length), sub: `${moneyCompact(totalMes)} propuestos` },
           { k: 'Enviadas', v: int(porEstado.enviada + porEstado.cerrada), sub: `${int(porEstado.cerrada)} cerradas` },
-          { k: 'Convertido ⌀', v: convProm != null ? pct(convProm, 0) : '—', sub: conEf.length ? `${conEf.length} con facturación` : 'sin enviadas aún', color: convProm != null ? (convProm >= 60 ? (theme.green || '#34C759') : (theme.orange || '#FF9500')) : undefined },
+          { k: 'Convertido ⌀', v: convProm != null ? pct(convProm, 0) : '—', sub: conEf.length ? `${conEf.length} con ventana completa · 3 meses` : 'sin ventanas completas aún', color: convProm != null ? (convProm >= 60 ? (theme.green || '#34C759') : (theme.orange || '#FF9500')) : undefined },
         ]}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
           <Boton icon={Upload} onClick={() => importRef.current?.click()} title="Importa un Excel de propuesta (SKU, Descripción, Piezas, Precio) como borrador">Importar Excel</Boton>

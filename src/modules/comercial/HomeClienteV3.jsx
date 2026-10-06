@@ -15,6 +15,7 @@ import { configDe, MESES, qDe, META_INV_DIAS } from './home/config';
 import { useHomeData } from './home/useHomeData';
 import { calcular, serieMensual, splitPor, topSkus } from './home/calc';
 import { GraficaSiSo, SplitTabla, TopSkusTabla, InventarioPanel, CobranzaPanel, PendientesMinutas, MinutasCliente, MarketingPanel, Secundario } from './home/bloques';
+import QueLeFalta from './home/QueLeFalta';
 
 const signo = (v, d = 0) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneDe = (v) => (v == null ? 'gray' : v >= 0 ? 'green' : 'red');
@@ -53,6 +54,7 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
     siso: <GraficaSiSo key="siso" serie={serie} rango={rango} setRango={setRango} anio={anio} />,
     split: <SplitTabla key="split" filas={split} cfg={cfg} rango={rangoSplit} setRango={setRangoSplit} />,
     top_skus: <TopSkusTabla key="top" top={top} onNavegar={ir('estrategia')} />,
+    que_le_falta: <QueLeFalta key="falta" clienteKey={clienteKey} nombre={cfg.nombre} anio={anio} mes={mesActual} onNavegar={ir('propuestas')} />,
     inventario: <InventarioPanel key="inv" r={r} onNavegar={ir('estrategia')} />,
     cobranza: <CobranzaPanel key="cob" r={r} onNavegar={ir('cartera')} />,
     pendientes: <PendientesMinutas key="pen" d={data} />,   // legacy (tablas viejas), fuera de BLOQUES_BASE

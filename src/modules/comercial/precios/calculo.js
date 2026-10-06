@@ -3,12 +3,13 @@
 // Elasticidad / simulador / precio bajo por SKU: ./elasticidad.js (sin imports, con test en scripts/test-precios-elasticidad.mjs).
 import { LISTAS, MAX_COLUMNAS_LISTA, ordenarListas, listaDeCliente, normalizar, tokens as tokenizar, coincide, N, mesesCerrados } from './textos';
 import { hoyISO } from '../../../lib/format.js';
+import { coincideSku, interpretarBusqueda } from '../../../lib/buscarSku.js';
 import { precioBajoPorCliente as _precioBajoPorCliente } from './elasticidad';
 
 // ── Filtros ──
 // f = { q, tokens, marca:Set, categoria:Set, roadmap:Set, listas:Set (columnas visibles; vacío = todas), conPromo, precioBajo, sinPrecio }
 export const FILTROS_VACIOS = () => ({ q: '', tokens: [], marca: new Set(), categoria: new Set(), roadmap: new Set(), listas: new Set(), conPromo: false, precioBajo: false, sinPrecio: false });
-export const conBusqueda = (f, q) => ({ ...f, q, tokens: tokenizar(q) });
+export const conBusqueda = (f, q, categorias = []) => ({ ...f, q, tokens: tokenizar(q), interp: interpretarBusqueda(q, { categorias }) });
 export const nActivos = (f) => f.marca.size + f.categoria.size + f.roadmap.size + f.listas.size + (f.conPromo ? 1 : 0) + (f.precioBajo ? 1 : 0) + (f.sinPrecio ? 1 : 0);
 
 /**
@@ -28,7 +29,7 @@ export const listasVisibles = (f, listas = LISTAS) => (f.listas.size ? listas.fi
 const GRUPOS = ['busqueda', 'marca', 'categoria', 'roadmap', 'conPromo', 'precioBajo', 'sinPrecio'];
 export function pasaGrupo(r, f, g) {
   switch (g) {
-    case 'busqueda': return f.tokens.length === 0 || coincide(r.indice, f.tokens);
+    case 'busqueda': return f.interp ? (f.interp.vacio || coincideSku(r, f.interp, r.indice)) : (f.tokens.length === 0 || coincide(r.indice, f.tokens));
     case 'marca': return f.marca.size === 0 || f.marca.has(r.marca || '');
     case 'categoria': return f.categoria.size === 0 || f.categoria.has(r.categoria || '');
     case 'roadmap': return f.roadmap.size === 0 || f.roadmap.has(r.rdmp || '');

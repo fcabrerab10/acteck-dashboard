@@ -9,6 +9,7 @@ import { Panel, Pill } from '../../../components/kit';
 import { AvatarImg } from '../../../lib/avatar';
 import { hairline } from '../../../components/perfil/comun';
 import { fmtHmCorto, plural, textoInactividad, CLIENTE_LABEL, MESES_CORTO } from './textos.js';
+import { lineaPersona, estadoPersona } from '../../../movil/pestanas/equipo/calculo';
 
 function Cifra({ k, v, sub, color }) {
   const { theme } = useTheme();
@@ -43,13 +44,15 @@ export default function TarjetaPersona({ u, datos, agendaDisponible, mesActual, 
             <div style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {u.puesto || u.rol}{externo ? ' · externo' : ''} · {tele?.ultimo ? `última ${relativo(tele.ultimo)}` : 'sin actividad en 28 días'}
             </div>
+            {/* 2026-10-06 (del celular): ritmo · día armado · plan vs real */}
+            {!externo && <div style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: theme.text }}>{lineaPersona({ u, datos })}</div>}
           </div>
           <ChevronRight size={14} style={{ color: theme.textSubtle || theme.textMuted, flexShrink: 0 }} />
         </div>
 
         {/* Pills de estado */}
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8, minHeight: 18 }}>
-          {tele?.activoHoy ? <Pill tone="green" size="xs" dot>activo hoy</Pill> : null}
+          {(() => { const e = estadoPersona({ datos, externo }); return <Pill tone={e.tone} size="xs" dot={e.tone !== 'gray'}>{e.label}</Pill>; })()}
           {inactTxt && <Pill tone={inact.sinEntrar ? 'red' : 'orange'} size="xs" dot>{inactTxt}</Pill>}
           {evalPendiente && <Pill tone="orange" size="xs">evaluar {MESES_CORTO[evalPendiente.mes - 1]}</Pill>}
           {u.se_evalua && !evalPendiente && <Pill tone="blue" size="xs">se evalúa</Pill>}

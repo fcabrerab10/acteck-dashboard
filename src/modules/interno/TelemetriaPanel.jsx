@@ -9,7 +9,8 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { relativo } from '../../lib/format';
 import SinAcceso from '../../components/SinAcceso';
-import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando } from '../../components/kit';
+import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando, GraficaLineas } from '../../components/kit';
+import { serieActividadDias } from '../../movil/pestanas/equipo/calculo';
 import { useDatosEquipo, useUmbralInactividad, useIndicesPorUsuario } from './equipo/datos.js';
 import { resumenTelemetria, resumenAcciones, cumplimientoAgenda, inactividad, evaluacionPendiente, pulsoEquipo, ordenarPersonas, UMBRALES_INACTIVIDAD, inicioSemana } from './equipo/calculo.js';
 import { fraseHero, fmtHm, plural, MESES, MESES_CORTO } from './equipo/textos.js';
@@ -97,6 +98,12 @@ export default function TelemetriaPanel() {
         <Boton icon={RefreshCw} onClick={() => refetch()}>Actualizar</Boton>
       </div>
 
+      {/* 2026-10-06 (del celular): actividad por día de las últimas 4 semanas. */}
+      <Panel titulo="Actividad por día · 4 semanas" meta="personas distintas que entraron y horas con el dashboard abierto · sólo internos" padding="8px 12px">
+        <GraficaLineas compacto alto={170} datos={serieActividadDias(eventos, { hoy, soloUsuarios: new Set(internos.map((u) => u.user_id)) }).map((d) => ({ x: d.lunes ? `L ${d.dia.slice(8)}` : d.dia.slice(8).replace(/^0/, ''), personas: d.personas, horas: d.horas, label: d.label }))}
+          series={[{ key: 'personas', label: 'Personas activas', tipo: 'principal', formato: (v) => `${v}` }, { key: 'horas', label: 'Horas activas', tipo: 'linea', eje: 'der', formato: (v) => `${v} h` }]} formato={(v) => `${v}`} />
+      </Panel>
+
       <Panel titulo="Acteck · equipo interno" meta={`${plural(internos.length, 'persona')} · ${pulso.activosHoy} hoy`}
         acciones={!agenda?.disponible ? <Pill tone="gray" size="xs">Agenda no disponible</Pill> : null}>
         <div style={GRID} data-stagger>
@@ -123,7 +130,7 @@ export default function TelemetriaPanel() {
       )}
 
       <HojaPersona u={sel} datos={sel ? porUsuario.get(sel.user_id) : null} abierto={!!sel && hojaAbierta} onClose={() => setHojaAbierta(false)} registrosHoy={datos.registrosHoy || []}
-        agendaDisponible={!!agenda?.disponible} evaluaciones={evaluaciones} />
+        agendaDisponible={!!agenda?.disponible} evaluaciones={evaluaciones} internos={internos} />
     </div>
   );
 }

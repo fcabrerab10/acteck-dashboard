@@ -26,6 +26,12 @@ import ResumenSecundario from './inventario/ResumenSecundario';
 import ExcelClienteHoja from './inventario/ExcelClienteHoja';
 import ProximosArribos from './inventario/ProximosArribos';
 import HistoricoPanel, { fotoHace } from './inventario/HistoricoPanel';
+import BuscadorEntiende from './sellin/BuscadorEntiende';
+import StockCierrePanel from './inventario/StockCierrePanel';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAll } from '../../lib/queries';
+import { cambioMesPasado } from '../../movil/pestanas/inventario/calculo';
+import { interpretarBusqueda } from '../../lib/buscarSku';
 import CompartirHoja from './inventario/CompartirHoja';
 import ApartadoPanel from './inventario/ApartadoPanel';
 import FueraDeVenta from './inventario/FueraDeVenta';
@@ -55,6 +61,9 @@ function InventarioGlobalPantalla({ sensible }) {
   // por SKU en piezas) sigue calculándose sobre el detalle, ya filtrado con la MISMA
   // regla (`en_inv_actual`), así que la suma cuadra al peso.
   const med = useMemo(() => inventarioDesdeVista(medidas), [medidas]);
+  // 2026-10-06 (del celular): cambio contra el cierre del mes pasado (v_inventario_cv_mes: inventario al cierre por mes).
+  const { data: cvMes = [] } = useQuery({ queryKey: ['inventario', 'cv_mes'], staleTime: 5 * 60 * 1000, queryFn: () => fetchAll('v_inventario_cv_mes', 'anio,mes,fecha_cierre,inv_cierre_mes,inv_cierre_mes_piezas', (q) => q.gte('anio', new Date().getFullYear() - 1)).catch(() => []) });
+  const cambioMes = useMemo(() => cambioMesPasado({ medidas, meses: cvMes, sensible }), [medidas, cvMes, sensible]);
 
   // Alcance
   const [soloComerciales, setSoloComerciales] = useState(true);
@@ -70,7 +79,8 @@ function InventarioGlobalPantalla({ sensible }) {
   const [compartirSkus, setCompartirSkus] = useState(null);
   const [excelCliente, setExcelCliente] = useState(null);   // 'canasta' | 'tabla' | null
 
-  const f = useMemo(() => ({ ...filtros, tokens: tokensBusqueda(busqueda) }), [filtros, busqueda]);
+  const categorias = useMemo(() => [...new Set(filas.map((r) => r.categoria).filter(Boolean))], [filas]);
+  const f = useMemo(() => ({ ...filtros, tokens: tokensBusqueda(busqueda), interp: interpretarBusqueda(busqueda, { categorias }) }), [filtros, busqueda, categorias]);
 
   // ── Filas efectivas según alcance ──
   // `en_inv_actual` = regla de [Inv Actual] resuelta en Postgres. Antes esto era
@@ -425,6 +435,10 @@ function InventarioGlobalPantalla({ sensible }) {
             ? (sensible ? `${fmtCompact(resumen.valorSobre)} a costo · ${resumen.valor > 0 ? ((resumen.valorSobre / resumen.valor) * 100).toFixed(0) : 0}% del valor` : `${fmtInt(resumen.piezasSobre)} pz · ${resumen.piezas > 0 ? ((resumen.piezasSobre / resumen.piezas) * 100).toFixed(0) : 0}% de las piezas`)
             : 'sin SKUs con exceso de cobertura'}
           onClick={() => soloEstado('Sobre-stock')} style={kpiActivo('Sobre-stock')} />
+        <KpiCard eyebrow={`Cambio vs cierre de ${cambioMes.mesLabel}`} badge={cambioMes.valor == null ? { tone: 'gray', l: 'sin cierre' } : { tone: cambioMes.valor > 0 ? 'orange' : 'green', l: cambioMes.valor > 0 ? 'creció' : 'bajó' }}
+          big={cambioMes.valor == null ? '—' : `${cambioMes.valor > 0 ? '+' : '−'}${sensible ? fmtCompact(Math.abs(cambioMes.valor)) : fmtInt(Math.abs(cambioMes.valor))}`} bigSmall={cambioMes.pct == null ? '' : `${cambioMes.pct > 0 ? '+' : ''}${cambioMes.pct.toFixed(1)} %`}
+          bigColor={cambioMes.valor == null ? theme.textMuted : cambioMes.valor > 0 ? theme.orange : theme.green}
+          sub={cambioMes.fechaCierre ? `Inv Actual de hoy contra la foto del ${fmtFechaCorta(cambioMes.fechaCierre)}` : 'aún no hay foto del cierre del mes pasado'} />
         <KpiCard eyebrow="Lead time" badge={{ tone: 'gray', l: `${fmtInt(resumen.nLt)} SKUs` }}
           big={resumen.leadTime != null ? fmtDias(resumen.leadTime) : '—'} bigSmall="promedio"
           sub={resumen.leadTime != null ? `${fmtInt(resumen.ltMin)}–${fmtInt(resumen.ltMax)} d de emisión a CEDIS · embarques concluidos` : 'sin historial de embarques'} />
@@ -447,14 +461,7 @@ function InventarioGlobalPantalla({ sensible }) {
             activos={nFiltrosActivos}
             resumen={`${fmtInt(filasTabla.length)} de ${fmtInt(skuRows.length)} SKUs`}
             acciones={<Boton icon={FileSpreadsheet} onClick={() => setExcelCliente('tabla')} title="Excel de disponibilidad para mandar a un cliente, con los filtros de ahora">Excel para cliente</Boton>}
-            buscador={(
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${busqueda ? theme.accent : theme.border}`, borderRadius: 999, height: 28, flex: 1, minWidth: 200, maxWidth: 340 }}>
-                <Search size={12} style={{ color: theme.textMuted, flexShrink: 0 }} />
-                <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar: palabras en cualquier orden, sin acentos (mouse inalambrico negro, parte del SKU…)"
-                  style={{ border: 0, outline: 0, background: 'transparent', fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, flex: 1, minWidth: 0 }} />
-                {busqueda && <X size={12} style={{ color: theme.textMuted, cursor: 'pointer', flexShrink: 0 }} onClick={() => setBusqueda('')} />}
-              </div>
-            )} />
+            buscador={<BuscadorEntiende value={busqueda} onChange={setBusqueda} categorias={categorias} resultados={busqueda ? `${fmtInt(filasTabla.length)} SKUs` : null} placeholder={'Buscar: AC-9431, monitor 27", balam, mouse inalámbrico…'} width={400} />} />
         </div>
 
         <TablaCompacta
@@ -487,6 +494,7 @@ function InventarioGlobalPantalla({ sensible }) {
 
       {/* Tendencia (histórico diario) */}
       <HistoricoPanel historico={historico} demandaDia={resumen.demDia} sensible={sensible} />
+      <StockCierrePanel sensible={sensible} />
 
       {/* Secundario */}
       <ResumenSecundario porCedis={porCedis} porTipo={porTipo} kpis={kpis} insights={resumen} cedisFiltro={cedisFiltro} onCedis={setCedisFiltro} sensible={sensible} />

@@ -185,6 +185,7 @@ export default function SellOutGlobal() {
     { key: 'ytd', label: 'YTD', sort: true, fmt: fmtMoney, render: (f) => (f.sinFuente ? '—' : fmtMoney(f.ytd)) },
     { key: 'sellIn', label: `SI ${mesLbl}`, sort: true, fmt: money, render: (f) => (f.cuenta === 'directo' ? <span style={{ color: theme.textMuted }}>=</span> : money(f.sellIn)) },
     { key: 'soSi', label: 'SO/SI', width: 60, sort: true, render: (f) => (f.soSi == null ? '—' : <span title={f.soSi > 999 ? `${Math.round(f.soSi).toLocaleString('es-MX')} % — el sell in del mes apenas empieza` : undefined} style={{ color: f.soSi < 60 ? theme.orange : f.soSi > 999 ? theme.textMuted : theme.text }}>{f.soSi > 999 ? '> 999 %' : fmtPct(f.soSi)}</span>), renderTotal: (v) => fmtPct(v) },
+    { key: 'ticket', label: 'Ticket ⌀', width: 76, sort: true, render: (f) => (f.ticket == null ? <span style={{ color: theme.textSubtle || theme.textMuted }} title="La fuente no trae folio de factura">—</span> : <span title={`${money(f.importe)} entre ${Number(f.facturas).toLocaleString('es-MX')} facturas`}>{money(f.ticket)}</span>) },
     // Cuota de sell in del mes (RevkoBi por cliente del ERP): ≥ 100 % verde, ≥ 85 % azul, el resto naranja.
     { key: 'pctCuota', label: 'Cuota', width: 62, sort: true, render: (f) => (f.pctCuota == null
       ? <span style={{ color: theme.textMuted }} title="Este cliente no tiene cuota cargada">—</span>
@@ -223,6 +224,7 @@ export default function SellOutGlobal() {
         { label: `Sell out ${mesLbl} ${anio - 1}`, key: 'importePrev', tipo: 'moneda', ancho: 15 },
         { label: 'Δ YoY', key: 'yoy', tipo: 'pct', ancho: 9 },
         { label: `YTD ${anio}`, key: 'ytd', tipo: 'moneda', ancho: 15 }, { label: `YTD ${anio - 1}`, key: 'ytdPrev', tipo: 'moneda', ancho: 15 },
+        { label: 'Facturas', key: 'facturas', tipo: 'numero', ancho: 10 }, { label: 'Ticket promedio', key: 'ticket', tipo: 'moneda', ancho: 14 },
         { label: `Sell in ${mesLbl}`, key: 'sellIn', tipo: 'moneda', ancho: 15 }, { label: 'Sell out / sell in', key: 'soSi', tipo: 'pct', ancho: 11 },
         { label: `Cuota sell in ${mesLbl}`, key: 'cuota', tipo: 'moneda', ancho: 15 }, { label: '% de cuota', key: 'pctCuota', tipo: 'pct', ancho: 10 },
         { label: 'Inventario en el cliente', key: 'invValor', tipo: 'moneda', ancho: 16 }, { label: 'Piezas inv.', key: 'invPiezas', tipo: 'numero', ancho: 11 },

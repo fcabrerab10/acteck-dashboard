@@ -17,7 +17,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
 import { useNav } from '../../nav';
 import { KpiM, KpiGrid, Skeleton, Vacio, CampoBusqueda, Segmented, BotonGrande, TituloSeccionM, ListaAgrupada, Fila, HojaM, MiniTrazo, GraficaScrub, LeyendaScrub, Pill } from '../../piezas';
-import { moneyCompact, int, deltaPct, MESES, N, pct } from '../../util';
+import { money, moneyCompact, int, deltaPct, MESES, N, pct } from '../../util';
 import TablaAnual from '../sellout/TablaAnual';
 import { catalogoSkus } from '../SellInCliente';
 import FichaProducto from '../../FichaProducto';
@@ -276,6 +276,7 @@ export function SellOutVista({ cuenta, nombre, fila, bloques, nota, anio, mes, d
       </div>
       <KpiGrid data-entrada-kpis>
         <KpiM eyebrow={`Sell out · ${mesL.toLowerCase()}`} big={f(unidad === 'piezas' ? fila.cantidad : fila.importe)} sub={<>{fila.yoy != null ? <><span style={{ color: fila.yoy >= 0 ? theme.green : theme.red }}>{deltaPct(fila.yoy)}</span> vs {anio - 1}</> : `sin ${anio - 1}`}{fila.soSi != null ? ` · SO/SI ${(fila.soSi / 100).toFixed(2)}` : ''}</>} />
+        {fila.ticket != null && <KpiM eyebrow="Ticket promedio" big={money(fila.ticket)} sub={`${fmtPz(fila.facturas)} facturas en ${mesL.toLowerCase()}`} />}
         <KpiM eyebrow={`Inventario en ${nombre.split(' ')[0]}`} big={fila.invPiezas != null ? (fila.invSemanas != null ? `${Math.round(fila.invSemanas)} sem` : `${fmtPz(fila.invPiezas)} pz`) : '—'} sub={fila.invPiezas != null ? `${fmtPz(fila.invPiezas)} pz${fila.invValor ? ` · ${moneyCompact(fila.invValor)}` : ''}` : 'no reporta inventario'} />
       </KpiGrid>
       {nota && <div style={{ margin: '10px 16px 0', padding: '10px 12px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, fontSize: 11.5, color: theme.textMuted, lineHeight: 1.45 }}>{nota}</div>}

@@ -3,6 +3,7 @@
 // Los conteos de cada grupo se calculan con TODOS los demás filtros aplicados (facetas):
 // "si además marco esto, quedan N SKUs".
 import { coincideTokens, etiquetaCobertura } from './constantes';
+import { coincideSku } from '../../../lib/buscarSku.js';
 
 export const FILTROS_VACIOS = () => ({ tokens: [], marca: new Set(), familia: new Set(), roadmap: new Set(), estado: new Set(), soloStock: false, soloTransito: false });
 
@@ -28,7 +29,7 @@ export const claveRoadmap = (r) => String(r.rdmp || '').trim().toUpperCase();
 // ¿Pasa el grupo `g` del filtro `f`?
 export function pasaGrupo(r, f, g) {
   switch (g) {
-    case 'busqueda': return f.tokens.length === 0 || coincideTokens(r.indice, f.tokens);
+    case 'busqueda': return f.interp ? (f.interp.vacio || coincideSku(r, f.interp, r.indice)) : (f.tokens.length === 0 || coincideTokens(r.indice, f.tokens));
     case 'marca': return f.marca.size === 0 || f.marca.has(claveMarca(r));
     case 'familia': return f.familia.size === 0 || f.familia.has(claveFamilia(r));
     case 'roadmap': return f.roadmap.size === 0 || f.roadmap.has(claveRoadmap(r));

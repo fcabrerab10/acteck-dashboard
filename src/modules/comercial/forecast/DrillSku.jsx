@@ -10,6 +10,7 @@ import { Pill, HeatCell, TablaCompacta, Cargando, GraficaLineas } from '../../..
 import { roadmapTone } from '../sellin/textos';
 import { fmtInt, fmtDias, fmtCompact, tonoCobertura, etiquetaCobertura, MONO } from '../inventario/constantes';
 import { useQuienLoCompra } from '../inventario/compartir';
+import { porQue } from './porQue';
 
 const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const fmtFechaC = (iso) => {
@@ -225,6 +226,12 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
           <MiniKpi label="Días inv." value={cob == null ? '∞' : Math.round(cob)} u={cob == null ? '' : 'd'} sub={cob == null ? 'sin demanda' : cob < 30 ? 'crítica' : cob < 60 ? 'tensa' : 'holgura sana'} color={cobColor} borderLeft />
           <MiniKpi label="Sugerido" value={r.sugerido > 0 ? fmtInt(r.sugerido) : '—'} u={r.sugerido > 0 ? 'pz' : ''} sub={r.sugerido > 0 ? `${r.contenedoresSugeridos || 1} cnt` : 'sin brecha'} color={r.sugerido > 0 ? theme.orange : null} borderLeft dim={r.sugerido <= 0} />
         </div>
+      </div>
+
+      {/* 2026-10-06 (del celular · Producto 360 · Abasto): el sugerido explicado en palabras. */}
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '8px 12px', fontSize: 12, lineHeight: 1.5, color: theme.text }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: theme.textMuted, marginRight: 8 }}>{r.sugerido > 0 ? `Por qué ${fmtInt(r.sugerido)} pz` : 'Cómo se calcula'}</span>
+        {porQue(r)}
       </div>
 
       {/* Simulador */}

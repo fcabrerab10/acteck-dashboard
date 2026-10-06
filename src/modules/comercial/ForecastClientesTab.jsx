@@ -48,6 +48,7 @@ import TransitoTimeline from './forecast/TransitoTimeline';
 import TiemposProveedores from './forecast/TiemposProveedores';
 import Reuniones from './forecast/reuniones/Reuniones';
 import AgregarLineaModal from './forecast/AgregarLineaModal';
+import MisClientesPanel from './forecast/MisClientesPanel';
 import { guardarSnapshotMensual, esPerfilInterno } from './forecast/snapshot';
 
 // El sugerido siempre se calcula sobre 3 meses (regla fija de la fórmula, Fase 4).
@@ -450,6 +451,9 @@ function ForecastPantalla({ perfil, sensible }) {
             </Boton>
           ) : null} />
       </Panel>
+
+      {/* 2026-10-06 (del celular): el forecast de los propios convertido en compra. */}
+      <MisClientesPanel data={data} rows={rowsAll} sensible={sensible} puedeEditar={puedeEditarSol} onAgregarSolicitud={(sku, piezas) => { const row = rowsAll.find((r) => r.sku === sku); if (!row) { toast.info(`${sku} no está en el universo del S&OP`); return; } const ppc = Number(row.piezasPorContenedor) || 0; setSkuParaAgregar({ ...row, sugerido: piezas, contenedoresSugeridos: ppc > 0 ? Math.ceil(piezas / ppc) : 0 }); }} />
 
       <Panel titulo="Detalle por SKU" meta={`${fmtInt(rowsOrdenados.length)} SKUs · click en la fila para el drill · píldora verde = en export${sortCol ? '' : ' · orden del Reporte'}`}
         acciones={<ExportMenu titulo="S&OP" subtitulo={`Detalle por SKU · horizonte ${HORIZONTE} meses`} excel={excelTabla} pdf={{ ref: rootRef }} deshabilitado={!rowsOrdenados.length} />}

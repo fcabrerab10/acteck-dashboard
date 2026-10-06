@@ -12,7 +12,8 @@ import { Hero, KpiCard, Panel, Cargando, Segmented } from '../../components/kit'
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { fecha as fmtFecha } from '../../lib/format';
-import Buscador from './sellin/Buscador';
+import BuscadorEntiende from './sellin/BuscadorEntiende';
+import CalculadoraPanel from './precios/CalculadoraPanel';
 import Filtros from './sellin/Filtros';
 import TablaPrecios from './precios/TablaPrecios';
 import PanelPrecioBajo from './precios/PanelPrecioBajo';
@@ -47,6 +48,8 @@ function Pantalla({ sensible }) {
   const listasTodas = useMemo(() => listasDeDatos(datos?.precios), [datos]);
   const listaMargen = prefLista && listasTodas.includes(prefLista) ? prefLista : (listasTodas.includes('Mayoreo AAA') ? 'Mayoreo AAA' : listasTodas[0] || 'Mayoreo AAA');
   const todas = useMemo(() => (datos ? construirFilas({ roadmap, ...datos, listas: listasTodas }) : []), [roadmap, datos, listasTodas]);
+  const categorias = useMemo(() => [...new Set(todas.map((r) => r.categoria).filter(Boolean))], [todas]);
+  const filasPorSku = useMemo(() => new Map(todas.map((r) => [r.sku, r])), [todas]);
   const filas = useMemo(() => ordenar(todas.filter((r) => pasaTodos(r, f, null)), orden, { listaMargen, miPrecio }), [todas, f, orden, listaMargen, miPrecio]);
   const facetas = useMemo(() => calcFacetas(todas, f, listasTodas), [todas, f, listasTodas]);
   const kpi = useMemo(() => resumen(filas, { ...periodo, listaMargen }), [filas, periodo.anio, periodo.mes, listaMargen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -125,13 +128,17 @@ function Pantalla({ sensible }) {
           sub={`de ${fmtInt(filas.length)} · falta precio en al menos una de las ${listasTodas.length} listas`} />
       </div>
 
+      {/* Calculadora de precio (2026-10-06): la del celular, con la misma propuesta en curso. */}
+      <CalculadoraPanel catalogo={roadmap} filasPorSku={filasPorSku} sensible={sensible} perfil={perfil}
+        onNavegar={(d) => window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: d }))} />
+
       <Panel titulo="Buscar y filtrar" meta={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs · ${listas.length} de ${listasTodas.length} listas en la tabla${listasTodas.length > listas.length ? ' (usa el filtro "Listas" para ver las demás; el drill y el Excel las llevan todas)' : ''}${orden ? ' · ordenado por columna' : ''}`}
         acciones={<ExportMenu titulo="Lista de Precios" subtitulo={`${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} />}>
         <Filtros grupos={grupos} toggles={toggles} activos={activos} onToggle={toggleSet} onToggleFlag={toggleFlag}
           onLimpiar={() => setF((p) => ({ ...FILTROS_VACIOS(), q: p.q, tokens: p.tokens }))}
           resumen={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs`}
-          buscador={<Buscador value={f.q} onChange={(q) => setF((p) => conBusqueda(p, q))} resultados={f.q ? `${fmtInt(filas.length)} SKUs` : null} width={340}
-            placeholder="Buscar: mouse inalámbrico negro, AC-93, teclado balam, RMI…" />} />
+          buscador={<BuscadorEntiende value={f.q} onChange={(q) => setF((p) => conBusqueda(p, q, categorias))} resultados={f.q ? `${fmtInt(filas.length)} SKUs` : null} categorias={categorias} width={400}
+            placeholder={'Buscar: AC-9431, monitor 27", balam, mouse inalámbrico…'} />} />
       </Panel>
 
       {sensible && listasTodas.length > 0 && (

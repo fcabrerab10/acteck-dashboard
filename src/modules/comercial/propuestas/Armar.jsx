@@ -10,7 +10,8 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Hero, Panel, Pill, Boton, TablaCompacta } from '../../../components/kit';
 import { money, moneyCompact, int, fechaCorta } from '../../../lib/format';
-import Buscador from '../sellin/Buscador';
+import BuscadorEntiende from '../sellin/BuscadorEntiende';
+import { interpretarBusqueda } from '../../../lib/buscarSku';
 import Filtros from '../sellin/Filtros';
 import { roadmapTone } from '../sellin/textos';
 import { MES_ACTUAL, MES_LABEL, MES_FULL, clienteColor, listaShort } from './constantes';
@@ -64,7 +65,8 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
   const sugeridos = useMemo(() => calcularSugeridos(skus, { activo: !!(contexto?.fuentes?.sellout && contexto?.fuentes?.invCliente) }), [skus, contexto]);
   const esSugeridoPendiente = (r) => sugeridos.has(r.sku) && !sugeridos.get(r.sku).sinStock && !(r.sku in propuesta);
 
-  const filtro = useMemo(() => ({ ...f, tokens: aTokens(busqueda) }), [f, busqueda]);
+  const categorias = useMemo(() => [...new Set(skus.map((r) => r.categoria || r.familia).filter(Boolean))], [skus]);
+  const filtro = useMemo(() => ({ ...f, tokens: aTokens(busqueda), interp: interpretarBusqueda(busqueda, { categorias }) }), [f, busqueda, categorias]);
   const facetas = useMemo(() => calcFacetas(skus, filtro), [skus, filtro]);
   const filtrados = useMemo(() => {
     const arr = skus.filter((r) => pasaTodos(r, filtro));
@@ -263,7 +265,7 @@ export default function Armar({ cliente, contexto, skus, propuesta, setPropuesta
       <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: apilar ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 320px', gap: 10, alignItems: 'start' }}>
         <div ref={catalogoRef} style={{ minWidth: 0 }}>
         <Panel padding="0" titulo="Catálogo" meta={`${int(filtrados.length)} de ${int(skus.length)} SKUs · ${propuestaLista.length} seleccionados`}
-          acciones={<Buscador value={busqueda} onChange={setBusqueda} resultados={int(filtrados.length)} placeholder="Buscar: mouse inalámbrico, AC-93, balam, RMI…" width={300} />}>
+          acciones={<BuscadorEntiende value={busqueda} onChange={setBusqueda} resultados={int(filtrados.length)} categorias={categorias} placeholder={'Buscar: AC-93, monitor 27", balam, mouse inalámbrico…'} width={380} />}>
           <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <Filtros grupos={grupos} toggles={toggles} onToggle={toggleGrupo} onToggleFlag={toggleFlag} onLimpiar={limpiar} activos={nActivos(f) + (busqueda ? 1 : 0)} />

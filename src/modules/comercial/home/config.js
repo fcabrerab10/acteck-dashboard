@@ -19,7 +19,7 @@ const SUCURSALES_DICOTECH = {
 // Orden estándar de bloques (Panel) debajo de los 4 KpiCard. El secundario va plegado.
 // 'minutas' (Agenda V4, 2026-09-21) sustituye al viejo 'pendientes', que leía las tablas
 // `pendientes`/`minutas` ya migradas a agenda_* y por eso mostraba datos congelados.
-const BLOQUES_BASE = ['siso', 'split', 'top_skus', 'inventario', 'cobranza', 'minutas', 'marketing'];
+const BLOQUES_BASE = ['siso', 'split', 'que_le_falta', 'top_skus', 'inventario', 'cobranza', 'minutas', 'marketing'];   // que_le_falta: 2026-10-06, del celular
 const SECUNDARIO_BASE = ['proyeccion', 'sugerido'];
 
 export const HOME_CONFIG = {

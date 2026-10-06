@@ -109,6 +109,14 @@ export default function ResumenSellOut({ cuenta, anio, mes, corteDia, compacto =
         )}
       </Caja>
 
+      <Caja titulo="Ticket promedio">
+        {fila.ticket != null ? (
+          <Cifra v={fmtMoney(fila.ticket)} sub={`${fmtInt(fila.facturas)} facturas en ${MESES[mes - 1].toLowerCase()}`} />
+        ) : (
+          <Cifra v="—" sub="esta fuente no trae folio de factura" color={theme.textMuted} />
+        )}
+      </Caja>
+
       <Caja titulo="Sell out vs sell in">
         <Cifra v={fila.soSi == null ? '—' : fmtPct(fila.soSi)}
           sub={fila.sellIn == null || fila.sellIn <= 0 ? 'sin sell in en el mes' : `sell in ${MESES[mes - 1].toLowerCase()} ${fmtMoney(fila.sellIn)}`}

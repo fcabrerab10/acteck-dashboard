@@ -5,7 +5,11 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { usePerfil } from '../../../lib/perfilContext';
 import { fechaCorta, relativo } from '../../../lib/format';
-import { Panel, Pill, Segmented, TablaCompacta } from '../../../components/kit';
+import { Panel, Pill, Segmented, TablaCompacta, Boton, toast } from '../../../components/kit';
+import { MessageCircle, UserPlus, X } from 'lucide-react';
+import { actualizarItem } from '../../agenda5/base/datos';
+import { datosSuDia } from './SuDia';
+import { urlWhatsApp, textoMensaje } from '../../../movil/pestanas/equipo/calculo';
 import { HojaLateral, hairline, suaveBg } from '../../../components/perfil/comun';
 import { AvatarImg } from '../../../lib/avatar';
 import { isoDia, sumarDias, inicioSemana } from './calculo.js';
@@ -14,7 +18,7 @@ import SuDia from './SuDia';
 import { useDetalleMes, useInvalidarEquipo } from './datos.js';
 import Evaluacion from './Evaluacion.jsx';
 
-export default function HojaPersona({ u, datos, abierto, onClose, agendaDisponible, evaluaciones, registrosHoy = [] }) {
+export default function HojaPersona({ u, datos, abierto, onClose, agendaDisponible, evaluaciones, registrosHoy = [], internos = [] }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const hoy = new Date();
@@ -30,8 +34,27 @@ export default function HojaPersona({ u, datos, abierto, onClose, agendaDisponib
   }, []);
   const detalle = useDetalleMes(u?.user_id, mesRef.anio, mesRef.mes, abierto && !!u?.se_evalua);
 
+  const [reasignando, setReasignando] = useState(false);
   if (!u) return null;
   const inactTxt = textoInactividad(inact);
+  const hoyIso = isoDia(hoy);
+  const vencidos = (agenda?.listaAbiertos || []).filter((i) => i.fecha_limite && String(i.fecha_limite).slice(0, 10) < hoyIso);
+  // 2026-10-06 (del celular): mensaje por WhatsApp con sus vencidos y lo de hoy; con perfiles.telefono abre su chat directo.
+  const mandarMensaje = () => {
+    const sd = datosSuDia({ u, agenda, registrosHoy });
+    const texto = textoMensaje({ u, vencidos, deHoy: sd.deHoy, hoy });
+    const url = urlWhatsApp(u.telefono, texto) || `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank', 'noopener');
+  };
+  const reasignarA = async (destino) => {
+    setReasignando(false);
+    if (!vencidos.length || !destino) return;
+    try {
+      for (const it of vencidos) await actualizarItem(it.id, { responsables: [destino.user_id] }, { prevResponsables: it.responsables || [] });
+      toast.ok(`${plural(vencidos.length, 'pendiente')} ahora de ${(destino.nombre || destino.email).split(' ')[0]}`);
+      invalidar();
+    } catch (e) { toast.error(`No se pudo reasignar: ${e.message || e}`); }
+  };
   const opciones = [{ id: 'semana', label: 'Semana' }, { id: 'acciones', label: '4 semanas', badge: acc?.total || 0 }];
   if (u.se_evalua) opciones.push({ id: 'evaluacion', label: 'Evaluación' });
 
@@ -42,6 +65,20 @@ export default function HojaPersona({ u, datos, abierto, onClose, agendaDisponib
       acciones={inactTxt ? <Pill tone={inact.sinEntrar ? 'red' : 'orange'} dot>{inactTxt}</Pill> : tele?.activoHoy ? <Pill tone="green" dot>activo hoy</Pill> : null}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
         <Segmented options={opciones} value={vista} onChange={setVista} style={{ display: 'flex' }} />
+        {u.tipo !== 'externo' && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Boton primario icon={MessageCircle} onClick={mandarMensaje} title={u.telefono ? `WhatsApp a ${u.telefono}` : 'Sin celular en su perfil: abre WhatsApp para que elijas el contacto'}>{u.telefono ? 'WhatsApp' : 'Mandar mensaje'}</Boton>
+            {!reasignando && <Boton icon={UserPlus} disabled={!vencidos.length} onClick={() => setReasignando(true)}>Reasignar vencidos{vencidos.length ? ` (${vencidos.length})` : ''}</Boton>}
+            {reasignando && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5, color: theme.textMuted }}>¿A quién?</span>
+                {internos.filter((p) => p.user_id !== u.user_id).map((p) => <Boton key={p.user_id} onClick={() => reasignarA(p)}>{(p.nombre || p.email).split(' ')[0]}</Boton>)}
+                <Boton icon={X} onClick={() => setReasignando(false)} />
+              </span>
+            )}
+            {!u.telefono && <span style={{ fontSize: 10.5, color: theme.textSubtle || theme.textMuted }}>Sin celular en su perfil (Administración › Editar datos).</span>}
+          </div>
+        )}
 
         {vista === 'semana' && agendaDisponible && <Panel titulo="Su día" meta="Mi ritmo · hoy"><SuDia u={u} agenda={agenda} registrosHoy={registrosHoy} /></Panel>}
         {vista === 'semana' && <SeccionSemana tele={tele} acc={acc} agenda={agenda} agendaDisponible={agendaDisponible} hoy={hoy} />}

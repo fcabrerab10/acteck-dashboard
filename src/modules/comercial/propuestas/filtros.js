@@ -2,6 +2,7 @@
 // f = { tokens: [], marca: Set, familia: Set, roadmap: Set, soloStock, soloSellout, soloSpiff }
 // Cada fila del catálogo trae `indice` (texto normalizado sin acentos: sku · descripción · marca · familia · roadmap).
 import { normalizar } from '../sellin/textos.js';
+import { coincideSku } from '../../../lib/buscarSku.js';
 
 // Búsqueda tolerante (2026-09-24, Fernando: «un buscador bien hecho… que no tenga temas con espacios o
 // caracteres»): sin acentos, minúsculas, cualquier signo (- / + , ( ) · : ; " ') cuenta como espacio y los
@@ -24,7 +25,7 @@ export const claveRoadmap = (r) => String(r.rdmp || '').trim().toUpperCase();
 
 export function pasaGrupo(r, f, g) {
   switch (g) {
-    case 'busqueda': return f.tokens.length === 0 || coincide(r.indice, f.tokens);
+    case 'busqueda': return f.interp ? (f.interp.vacio || coincideSku(r, f.interp, r.indice)) : (f.tokens.length === 0 || coincide(r.indice, f.tokens));
     case 'marca': return f.marca.size === 0 || f.marca.has(claveMarca(r));
     case 'familia': return f.familia.size === 0 || f.familia.has(claveFamilia(r));
     case 'roadmap': return f.roadmap.size === 0 || f.roadmap.has(claveRoadmap(r));
