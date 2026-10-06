@@ -31,6 +31,8 @@ const { destino } = await vite.ssrLoadModule('/src/movil/rutas.js');
 const pc = await vite.ssrLoadModule('/src/movil/pestanas/cliente/pagosCalc.js');
 const { PagosPropioVista } = await vite.ssrLoadModule('/src/movil/pestanas/cliente/PagosPropio.jsx');
 const { REGLAS_DEFAULT } = await vite.ssrLoadModule('/src/modules/comercial/pagosv3/reglas.js');
+const { CobranzaGlobalVista, textoCobranza } = await vite.ssrLoadModule('/src/movil/pestanas/cobranza/CobranzaGlobalM.jsx');
+const cob = await vite.ssrLoadModule('/src/modules/comercial/cobranza/calculo.js');
 
 const qc = new QueryClient();
 const nav = { modo: 'barra', perfil: { user_id: 'u-f', es_super_admin: true }, push() {}, pop() {}, navegar() {}, agregarSku() {} };
@@ -148,4 +150,17 @@ test('Pagos del cliente propio: resumen, rebate por regla, apoyos y SSR (uso int
   assert.match(html, /Por pagar · oct/); assert.match(html, /Rebate · Q4/); assert.match(html, /Apoyos por producto/); assert.match(html, /Fondo/); assert.match(html, /Flujo del mes/); assert.match(html, /Solicitado/);
   assert.match(html, /Rebate Q3 2026/); assert.match(html, /Solicitar/); assert.match(html, /＋ Apoyo por producto/); assert.match(html, /Apoyos por SKU · costo convenio/); assert.match(html, /Registrar/); assert.match(html, /Reglas de pago/); assert.match(html, /Pagado por mes/);
   assert.equal(destino({ pagina: 'pagos', clienteKey: 'digitalife' }).key, 'cliente-digitalife');
+});
+
+test('Cobranza general (celular): consolidado de los tres con el formato estándar', () => {
+  const cortes = (k, s0, v0) => [{ id: `${k}-2`, fecha_corte: '2026-10-11', saldo_actual: s0, saldo_vencido: v0, dso: 48, tipo_cambio: 17 }, { id: `${k}-1`, fecha_corte: '2026-10-04', saldo_actual: s0 * 0.9, saldo_vencido: v0 + 10000, dso: 50 }];
+  const det = [{ referencia: 'F-1', fecha_emision: '2026-08-01', vencimiento: '2026-09-01', saldo_actual: 140000 }, { referencia: 'F-2', fecha_emision: '2026-09-20', vencimiento: '2026-10-15', saldo_actual: 640000 }];
+  const cls = [cob.resumirCliente('digitalife', cortes('d', 5000000, 140000), det, { plazo_dias_credito: 90, linea_credito_mxn_pagare: 9000000 }), cob.resumirCliente('pcel', cortes('p', 5100000, 210000), det, null), cob.resumirCliente('dicotech', [], [], null)];
+  const t = cob.consolidar(cls);
+  const html = render(CobranzaGlobalVista, { t, cls, onCliente() {}, onCompartir() {} });
+  assert.ok(!/NaN|undefined|\[object Object\]/.test(html));
+  assert.match(html, /Corte 11 oct · 2 clientes/); assert.match(html, /Saldo/); assert.match(html, /Vencido/); assert.match(html, /DSO/); assert.match(html, /Vence esta semana/);
+  assert.match(html, /Aging del vencido/); assert.match(html, /\+90 d/); assert.match(html, /Saldo y vencido por corte/); assert.match(html, /Quién debe/); assert.match(html, /Digitalife/); assert.match(html, /sin estado de cuenta/);
+  assert.match(html, /Facturas vencidas/); assert.match(html, /F-1/); assert.match(html, /Compartir resumen/);
+  assert.match(textoCobranza(t, cls), /Cartera \$10\.1M · vencido \$350K/);
 });
