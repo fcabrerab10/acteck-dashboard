@@ -6,7 +6,7 @@
 //   promedio) → 4 KpiM: Valor del inventario actual · Cambio contra el mes pasado · Llega este mes / viene en total ·
 //   Vueltas de inventario del año → GraficaScrub 12 meses (inventario al cierre vs venta promedio 3 m; tooltip con los
 //   días de inventario del mes) → PayM Categoría · Marca · Almacén → Detalle por SKU × 12 meses (stock al cierre, Piezas · $,
-//   DetalleSkuAnual) → agotados con demanda plegados (hasta 10) con «Ver en S&OP». Tocar un SKU → FichaProducto.
+//   DetalleSkuAnual) → agotados con demanda plegados (hasta 10) con «Ver en S&OP». Tocar un SKU → Producto 360 (cara Inventario).
 // Sin permiso sensible todo va en piezas (ni valor, ni costo, ni CV en dinero).
 // Datos: ./datos.js (8 consultas chicas) · agregación SKU × almacén = inventario/agregar.js (la de la web) · POs =
 // inventario/arribos.js#agruparPorPO · lecturas puras = ./calculo.js. `InventarioMVista` es pura: la renderiza
@@ -28,7 +28,7 @@ import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Vaci
 import { MONO, deltaPct } from '../../util';
 import DetalleSkuAnual from '../sellout/DetalleSkuAnual';
 import { columnasVentana, categoriasDe } from '../sellout/skuAnual';
-import FichaProducto from '../../FichaProducto';
+import Producto360 from '../producto/Producto360';
 import { useInventarioEmpresa } from './datos';
 import { resumenInventarioM, demandaDesdePivot, fmtDinero, fmtPz } from './calculo';
 
@@ -152,7 +152,7 @@ export default function InventarioM() {
   if (d.error) return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Inventario" sub={sub} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudo cargar el inventario" sub={d.error.message} /></>);
   if (d.loading || !r) return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Inventario" sub="Cargando…" /><Cargando pantalla="movilInventario" /></>);
 
-  const verSku = (sku) => { nav.agregarSku?.(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const verSku = (sku) => nav.push(<Producto360 sku={sku} cara="inventario" />, `producto-${sku}`); // Producto 360 (2026-10-05)
   const verSop = () => nav.navegar?.({ pagina: 'forecastClientes' });
 
   return (

@@ -39,7 +39,7 @@ export default function Producto360({ sku, cara: caraInicial = 'sellout' }) {
   const r = useMemo(() => {
     if (!d) return null;
     const nombresCuenta = Object.fromEntries(d.cuentas.map((c) => [c.cuenta, c.nombre]));
-    const desplaza = quienLoDesplaza(d.sellout, { anio, mes, inventario: d.invCuentas, nombres: nombresCuenta });
+    const desplaza = quienLoDesplaza(d.sellout.map((x) => ({ cuenta: x.cuenta, anio: x.anio, mes: x.mes, piezas: x.cantidad, importe: x.importe })), { anio, mes, inventario: d.invCuentas, nombres: nombresCuenta });
     const compra = quienLoCompra(d.sellin.map((x) => ({ cliente: x.cliente, cliente_nombre: x.cliente_nombre, anio: x.anio, mes: x.mes, piezas: x.piezas_venta_neta, monto: x.fact_neta })), { anio, mes });
     const serie = serieSiSo(d.sellin.map((x) => ({ anio: x.anio, mes: x.mes, piezas: x.piezas_venta_neta, monto: x.fact_neta })), d.sellout.map((x) => ({ anio: x.anio, mes: x.mes, piezas: x.cantidad, monto: x.importe })), { anio, mes, campoSi: unidad === 'piezas' ? 'piezas' : 'monto', campoSo: unidad === 'piezas' ? 'piezas' : 'monto' });
     const mesK = `${anio}-${String(mes).padStart(2, '0')}`;

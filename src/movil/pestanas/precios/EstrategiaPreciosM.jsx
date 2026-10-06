@@ -57,7 +57,7 @@ export function PreciosVista({ r, sensible, catalogo, filasPorSku, costoDe, clie
   return (
     <>
       <HeroM eyebrow={`Estrategia de precios · ${r.mesUsado.label}`} frase={r.frase}
-        sub={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>{r.cambios.conPrecio ? `${int(r.cambios.conPrecio)} SKUs con precio` : 'Sin precios cargados'}{r.cambios.promos ? ` · ${int(r.cambios.promos)} con promo` : ''}<FrescuraPill pantalla="estrategiaPrecios" inverso /></span>} />
+        sub={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>{r.cambios.promos ? `${int(r.cambios.promos)} con promo este mes` : 'Calculadora de margen y descuento'}<FrescuraPill pantalla="estrategiaPrecios" inverso /></span>} />
       <KpiGrid style={{ marginTop: 10 }}>
         {sensible
           ? <KpiM eyebrow={`Margen ${listaLbl(r.margen.lista)}`} big={fmtPct(r.margen.pct)} bigColor={r.margen.pct == null ? undefined : r.margen.pct < r.margen.minimo ? theme.orange : theme.green} sub={r.margen.pct == null ? 'sin venta para ponderar' : `ponderado por venta · ${int(r.margen.bajoMinimo)} bajo el mínimo`} />
