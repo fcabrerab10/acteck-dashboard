@@ -74,7 +74,17 @@ export function resumenSellOut({ cuentas = [], mensual = [], dias = [], skuAnio 
   const sinFuente = new Set(filas.filter((f) => f.sinFuente).map((f) => f.cuenta));
   const sellIn = mensual.reduce((s, r) => (enMes(r) && !sinFuente.has(r.cuenta) ? s + N(r.sell_in) : s), 0);
   const cantidad = modo === 'mes' ? tot.cantidad : mensual.reduce((s, r) => (enMes(r) ? s + N(r.cantidad) : s), 0);
-  const soSi = sellIn > 0 ? (importe / sellIn) * 100 : null;
+  // SO/SI: sólo cuentas con sell out Y sell in en el período; los primeros días del mes en curso se usa el último mes
+  // cerrado (si no, $1.1M de sell out contra $3K de sell in daba «430») (2026-10-05).
+  const pocoMes = enCurso && hoy.getDate() < 10 && modo === 'mes';
+  const [sa, sm] = pocoMes ? (mesU === 1 ? [anioU - 1, 12] : [anioU, mesU - 1]) : [anioU, mesU];
+  const mesesSoSi = modo === 'mes' ? [sm] : mesesPeriodo;
+  let soNum = 0, siDen = 0;
+  const porCuentaSo = new Map();
+  mensual.forEach((r) => { if (N(r.anio) !== sa || !mesesSoSi.includes(N(r.mes)) || sinFuente.has(r.cuenta)) return; const o = porCuentaSo.get(r.cuenta) || { so: 0, si: 0 }; o.so += N(r.importe); o.si += N(r.sell_in); porCuentaSo.set(r.cuenta, o); });
+  porCuentaSo.forEach((o) => { if (o.so > 0 && o.si > 0) { soNum += o.so; siDen += o.si; } });
+  const soSi = siDen > 0 ? (soNum / siDen) * 100 : null;
+  const soSiMes = pocoMes ? sm : null;
   const cuentasConSellOut = conFuente.filter((f) => (modo === 'mes' ? f.importe : f.ytd) > 0).length;
 
   // Inventario en cuentas: última foto (construirFilas ya la trae) y semanas al ritmo de los 3 meses cerrados.
@@ -105,9 +115,11 @@ export function resumenSellOut({ cuentas = [], mensual = [], dias = [], skuAnio 
   const rd = new Map(roadmap.map((r) => [String(r.sku || '').toUpperCase(), r]));
   const marcaMap = new Map(), catMap = new Map();
   const activos = new Set();
+  // SKUs activos y mix: los primeros días del mes en curso se miden sobre el último mes cerrado (mismo criterio que SO/SI).
+  const mesesAct = pocoMes ? [sm] : mesesPeriodo;
   for (const r of skuAnio) {
-    if (N(r.anio) !== anioU) continue;
-    const v = sumaMeses(r.monto, mesesPeriodo), pz = sumaMeses(r.piezas, mesesPeriodo);
+    if (N(r.anio) !== sa) continue;
+    const v = sumaMeses(r.monto, mesesAct), pz = sumaMeses(r.piezas, mesesAct);
     if (!(v > 0) && !(pz > 0)) continue;
     const k = String(r.sku || '').toUpperCase();
     activos.add(k);
@@ -132,7 +144,7 @@ export function resumenSellOut({ cuentas = [], mensual = [], dias = [], skuAnio 
 
   return {
     anio: anioU, mes: mesU, esOtroMes: u.esOtroMes, vacio: !!u.vacio, enCurso, corteDia, modo, periodoLbl,
-    importe, importePrev, yoy, cantidad, sellIn, soSi, cuentasConSellOut, cuentasConFuente: conFuente.length,
+    importe, importePrev, yoy, cantidad, sellIn, soSi, soSiMes, cuentasConSellOut, cuentasConFuente: conFuente.length,
     inv: { valor: tot.invValor, piezas: invPiezas, cuentas: conInv.length, semanas },
     skus: { activos: activos.size, roadmap: skusRoadmap.size, sinMovimiento },
     top5, reparto, frase, serie, mixes, tabla, columnas, filas,

@@ -26,6 +26,10 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [ ] Misma regla en Agenda Día y en las pantallas nuevas.
 - [ ] Navegación general: Fernando manda capturas de iPhone e iPad mini (no se reproduce en la emulación: área segura).
 
+## Reportado el 5-oct, por atender
+- [ ] S&OP en el celular «ni siquiera me deja verla»: reproducir con la sesión de Fernando y corregir.
+- [ ] Cobranza en el celular: rehacer con TODA la cobranza (no sólo clientes propios), mismo formato estándar; mockup antes.
+
 ## Pendientes de Fernando
 - [ ] Semana de ensambles 31 ago–6 sep 2026 (está en el correo de Alejandro del 7-sep; Google pide verificación para bajarla desde Chrome).
 - [ ] Lista completa de empleados y puestos (para la Ciudad).

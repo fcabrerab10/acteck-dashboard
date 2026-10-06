@@ -48,7 +48,7 @@ export function SellOutVista({ r, categorias = [], onSku, cargandoTabla = false 
       <KpiGrid data-entrada-kpis style={{ marginTop: 12 }}>
         <KpiM eyebrow={`Sell out · ${etiquetaPeriodo}`} big={r.importe > 0 ? moneyCompact(r.importe) : '—'}
           sub={r.importe > 0 ? <>{r.yoy != null ? <><span style={{ color: r.yoy >= 0 ? theme.green : theme.red }}>{deltaPct(r.yoy)}</span> vs {r.anio - 1} · </> : null}{r.cuentasConSellOut} de {r.cuentasConFuente} cuentas</> : 'sin sell out cargado'} />
-        <KpiM eyebrow="SO / SI" big={r.soSi != null ? (r.soSi / 100).toFixed(2) : '—'} bigColor={r.soSi == null ? undefined : r.soSi >= 100 ? theme.green : r.soSi < 60 ? theme.orange : undefined}
+        <KpiM eyebrow={`SO / SI${r.soSiMes ? ` · ${MESES[r.soSiMes - 1].toLowerCase()}` : ''}`} big={r.soSi != null ? (r.soSi / 100).toFixed(2) : '—'} bigColor={r.soSi == null ? undefined : r.soSi >= 100 ? theme.green : r.soSi < 60 ? theme.orange : undefined}
           sub={r.sellIn > 0 ? `sell in ${moneyCompact(r.sellIn)}` : 'sin sell in en el período'} />
         <KpiM eyebrow="Inventario en cuentas" big={r.inv.cuentas ? (r.inv.semanas != null ? `${Math.round(r.inv.semanas)} sem` : int(r.inv.piezas) + ' pz') : '—'}
           sub={r.inv.cuentas ? `${moneyCompact(r.inv.valor)} · ${r.inv.cuentas} cuentas reportan` : 'ninguna cuenta reporta'} />

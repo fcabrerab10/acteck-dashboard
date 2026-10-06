@@ -40,6 +40,12 @@ function useSOPDatos(enabled) {
     queryFn: async () => {
       const hoy = new Date();
       const anioCorte = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1).getFullYear();
+      // 12 meses exactos de facturación (2026-10-05: `filtro12m` se usaba sin definirse → ReferenceError → el S&OP del
+      // celular quedaba en blanco; Fernando: «ni siquiera me deja verla»).
+      const m0 = new Date(hoy.getFullYear(), hoy.getMonth() - 11, 1);
+      const filtro12m = m0.getFullYear() === hoy.getFullYear()
+        ? `and(anio.eq.${hoy.getFullYear()},mes.gte.${m0.getMonth() + 1})`
+        : `and(anio.eq.${m0.getFullYear()},mes.gte.${m0.getMonth() + 1}),and(anio.eq.${hoy.getFullYear()},mes.lte.${hoy.getMonth() + 1})`;
       const opcional = (p) => p.catch(() => []);
       const [inventario, transito, leadTimes, facturacion, embarques, reporteSkus, roadmap, catalogoArticulos, skuConfig, comprasPendientes, comprasProv] = await Promise.all([
         fetchAll('v_inventario_comercial', 'sku,disponible,inventario'),

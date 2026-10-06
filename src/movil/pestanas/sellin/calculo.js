@@ -68,7 +68,10 @@ export function resumenSellIn(d, { anio, mes, modo = 'mes', hoy = new Date(), se
   // Clientes con compra en el período · activos en el año · nuevos (primera compra dentro del período, nada antes).
   const cl = d.clientesMes || [];
   const conCompra = new Set(cl.filter((r) => en(anio, mesesPeriodo)(r) && N(r.fact_neta) > 0).map((r) => r.cliente));
-  const activosAnio = new Set(cl.filter((r) => N(r.anio) === anio && N(r.fact_neta) > 0).map((r) => r.cliente));
+  // Activos = clientes de verdad (≥ $50K en el año); si no, el ERP mete 1,700 clientes de mostrador de una compra (2026-10-05).
+  const ytdPorCliente = new Map();
+  cl.forEach((r) => { if (N(r.anio) === anio) ytdPorCliente.set(r.cliente, N(ytdPorCliente.get(r.cliente)) + N(r.fact_neta)); });
+  const activosAnio = new Set([...ytdPorCliente].filter(([, v]) => v >= 50000).map(([c]) => c));
   const antes = new Set(cl.filter((r) => N(r.fact_neta) > 0 && (N(r.anio) === anio - 1 || (N(r.anio) === anio && N(r.mes) < mesesPeriodo[0]))).map((r) => r.cliente));
   const nuevos = [...conCompra].filter((c) => !antes.has(c)).length;
 
