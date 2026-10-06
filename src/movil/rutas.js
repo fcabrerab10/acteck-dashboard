@@ -28,6 +28,7 @@ const CobranzaGlobalM  = lazy(() => import('./pestanas/cobranza/CobranzaGlobalM'
 const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
 const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
+const ClientePropioM   = lazy(() => import('./pestanas/cliente/ClientePropioM')); // cliente propio (3.84.0 · 2026-10-06)
 const ForecastM        = lazy(() => import('./pestanas/forecast/ForecastM')); // Proyectos y forecast (3.83.0 · 2026-10-05)
 const InventarioM      = lazy(() => import('./pestanas/inventario/InventarioM')); // 2026-10-05 · Inventario global
 const EstrategiaPreciosM = lazy(() => import('./pestanas/precios/EstrategiaPreciosM')); // 2026-10-05 · calculadora de margen y propuesta
@@ -83,9 +84,10 @@ const CLIENTE = {
   home:   (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(FichaCliente, { clienteKey: ck }) }),
   // Pagos ya no es pestaña de cliente (diseño B): el cliente sólo queda preelegido en la pantalla global.
   pagos:  (ck, extra) => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil, { inicial: { ...(extra || {}), cliente: ck } }) }),
-  sellIn: (ck) => ({ tipo: 'push', key: `sellin-${ck}`, el: h(SellInCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
-  estrategia: (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
-  sellOut:    (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
+  // 2026-10-06: Sell In y Sell Out de los propios viven dentro de la ficha nueva (ClientePropioM) con el formato estándar.
+  sellIn: (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellin' }) }),
+  estrategia: (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellout' }) }),
+  sellOut:    (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellout' }) }),
   marketing:  (ck) => ({ tipo: 'push', key: `marketing-${ck}`, el: h(MarketingCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
   cartera:    (ck) => ({ tipo: 'push', key: `cartera-${ck}`, el: h(CobranzaCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
 };

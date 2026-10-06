@@ -10,6 +10,7 @@ import { useClientesMes, useSelloutMensual, PROPIOS, nombreCliente, colorCliente
 import { money, moneyCompact, deltaPct, tonoCuota, MESES, N } from '../util';
 import SellInCliente from './SellInCliente';
 import BotonPrepararVisita from '../../components/BotonPrepararVisita';
+import ClientePropioM from './cliente/ClientePropioM';
 
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
@@ -20,6 +21,8 @@ export default function FichaCliente({ clienteKey, tipo, label }) {
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const propio = PROPIOS.includes(clienteKey);
+  // 2026-10-06: los clientes propios abren la ficha nueva (Resumen · Sell In · Sell Out con el formato estándar).
+  if (propio) return <ClientePropioM clienteKey={clienteKey} />;
   const esCanal = tipo === 'canal';
   const nombre = label || (esCanal ? canalLabel(clienteKey) : nombreCliente(clienteKey));
   const { data, isLoading } = useClientesMes(anio);

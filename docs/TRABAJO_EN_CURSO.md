@@ -17,6 +17,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] S&OP del celular en blanco: corregido (3.80.1).
 - [x] S&OP (celular) Empresa · Mis clientes, Lo que viene con PO abrible, Producto 360 · Abasto, Proyectos y forecast con «Los tres» y captura del forecast en formato CRM desde el celular (3.83.0).
 - [x] «Resumen de Clientes» fuera del menú web (3.83.0).
+- [x] Clientes propios (celular): ficha nueva Resumen · Sell In · Sell Out para Digitalife, PCEL y Dicotech con las reglas de Fernando (3.84.0). Faltan Marketing y Crédito y cobranza dentro de la ficha (mockup c73e7c5c v2 en revisión).
 
 ## Aprobado, por construir
 - [ ] **Clientes propios en el celular** (Resumen · Sell In · Sell Out · Marketing · Crédito y cobranza, para Digitalife, PCEL y Dicotech): mockup c73e7c5c revisado el 5-oct. Reglas: las ven los clientes → sin margen ni costo; gráficas lineales (sólo el zoom diario en barras); inventario en dinero grande, semanas en letra chica. Siguiente paso: mockup de los TRES clientes juntos con Marketing y Cobranza antes de codear PCEL y Dicotech; Digitalife se puede ir construyendo.

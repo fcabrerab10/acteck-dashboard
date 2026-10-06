@@ -104,7 +104,7 @@ export function MovimientoM({ titulo = 'Dónde está el movimiento', movs, meta,
 }
 
 // ── Detalle por SKU × 12 meses (TablaAnual) con Piezas · $ y buscador ──
-function DetalleSkuM({ titulo = 'Detalle por SKU', filas, meses, unidad, busca, onBusca, onSku, pie, cargando, placeholder = 'SKU o descripción' }) {
+export function DetalleSkuM({ titulo = 'Detalle por SKU', filas, meses, unidad, busca, onBusca, onSku, pie, cargando, placeholder = 'SKU o descripción' }) {
   const { theme } = useTheme();
   const q = busca.trim().toUpperCase();
   const visibles = filas.filter((f) => !q || f.sku.toUpperCase().includes(q) || String(f.descripcion || '').toUpperCase().includes(q) || String(f.sub || '').toUpperCase().includes(q)).slice(0, 80);
@@ -124,7 +124,7 @@ function DetalleSkuM({ titulo = 'Detalle por SKU', filas, meses, unidad, busca, 
 }
 
 // ── Evolución 12 meses (GraficaScrub: este año vs el anterior) ──
-function Evolucion12M({ titulo, datos, unidad, anio, color, pie }) {
+export function Evolucion12M({ titulo, datos, unidad, anio, color, pie }) {
   const { theme } = useTheme();
   const gris = theme.textSubtle || theme.textMuted;
   const f = fmtDe(unidad);
@@ -225,7 +225,7 @@ function HojaDimension({ cuenta, anio, mes, campo, item, onClose }) {
 }
 
 /** Lista de sucursales o vendedores (agregarDimension): nombre, mini trazo 6 m, monto y Δ. */
-function DimensionM({ titulo, filas, anio, mes, onTocar, sub, cargando, vacio }) {
+export function DimensionM({ titulo, filas, anio, mes, onTocar, sub, cargando, vacio }) {
   const { theme } = useTheme();
   const conVenta = filas.filter((f) => f.importe > 0).length;
   return (
