@@ -28,6 +28,9 @@ const calc = await vite.ssrLoadModule('/src/movil/pestanas/cliente/calculo.js');
 const { ResumenPropioVista } = await vite.ssrLoadModule('/src/movil/pestanas/cliente/ClientePropioM.jsx');
 const { SellOutPropioVista, textoSellOut } = await vite.ssrLoadModule('/src/movil/pestanas/cliente/SellOutPropio.jsx');
 const { destino } = await vite.ssrLoadModule('/src/movil/rutas.js');
+const pc = await vite.ssrLoadModule('/src/movil/pestanas/cliente/pagosCalc.js');
+const { PagosPropioVista } = await vite.ssrLoadModule('/src/movil/pestanas/cliente/PagosPropio.jsx');
+const { REGLAS_DEFAULT } = await vite.ssrLoadModule('/src/modules/comercial/pagosv3/reglas.js');
 
 const qc = new QueryClient();
 const nav = { modo: 'barra', perfil: { user_id: 'u-f', es_super_admin: true }, push() {}, pop() {}, navegar() {}, agregarSku() {} };
@@ -116,4 +119,33 @@ test('rutas: Sell In y Sell Out de los propios abren la ficha nueva', () => {
   assert.equal(destino({ pagina: 'estrategia', clienteKey: 'dicotech' }).key, 'cliente-dicotech');
   assert.equal(destino({ pagina: 'marketing', clienteKey: 'digitalife' }).key, 'cliente-digitalife');
   assert.equal(destino({ pagina: 'cartera', clienteKey: 'pcel' }).key, 'cliente-pcel');
+});
+
+test('Pagos del cliente propio: resumen, rebate por regla, apoyos y SSR (uso interno)', () => {
+  const pagos = [
+    { id: 1, cliente: 'digitalife', tipo: 'rebate', concepto: 'Rebate Q3 2026', monto: 412000, estado: 'calculado', fecha_programada: '2026-10-15' },
+    { id: 2, cliente: 'digitalife', tipo: 'apoyo_producto', concepto: 'Apoyo BPRM-102', monto: 86000, estado: 'solicitado', fecha_programada: '2026-10-02' },
+    { id: 3, cliente: 'digitalife', tipo: 'marketing', concepto: 'Marketing sep', monto: 45000, estado: 'autorizado', fecha_programada: '2026-10-20' },
+    { id: 4, cliente: 'digitalife', tipo: 'spiff', concepto: 'SPIFF ago', monto: 4000, estado: 'pagado', fecha_programada: '2026-09-15' },
+    { id: 5, cliente: 'digitalife', tipo: 'rebate', concepto: 'Vacío', monto: 0, estado: 'calculado' },
+  ];
+  const r = pc.resumenPagos({ pagos, anio: 2026, mes: 10, hoy: HOY });
+  assert.equal(r.nPorPagar, 3); assert.equal(r.porPagar, 543000); assert.equal(r.vencidos, 1); assert.equal(r.montoVencido, 86000); assert.equal(r.abiertos, 3);
+  assert.deepEqual(r.flujo.map((f) => f.n), [1, 1, 1, 0, 0]); assert.equal(r.pagadoAnio, 4000); assert.equal(r.lista[0].id, 2);
+  // Rebate por niveles (PCEL, trimestral): Q4 con oct → alcance vs cuota_min
+  const pcel = pc.rebateProgreso({ fact: [{ anio: 2026, mes: 10, monto: 3200000 }], cuotas: [{ anio: 2026, mes: 10, cuota_min: 3000000 }, { anio: 2026, mes: 11, cuota_min: 0 }], regla: REGLAS_DEFAULT.pcel.rebate, anio: 2026, mes: 10 });
+  assert.equal(pcel.periodo, 'Q4'); assert.equal(Math.round(pcel.alcance * 100), 107); assert.equal(pcel.pct, 0.015); assert.equal(pcel.monto, 48000); assert.equal(pcel.nivel, '106-119.99%');
+  const dct = pc.rebateProgreso({ fact: [{ anio: 2026, mes: 10, monto: 800000 }], cuotas: [{ anio: 2026, mes: 10, cuota_min: 1000000 }], regla: REGLAS_DEFAULT.dicotech.rebate, anio: 2026, mes: 10 });
+  assert.equal(dct.modo, 'mensual'); assert.equal(dct.pct, 0); assert.equal(dct.monto, 0);
+  const dgl = pc.rebateProgreso({ fact: [{ anio: 2026, mes: 10, monto: 1000000 }], cuotas: [], regla: REGLAS_DEFAULT.digitalife.rebate, anio: 2026, mes: 10 });
+  assert.equal(dgl.modo, 'por_categoria'); assert.match(dgl.nivel, /monitores 2 %/);
+  const ap = pc.resumenApoyos([{ sku: 'AC-1', stock: 420, apoyo_pz: 360, apoyo_inventario: 151200, costo_convenio: 3540, precio_factura: 3900 }, { sku: 'BR-2', stock: 0, apoyo_pz: 30, apoyo_inventario: 0 }], new Map([['AC-9', {}]]));
+  assert.equal(ap.skus, 1); assert.equal(ap.porRegistrar, 1); assert.equal(ap.enPiso, 151200);
+  assert.match(pc.frasePagos({ nombre: 'PCEL', mes: 10, r, rebate: pcel, apoyos: ap }), /Le debemos \$543K en octubre: \$412K de rebate, \$86K de apoyos, \$45K de marketing; el rebate de Q4 va al 107 % y generaría \$48K; 1 apoyo por producto sin registrar\. 1 pago vencido \(\$86K\)\./);
+  assert.equal(pc.pctIn(0.015), '1.5'); assert.equal(pc.pctOut('1.5'), 0.015);
+  const html = render(PagosPropioVista, { nombre: 'PCEL', anio: 2026, mes: 10, r, rebate: pcel, apoyos: ap, fondo: 120000, serie: pc.serieMensualPagos(pagos, 2026), puedeEditar: true, hoy: HOY, onPago() {}, onNuevoApoyo() {}, onRegistrarApoyo() {}, onReglas() {} });
+  assert.ok(!/NaN|undefined|\[object Object\]/.test(html));
+  assert.match(html, /Por pagar · oct/); assert.match(html, /Rebate · Q4/); assert.match(html, /Apoyos por producto/); assert.match(html, /Fondo/); assert.match(html, /Flujo del mes/); assert.match(html, /Solicitado/);
+  assert.match(html, /Rebate Q3 2026/); assert.match(html, /Solicitar/); assert.match(html, /＋ Apoyo por producto/); assert.match(html, /Apoyos por SKU · costo convenio/); assert.match(html, /Registrar/); assert.match(html, /Reglas de pago/); assert.match(html, /Pagado por mes/);
+  assert.equal(destino({ pagina: 'pagos', clienteKey: 'digitalife' }).key, 'cliente-digitalife');
 });

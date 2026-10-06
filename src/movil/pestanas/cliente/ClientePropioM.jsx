@@ -10,11 +10,13 @@
 //   Sell Out → cliente/SellOutPropio.jsx.
 //   Marketing → MarketingCliente embebido (hero del año, 4 tarjetas, inversión por mes en línea, lista del mes y captura).
 //   Cobranza  → CobranzaCliente embebido (hero del corte, 4 tarjetas, saldo y vencido por corte en línea, aging, facturas).
-//   Abajo: Pagos · Propuestas · Proyectos y forecast (Pagos del cliente propio se rehace aparte, pendiente).
+//   Pagos     → cliente/PagosPropio.jsx (uso interno: sólo con permiso de Pagos del cliente).
+//   Abajo: Propuestas · Proyectos y forecast.
 import React, { useMemo, useState } from 'react';
-import { Share2, Megaphone, Wallet, FileText, ClipboardList, CalendarCheck } from 'lucide-react';
+import { Share2, Megaphone, FileText, ClipboardList, CalendarCheck } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { useRoadmap } from '../../../lib/queries';
+import { puedeVerPestanaCliente } from '../../../lib/permisos';
 import { textoFichaCliente, textoAvance, compartir } from '../../../lib/whatsapp';
 import BotonPrepararVisita from '../../../components/BotonPrepararVisita';
 import { useNav } from '../../nav';
@@ -31,6 +33,7 @@ import { SellInVista } from '../analisis/Pestanas';
 import SellOutPropio from './SellOutPropio';
 import MarketingCliente from '../MarketingCliente';
 import CobranzaCliente from '../CobranzaCliente';
+import PagosPropio from './PagosPropio';
 import Producto360 from '../producto/Producto360';
 import { useCobranzaResumen, useAcuerdosCliente, useMarketingCliente, useNuestroStock } from './datos';
 import { queLeFalta, lineaFalta, resumenCobranza, acuerdosAbiertos, marketingResumen, fraseResumen, fechaCortaIso } from './calculo';
@@ -104,7 +107,10 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
   const nav = useNav();
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
-  const [pestana, setPestana] = useState(PESTANAS.some((p) => p.id === pestanaInicial) ? pestanaInicial : 'resumen');
+  // Pagos (rebates, apoyos, fondos) es de uso interno: sólo entra a la ficha si el perfil ve Pagos de este cliente.
+  const conPagos = puedeVerPestanaCliente(nav.perfil, ck, 'pagos');
+  const pestanas = conPagos ? [...PESTANAS, { id: 'pagos', label: 'Pagos' }] : PESTANAS;
+  const [pestana, setPestana] = useState(pestanas.some((p) => p.id === pestanaInicial) ? pestanaInicial : 'resumen');
   const codigo = CLIENTES_CRM[ck]?.codigo || null;
   const nombre = nombreCliente(ck);
   const cuenta = ck;
@@ -163,7 +169,7 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
       <Cabecera onVolver={nav.pop} etiqueta="Clientes" />
       <TituloGrande titulo={nombre} sub={<><span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block', flexShrink: 0 }} /><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span></>} />
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', padding: '0 16px 10px' }}>
-        {PESTANAS.map((p) => <Pill key={p.id} tone={pestana === p.id ? 'blue' : 'gray'} onClick={() => setPestana(p.id)} style={{ cursor: 'pointer', flexShrink: 0, fontSize: 12.5, padding: '6px 12px' }}>{p.label}</Pill>)}
+        {pestanas.map((p) => <Pill key={p.id} tone={pestana === p.id ? 'blue' : 'gray'} onClick={() => setPestana(p.id)} style={{ cursor: 'pointer', flexShrink: 0, fontSize: 12.5, padding: '6px 12px' }}>{p.label}</Pill>)}
       </div>
       {error && <Vacio titulo="No se pudo cargar el cliente" sub={String(error.message || error)} color={theme.red} />}
       {cargando && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /></div><Skeleton h={200} r={12} /></div>}
@@ -182,9 +188,9 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
       {!cargando && !error && pestana === 'sellout' && <SellOutPropio clienteKey={ck} nombre={nombre} anio={anio} />}
       {pestana === 'marketing' && <MarketingCliente clienteKey={ck} nombre={nombre} embebido />}
       {pestana === 'cobranza' && <CobranzaCliente clienteKey={ck} nombre={nombre} embebido />}
+      {pestana === 'pagos' && conPagos && <PagosPropio clienteKey={ck} nombre={nombre} />}
 
       <ListaAgrupada titulo={`Más de ${nombre}`} style={{ marginTop: 22 }}>
-        <Fila icon={Wallet} color={color} titulo="Pagos" sub="Rebates, apoyos, fondos · flujo de pago" onClick={() => nav.navegar({ pagina: 'pagos', extra: { cliente: ck } })} />
         <Fila icon={FileText} color={color} titulo="Propuestas" sub="Armar y enviar una propuesta" onClick={() => nav.navegar({ pagina: 'propuestas', extra: { clienteKey: ck } })} />
         <Fila icon={ClipboardList} color={color} titulo="Proyectos y forecast" sub="Lo que va a necesitar · formato del CRM" onClick={() => nav.navegar({ pagina: 'forecastReservas', extra: { cliente: ck } })} />
       </ListaAgrupada>

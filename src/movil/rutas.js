@@ -79,7 +79,8 @@ const GLOBALES = {
 const CLIENTE = {
   home:   (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(FichaCliente, { clienteKey: ck }) }),
   // Pagos ya no es pestaña de cliente (diseño B): el cliente sólo queda preelegido en la pantalla global.
-  pagos:  (ck, extra) => ({ tipo: 'push', key: 'pagos', el: h(PagosMovil, { inicial: { ...(extra || {}), cliente: ck } }) }),
+  // 2026-10-06: Pagos de un cliente propio abre su ficha en la pestaña Pagos (la pantalla global sigue en el nodo `pagos`).
+  pagos:  (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'pagos' }) }),
   // 2026-10-06: Sell In y Sell Out de los propios viven dentro de la ficha nueva (ClientePropioM) con el formato estándar.
   sellIn: (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellin' }) }),
   estrategia: (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellout' }) }),

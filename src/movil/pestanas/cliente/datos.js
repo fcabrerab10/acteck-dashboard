@@ -68,3 +68,19 @@ export function useEnsamblesModelo(ck, enabled = true) {
     queryFn: async () => { try { return lanzar(await cachedQuery(supabase.from('v_sellout_ensambles_modelo').select('ensamble,sku,descripcion,marca,piezas,ensambles,primera_fecha,ultima_fecha,monto').eq('cliente', ck))); } catch { return []; } },
   });
 }
+
+/** Pagos del cliente propio: pagos (la app los escribe), fondos y reglas vigentes. */
+export function usePagosPropio(ck, enabled = true) {
+  return useQuery({
+    queryKey: ['movil', 'cliente', 'pagos-propio', ck], staleTime: 60 * 1000, enabled: !!ck && enabled && DB_CONFIGURED,
+    queryFn: async () => {
+      const [pagos, fondos, reglas] = await Promise.all([
+        supabase.from('pagos').select('*').eq('cliente', ck).order('fecha_programada', { ascending: true }),
+        supabase.from('v_pagos_fondos_saldo').select('*').eq('cliente', ck),
+        supabase.from('pagos_reglas').select('id,cliente,seccion,config,vigente_desde,vigente_hasta').is('vigente_hasta', null),
+      ]);
+      if (pagos.error) throw pagos.error;
+      return { pagos: pagos.data || [], fondos: fondos.data || [], reglas: reglas.data || [] };
+    },
+  });
+}
