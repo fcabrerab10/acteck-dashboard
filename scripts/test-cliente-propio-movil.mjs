@@ -114,4 +114,6 @@ test('rutas: Sell In y Sell Out de los propios abren la ficha nueva', () => {
   assert.equal(destino({ pagina: 'sellIn', clienteKey: 'digitalife' }).key, 'cliente-digitalife');
   assert.equal(destino({ pagina: 'sellOut', clienteKey: 'pcel' }).key, 'cliente-pcel');
   assert.equal(destino({ pagina: 'estrategia', clienteKey: 'dicotech' }).key, 'cliente-dicotech');
+  assert.equal(destino({ pagina: 'marketing', clienteKey: 'digitalife' }).key, 'cliente-digitalife');
+  assert.equal(destino({ pagina: 'cartera', clienteKey: 'pcel' }).key, 'cliente-pcel');
 });

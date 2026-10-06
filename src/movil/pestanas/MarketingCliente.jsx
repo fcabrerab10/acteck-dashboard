@@ -14,7 +14,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
 import { useNav } from '../nav';
-import { TituloGrande, KpiM, KpiGrid, ListaAgrupada, Cabecera, Skeleton, Pill, Vacio, BotonGrande, toast } from '../piezas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Cabecera, Skeleton, Pill, Vacio, BotonGrande, GraficaScrub, LeyendaScrub, TituloSeccionM, toast } from '../piezas';
 import { nombreCliente } from '../datos';
 import { MESES, N, leerLS, guardarLS } from '../util';
 import { TIPOS, MARCAS, REDES_SOCIALES, tipoMeta, mesAnioDe, fechaCorta, isoHoy, fmtMXN, fmtNum, esCerrada, estatusDe } from '../../modules/comercial/marketing/config';
@@ -162,7 +162,8 @@ function DetalleActividad({ ck, anio, id, canEdit }) {
   );
 }
 
-export default function MarketingCliente({ clienteKey, nombre }) {
+// `embebido` (3.84.2 · 2026-10-06): dentro de la ficha del cliente propio: hero del año, 4 tarjetas, inversión mensual en línea y la lista del mes.
+export default function MarketingCliente({ clienteKey, nombre, embebido = false }) {
   const { theme } = useTheme();
   const nav = useNav();
   const qc = useQueryClient();
@@ -180,6 +181,21 @@ export default function MarketingCliente({ clienteKey, nombre }) {
   useEffect(() => { guardarLS(LS_MES, { ck, ...sel }); }, [ck, sel]);
   const { data, isLoading, error } = useActividades(puedeVer ? ck : null, sel.anio);
   useRealtimeActividades(puedeVer ? ck : null, sel.anio);
+  const { data: dataPrev } = useActividades(puedeVer && embebido ? ck : null, sel.anio - 1);
+  // Resumen del año para la ficha: actividades vivas, inversión, activas, completadas, próxima y la inversión por mes (vs el año anterior).
+  const anual = useMemo(() => {
+    if (!embebido || !data) return null;
+    const vivas = data.filter((a) => a.estatus !== 'archivado');
+    const inv = (rows) => rows.reduce((s, a) => s + N(a.inversion), 0);
+    const porMes = (rows) => { const m = Array(12).fill(0); rows.forEach((a) => { const x = mesAnioDe(a); if (x.m >= 1 && x.m <= 12) m[x.m - 1] += N(a.inversion); }); return m; };
+    const prox = vivas.filter((a) => !esCerrada(a) && a.fecha && a.fecha >= hoy).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))[0] || null;
+    const activas = vivas.filter((a) => !esCerrada(a)).length;
+    const completadas = vivas.length - activas;
+    const invAnio = inv(vivas), invPrev = inv((dataPrev || []).filter((a) => a.estatus !== 'archivado'));
+    const mesesAnio = porMes(vivas), mesesPrev = porMes(dataPrev || []);
+    const serie = MESES.map((l, i) => ({ label: l, v: i < (sel.anio === anioActual ? mesActual : 12) ? mesesAnio[i] : null, prev: mesesPrev[i] }));
+    return { total: vivas.length, activas, completadas, invAnio, invPrev, prox, serie };
+  }, [embebido, data, dataPrev, hoy, sel.anio, anioActual, mesActual]);
 
   const mover = (d) => setSel((s) => { let m = s.mes + d, a = s.anio; if (m < 1) { m = 12; a--; } if (m > 12) { m = 1; a++; } return { anio: a, mes: m }; });
 
@@ -215,13 +231,38 @@ export default function MarketingCliente({ clienteKey, nombre }) {
 
   return (
     <>
-      <Cabecera onVolver={nav.pop} etiqueta={label}
+      {!embebido && <Cabecera onVolver={nav.pop} etiqueta={label}
         derecha={canEdit ? (
           <button type="button" onClick={nueva} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 36, padding: '0 12px 0 8px', borderRadius: 999, border: 0, background: theme.accent, color: theme.textOnDark || '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={16} strokeWidth={2.5} />Actividad
           </button>
-        ) : undefined} />
-      <TituloGrande titulo={`Marketing · ${label}`} sub={r ? `${r.mes.length} ${r.mes.length === 1 ? 'actividad' : 'actividades'} en ${MESES[sel.mes - 1].toLowerCase()} · ${fmtMXN(r.inversion)}` : label} />
+        ) : undefined} />}
+      {!embebido && <TituloGrande titulo={`Marketing · ${label}`} sub={r ? `${r.mes.length} ${r.mes.length === 1 ? 'actividad' : 'actividades'} en ${MESES[sel.mes - 1].toLowerCase()} · ${fmtMXN(r.inversion)}` : label} />}
+      {embebido && anual && (
+        <>
+          <HeroM eyebrow={`Marketing · ${sel.anio}`}
+            frase={anual.total ? `${anual.total} actividad${anual.total === 1 ? '' : 'es'} en el año por ${fmtMXN(anual.invAnio)}${anual.prox ? `; la siguiente es ${anual.prox.nombre} el ${fechaCorta(anual.prox.fecha)}` : '; nada programado hacia adelante'}.` : `Sin actividades de marketing en ${sel.anio}.`}
+            sub={anual.total ? `${anual.activas} activa${anual.activas === 1 ? '' : 's'} · ${anual.completadas} completada${anual.completadas === 1 ? '' : 's'}${anual.invPrev ? ` · ${sel.anio - 1}: ${fmtMXN(anual.invPrev)}` : ''}` : undefined} />
+          <KpiGrid data-entrada-kpis style={{ marginTop: 12 }}>
+            <KpiM eyebrow={`Inversión ${sel.anio}`} big={anual.invAnio > 0 ? fmtMXN(anual.invAnio) : '—'} sub={anual.invPrev > 0 ? <><span style={{ color: anual.invAnio >= anual.invPrev ? theme.green : theme.red }}>{anual.invAnio >= anual.invPrev ? '+' : ''}{Math.round(((anual.invAnio - anual.invPrev) / anual.invPrev) * 100)}%</span> vs {sel.anio - 1}</> : `${anual.total} actividades`} />
+            <KpiM eyebrow="Activas ahora" big={String(anual.activas)} bigColor={anual.activas ? theme.green : undefined} sub={anual.activas ? 'en curso o por confirmar' : 'ninguna en curso'} />
+            <KpiM eyebrow="Completadas" big={String(anual.completadas)} sub={`en ${sel.anio}`} />
+            <KpiM eyebrow="Próxima" big={anual.prox ? fechaCorta(anual.prox.fecha).replace(' 20', ' ') : '—'} sub={anual.prox ? anual.prox.nombre : 'nada programado'} />
+          </KpiGrid>
+          {anual.serie.some((d) => d.v || d.prev) && (
+            <>
+              <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta="arrastra para leer">Inversión por mes</TituloSeccionM>
+              <div style={{ margin: '0 16px', background: theme.surface, borderRadius: 14, padding: '10px 10px 6px' }}>
+                <GraficaScrub datos={anual.serie} formato={fmtMXN} series={[{ key: 'prev', label: `${sel.anio - 1}`, color: theme.textSubtle || theme.textMuted }, { key: 'v', label: `${sel.anio}`, color: theme.accent, area: true, grosor: 2.4 }]}
+                  tooltip={(d) => <><b style={{ fontSize: 12.5 }}>{d.label}</b> · <b style={{ fontSize: 12.5 }}>{d.v != null ? fmtMXN(d.v) : '—'}</b>{d.prev ? ` · ${sel.anio - 1} ${fmtMXN(d.prev)}` : ''}</>}
+                  onTocar={(k) => { if (typeof k === 'number' && k >= 0) setSel({ anio: sel.anio, mes: k + 1 }); }} />
+                <LeyendaScrub items={[{ label: `${sel.anio}`, color: theme.accent }, { label: `${sel.anio - 1}`, color: theme.textSubtle || theme.textMuted }]} />
+              </div>
+            </>
+          )}
+          {canEdit && <div style={{ padding: '14px 16px 4px' }}><BotonGrande primario icon={Plus} onClick={nueva}>Nueva actividad</BotonGrande></div>}
+        </>
+      )}
 
       {!puedeVer ? <Vacio icon={null} titulo="Sin acceso" sub={`No tienes acceso a Marketing de ${label}.`} /> : (
         <>

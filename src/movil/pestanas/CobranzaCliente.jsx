@@ -15,7 +15,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { useNav } from '../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Cabecera, CampoBusqueda, Skeleton, Segmented, Pill, Vacio, BotonGrande, toast } from '../piezas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Cabecera, CampoBusqueda, Skeleton, Segmented, Pill, Vacio, BotonGrande, GraficaScrub, LeyendaScrub, TituloSeccionM, toast } from '../piezas';
 import { nombreCliente } from '../datos';
 import { money, moneyCompact, fechaCorta, N, MONO } from '../util';
 import { textoEstadoCuenta, folioCorto, compartir, copiar } from '../../lib/whatsapp';
@@ -98,7 +98,8 @@ function HojaCompartir({ facturas, cliente, fechaCorte, saldoTotal, totalVencido
   );
 }
 
-export default function CobranzaCliente({ clienteKey, nombre }) {
+// `embebido` (3.84.2 · 2026-10-06): dentro de la ficha del cliente propio (sin Cabecera ni título; 4 tarjetas y saldo por corte en línea).
+export default function CobranzaCliente({ clienteKey, nombre, embebido = false }) {
   const { theme } = useTheme();
   const nav = useNav();
   const perfil = usePerfil() || nav?.perfil;
@@ -144,7 +145,10 @@ export default function CobranzaCliente({ clienteKey, nombre }) {
     const usoPct = lineaMXN > 0 ? Math.min(999, Math.round((saldoActual / lineaMXN) * 100)) : null;
     const deltaVenc = estadoPrev ? saldoVencido - (N(estadoPrev.saldo_vencido)) : null;
     const dsoTone = dso == null ? 'gray' : dso <= plazo ? 'green' : dso <= plazo + 30 ? 'orange' : 'red';
-    return { refMs, facturas, vencidas, saldoActual, saldoVencido, aging, dso, pctVencido, frase, plazo, lineaMXN, usoPct, deltaVenc, dsoTone };
+    // Próximo vencimiento: la fecha más cercana por vencer y lo que vence ese día.
+    const porVencer = facturas.filter((f) => f.dias === 0 && f.vencimiento).sort((a, b) => String(a.vencimiento).localeCompare(String(b.vencimiento)));
+    const proximo = porVencer[0] ? { fecha: porVencer[0].vencimiento, monto: porVencer.filter((f) => f.vencimiento === porVencer[0].vencimiento).reduce((s2, f) => s2 + f.saldo, 0), n: porVencer.filter((f) => f.vencimiento === porVencer[0].vencimiento).length, dias: porVencer[0].paraVencer } : null;
+    return { refMs, facturas, vencidas, saldoActual, saldoVencido, aging, dso, pctVencido, frase, plazo, lineaMXN, usoPct, deltaVenc, dsoTone, proximo };
   }, [estado, estadoPrev, detalle, esUltimo, config]);
 
   const lista = useMemo(() => {
@@ -165,10 +169,12 @@ export default function CobranzaCliente({ clienteKey, nombre }) {
   const tonoVenc = r ? (r.pctVencido === 0 ? theme.green : r.pctVencido <= 5 ? theme.green : r.pctVencido <= 15 ? theme.orange : theme.red) : theme.text;
   const filtroLabel = filtro === 'todas' ? null : filtro === 'vigente' ? 'Vigentes' : TRAMOS.find((t) => t.id === filtro)?.label;
 
+  // Serie de cortes (cronológica) para la gráfica de línea que se lee arrastrando (sustituye a la mini serie en la ficha).
+  const serieCortes = useMemo(() => [...cortes].reverse().slice(-16).map((c) => ({ id: c.id, label: fechaCorta(c.fecha_corte).replace(' 20', ' '), saldo: N(c.saldo_actual), vencido: N(c.saldo_vencido), dso: c.dso })), [cortes]);
   return (
     <>
-      <Cabecera onVolver={nav.pop} etiqueta={label} />
-      <TituloGrande titulo="Crédito y Cobranza" sub={estado ? `${label} · corte ${fechaCorta(estado.fecha_corte)} · semana ${estado.semana}${esUltimo ? '' : ' · histórico'}` : label} />
+      {!embebido && <Cabecera onVolver={nav.pop} etiqueta={label} />}
+      {!embebido && <TituloGrande titulo="Crédito y Cobranza" sub={estado ? `${label} · corte ${fechaCorta(estado.fecha_corte)} · semana ${estado.semana}${esUltimo ? '' : ' · histórico'}` : label} />}
       {!puedeVer && <Vacio icon={null} titulo="Sin acceso" sub={`No tienes acceso a Crédito y Cobranza de ${label}.`} />}
       {puedeVer && error && <Vacio titulo="No se pudo cargar la cartera" sub={error.message} />}
       {puedeVer && !error && (isLoading || (estado && (cargandoDet || !r))) && (
@@ -189,7 +195,28 @@ export default function CobranzaCliente({ clienteKey, nombre }) {
               { k: 'DSO', v: r.dso != null ? `${r.dso} d` : '—', sub: `plazo ${r.plazo} d` },
             ]} />
 
-          <KpiGrid style={{ marginTop: 12 }}>
+          {embebido && (
+            <KpiGrid data-entrada-kpis style={{ marginTop: 12 }}>
+              <KpiM eyebrow="Saldo" big={moneyCompact(r.saldoActual)} sub={r.lineaMXN > 0 ? `${r.usoPct} % de la línea ${moneyCompact(r.lineaMXN)}` : `${r.facturas.length} factura${r.facturas.length === 1 ? '' : 's'}`} progress={r.lineaMXN > 0 ? Math.min(100, r.usoPct) : undefined} />
+              <KpiM eyebrow="Vencido" big={moneyCompact(r.saldoVencido)} bigColor={r.saldoVencido > 0 ? theme.red : theme.green} sub={r.saldoVencido > 0 ? `${r.vencidas.length} factura${r.vencidas.length === 1 ? '' : 's'} · ${r.pctVencido.toFixed(r.pctVencido < 10 ? 1 : 0)} % del saldo` : 'al corriente'} />
+              <KpiM eyebrow="DSO" big={r.dso != null ? `${r.dso} d` : '—'} bigColor={r.dsoTone === 'red' ? theme.red : r.dsoTone === 'orange' ? theme.orange : undefined} sub={`plazo ${r.plazo} d · ${r.dso == null ? 'sin dato' : r.dso <= r.plazo ? 'en plazo' : 'arriba del plazo'}`} />
+              <KpiM eyebrow="Próximo vencimiento" big={r.proximo ? fechaCorta(r.proximo.fecha).replace(' 20', ' ') : '—'} sub={r.proximo ? `${moneyCompact(r.proximo.monto)} · ${r.proximo.n} factura${r.proximo.n === 1 ? '' : 's'}${r.proximo.dias != null ? ` · en ${r.proximo.dias} d` : ''}` : 'nada por vencer'} />
+            </KpiGrid>
+          )}
+          {embebido && serieCortes.length > 1 && (
+            <>
+              <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta="arrastra para leer · toca para abrir el corte">Saldo y vencido por corte</TituloSeccionM>
+              <div style={{ margin: '0 16px', background: theme.surface, borderRadius: 14, padding: '10px 10px 6px' }}>
+                <GraficaScrub datos={serieCortes} formato={moneyCompact} series={[{ key: 'saldo', label: 'Saldo', color: theme.accent, area: true, grosor: 2.4 }, { key: 'vencido', label: 'Vencido', color: theme.red }]}
+                  tooltip={(d) => <><b style={{ fontSize: 12.5 }}>{d.label}</b> · saldo <b style={{ fontSize: 12.5 }}>{moneyCompact(d.saldo)}</b> · vencido {moneyCompact(d.vencido)}{d.dso != null ? ` · DSO ${d.dso} d` : ''}</>}
+                  onTocar={(k) => { const d = serieCortes[k]; if (d?.id) setCorteSel(d.id); }} activo={Math.max(0, serieCortes.findIndex((d) => d.id === estado.id))} />
+                <LeyendaScrub items={[{ label: 'Saldo', color: theme.accent }, { label: 'Vencido', color: theme.red }]} />
+              </div>
+            </>
+          )}
+
+          <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta="toca un tramo para filtrar">Aging</TituloSeccionM>
+          <KpiGrid style={{ marginTop: 0 }}>
             {TRAMOS.map((t) => {
               const a = r.aging[t.id]; const on = filtro === t.id;
               return (
@@ -235,7 +262,7 @@ export default function CobranzaCliente({ clienteKey, nombre }) {
           {lista.length > 80 && <div style={{ padding: '8px 28px 0', fontSize: 11.5, color: theme.textSubtle || theme.textMuted }}>Mostrando 80 de {lista.length}. Afina la búsqueda para ver el resto.</div>}
 
           <ListaAgrupada titulo="Historial de cortes" meta={`${cortes.length}`} style={{ marginTop: 18 }} pie="Línea = saldo · área roja = vencido. Toca un corte para ver sus facturas; los días de atraso se calculan a la fecha de ese corte.">
-            <div style={{ padding: '12px 12px 6px' }}><MiniSerie cortes={cortes} selId={estado.id} onSel={setCorteSel} /></div>
+            {!embebido && <div style={{ padding: '12px 12px 6px' }}><MiniSerie cortes={cortes} selId={estado.id} onSel={setCorteSel} /></div>}
             {cortes.slice(0, 12).map((c) => {
               const on = c.id === estado.id;
               const pv = N(c.saldo_actual) > 0 ? (N(c.saldo_vencido) / N(c.saldo_actual)) * 100 : 0;

@@ -8,15 +8,17 @@
 //              → Compartir ficha · Preparar visita.
 //   Sell In  → la misma vista de Análisis por cliente (analisis/Pestanas.jsx#SellInVista) SIN sensible + Compartir avance.
 //   Sell Out → cliente/SellOutPropio.jsx.
-//   Abajo: Marketing · Cobranza · Pagos (las pantallas de siempre) hasta que entren a la ficha con su propio mockup.
+//   Marketing → MarketingCliente embebido (hero del año, 4 tarjetas, inversión por mes en línea, lista del mes y captura).
+//   Cobranza  → CobranzaCliente embebido (hero del corte, 4 tarjetas, saldo y vencido por corte en línea, aging, facturas).
+//   Abajo: Pagos · Propuestas · Proyectos y forecast (Pagos del cliente propio se rehace aparte, pendiente).
 import React, { useMemo, useState } from 'react';
-import { Share2, Megaphone, CreditCard, Wallet, FileText, ClipboardList, CalendarCheck } from 'lucide-react';
+import { Share2, Megaphone, Wallet, FileText, ClipboardList, CalendarCheck } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { useRoadmap } from '../../../lib/queries';
 import { textoFichaCliente, textoAvance, compartir } from '../../../lib/whatsapp';
 import BotonPrepararVisita from '../../../components/BotonPrepararVisita';
 import { useNav } from '../../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, ListaAgrupada, Fila, BotonGrande, TituloSeccionM, Segmented, GraficaScrub, LeyendaScrub, BarraCuotaM, PayM, ChipsPay, Pill, toast } from '../../piezas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, ListaAgrupada, Fila, BotonGrande, TituloSeccionM, GraficaScrub, LeyendaScrub, BarraCuotaM, PayM, ChipsPay, Pill, toast } from '../../piezas';
 import { nombreCliente, colorCliente } from '../../datos';
 import { moneyCompact, int, deltaPct, MESES, N } from '../../util';
 import { useCuotasClientes, useSellInDia, useDetalleCliente } from '../../../modules/comercial/analisis/useAnalisisData';
@@ -27,12 +29,14 @@ import { useClienteMes, useVendedorCliente } from '../analisis/datos';
 import { fraccionMes, ritmoCompras, sellOutMesCuenta, serieAnioSiSo } from '../analisis/calculo';
 import { SellInVista } from '../analisis/Pestanas';
 import SellOutPropio from './SellOutPropio';
+import MarketingCliente from '../MarketingCliente';
+import CobranzaCliente from '../CobranzaCliente';
 import Producto360 from '../producto/Producto360';
 import { useCobranzaResumen, useAcuerdosCliente, useMarketingCliente, useNuestroStock } from './datos';
 import { queLeFalta, lineaFalta, resumenCobranza, acuerdosAbiertos, marketingResumen, fraseResumen, fechaCortaIso } from './calculo';
 
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-const PESTANAS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell In' }, { id: 'sellout', label: 'Sell Out' }];
+const PESTANAS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell In' }, { id: 'sellout', label: 'Sell Out' }, { id: 'marketing', label: 'Marketing' }, { id: 'cobranza', label: 'Cobranza' }];
 const nombreBonito = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()).trim();
 
 /** Vista pura del Resumen (SSR en pruebas). */
@@ -122,7 +126,9 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
   const mensual = useMemo(() => { const m = new Map(); rows.forEach((r) => { const k = idxMes(r.anio, r.mes); const o = m.get(k) || { fact_neta: 0, piezas: 0, contribucion: 0 }; o.fact_neta += N(r.fact_neta); o.piezas += N(r.piezas_venta_neta); m.set(k, o); }); return m; }, [rows]);
   const mapa = useMemo(() => mapaCuotas(cuotasRows), [cuotasRows]);
   const ritmo = useMemo(() => ritmoCompras(diario, hoy), [diario, hoy]);
-  const so = useMemo(() => sellOutMesCuenta(soMensual, cuenta, anio, mes, hoy), [soMensual, cuenta, anio, mes, hoy]);
+  // Sell out del Resumen: en los primeros 10 días del mes se lee el mes anterior completo (regla «primeros días del mes»).
+  const [soAnio, soMes] = hoy.getDate() < 10 ? (mes === 1 ? [anio - 1, 12] : [anio, mes - 1]) : [anio, mes];
+  const so = useMemo(() => sellOutMesCuenta(soMensual, cuenta, soAnio, soMes, hoy), [soMensual, cuenta, soAnio, soMes, hoy]);
   const faltaBase = useMemo(() => queLeFalta({ skus: skusSo, inv: invCuenta, anio: so?.anioUsado || anio, mes: so?.mesUsado || mes, roadmap: rd, top: 10 }), [skusSo, invCuenta, so, anio, mes, rd]);
   const { data: nuestro } = useNuestroStock(faltaBase.lista.map((x) => x.sku), pestana === 'resumen');
   const falta = useMemo(() => (nuestro ? queLeFalta({ skus: skusSo, inv: invCuenta, nuestro, anio: so?.anioUsado || anio, mes: so?.mesUsado || mes, roadmap: rd, top: 10 }) : faltaBase), [nuestro, faltaBase, skusSo, invCuenta, so, anio, mes, rd]);
@@ -146,7 +152,6 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
   const top5 = useMemo(() => { const m = new Map(); detalle.forEach((x) => { if (N(x.anio) !== anio) return; const o = m.get(x.articulo) || { sku: x.articulo, piezas: 0, monto: 0, descripcion: rd.get(x.articulo)?.descripcion || '' }; o.piezas += N(x.piezas_venta_neta); o.monto += N(x.fact_neta); m.set(x.articulo, o); }); return [...m.values()].sort((a, b) => b.monto - a.monto).slice(0, 5); }, [detalle, anio, rd]);
 
   const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellout" />, `producto-${sku}`);
-  const ir = (pagina, extra) => nav.navegar({ clienteKey: ck, pagina, extra });
   const compartirFicha = async () => { const res = await compartir(textoFichaCliente({ cliente: nombre, mes, anio, mtd: r.mtd, ytd: r.ytd, yoyYtd: r.yoyYtd, top: top5 }), { titulo: `Ficha ${nombre}` }); if (res === 'share') toast.ok('Compartido'); else if (res) toast.ok('Texto copiado'); };
   const compartirAvance = async () => { const res = await compartir(textoAvance({ cliente: nombre, mes, anio, mtd: r.mtd, cuota: r.cuotaMes, ytd: r.ytd, top: top5 }), { titulo: `Avance ${nombre}` }); if (res === 'share') toast.ok('Compartido'); else if (res) toast.ok('Texto copiado'); };
 
@@ -157,13 +162,15 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
     <div data-stagger style={{ paddingBottom: 24 }}>
       <Cabecera onVolver={nav.pop} etiqueta="Clientes" />
       <TituloGrande titulo={nombre} sub={<><span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block', flexShrink: 0 }} /><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span></>} />
-      <div style={{ padding: '0 16px 10px' }}><Segmented size="md" value={pestana} onChange={setPestana} options={PESTANAS} style={{ display: 'flex', width: '100%' }} /></div>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', padding: '0 16px 10px' }}>
+        {PESTANAS.map((p) => <Pill key={p.id} tone={pestana === p.id ? 'blue' : 'gray'} onClick={() => setPestana(p.id)} style={{ cursor: 'pointer', flexShrink: 0, fontSize: 12.5, padding: '6px 12px' }}>{p.label}</Pill>)}
+      </div>
       {error && <Vacio titulo="No se pudo cargar el cliente" sub={String(error.message || error)} color={theme.red} />}
       {cargando && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /></div><Skeleton h={200} r={12} /></div>}
       {!cargando && !error && pestana === 'resumen' && (
         <ResumenPropioVista nombre={nombre} anio={anio} mes={mes} enCurso={r.enCurso} mtd={r.mtd} cuotaMes={r.cuotaMes} yoyMes={r.yoyMes} so={so} serie={r.serie} falta={falta} cobranza={cobranza} acuerdos={acuerdos} marketing={marketing} catSi={cats.si} catSo={cats.so}
           onProponer={(skus) => nav.navegar({ pagina: 'propuestas', extra: { clienteKey: ck, skus } })} onAgenda={() => nav.navegar({ pagina: 'agenda' })}
-          onMarketing={() => ir('marketing')} onCobranza={() => ir('cartera')} onSellOut={() => setPestana('sellout')} onSku={abrirSku} onCompartir={compartirFicha}
+          onMarketing={() => setPestana('marketing')} onCobranza={() => setPestana('cobranza')} onSellOut={() => setPestana('sellout')} onSku={abrirSku} onCompartir={compartirFicha}
           visita={<BotonPrepararVisita clienteKey={ck} nombre={nombre} anio={anio} variante="bloque" />} />
       )}
       {!cargando && !error && pestana === 'sellin' && (
@@ -173,10 +180,10 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
         </>
       )}
       {!cargando && !error && pestana === 'sellout' && <SellOutPropio clienteKey={ck} nombre={nombre} anio={anio} />}
+      {pestana === 'marketing' && <MarketingCliente clienteKey={ck} nombre={nombre} embebido />}
+      {pestana === 'cobranza' && <CobranzaCliente clienteKey={ck} nombre={nombre} embebido />}
 
       <ListaAgrupada titulo={`Más de ${nombre}`} style={{ marginTop: 22 }}>
-        <Fila icon={Megaphone} color={color} titulo="Marketing" sub="Actividades del mes · captura" onClick={() => ir('marketing')} />
-        <Fila icon={CreditCard} color={color} titulo="Crédito y cobranza" sub="Saldo · vencido · estado de cuenta" onClick={() => ir('cartera')} />
         <Fila icon={Wallet} color={color} titulo="Pagos" sub="Rebates, apoyos, fondos · flujo de pago" onClick={() => nav.navegar({ pagina: 'pagos', extra: { cliente: ck } })} />
         <Fila icon={FileText} color={color} titulo="Propuestas" sub="Armar y enviar una propuesta" onClick={() => nav.navegar({ pagina: 'propuestas', extra: { clienteKey: ck } })} />
         <Fila icon={ClipboardList} color={color} titulo="Proyectos y forecast" sub="Lo que va a necesitar · formato del CRM" onClick={() => nav.navegar({ pagina: 'forecastReservas', extra: { cliente: ck } })} />

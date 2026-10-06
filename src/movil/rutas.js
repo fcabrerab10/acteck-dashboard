@@ -9,14 +9,10 @@ import { createElement as h, lazy } from 'react';
 import { CLIENTES_NAV } from '../components/nav/arbol';
 
 const FichaCliente  = lazy(() => import('./pestanas/FichaCliente'));
-const SellInCliente = lazy(() => import('./pestanas/SellInCliente'));
 const Historial     = lazy(() => import('./pestanas/Historial'));
 const Fuentes       = lazy(() => import('./pestanas/Fuentes'));
 const VisionGeneral    = lazy(() => import('./pestanas/VisionGeneral'));
 const AnalisisClientes = lazy(() => import('./pestanas/AnalisisClientes'));
-const SellOutCliente   = lazy(() => import('./pestanas/SellOutCliente'));
-const MarketingCliente = lazy(() => import('./pestanas/MarketingCliente'));
-const CobranzaCliente  = lazy(() => import('./pestanas/CobranzaCliente'));
 const SopM             = lazy(() => import('./pestanas/sop/SopM'));         // S&OP (3.83.0 · 2026-10-05)
 const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
 const SellInGlobal     = lazy(() => import('./pestanas/sellin/SellInGlobal'));
@@ -88,8 +84,8 @@ const CLIENTE = {
   sellIn: (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellin' }) }),
   estrategia: (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellout' }) }),
   sellOut:    (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'sellout' }) }),
-  marketing:  (ck) => ({ tipo: 'push', key: `marketing-${ck}`, el: h(MarketingCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
-  cartera:    (ck) => ({ tipo: 'push', key: `cartera-${ck}`, el: h(CobranzaCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
+  marketing:  (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'marketing' }) }),
+  cartera:    (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(ClientePropioM, { clienteKey: ck, pestanaInicial: 'cobranza' }) }),
 };
 
 export function destino({ pagina, clienteKey, label, extra } = {}) {

@@ -174,7 +174,15 @@ export default function SellOutPropio({ clienteKey: ck, nombre, anio }) {
   const { data: mensual = [], isLoading: lMes } = useMensual(anio);
   const { data: cuotas = [] } = useCuotas(anio);
   const propios = useMemo(() => mensual.filter((r) => r.cuenta === cuenta && N(r.anio) === anio), [mensual, cuenta, anio]);
-  const mes = useMemo(() => { const con = propios.filter((r) => N(r.importe) > 0).map((r) => N(r.mes)); if (con.length) return Math.max(...con); const u = ultimoMesConVenta(dias); return u && u.anio === anio ? u.mes : (anio === new Date().getFullYear() ? new Date().getMonth() + 1 : 12); }, [propios, dias, anio]);
+  // Mes = el último con sell out de la cuenta; pero en los primeros 10 días del mes en curso se lee el mes anterior
+  // completo (regla «primeros días del mes»): octubre a 6 días daba SO/SI 318 en PCEL y «0 clientes activos» en Dicotech.
+  const mes = useMemo(() => {
+    const hoy = new Date();
+    const con = propios.filter((r) => N(r.importe) > 0).map((r) => N(r.mes));
+    let m = con.length ? Math.max(...con) : (() => { const u = ultimoMesConVenta(dias); return u && u.anio === anio ? u.mes : (anio === hoy.getFullYear() ? hoy.getMonth() + 1 : 12); })();
+    if (anio === hoy.getFullYear() && m === hoy.getMonth() + 1 && hoy.getDate() < 10 && m > 1 && con.includes(m - 1)) m -= 1;
+    return m;
+  }, [propios, dias, anio]);
   const corteDia = useMemo(() => ultimoDiaConVenta(dias, anio, mes) || 31, [dias, anio, mes]);
   const fila = useMemo(() => {
     const fl = construirFilas({ cuentas, mensual, dias, anio, mes, corteDia, cuotas }).find((x) => x.cuenta === cuenta);
