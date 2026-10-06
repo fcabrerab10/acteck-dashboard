@@ -1,12 +1,12 @@
 // Acteck Ciudad · escena 3D (three.js, low-poly cálido). Sólo se importa desde Ciudad.jsx dentro de un import()
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
-//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), oscuro }) → { destruir(), resize(), irA(tag) }
+//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), oscuro }) → { destruir(), resize(), irA(tag), stats() }
 // Este archivo sólo orquesta: arma el contexto compartido (ctx) y llama a los módulos de escena/ en orden
 // (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion). El estilo vive en luz-clima.js.
 import * as THREE from 'three';
 import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
-import { terreno, carretera } from './escena/terreno.js';
+import { terreno, carretera, plantarArboles } from './escena/terreno.js';
 import { oficina, cedis, puerto, distritos } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
@@ -33,7 +33,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   const raiz = new THREE.Group();
   const add = (m, tag) => { raiz.add(m); if (tag) { m.traverse((o) => { if (o.isMesh) { o.userData.tag = tag; interact.push(o); } }); } return m; };
   const box = (w, h, d, color, extra) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(color, extra)); m.castShadow = true; m.receiveShadow = true; m.position.y = h / 2; return m; };
-  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, box, add, interact, animados, sprites };
+  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, box, add, interact, animados, sprites, arboles: [] };
 
   luces(ctx);
   scene.add(raiz);
@@ -47,6 +47,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   barcos(ctx, puertoPos);
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
   const { distritoPos, rutas } = distritos(ctx, cedisPos);
+  plantarArboles(ctx); // después de todos los arbol(): oficina, CEDIS y distritos
   const etA = etiqueta(ctx, 'acteck. · Guadalajara', '#0A84FF'); etA.position.set(ctx.esc.x + 1, 17, ctx.esc.z - 4); raiz.add(etA);
   const etP = etiqueta(ctx, 'Manzanillo', '#1D1D1F'); etP.position.set(puertoPos.x, 10, puertoPos.z + 2); raiz.add(etP);
   camiones(ctx, rutas);
@@ -60,6 +61,8 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   // cámara quieta) baja a ~10 fps; cualquier gesto la regresa a 60 al instante.
   const CALMA_MS = 15000, CALMA_CUADRO_MS = 100;
   let viva = true; let ultimo = performance.now(); let tiempo = 0; let ultimoDibujo = 0; let pausada = false;
+  // Medidor para el harness (`?fps`): cuadros dibujados en el último segundo y lo que costó el último cuadro.
+  const med = { cuadros: 0, desde: performance.now(), fps: 0 };
   function frame(now) {
     if (!viva) return;
     if (document.hidden) { pausada = true; return; }
@@ -80,11 +83,13 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
     escalarEtiquetas(sprites, vista.zoom);
     inter.hover(interact, onHover);
     R.render(scene, cam);
+    med.cuadros++; if (now - med.desde >= 1000) { med.fps = Math.round(med.cuadros * 1000 / (now - med.desde)); med.cuadros = 0; med.desde = now; }
   }
   requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);
   return {
     resize, irA,
+    stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
     destruir() { viva = false; ro.disconnect(); inter.quitar(); document.removeEventListener('visibilitychange', onVisible); scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); } }); R.dispose(); },
   };
 }

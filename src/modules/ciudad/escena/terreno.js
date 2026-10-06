@@ -31,4 +31,26 @@ export function carretera({ raiz, P, M }, a, b, ancho = 1.6) {
   return curva;
 }
 
-export function arbol({ P, M }, g, x, z, s = 1) { const t = new THREE.Mesh(new THREE.CylinderGeometry(.14 * s, .2 * s, 1.1 * s, 6), M(P.tronco)); t.position.set(x, .55 * s, z); t.castShadow = true; g.add(t); const c = new THREE.Mesh(new THREE.ConeGeometry(.95 * s, 2 * s, 7), M(Math.random() > .5 ? P.arbol : P.arbol2)); c.position.set(x, 1.9 * s, z); c.castShadow = true; g.add(c); const c2 = new THREE.Mesh(new THREE.ConeGeometry(.7 * s, 1.4 * s, 7), M(P.arbol)); c2.position.set(x, 2.8 * s, z); c2.castShadow = true; g.add(c2); }
+// Árboles instanciados (3.86.1): arbol() sólo anota dónde va cada uno (relativo a su grupo) y plantarArboles(), al final
+// de la construcción, los dibuja todos con 4 InstancedMesh (tronco, copa de dos tonos y punta) con geometrías compartidas:
+// antes eran 3 mallas y 3 geometrías nuevas por árbol. No son tocables (antes heredaban el tag de su edificio al pasar).
+export function arbol(ctx, g, x, z, s = 1) { (ctx.arboles ||= []).push({ g, x, z, s, tono: Math.random() > .5 ? 1 : 0 }); }
+export function plantarArboles({ raiz, P, M, arboles = [] }) {
+  if (!arboles.length) return;
+  raiz.updateMatrixWorld(true);
+  const aRaiz = new THREE.Matrix4().copy(raiz.matrixWorld).invert();
+  const geo = (g, y) => { g.translate(0, y, 0); return g; };
+  const partes = [
+    { geo: geo(new THREE.CylinderGeometry(.14, .2, 1.1, 6), .55), mat: M(P.tronco), cual: () => true },
+    { geo: geo(new THREE.ConeGeometry(.95, 2, 7), 1.9), mat: M(P.arbol2), cual: (a) => a.tono === 0 },
+    { geo: geo(new THREE.ConeGeometry(.95, 2, 7), 1.9), mat: M(P.arbol), cual: (a) => a.tono === 1 },
+    { geo: geo(new THREE.ConeGeometry(.7, 1.4, 7), 2.8), mat: M(P.arbol), cual: () => true },
+  ];
+  const m = new THREE.Matrix4(), local = new THREE.Matrix4(), esc = new THREE.Matrix4();
+  for (const pt of partes) {
+    const lista = arboles.filter(pt.cual); if (!lista.length) { pt.geo.dispose(); continue; }
+    const im = new THREE.InstancedMesh(pt.geo, pt.mat, lista.length); im.castShadow = true;
+    lista.forEach((a, i) => { local.makeTranslation(a.x, 0, a.z).multiply(esc.makeScale(a.s, a.s, a.s)); m.multiplyMatrices(aRaiz, a.g.matrixWorld).multiply(local); im.setMatrixAt(i, m); });
+    im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); raiz.add(im);
+  }
+}
