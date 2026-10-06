@@ -273,7 +273,12 @@ test('shell móvil sólo en teléfono o en táctil hasta 1439 px; una computador
   assert.equal(debeUsarShellMovil('mobile', true, 430), true, 'iPhone 16 Pro Max');
   assert.equal(debeUsarShellMovil('mobile', true, 375), true, 'iPhone SE');
   assert.equal(debeUsarShellMovil('mobile', false, 1440), false, 'ventana angosta en una Mac: escritorio');
-  assert.equal(debeUsarShellMovil('tablet', true, 744), false, 'iPad mini: escritorio (2026-10-05)');
+  assert.equal(debeUsarShellMovil('tablet', true, 744), false, 'iPad mini sin orientación conocida: escritorio');
+  assert.equal(debeUsarShellMovil('tablet', true, 744, { ladoMayor: 1133, vertical: true }), true, 'iPad mini vertical: celular (2026-10-05)');
+  assert.equal(debeUsarShellMovil('tablet', true, 744, { ladoMayor: 1133, vertical: false }), false, 'iPad mini horizontal: web');
+  assert.equal(debeUsarShellMovil('tablet', true, 768, { ladoMayor: 1024, vertical: true }), true, 'iPad mini viejo vertical: celular');
+  assert.equal(debeUsarShellMovil('tablet', true, 834, { ladoMayor: 1194, vertical: true }), false, 'iPad Pro 11 vertical: sigue web');
+  assert.equal(debeUsarShellMovil('tablet', true, 744, { ladoMayor: 1600, vertical: true }), false, 'pantalla 744 pero más larga que un iPad mini: web');
   assert.equal(debeUsarShellMovil('laptop', true, 1024), false, 'iPad Pro: escritorio');
   assert.equal(debeUsarShellMovil('desktop', true, 1080), false);
 });

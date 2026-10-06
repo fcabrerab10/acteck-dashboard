@@ -54,13 +54,19 @@ export function useIsTouch() {
 
 // Shell móvil SÓLO en el celular (2026-10-05, Fernando: «en el iPad quiero que se vea como en la laptop; el único con
 // estilo celular es el celular tal cual»). Regla pura: dispositivo táctil cuyo lado menor de pantalla mide menos de
-// 700 px (iPhone SE 375 … iPhone 17 Pro Max 440). iPad mini (744 × 1133), iPad Pro y cualquier computadora —aunque la
-// ventana sea angosta— usan el shell de escritorio (dispositivo.js lo adapta: sidebar en iconos en tabletas).
-export const debeUsarShellMovil = (bp, touch, ladoMenor = Infinity) => !!touch && Number(ladoMenor) < 700;
+// 700 px (iPhone SE 375 … iPhone 17 Pro Max 440). iPad Pro y cualquier computadora —aunque la ventana sea angosta—
+// usan el shell de escritorio (dispositivo.js lo adapta: sidebar en iconos en tabletas).
+// Excepción pedida el mismo día, SÓLO para el iPad mini (pantalla 744 × 1133 o 768 × 1024): en vertical se ve como el
+// celular y en horizontal como la web. Se reconoce por el tamaño físico de la pantalla, no por la ventana.
+export const esIpadMini = (ladoMenor, ladoMayor) => Number(ladoMenor) >= 700 && Number(ladoMenor) <= 768 && Number(ladoMayor) <= 1133;
+export const debeUsarShellMovil = (bp, touch, ladoMenor = Infinity, { ladoMayor = Infinity, vertical = false } = {}) =>
+  !!touch && (Number(ladoMenor) < 700 || (esIpadMini(ladoMenor, ladoMayor) && !!vertical));
 
 export const useMobileShell = () => {
   useBreakpoint(); // re-render al cambiar de tamaño (orientación)
   const touch = useIsTouch();
-  const lado = typeof window !== 'undefined' && window.screen ? Math.min(window.screen.width || Infinity, window.screen.height || Infinity) : Infinity;
-  return debeUsarShellMovil(null, touch, lado);
+  const sw = typeof window !== 'undefined' && window.screen ? window.screen.width || Infinity : Infinity;
+  const sh = typeof window !== 'undefined' && window.screen ? window.screen.height || Infinity : Infinity;
+  const vertical = typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false;
+  return debeUsarShellMovil(null, touch, Math.min(sw, sh), { ladoMayor: Math.max(sw, sh), vertical });
 };
