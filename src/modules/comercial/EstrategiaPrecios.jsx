@@ -30,6 +30,7 @@ export default function EstrategiaPrecios() {
 
 function Pantalla({ sensible }) {
   const { theme } = useTheme();
+  const perfil = usePerfil();
   const rootRef = useRef(null);
   const { roadmap, datos, loading, error } = useDatosPrecios(sensible);
   const [f, setF] = useState(FILTROS_VACIOS);
