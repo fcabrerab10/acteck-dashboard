@@ -9,7 +9,7 @@ import { etiqueta, fmtK, capital } from './etiquetas.js';
 
 // Oficina + sala de juntas + equipo caminando entre oficina, sala y CEDIS.
 export function oficina(ctx) {
-  const { P, M, box, add, oscuro, modelo, esc, animados } = ctx;
+  const { P, M, G, box, add, oscuro, modelo, esc, animados } = ctx;
   const ofiPos = { x: esc.x - 7, z: esc.z + 2 };
   const g = new THREE.Group(); g.position.set(ofiPos.x, 0, ofiPos.z);
   const base = box(14, .5, 14, P.banqueta); g.add(base);
@@ -17,12 +17,12 @@ export function oficina(ctx) {
   const techo = box(9.8, .6, 7.8, P.oficinaTecho); techo.position.set(0, 9.6, 0); g.add(techo);
   const letrero = box(5, .9, .3, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); letrero.position.set(0, 10.4, 3.6); g.add(letrero);
   const vm = M(P.ventana, { roughness: .4 }); const vOn = M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.4 : .15, roughness: .4 });
-  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); g.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); g.add(v2); }
-  const puerta = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, .12), M(0x5A4636)); puerta.position.set(0, 1.35, 3.56); g.add(puerta);
+  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); g.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); g.add(v2); }
+  const puerta = new THREE.Mesh(G(1.6, 2.2, .12), M(0x5A4636)); puerta.position.set(0, 1.35, 3.56); g.add(puerta);
   // sala de juntas (anexo bajo) que se enciende con reunión
   const sala = box(4.5, 3.2, 4.5, P.oficina); sala.position.set(-6, 1.85, -3); g.add(sala);
   const salaTecho = box(5, .4, 5, P.oficinaTecho); salaTecho.position.set(-6, 3.65, -3); g.add(salaTecho);
-  const salaVent = new THREE.Mesh(new THREE.BoxGeometry(3, 1.4, .12), modelo.oficina.reunionEnCurso ? vOn : vm); salaVent.position.set(-6, 1.9, -.7); g.add(salaVent);
+  const salaVent = new THREE.Mesh(G(3, 1.4, .12), modelo.oficina.reunionEnCurso ? vOn : vm); salaVent.position.set(-6, 1.9, -.7); g.add(salaVent);
   if (oscuro && modelo.oficina.reunionEnCurso) { const l = new THREE.PointLight(0xFFD66B, 1.4, 14); l.position.set(-6, 3, .5); g.add(l); }
   for (const [x, z] of [[6, 5.5], [-6, 5.5], [6.2, -5.8]]) arbol(ctx, g, x, z, 1.1);
   add(g, { tipo: 'oficina', titulo: 'Oficina Acteck', sub: `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reunión${modelo.oficina.reuniones === 1 ? '' : 'es'} hoy`, pagina: 'agenda' });
@@ -41,15 +41,15 @@ export function oficina(ctx) {
 
 // CEDIS: nave, racks, tarimas descargando y montacargas.
 export function cedis(ctx) {
-  const { P, M, box, add, oscuro, modelo, esc, animados } = ctx;
+  const { P, M, G, box, add, oscuro, modelo, esc, animados } = ctx;
   const cedisPos = { x: esc.x + 9, z: esc.z - 2 };
   const g = new THREE.Group(); g.position.set(cedisPos.x, 0, cedisPos.z);
   g.add(box(22, .5, 16, P.banqueta));
   const nave = box(16, 6, 11, P.cedis); nave.position.set(0, 3.25, -1); g.add(nave);
   const techo = box(17, .7, 12, P.cedisTecho); techo.position.set(0, 6.6, -1); g.add(techo);
   for (let i = 0; i < 3; i++) { const cl = box(2.2, .4, 3, P.cedisTecho); cl.position.set(-5 + i * 5, 7.1, -1); g.add(cl); }
-  for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, .14), M(0x4A4F5C)); p.position.set(-5 + i * 5, 1.5, 4.57); g.add(p); }
-  for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(new THREE.BoxGeometry(1.6, .8, .12), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .12, roughness: .4 })); v.position.set(-6.5 + i * 2.6, 4.6, 4.57); g.add(v); }
+  for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(G(2.4, 2.6, .14), M(0x4A4F5C)); p.position.set(-5 + i * 5, 1.5, 4.57); g.add(p); }
+  for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(G(1.6, .8, .12), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .12, roughness: .4 })); v.position.set(-6.5 + i * 2.6, 4.6, 4.57); g.add(v); }
   const rotulo = box(5.5, .9, .25, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); rotulo.position.set(0, 7.4, 4.6); g.add(rotulo);
   // racks al frente (altura por días de inventario) y tarimas descargando
   for (let i = 0; i < modelo.cedis.racks; i++) { const col = i % 2 ? 0xC58A3A : 0xD49A4A; for (let k = 0; k < 1 + (i % 3); k++) { const c = box(1.3, 1, 1.3, col); c.position.set(-9 + (i % 5) * 2.2, .75 + k * 1.05, 6.5 + Math.floor(i / 5) * 2); g.add(c); } }
@@ -78,7 +78,7 @@ export function puerto(ctx) {
 
 // Distritos: una manzana por ciudad con sus tiendas, clientes finales, vendedores, peatones, etiqueta y carretera desde el CEDIS.
 export function distritos(ctx, cedisPos) {
-  const { P, M, box, add, oscuro, modelo, esc, raiz, interact, animados } = ctx;
+  const { P, M, G, box, add, oscuro, modelo, esc, raiz, interact, animados } = ctx;
   const distritoPos = new Map(); const rutas = new Map();
   modelo.distritos.forEach((d) => {
     const esGDL = d.ciudad === 'GUADALAJARA';
@@ -99,14 +99,14 @@ export function distritos(ctx, cedisPos) {
       const techo = box(2.3, .3, 2.3, P.tiendaTecho); techo.position.y = 2.05; tg.add(techo);
       const toldo = box(2.2, .16, .8, col); toldo.position.set(0, 1.5, 1.35); tg.add(toldo);
       const letrero = box(1.5, .34, .12, t.vendio ? col : P.ventana, { emissive: t.vendio ? col : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.6 : .3) : 0 }); letrero.position.set(0, 1.78, 1.06); tg.add(letrero);
-      const vit = new THREE.Mesh(new THREE.BoxGeometry(1.1, .75, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .75, 1.05); tg.add(vit);
-      const puerta = new THREE.Mesh(new THREE.BoxGeometry(.5, 1.1, .1), M(0x5A4636)); puerta.position.set(.6, .55, 1.05); tg.add(puerta);
+      const vit = new THREE.Mesh(G(1.1, .75, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .75, 1.05); tg.add(vit);
+      const puerta = new THREE.Mesh(G(.5, 1.1, .1), M(0x5A4636)); puerta.position.set(.6, .55, 1.05); tg.add(puerta);
       if (oscuro && t.vendio) { const l = new THREE.PointLight(col, .8, 6); l.position.set(0, 2.2, 1.8); tg.add(l); }
       if (t.cartera && t.cartera.vencido > 0) { const palo = box(.1, 3.2, .1, 0x6b6e76); palo.position.set(-1.1, 1.6, -1.1); tg.add(palo); const bandera = box(.9, .55, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .3 }); bandera.position.set(-.65, 2.9, -1.1); tg.add(bandera); animados.push((tt) => { bandera.rotation.y = Math.sin(tt * 3) * .25; }); }
       g.add(tg);
       interact.push(...(() => { const arr = []; tg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, ciudad: d.ciudad }; arr.push(o); } }); return arr; })());
     });
-    for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const techo = new THREE.Mesh(new THREE.ConeGeometry(.95, .7, 4), M(P.tiendaTecho)); techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(new THREE.BoxGeometry(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); cg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad }; interact.push(o); } }); }
+    for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const techo = new THREE.Mesh(new THREE.ConeGeometry(.95, .7, 4), M(P.tiendaTecho)); techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); cg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad }; interact.push(o); } }); }
     // árboles y farol
     arbol(ctx, g, -ancho / 2 - 1.2, -largo / 2 - 1.2, .9); arbol(ctx, g, ancho / 2 + 1.2, largo / 2 + 1.2, 1); if (n > 6) arbol(ctx, g, ancho / 2 + 1.2, -largo / 2 - 1.2, .8);
     const farol = box(.12, 2.6, .12, 0x6b6e76); farol.position.set(ancho / 2 + .6, 1.3, largo / 2 + .6); g.add(farol); const foco = new THREE.Mesh(new THREE.SphereGeometry(.22, 8, 6), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.6 : .2 })); foco.position.set(ancho / 2 + .6, 2.7, largo / 2 + .6); g.add(foco);
