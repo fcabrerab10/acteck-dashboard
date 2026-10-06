@@ -5,7 +5,7 @@
 // Módulos: Hoy · Bandeja · Pendientes · Reuniones (minutas de la V4 dentro del nuevo armazón) · Ideas · Registro del día ·
 // Semana · Equipo. Captura rápida con N o ⌘⇧N en lenguaje natural (agenda5/interpretar.js).
 import React, { useEffect, useMemo, useState } from 'react';
-import { Sun, Inbox, CheckSquare, Users, Lightbulb, BookOpen, CalendarRange, UserCheck, ChevronDown } from 'lucide-react';
+import { Sun, Inbox, CheckSquare, Users, Lightbulb, BookOpen, CalendarRange, UserCheck, ChevronDown, Compass } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
@@ -20,6 +20,7 @@ import { hoyDe, bandejaDe, pendientesDe, isoDia, sumarDias, fmtMin, esDe, abiert
 import { Avatar, FilaTarea, Titulo, Seccion, Palomita } from './comun';
 import Captura from './Captura';
 import Hoy from './Hoy';
+import Dia from './Dia';
 import Bandeja from './Bandeja';
 import Pendientes from './Pendientes';
 import ReunionesV5 from './Reuniones';
@@ -29,7 +30,7 @@ import FormReunion from './base/FormReunion';
 import { comentariosPorItem } from './base/calculo';
 
 const MODULOS = [
-  { id: 'hoy', label: 'Hoy', icon: Sun }, { id: 'bandeja', label: 'Bandeja', icon: Inbox }, { id: 'pendientes', label: 'Pendientes', icon: CheckSquare },
+  { id: 'dia', label: 'Día', icon: Compass }, { id: 'hoy', label: 'Horario', icon: Sun }, { id: 'bandeja', label: 'Bandeja', icon: Inbox }, { id: 'pendientes', label: 'Pendientes', icon: CheckSquare },
   { id: 'reuniones', label: 'Reuniones', icon: Users }, { id: 'ideas', label: 'Ideas', icon: Lightbulb },
   { id: 'registro', label: 'Registro del día', icon: BookOpen, grupo: 'Ritmo' }, { id: 'semana', label: 'Semana', icon: CalendarRange, grupo: 'Ritmo' },
   { id: 'equipo', label: 'Equipo', icon: UserCheck, grupo: 'Equipo' },
@@ -40,7 +41,7 @@ export default function Agenda5({ onNavegar, inicial = null }) {
   const { theme } = useTheme();
   const [uid, setUid] = useState(null);
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUid(data?.user?.id || null)); }, []);
-  const [modulo, setModulo] = useState(inicial?.vista || 'hoy');
+  const [modulo, setModulo] = useState(inicial?.vista || 'dia');
   const [propietario, setPropietario] = useState(null);
   const [captura, setCaptura] = useState(!!inicial?.captura); // el correo de la Agenda trae #/ir/agenda?captura=1
   const [hojaItem, setHojaItem] = useState(null);
@@ -104,6 +105,7 @@ export default function Agenda5({ onNavegar, inicial = null }) {
       </aside>
       <main style={{ padding: '16px 18px', minWidth: 0, animation: `agIn ${DUR.content}ms ${EASE} both` }} key={modulo + propietario}>
         <style>{`@keyframes agIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }`}</style>
+        {modulo === 'dia' && <Dia {...comunes} />}
         {modulo === 'hoy' && <Hoy {...comunes} />}
         {modulo === 'bandeja' && <Bandeja {...comunes} />}
         {modulo === 'pendientes' && <Pendientes {...comunes} />}

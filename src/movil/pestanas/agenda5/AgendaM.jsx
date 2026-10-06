@@ -24,9 +24,10 @@ import { bloquesDia } from '../../../modules/agenda5/calculo';
 import { useBottomOffset, AgendaCtx, PalomitaM } from './comun';
 import CapturaHoja from './Captura';
 import Reuniones from './Reuniones';
+import DiaM from './DiaM';
 import Minuta from './Minuta';
 
-const VISTAS = [{ id: 'hoy', label: 'Día' }, { id: 'bandeja', label: 'Bandeja' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'reuniones', label: 'Reuniones' }, { id: 'mas', label: 'Más' }];
+const VISTAS = [{ id: 'dia', label: 'Día' }, { id: 'hoy', label: 'Horario' }, { id: 'bandeja', label: 'Bandeja' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'reuniones', label: 'Reuniones' }, { id: 'mas', label: 'Más' }];
 const DIAS_1 = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const lunesDe = (iso) => { const d = new Date(`${iso}T12:00:00`); return isoDia(sumarDias(d, -((d.getDay() + 6) % 7))); };
@@ -40,7 +41,7 @@ export default function AgendaM({ inicial, raiz = false }) {
   const puedeVer = puedeVerPaginaGlobal(perfil, 'agenda');
   const d = useAgenda5({ enabled: !!perfil && puedeVer });
   const google = useGoogleEstado();
-  const [vista, setVista] = useState(inicial?.vista || 'hoy');
+  const [vista, setVista] = useState(inicial?.vista || 'dia');
   const [propietario, setPropietario] = useState(null);
   const [cap, setCap] = useState(null);       // hoja V4 (editar ítem)
   const [rapida, setRapida] = useState(false); // captura rápida V5
@@ -113,6 +114,7 @@ export default function AgendaM({ inicial, raiz = false }) {
   return (
     <AgendaCtx.Provider value={ctx}>
       {cabecera}
+      {vista === 'dia' && <DiaM {...com} perfil={perfil} />}
       {vista === 'hoy' && <HoyM {...com} />}
       {vista === 'bandeja' && <BandejaM {...com} />}
       {vista === 'pendientes' && <PendientesM {...com} />}
