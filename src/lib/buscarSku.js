@@ -50,3 +50,28 @@ export function coincideSku(r, interp, indice = indiceSku(r)) {
 
 /** Texto corto de lo entendido: «SKU AC-9431 · Categoría Monitores · 27"». */
 export const resumenBusqueda = (interp) => interp.chips.map((c) => c.label).join(' · ');
+
+const mismoChip = (a, b) => a.tipo === b.tipo && String(a.valor).toLowerCase() === String(b.valor).toLowerCase();
+
+/**
+ * Quita un chip del texto escrito (la × del chip en el celular, 2026-10-05): devuelve el texto SIN las palabras que
+ * produjeron ese chip y con los demás chips intactos. Prueba quitando una palabra o dos seguidas (marca «balam rush»,
+ * «27 pulgadas», categoría de dos palabras) y se queda con la primera combinación que elimina justo ese chip.
+ */
+export function quitarChip(q, chip, opts = {}) {
+  const palabras = String(q || '').split(/\s+/).filter(Boolean);
+  const antes = interpretarBusqueda(q, opts).chips;
+  const quedan = (texto) => interpretarBusqueda(texto, opts).chips;
+  const sinEse = antes.filter((c) => !mismoChip(c, chip));
+  const sirve = (texto) => {
+    const c = quedan(texto);
+    return c.length === sinEse.length && c.every((x, i) => mismoChip(x, sinEse[i]));
+  };
+  for (const n of [1, 2]) {
+    for (let i = 0; i + n <= palabras.length; i++) {
+      const texto = [...palabras.slice(0, i), ...palabras.slice(i + n)].join(' ');
+      if (sirve(texto)) return texto;
+    }
+  }
+  return '';
+}

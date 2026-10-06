@@ -46,6 +46,40 @@ export function useSellInGlobal(anio) {
   });
 }
 
+/**
+ * Sell In de la EMPRESA en el celular (3.80.0 · 2026-10-05): 7 consultas chicas, todas por queries.js.
+ *   v_erp_medidas_mes            2 años × 12 (fact_neta, contribucion, piezas…: medidas del director, lee la MV)
+ *   cuotas_canales               TOTAL y por canal del año (como Inicio)
+ *   v_cuota_global_mensual       Σ cuotas_mensuales.cuota_ideal por mes (respaldo de la cuota)
+ *   v_vision_factura_dimension_mes 2 años: canal · marca · categoría (mix como pay)
+ *   mv_analisis_cliente_mes      cliente × mes, 2 años, 3 columnas (clientes con compra, activos, nuevos)
+ *   v_sellin_global_sku_anio     3 años pivotados (tabla SKU × 12 meses con Δ) → { sku, anio, monto[12], piezas[12] }
+ * (+ useRoadmap, cacheado y compartido). Las medidas traen contribución: la pantalla sólo la enseña con `sensible`.
+ */
+export function useSellInEmpresa(anio) {
+  const anios = [anio - 1, anio];
+  return useQuery({
+    queryKey: ['movil', 'sellin-empresa', anio],
+    staleTime: STALE,
+    enabled: !!anio,
+    queryFn: async () => {
+      const [medidas, cuotaCanales, cuotaMensual, dimMes, clientesMes, skuAnio] = await Promise.all([
+        fetchAll('v_erp_medidas_mes', 'anio,mes,fact_bruta,devoluciones,rmas,bonificaciones,fact_neta,venta_neta,costo_venta_neta,contribucion,utilidad_comercial,piezas_venta_neta', (q) => q.in('anio', anios)),
+        cachedQuery(supabase.from('cuotas_canales').select('anio,dimension_tipo,dimension_valor,meta_facturacion,meta_margen_pct').eq('anio', anio)).then((r) => r.data || []).catch(() => []),
+        fetchAll('v_cuota_global_mensual', 'anio,mes,cuota_min,cuota_ideal', (q) => q.in('anio', anios)),
+        fetchAll('v_vision_factura_dimension_mes', 'anio,mes,dimension,valor,venta,piezas', (q) => q.in('anio', anios)),
+        fetchAll('mv_analisis_cliente_mes', 'cliente,anio,mes,fact_neta', (q) => q.in('anio', anios)),
+        fetchAllQ(() => supabase.from('v_sellin_global_sku_anio').select('sku,anio,piezas,monto').in('anio', [anio - 2, anio - 1, anio]),
+          { pageSize: 5000, orderCol: 'sku', label: 'v_sellin_global_sku_anio' }),
+      ]);
+      return {
+        medidas: medidas || [], cuotaCanales, cuotaMensual: cuotaMensual || [], dimMes: dimMes || [], clientesMes: clientesMes || [],
+        skuAnio: (skuAnio || []).map((r) => ({ sku: r.sku, anio: Number(r.anio), monto: r.monto || [], piezas: r.piezas || [] })),
+      };
+    },
+  });
+}
+
 /** Renglones de facturación de UN sku en los años que cubren los últimos meses mostrados. */
 export function useClientesSku(sku, anios) {
   const lista = [...new Set(anios)].sort();

@@ -189,6 +189,22 @@ export function useResumenCuenta(cuenta, anio, enabled = true) {
   };
 }
 
+/**
+ * Sell out de TODAS las cuentas por sku × año con los 12 meses pivotados (v_sellout_sku_anio, migración
+ * 20261005_sku_anio_pivot_movil.sql: vista viva sobre mv_sellout_cuenta_sku_mes, 65 ms). Tres años para que la tabla
+ * «Detalle por SKU × 12 meses» del celular tenga su Δ contra los mismos 12 meses del año anterior aunque la ventana
+ * cruce de año: 3.4 K filas · 132 KB gz. Se normaliza a { sku, anio, marca, categoria, monto[12], piezas[12] }.
+ */
+export function useSkuAnio(anio, enabled = true) {
+  return useQuery(q(['sellout_global', 'sku_anio', anio], async () => {
+    const rows = await fetchAllQ(
+      () => supabase.from('v_sellout_sku_anio').select('sku,anio,marca,categoria,importe,cantidad').in('anio', [anio - 2, anio - 1, anio]),
+      { pageSize: 5000, orderCol: 'sku', label: 'v_sellout_sku_anio' },
+    );
+    return (rows || []).map((r) => ({ sku: r.sku, anio: Number(r.anio), marca: r.marca, categoria: r.categoria, monto: r.importe || [], piezas: r.cantidad || [] }));
+  }, { enabled: enabled && !!anio }));
+}
+
 /** cliente_key del dashboard → cuenta de sell out (para Análisis por Cliente). */
 export const CUENTA_POR_CLIENTE = { digitalife: 'digitalife', pcel: 'pcel', dicotech: 'dicotech' };
 /** Código de cliente del ERP → cuenta de sell out. Mismo mapeo que v_sellout_cuentas. */
