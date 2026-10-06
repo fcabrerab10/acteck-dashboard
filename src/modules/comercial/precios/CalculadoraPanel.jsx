@@ -163,7 +163,7 @@ export default function CalculadoraPanel({ catalogo = [], filasPorSku, sensible 
                   })}
                 </div>
               )}
-              {interp.vacio && <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '10px 2px 0', lineHeight: 1.4 }}>Escribe un SKU («AC-9431»), un modelo, una marca o una categoría. También puedes tocar «Calcular» en la tabla de abajo.</div>}
+              {interp.vacio && <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '10px 2px 0', lineHeight: 1.4 }}>Escribe un SKU («AC-9431»), un modelo, una marca o una categoría.</div>}
             </>
           )}
           {item && (

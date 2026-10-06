@@ -21,6 +21,8 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 - [x] Velocidad y «cada rato carga» en el iPad (3.89.0): la caché de datos ya sobrevive a los deploys, las pestañas abren al instante con lo cacheado y refrescan atrás, y un deploy ya no recarga la pestaña que está en otra app.
 
+- [x] Del celular a la web (3.90.0–3.90.1): ticket promedio por cuenta en Sell Out, buscador que entiende (Propuestas · Inventario · Precios), calculadora de precio con propuesta en curso, «Qué le falta» en el Resumen del cliente, S&OP «Mis clientes» y «por qué N pz», Inventario con cambio mensual y stock al cierre por SKU, conversión ponderada en Propuestas, Actividad del equipo con 4 semanas, ritmo, WhatsApp y reasignar.
+
 ## Aprobado, por construir
 - [x] Pagos del cliente propio (celular): pestaña Pagos en la ficha con flujo del mes, rebate según la regla, apoyo por producto, apoyos por costo convenio y reglas editables (% y base) (3.85.0–3.85.1).
 - [x] Cobranza general (celular) rehecha con el formato estándar sobre los tres propios (3.86.0).
