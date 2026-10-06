@@ -65,7 +65,7 @@ const GRUPOS_BASE = [
   {
     id: 'clientesPropios', label: 'Clientes propios', icon: Users, color: '#34C759',
     nodos: [
-      { pagina: 'resumenClientes',   label: 'Resumen de Clientes',   icon: BarChart3 },
+      // 2026-10-05 · Fernando: «la pestaña de Resumen de clientes no le veo razón de ser»: fuera del menú (el código sigue en PaginaContenido por si vuelve).
       // Pagos V3 · una sola pantalla para los tres clientes; se ve si el perfil ve `pagos` de al menos un cliente.
       { pagina: 'pagos',             label: 'Pagos',                 icon: Wallet,
         ver: (perfil) => CLIENTES_ORDEN.some((k) => puedeVerPestanaCliente(perfil, k, 'pagos')) },

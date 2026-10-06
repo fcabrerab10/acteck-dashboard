@@ -17,7 +17,7 @@ const AnalisisClientes = lazy(() => import('./pestanas/AnalisisClientes'));
 const SellOutCliente   = lazy(() => import('./pestanas/SellOutCliente'));
 const MarketingCliente = lazy(() => import('./pestanas/MarketingCliente'));
 const CobranzaCliente  = lazy(() => import('./pestanas/CobranzaCliente'));
-const SOP              = lazy(() => import('./pestanas/SOP'));
+const SopM             = lazy(() => import('./pestanas/sop/SopM'));         // S&OP (3.83.0 · 2026-10-05)
 const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
 const SellInGlobal     = lazy(() => import('./pestanas/sellin/SellInGlobal'));
 const SellOutGlobal    = lazy(() => import('./pestanas/selloutGlobal/SellOutGlobal'));
@@ -28,6 +28,7 @@ const CobranzaGlobalM  = lazy(() => import('./pestanas/cobranza/CobranzaGlobalM'
 const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
 const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
+const ForecastM        = lazy(() => import('./pestanas/forecast/ForecastM')); // Proyectos y forecast (3.83.0 · 2026-10-05)
 const InventarioM      = lazy(() => import('./pestanas/inventario/InventarioM')); // 2026-10-05 · Inventario global
 const EstrategiaPreciosM = lazy(() => import('./pestanas/precios/EstrategiaPreciosM')); // 2026-10-05 · calculadora de margen y propuesta
 
@@ -58,7 +59,7 @@ const GLOBALES = {
   sellOut:           () => ({ tipo: 'push', key: 'sellout-global', el: h(SellOutGlobal) }), // Sell Out consolidado (sin clienteKey)
   analisisClientes:  () => ({ tipo: 'push', key: 'analisis', el: h(AnalisisClientes) }),
   cobranzaGlobal:    () => ({ tipo: 'push', key: 'cobranza-global', el: h(CobranzaGlobalM) }), // Cobranza general (2026-10-04)
-  forecastClientes:  () => ({ tipo: 'push', key: 'sop', el: h(SOP) }),
+  forecastClientes:  (extra) => ({ tipo: 'push', key: 'sop', el: h(SopM, { inicial: extra || null }) }),
   // `extra.skus` (+ `extra.clienteKey`) precarga una propuesta nueva con esos SKUs (desde «<Cuenta> frente al resto», 2026-10-05).
   propuestas:        (extra) => ({ tipo: 'push', key: 'propuestas', el: h(Propuestas, { inicial: extra || null }) }),
   // Tracking de pedidos (OCs de clientes). `extra.ocId` (alerta de tracking) abre la ficha de la OC.
@@ -66,7 +67,10 @@ const GLOBALES = {
     ? { tipo: 'push', key: `oc-${extra.ocId}`, el: h(FichaOC, { ocId: extra.ocId }) }
     : { tipo: 'push', key: 'tracking', el: h(TrackingM) }),
   // Proyectos y abasto (V3 · 2026-09-21): sustituye al Forecast de reservas en el celular.
-  forecastReservas:  (extra) => ({ tipo: 'push', key: extra?.proyectoId ? `proyectos-${extra.proyectoId}` : 'proyectos', el: h(Proyectos, { inicial: extra || null }) }),
+  // 2026-10-05: la pestaña abre Proyectos y forecast (ForecastM); una alerta de arribo con proyectoId abre directo el proyecto.
+  forecastReservas:  (extra) => (extra?.proyectoId
+    ? { tipo: 'push', key: `proyectos-${extra.proyectoId}`, el: h(Proyectos, { inicial: extra }) }
+    : { tipo: 'push', key: 'forecast', el: h(ForecastM, { inicial: extra || null }) }),
   // Agenda V4 · pestaña RAÍZ del shell (2026-09-22), con su propia pila: ya no se empuja sobre otra pestaña.
   // `extra` viene de una notificación: { itemId } abre el ítem o su minuta; { vista } elige la vista inicial;
   // MovilApp se lo pasa a la pantalla raíz. adminInterna (página vieja) cae aquí también.

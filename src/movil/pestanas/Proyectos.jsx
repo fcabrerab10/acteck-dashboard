@@ -42,7 +42,7 @@ export default function Proyectos({ inicial = null }) {
   const [vista, setVista] = useState('proyectos');
   const [mesSel, setMesSel] = useState(null);     // null = todos
   const [abierto, setAbierto] = useState(inicial?.proyectoId || null);   // id del proyecto (una alerta de arribo lo trae en `inicial`)
-  const [nuevo, setNuevo] = useState(false);
+  const [nuevo, setNuevo] = useState(!!inicial?.nuevo);   // ForecastM abre «Nuevo proyecto» directo
 
   const pr = useProyectos();
   const ab = useAbasto();

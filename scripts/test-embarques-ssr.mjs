@@ -17,7 +17,7 @@ test('las pantallas tocadas cargan y exportan default', async () => {
     '/src/modules/comercial/InventarioGlobal.jsx',
     '/src/modules/comercial/inventario/ProximosArribos.jsx',
     '/src/modules/comercial/inventario/HistoricoPanel.jsx',
-    '/src/movil/pestanas/SOP.jsx',
+    '/src/movil/pestanas/sop/SopM.jsx',
   ]) {
     const mod = await vite.ssrLoadModule(m);
     assert.equal(typeof mod.default, 'function', `${m} debe exportar default`);

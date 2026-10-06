@@ -97,7 +97,8 @@ test('la ruta móvil de forecastReservas apunta a la pantalla nueva', async () =
   const { destino } = await vite.ssrLoadModule('/src/movil/rutas.js');
   const d = destino({ pagina: 'forecastReservas', clienteKey: null });
   assert.equal(d.tipo, 'push');
-  assert.equal(d.key, 'proyectos');
+  assert.equal(d.key, 'forecast'); // 2026-10-05: la pestaña abre Proyectos y forecast (ForecastM)
+  assert.equal(destino({ pagina: 'forecastReservas', extra: { proyectoId: 'x' } }).key, 'proyectos-x');
 });
 
 test('la pantalla completa renderiza con datos sembrados (hero, KPIs, tablero y compras)', async () => {

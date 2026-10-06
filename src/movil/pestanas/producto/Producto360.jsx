@@ -18,9 +18,11 @@ import FichaProducto from '../../FichaProducto';
 import AnalisisFicha from '../AnalisisFicha';
 import { moneyCompact, int, deltaPct, MESES, N } from '../../util';
 import { useProducto360 } from './datos';
+import Abasto from './Abasto';
 
 const PROPIOS = { digitalife: 'digitalife', pcel: 'pcel', dicotech: 'dicotech' };
-const CARAS = [{ id: 'sellin', label: 'Sell in' }, { id: 'sellout', label: 'Sell out' }, { id: 'inventario', label: 'Inventario' }];
+// Cuarta cara «Abasto» (3.83.0): el S&OP de este SKU con sus propios datos (producto/Abasto.jsx).
+const CARAS = [{ id: 'sellin', label: 'Sell in' }, { id: 'sellout', label: 'Sell out' }, { id: 'inventario', label: 'Inventario' }, { id: 'abasto', label: 'Abasto' }];
 const fechaCorta = (iso) => { if (!iso) return '—'; const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`); return `${d.getDate()} ${MESES[d.getMonth()].toLowerCase()}`; };
 const mesLbl = (k) => { const [a, m] = String(k).split('-').map(Number); return `${MESES[m - 1].toLowerCase()} ${String(a).slice(2)}`; };
 
@@ -182,6 +184,8 @@ export default function Producto360({ sku, cara: caraInicial = 'sellout' }) {
           )}
         </>
       )}
+
+      {cara === 'abasto' && <Abasto sku={sku} sensible={sensible} />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '18px 16px 0' }}>
         <BotonGrande primario icon={FileText} onClick={() => proponer(null)}>Preparar propuesta</BotonGrande>

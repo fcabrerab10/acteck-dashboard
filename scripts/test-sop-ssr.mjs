@@ -21,7 +21,7 @@ test('los archivos tocados cargan y exportan default', async () => {
     '/src/modules/comercial/tracking/Backorder.jsx',
     '/src/modules/comercial/tracking/SurtirHoy.jsx',
     '/src/modules/comercial/tracking/FacturasSinOC.jsx',
-    '/src/movil/pestanas/SOP.jsx',
+    '/src/movil/pestanas/sop/SopM.jsx',
   ]) {
     const mod = await vite.ssrLoadModule(m);
     assert.equal(typeof mod.default, 'function', `${m} debe exportar default`);

@@ -15,9 +15,11 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] Producto 360 (3.81.0–3.81.1).
 - [x] Inventario (3.81.0) y Estrategia de Precios con calculadora y propuesta (3.81.0).
 - [x] S&OP del celular en blanco: corregido (3.80.1).
+- [x] S&OP (celular) Empresa · Mis clientes, Lo que viene con PO abrible, Producto 360 · Abasto, Proyectos y forecast con «Los tres» y captura del forecast en formato CRM desde el celular (3.83.0).
+- [x] «Resumen de Clientes» fuera del menú web (3.83.0).
 
 ## Aprobado, por construir
-- [ ] S&OP (celular): mockup v2 (artifact 696658b3) esperando el visto bueno de Fernando.
+- [ ] **Clientes propios en el celular** (Resumen · Sell In · Sell Out · Marketing · Crédito y cobranza, para Digitalife, PCEL y Dicotech): mockup c73e7c5c revisado el 5-oct. Reglas: las ven los clientes → sin margen ni costo; gráficas lineales (sólo el zoom diario en barras); inventario en dinero grande, semanas en letra chica. Siguiente paso: mockup de los TRES clientes juntos con Marketing y Cobranza antes de codear PCEL y Dicotech; Digitalife se puede ir construyendo.
 - [ ] ~~Sell Out global (celular)~~, mockup 2b9599a5: hero, 4 tarjetas, gráfica vs año anterior, pay del mix, **tabla de detalle por SKU × 12 m** con Piezas · $, ordenar por cualquier columna y buscador que entiende (chips con lo entendido). Sin cuentas.
 - [ ] Sell In global (celular): mismo esqueleto con cuota, margen y clientes que compraron; tabla por SKU igual. Sin tabla de clientes.
 - [ ] Producto 360: hero completo (sell in, sell out, SO/SI, inventario nuestro, en cuentas, en camino), gráfica sell in vs sell out, Segmented «Quién lo desplaza · Quién lo compra» (ranking con piezas, Δ, semanas de inventario; clientes que dejaron de comprarlo), dónde se vende. Botones conectados: Preparar propuesta (canasta precargada + cliente + sugerido), Proponer (cliente puesto + pendiente en la Agenda), Ver en Inventario (buscador con el SKU), Precios (Ficha de producto). Cuentas y clientes tocables → Análisis por cliente.
