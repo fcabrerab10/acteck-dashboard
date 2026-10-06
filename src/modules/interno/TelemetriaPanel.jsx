@@ -122,7 +122,7 @@ export default function TelemetriaPanel() {
         </Panel>
       )}
 
-      <HojaPersona u={sel} datos={sel ? porUsuario.get(sel.user_id) : null} abierto={!!sel && hojaAbierta} onClose={() => setHojaAbierta(false)}
+      <HojaPersona u={sel} datos={sel ? porUsuario.get(sel.user_id) : null} abierto={!!sel && hojaAbierta} onClose={() => setHojaAbierta(false)} registrosHoy={datos.registrosHoy || []}
         agendaDisponible={!!agenda?.disponible} evaluaciones={evaluaciones} />
     </div>
   );

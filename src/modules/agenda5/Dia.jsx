@@ -17,6 +17,10 @@ import { completarItem, cronometro, moverA, actualizarItem } from './datos';
 import { useFuentesDia, propuestasDe, decidir, cerrarDia, horasDe, navegar } from './dia/datos';
 import { HILOS, hiloDe, porHilo, cargaDia, fmtMin, momentoDe } from './dia/proponer';
 import { usePerfil } from '../../lib/perfilContext';
+import { usePreferencias } from '../../lib/preferencias';
+import Ritmo from './dia/RitmoModal';
+import { resumenRitmo } from './dia/ritmo';
+import { Settings2 } from 'lucide-react';
 
 const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -25,9 +29,16 @@ const FASES = [{ id: 'armar', label: 'Armar el día' }, { id: 'guia', label: 'Gu
 export default function Dia({ d, uid, propietario, personasPorId, puedeEditar, onAbrirItem, onCapturar, onAbrirReunion }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
+  const prefs = usePreferencias();
   const hoy = useMemo(() => new Date(), []);
   const hoyIso = isoDia(hoy);
-  const horas = horasDe(perfil);
+  const esMia = propietario === uid;
+  const personaVista = d.personas?.find((x) => x.user_id === propietario) || null;
+  const horasGuardadas = esMia ? prefs?.agenda?.horas || perfil?.preferencias?.agenda?.horas || null : personaVista?.preferencias?.agenda?.horas || null;
+  const horas = { ...horasDe(null), ...(horasGuardadas || {}) };
+  const [ritmo, setRitmo] = useState(false);
+  const [ritmoOfrecido, setRitmoOfrecido] = useState(false);
+  useEffect(() => { if (esMia && puedeEditar && !horasGuardadas && !ritmoOfrecido && uid) { setRitmo(true); setRitmoOfrecido(true); } }, [esMia, puedeEditar, horasGuardadas, ritmoOfrecido, uid]);
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 30000); return () => clearInterval(t); }, []);
   const ahora = useMemo(() => new Date(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -60,8 +71,12 @@ export default function Dia({ d, uid, propietario, personasPorId, puedeEditar, o
             <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text }}>{saludo}{perfil?.nombre ? `, ${String(perfil.nombre).split(' ')[0]}` : ''}</div>
             <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2 }}>{fecha.replace(/^./, (c) => c.toUpperCase())} · {momento === 'pausa' ? `pausa hasta las ${horas.retomar}` : momento === 'antes' ? `el día se arma a las ${horas.armar}` : momento === 'cierre' ? 'hora de cerrar el día' : `cierras a las ${horas.cierre}`}</div>
           </div>
-          <Segmented options={FASES} value={f} onChange={setFase} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {esMia && puedeEditar && <Boton icon={Settings2} onClick={() => setRitmo(true)} title={resumenRitmo(horasGuardadas)}>Mi ritmo</Boton>}
+            <Segmented options={FASES} value={f} onChange={setFase} />
+          </div>
         </div>
+        {ritmo && <Ritmo abierto={ritmo} onClose={() => setRitmo(false)} horas={horasGuardadas} personas={d.personas} propietario={propietario} hoy={hoy} />}
         {f === 'armar' && <Armar theme={theme} h={h} props={props} cargando={fuentes.isLoading} horas={horas} uid={uid} propietario={propietario} hoyIso={hoyIso} puedeEditar={puedeEditar} onEmpezar={() => setFase('guia')} onCapturar={onCapturar} areasPorId={areasPorId} personasPorId={personasPorId} onAbrirItem={onAbrirItem} toggle={toggle} />}
         {f === 'guia' && <Guia theme={theme} h={h} s={s} ahora={ahora} areasPorId={areasPorId} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onAbrirItem={onAbrirItem} onAbrirReunion={onAbrirReunion} toggle={toggle} crono={crono} hoyIso={hoyIso} onArmar={() => setFase('armar')} />}
         {f === 'cierre' && <Cierre theme={theme} h={h} uid={uid} propietario={propietario} hoyIso={hoyIso} registro={registroHoy} puedeEditar={puedeEditar} areasPorId={areasPorId} />}

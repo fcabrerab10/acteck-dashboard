@@ -17,11 +17,12 @@ import { fmtHm, fmtHmCorto, fmtHora, fmtDiaLargo, plural, textoInactividad, PAGI
 import { useInvalidarEquipo } from '../../../modules/interno/equipo/datos.js';
 import { useNav } from '../../nav';
 import { TituloGrande, HeroM, ListaAgrupada, Cabecera, Segmented, Pill, Vacio, toast } from '../../piezas';
+import SuDia from '../../../modules/interno/equipo/SuDia';
 import { PalomitaM } from '../agenda5/comun';
 import { ultimaEntrada } from './piezas';
 import EvaluacionM from './EvaluacionM';
 
-export default function Persona({ u, datos, agendaDisponible, evaluaciones, mesActual }) {
+export default function Persona({ u, datos, agendaDisponible, evaluaciones, mesActual, registrosHoy = [] }) {
   const nav = useNav();
   const hoy = useMemo(() => new Date(), []);
   const hoyIso = isoDia(hoy);
@@ -54,6 +55,7 @@ export default function Persona({ u, datos, agendaDisponible, evaluaciones, mesA
           <Segmented size="md" value={vista} onChange={setVista} options={opciones} style={{ display: 'flex', width: '100%' }} />
         </div>
 
+        {vista === 'semana' && agendaDisponible && <ListaAgrupada titulo="Su día" meta="Mi ritmo · hoy"><div style={{ padding: '8px 16px 10px' }}><SuDia u={u} agenda={agenda} registrosHoy={registrosHoy} compacto /></div></ListaAgrupada>}
         {vista === 'semana' && <Semana tele={tele} acc={acc} hoy={hoy} />}
         {vista === 'pendientes' && <Pendientes agenda={agenda} agendaDisponible={agendaDisponible} hoyIso={hoyIso} nav={nav} />}
         {vista === 'evaluacion' && u.se_evalua && <EvaluacionM u={u} agenda={agenda} evaluaciones={evaluaciones} mesActual={mesActual} />}

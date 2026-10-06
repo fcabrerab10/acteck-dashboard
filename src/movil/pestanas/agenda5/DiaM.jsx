@@ -9,6 +9,8 @@ import { completarItem, cronometro, moverA } from '../../../modules/agenda5/dato
 import { useFuentesDia, propuestasDe, decidir, cerrarDia, horasDe, navegar } from '../../../modules/agenda5/dia/datos';
 import { HILOS, hiloDe, porHilo, cargaDia, fmtMin, momentoDe } from '../../../modules/agenda5/dia/proponer';
 import { ListaAgrupada, Fila, BotonGrande, toast } from '../../piezas';
+import { usePreferencias } from '../../../lib/preferencias';
+import RitmoM from './RitmoM';
 
 const FASES = [['armar', 'Armar'], ['guia', 'Guía'], ['cierre', 'Cierre']];
 const hiloDeId = (id) => HILOS.find((x) => x.id === id) || HILOS[2];
@@ -16,7 +18,14 @@ const hiloDeId = (id) => HILOS.find((x) => x.id === id) || HILOS[2];
 export default function DiaM({ d, uid, propietario, puedeEditar, hoy, abrirItem, perfil }) {
   const { theme } = useTheme();
   const hoyIso = isoDia(hoy);
-  const horas = horasDe(perfil);
+  const prefs = usePreferencias();
+  const esMia = propietario === uid;
+  const personaVista = d.personas?.find((x) => x.user_id === propietario) || null;
+  const horasGuardadas = esMia ? prefs?.agenda?.horas || perfil?.preferencias?.agenda?.horas || null : personaVista?.preferencias?.agenda?.horas || null;
+  const horas = { ...horasDe(null), ...(horasGuardadas || {}) };
+  const [ritmo, setRitmo] = useState(false);
+  const [ritmoOfrecido, setRitmoOfrecido] = useState(false);
+  useEffect(() => { if (esMia && puedeEditar && !horasGuardadas && !ritmoOfrecido && uid) { setRitmo(true); setRitmoOfrecido(true); } }, [esMia, puedeEditar, horasGuardadas, ritmoOfrecido, uid]);
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 30000); return () => clearInterval(t); }, []);
   const ahora = useMemo(() => new Date(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -39,8 +48,9 @@ export default function DiaM({ d, uid, propietario, puedeEditar, hoy, abrirItem,
     <div style={{ paddingBottom: 120 }}>
       <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', alignItems: 'center' }}>
         {FASES.map(([id, l]) => <button key={id} type="button" onClick={() => setFase(id)} style={chip(f === id)}>{l}</button>)}
-        <span style={{ marginLeft: 'auto', fontSize: 11.5, color: theme.textMuted }}>{sub}</span>
+        <button type="button" onClick={() => esMia && puedeEditar && setRitmo(true)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 11.5, color: esMia && puedeEditar ? theme.accent : theme.textMuted, fontFamily: TYPO.fontText, padding: 0, cursor: 'pointer' }}>{sub}</button>
       </div>
+      {ritmo && <RitmoM abierto={ritmo} onClose={() => setRitmo(false)} horas={horasGuardadas} personas={d.personas} propietario={propietario} hoy={hoy} />}
       {f === 'armar' && <ArmarM theme={theme} inv={inv} h={h} props={props} cargando={fuentes.isLoading} horas={horas} uid={uid} propietario={propietario} hoyIso={hoyIso} puedeEditar={puedeEditar} onEmpezar={() => setFase('guia')} areasPorId={areasPorId} abrirItem={abrirItem} toggle={toggle} />}
       {f === 'guia' && <GuiaM theme={theme} inv={inv} h={h} s={s} ahora={ahora} areasPorId={areasPorId} puedeEditar={puedeEditar} abrirItem={abrirItem} toggle={toggle} hoyIso={hoyIso} onArmar={() => setFase('armar')} />}
       {f === 'cierre' && <CierreM theme={theme} inv={inv} h={h} propietario={propietario} hoyIso={hoyIso} registro={registroHoy} puedeEditar={puedeEditar} areasPorId={areasPorId} abrirItem={abrirItem} />}

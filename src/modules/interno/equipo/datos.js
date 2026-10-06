@@ -18,7 +18,7 @@ export const DIAS_HISTORIA = 28;
 export const KEY_EQUIPO = ['equipo'];
 const STALE = 60 * 1000;
 
-const PERFIL_COLS = 'id,user_id,nombre,email,rol,tipo,puesto,activo,estado,es_super_admin,se_evalua,avatar_url,avatar_estado,avatar_fondo,genero';
+const PERFIL_COLS = 'id,user_id,nombre,email,rol,tipo,puesto,activo,estado,es_super_admin,se_evalua,avatar_url,avatar_estado,avatar_fondo,genero,preferencias';
 
 // ISO del inicio (00:00 local) de hace N días — límite inferior de eventos y auditoría.
 function desdeISO(dias) {
@@ -51,7 +51,7 @@ async function leerAuditoria(desde) {
 async function leerAgenda(desde) {
   try {
     const { data, error } = await supabase.from('agenda_items')
-      .select('id,tipo,titulo,estado,fecha_limite,responsables,completado_en,reunion_id,cliente_key,prioridad')
+      .select('id,tipo,titulo,estado,fecha_limite,cuando,hora,duracion_min,min_real,propietario,responsables,completado_en,reunion_id,cliente_key,prioridad,origen')
       .or(`estado.in.(abierta,arrastrada),completado_en.gte.${desde},updated_at.gte.${desde}`)
       .limit(5000);
     if (error) throw error;
@@ -60,6 +60,15 @@ async function leerAgenda(desde) {
     console.warn('[equipo] agenda no disponible:', e?.message || e);
     return { disponible: false, items: [], error: e?.message || String(e) };
   }
+}
+
+/** Registro del día de hoy de todo el equipo (agenda_registro_dia): planeado vs real, energía, cerrado. Tolerante. */
+async function leerRegistrosHoy() {
+  try {
+    const hoy = new Date(); const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+    const { data, error } = await supabase.from('agenda_registro_dia').select('usuario,fecha,resumen,energia,min_planeados,min_reales,manana_empiezo,cerrado_at').eq('fecha', iso);
+    if (error) throw error; return data || [];
+  } catch (e) { console.warn('[equipo] registro del día:', e?.message || e); return []; }
 }
 
 async function leerEvaluaciones() {
@@ -92,18 +101,19 @@ export function useDatosEquipo(enabled = true) {
       const desde = desdeISO(DIAS_HISTORIA);
       const hoy = new Date();
       const safe = (p, fallback, label) => p.catch((e) => { console.warn(`[equipo][${label}]`, e?.message || e); return fallback; });
-      const [usuarios, eventos, auditoria, agenda, evaluaciones, mesActual] = await Promise.all([
+      const [usuarios, eventos, auditoria, agenda, evaluaciones, mesActual, registrosHoy] = await Promise.all([
         leerPerfiles(),
         safe(leerEventos(desde), [], 'eventos_usuario'),
         safe(leerAuditoria(desde), [], 'auditoria_cambios'),
         leerAgenda(desde),
         safe(leerEvaluaciones(), [], 'evaluaciones_mensuales'),
         safe(leerMes(hoy.getFullYear(), hoy.getMonth() + 1), { facturacion: 0, cuota: 0, cuotaPct: 0, bonoBase: bonoEstimado(0) }, 'mes'),
+        leerRegistrosHoy(),
       ]);
-      return { usuarios, eventos, auditoria, agenda, evaluaciones, mesActual, desde, cargadoAt: Date.now() };
+      return { usuarios, eventos, auditoria, agenda, evaluaciones, mesActual, registrosHoy, desde, cargadoAt: Date.now() };
     },
   });
-  return { ...(q.data || { usuarios: [], eventos: [], auditoria: [], agenda: { disponible: false, items: [] }, evaluaciones: [], mesActual: null }), cargando: q.isLoading, error: q.error, refetch: q.refetch };
+  return { ...(q.data || { usuarios: [], eventos: [], auditoria: [], agenda: { disponible: false, items: [] }, evaluaciones: [], mesActual: null, registrosHoy: [] }), cargando: q.isLoading, error: q.error, refetch: q.refetch };
 }
 
 /** Evaluación, facturación y cuota de un mes concreto (hoja lateral). */

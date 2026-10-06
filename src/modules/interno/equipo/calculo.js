@@ -166,7 +166,14 @@ export function cumplimientoAgenda(items, userId, { hoy, dias = 30 } = {}) {
   const puntosCerrados = cerrados.filter((i) => i.tipo === 'punto').length;
   let ultimoCierre = null;
   for (const i of mios) if (i.completado_en && (!ultimoCierre || String(i.completado_en) > String(ultimoCierre))) ultimoCierre = i.completado_en;
+  // «Su día» (2026-10-05): lo que la persona tiene para hoy (cuando = hoy, o límite hoy) y lo que cerró hoy.
+  const esHoy = (i) => (i.cuando ? i.cuando === hoyIso : String(i.fecha_limite || '').slice(0, 10) === hoyIso);
+  const propios = (items || []).filter((i) => esResponsable(i, userId) || i.propietario === userId);
+  const deHoy = propios.filter((i) => ESTADOS_ABIERTOS.has(i.estado) && esHoy(i)).sort((a, b) => String(a.hora || '99').localeCompare(String(b.hora || '99')));
+  const hechasHoy = propios.filter((i) => i.estado === 'hecha' && i.completado_en && isoDia(i.completado_en) === hoyIso);
+  const vencidosHoy = propios.filter((i) => ESTADOS_ABIERTOS.has(i.estado) && ((i.cuando && i.cuando < hoyIso) || (!i.cuando && i.fecha_limite && String(i.fecha_limite).slice(0, 10) < hoyIso)));
   return {
+    deHoy, hechasHoy, vencidosHoy, minPlanHoy: deHoy.reduce((s, i) => s + (Number(i.duracion_min) || 0), 0) + hechasHoy.reduce((s, i) => s + (Number(i.duracion_min) || 0), 0), minRealHoy: [...deHoy, ...hechasHoy].reduce((s, i) => s + (Number(i.min_real) || 0), 0),
     abiertos: abiertos.length, vencidos: vencidos.length, cerrados: cerrados.length, aTiempo: aTiempo.length,
     pctATiempo: cerrados.length ? Math.round(aTiempo.length / cerrados.length * 100) : null,
     puntosCerrados, ultimoCierre,

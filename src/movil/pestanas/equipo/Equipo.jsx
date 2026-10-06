@@ -75,7 +75,7 @@ export default function Equipo() {
   const externosOrden = useMemo(() => ordenarPersonas(externos, porUsuario), [externos, porUsuario]);
   const evalsPendientes = useMemo(() => internos.filter((u) => porUsuario.get(u.user_id)?.evalPendiente), [internos, porUsuario]);
 
-  const abrir = (u) => nav.push(<Persona u={u} datos={porUsuario.get(u.user_id)} agendaDisponible={!!agenda?.disponible} evaluaciones={evaluaciones} mesActual={mesActual} />, `equipo-${u.user_id}`);
+  const abrir = (u) => nav.push(<Persona u={u} datos={porUsuario.get(u.user_id)} agendaDisponible={!!agenda?.disponible} evaluaciones={evaluaciones} mesActual={mesActual} registrosHoy={datos.registrosHoy || []} />, `equipo-${u.user_id}`);
 
   const recordar = async (u) => {
     const d = porUsuario.get(u.user_id);

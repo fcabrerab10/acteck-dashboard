@@ -10,10 +10,11 @@ import { HojaLateral, hairline, suaveBg } from '../../../components/perfil/comun
 import { AvatarImg } from '../../../lib/avatar';
 import { isoDia, sumarDias, inicioSemana } from './calculo.js';
 import { fmtHm, fmtHmCorto, fmtHora, fmtDiaLargo, plural, textoInactividad, PAGINA_LABEL, CLIENTE_LABEL, MESES_CORTO } from './textos.js';
+import SuDia from './SuDia';
 import { useDetalleMes, useInvalidarEquipo } from './datos.js';
 import Evaluacion from './Evaluacion.jsx';
 
-export default function HojaPersona({ u, datos, abierto, onClose, agendaDisponible, evaluaciones }) {
+export default function HojaPersona({ u, datos, abierto, onClose, agendaDisponible, evaluaciones, registrosHoy = [] }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const hoy = new Date();
@@ -42,6 +43,7 @@ export default function HojaPersona({ u, datos, abierto, onClose, agendaDisponib
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
         <Segmented options={opciones} value={vista} onChange={setVista} style={{ display: 'flex' }} />
 
+        {vista === 'semana' && agendaDisponible && <Panel titulo="Su día" meta="Mi ritmo · hoy"><SuDia u={u} agenda={agenda} registrosHoy={registrosHoy} /></Panel>}
         {vista === 'semana' && <SeccionSemana tele={tele} acc={acc} agenda={agenda} agendaDisponible={agendaDisponible} hoy={hoy} />}
         {vista === 'acciones' && <SeccionAcciones acc={acc} />}
         {vista === 'evaluacion' && u.se_evalua && (
