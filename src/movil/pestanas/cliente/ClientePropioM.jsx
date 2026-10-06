@@ -3,7 +3,8 @@
 //   TituloGrande (cliente propio · código · atiende · ritmo de compra) → Segmented Resumen · Sell In · Sell Out
 //   Resumen  → HeroM (frase + barra de cuota) → 4 KpiM (Cuota del mes · Sell out del último mes · Inventario en el cliente $
 //              · Cobranza) → sell in vs sell out del año (línea con cuota punteada) → Qué le falta (agotados que vende,
-//              «Armar propuesta») → Pagos y rebates (→ Pagos) → Acuerdos abiertos (→ Agenda) → Marketing (→ Marketing)
+//              «Armar propuesta») → Categorías (pay, la única excepción a «líneas») → Acuerdos abiertos (→ Agenda) → Marketing
+//              (Pagos y apoyos NO van aquí: Fernando los quiere en su pestaña de Pagos, pendiente)
 //              → Compartir ficha · Preparar visita.
 //   Sell In  → la misma vista de Análisis por cliente (analisis/Pestanas.jsx#SellInVista) SIN sensible + Compartir avance.
 //   Sell Out → cliente/SellOutPropio.jsx.
@@ -15,7 +16,7 @@ import { useRoadmap } from '../../../lib/queries';
 import { textoFichaCliente, textoAvance, compartir } from '../../../lib/whatsapp';
 import BotonPrepararVisita from '../../../components/BotonPrepararVisita';
 import { useNav } from '../../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, ListaAgrupada, Fila, BotonGrande, TituloSeccionM, Segmented, GraficaScrub, LeyendaScrub, BarraCuotaM, Pill, toast } from '../../piezas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, ListaAgrupada, Fila, BotonGrande, TituloSeccionM, Segmented, GraficaScrub, LeyendaScrub, BarraCuotaM, PayM, ChipsPay, Pill, toast } from '../../piezas';
 import { nombreCliente, colorCliente } from '../../datos';
 import { moneyCompact, int, deltaPct, MESES, N } from '../../util';
 import { useCuotasClientes, useSellInDia, useDetalleCliente } from '../../../modules/comercial/analisis/useAnalisisData';
@@ -27,20 +28,21 @@ import { fraccionMes, ritmoCompras, sellOutMesCuenta, serieAnioSiSo } from '../a
 import { SellInVista } from '../analisis/Pestanas';
 import SellOutPropio from './SellOutPropio';
 import Producto360 from '../producto/Producto360';
-import { useCobranzaResumen, usePagosCliente, useAcuerdosCliente, useMarketingCliente, useNuestroStock } from './datos';
-import { queLeFalta, lineaFalta, resumenCobranza, pagosDelMes, acuerdosAbiertos, marketingResumen, fraseResumen, fechaCortaIso } from './calculo';
+import { useCobranzaResumen, useAcuerdosCliente, useMarketingCliente, useNuestroStock } from './datos';
+import { queLeFalta, lineaFalta, resumenCobranza, acuerdosAbiertos, marketingResumen, fraseResumen, fechaCortaIso } from './calculo';
 
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const PESTANAS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell In' }, { id: 'sellout', label: 'Sell Out' }];
 const nombreBonito = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()).trim();
 
 /** Vista pura del Resumen (SSR en pruebas). */
-export function ResumenPropioVista({ nombre, anio, mes, enCurso, mtd, cuotaMes, yoyMes, so, serie = [], falta, cobranza, pagos, acuerdos, marketing, onProponer, onPagos, onAgenda, onMarketing, onCobranza, onSellOut, onSku, onCompartir, visita = null }) {
+export function ResumenPropioVista({ nombre, anio, mes, enCurso, mtd, cuotaMes, yoyMes, so, serie = [], falta, cobranza, acuerdos, marketing, catSi = [], catSo = [], onProponer, onAgenda, onMarketing, onCobranza, onSellOut, onSku, onCompartir, visita = null }) {
   const { theme } = useTheme();
   const mesL = MESES[mes - 1];
   const pct = alcanceCuota(mtd, cuotaMes);
   const frase = fraseResumen({ nombre, mes, pctCuota: pct, soSi: so?.soSi != null ? so.soSi / 100 : null, invValor: so?.invValor ?? null, semanas: so?.semanas ?? null, vencido: cobranza ? cobranza.vencido : null, agotados: falta?.agotados || 0, enCurso });
-  const sub = [cuotaMes > 0 ? `${moneyCompact(mtd)} de ${moneyCompact(cuotaMes)}` : `${moneyCompact(mtd)} en ${mesL.toLowerCase()}`, cobranza?.proximo ? `próximo pago ${fechaCortaIso(cobranza.proximo.fecha)}` : null, pagos?.abiertos ? `${pagos.abiertos} pago${pagos.abiertos === 1 ? '' : 's'} en proceso` : null].filter(Boolean).join(' · ');
+  const [dimCat, setDimCat] = useState('si');
+  const sub = [cuotaMes > 0 ? `${moneyCompact(mtd)} de ${moneyCompact(cuotaMes)}` : `${moneyCompact(mtd)} en ${mesL.toLowerCase()}`, cobranza?.proximo ? `próximo pago ${fechaCortaIso(cobranza.proximo.fecha)}` : null, so?.invPiezas != null ? `${int(so.invPiezas)} pz en piso` : null].filter(Boolean).join(' · ');
   const morado = theme.purple || '#BF5AF2';
   const series = [{ key: 'cuota', label: 'Cuota', color: theme.orange, dash: true }, { key: 'so', label: 'Sell out', color: morado }, { key: 'si', label: 'Sell in', color: theme.accent, area: true, grosor: 2.6 }];
   const tooltip = (f) => (<><b style={{ fontSize: 12.5 }}>{f.label}</b> · sell in <b style={{ fontSize: 12.5 }}>{f.si != null ? moneyCompact(f.si) : '—'}</b>{f.so != null ? ` · sell out ${moneyCompact(f.so)}` : ''}{f.soSi != null ? ` · SO/SI ${f.soSi.toFixed(1)}` : ''}{f.cuota ? ` · cuota ${moneyCompact(f.cuota)}` : ''}</>);
@@ -69,10 +71,12 @@ export function ResumenPropioVista({ nombre, anio, mes, enCurso, mtd, cuotaMes, 
         {(falta?.lista || []).map((x) => <Fila key={x.sku} titulo={`${x.sku}${x.descripcion ? ` ${x.descripcion}` : ''}`} sub={lineaFalta(x, nombre.split(' ')[0])} valor={x.piezas > 0 ? `+ ${int(x.piezas)} pz` : '—'} chevron={!!onSku} onClick={onSku ? () => onSku(x.sku) : undefined} pill={x.agotado ? { tone: 'red', label: 'agotado' } : { tone: 'orange', label: `${x.semanas} sem` }} />)}
       </ListaAgrupada>
 
-      <ListaAgrupada titulo={`Pagos y rebates · ${MESES_LARGO[mes - 1]}`} meta={pagos?.abiertos ? `${pagos.abiertos} en proceso · ${moneyCompact(pagos.montoAbierto)}` : undefined} style={{ marginTop: 18 }} accion={onPagos ? <Pill tone="gray" onClick={onPagos} style={{ cursor: 'pointer' }}>Pagos ›</Pill> : null}>
-        {!pagos?.filas?.length && <Fila titulo="Nada en proceso" sub="Sin rebates, apoyos ni pagos pendientes." chevron={false} />}
-        {(pagos?.filas || []).map((p) => <Fila key={p.id} titulo={p.titulo} sub={p.sub} valor={moneyCompact(p.monto)} chevron={false} pill={{ tone: p.tone, label: p.estado === 'calculado' ? 'por solicitar' : p.estado }} onClick={onPagos} />)}
-      </ListaAgrupada>
+      {(catSi.length > 0 || catSo.length > 0) && (
+        <div style={{ padding: '0 16px', marginTop: 18 }}>
+          <PayM titulo="Categorías" filas={dimCat === 'si' ? catSi : catSo} formato={moneyCompact} centro={`YTD ${dimCat === 'si' ? 'SI' : 'SO'}`} vacio={dimCat === 'si' ? 'Sin sell in en el año.' : 'Sin sell out en el año.'}
+            acciones={<ChipsPay opciones={[['si', 'Sell in'], ['so', 'Sell out']]} value={dimCat} onChange={setDimCat} />} />
+        </div>
+      )}
 
       <ListaAgrupada titulo="Acuerdos abiertos" meta={acuerdos?.total ? `${acuerdos.total}${acuerdos.vencidos ? ` · ${acuerdos.vencidos} vencido${acuerdos.vencidos === 1 ? '' : 's'}` : ''}` : undefined} style={{ marginTop: 18 }} accion={onAgenda ? <Pill tone="gray" onClick={onAgenda} style={{ cursor: 'pointer' }}>Agenda ›</Pill> : null}>
         {!acuerdos?.filas?.length && <Fila titulo="Sin acuerdos abiertos" sub="Los puntos de las minutas y pendientes con este cliente aparecen aquí." chevron={false} />}
@@ -110,7 +114,6 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
   const { data: skusSo = [] } = useDrillSkus(cuenta, anio, pestana === 'resumen');
   const { data: invCuenta = [] } = useDrillInventario(cuenta, pestana === 'resumen');
   const { data: cob } = useCobranzaResumen(ck, pestana === 'resumen');
-  const { data: pagosRows = [] } = usePagosCliente(ck, pestana === 'resumen');
   const { data: acuerdosRows = [] } = useAcuerdosCliente(ck, pestana === 'resumen');
   const { data: mkRows = [] } = useMarketingCliente(ck, anio, pestana === 'resumen');
   const { data: roadmap } = useRoadmap();
@@ -131,9 +134,15 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
     return { mtd, yoyMes: prev > 0 ? ((mtd - prev) / prev) * 100 : null, cuotaMes: cuotaPeriodo(mapa, codigo, anio, mes, 'mes'), serie: serieAnioSiSo({ mensual, soMensual, cuenta, mapa, codigo, anio, hoy }), ytd, yoyYtd: ytdPrev > 0 ? ((ytd - ytdPrev) / ytdPrev) * 100 : null, enCurso: true };
   }, [mensual, mapa, codigo, soMensual, cuenta, anio, mes, hoy]);
   const cobranza = useMemo(() => (cob ? resumenCobranza(cob.cortes, cob.detalle, hoy) : null), [cob, hoy]);
-  const pagos = useMemo(() => pagosDelMes(pagosRows, anio, mes), [pagosRows, anio, mes]);
   const acuerdos = useMemo(() => acuerdosAbiertos(acuerdosRows, hoy), [acuerdosRows, hoy]);
   const marketing = useMemo(() => marketingResumen(mkRows, hoy), [mkRows, hoy]);
+  const cats = useMemo(() => {
+    const norm = (c) => String(c || 'Sin categoría').trim() || 'Sin categoría';
+    const si = new Map(), so2 = new Map();
+    detalle.forEach((x) => { if (N(x.anio) !== anio || N(x.mes) > mes) return; const c = norm(rd.get(x.articulo)?.categoria || x.categoria); si.set(c, N(si.get(c)) + N(x.fact_neta)); });
+    skusSo.forEach((x) => { if (N(x.anio) !== anio || N(x.mes) > mes) return; const c = norm(rd.get(x.sku)?.categoria || x.categoria); so2.set(c, N(so2.get(c)) + N(x.importe)); });
+    return { si: [...si].map(([label, v]) => ({ label, v })), so: [...so2].map(([label, v]) => ({ label, v })) };
+  }, [detalle, skusSo, rd, anio, mes]);
   const top5 = useMemo(() => { const m = new Map(); detalle.forEach((x) => { if (N(x.anio) !== anio) return; const o = m.get(x.articulo) || { sku: x.articulo, piezas: 0, monto: 0, descripcion: rd.get(x.articulo)?.descripcion || '' }; o.piezas += N(x.piezas_venta_neta); o.monto += N(x.fact_neta); m.set(x.articulo, o); }); return [...m.values()].sort((a, b) => b.monto - a.monto).slice(0, 5); }, [detalle, anio, rd]);
 
   const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellout" />, `producto-${sku}`);
@@ -152,8 +161,8 @@ export default function ClientePropioM({ clienteKey: ck, pestanaInicial = 'resum
       {error && <Vacio titulo="No se pudo cargar el cliente" sub={String(error.message || error)} color={theme.red} />}
       {cargando && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /></div><Skeleton h={200} r={12} /></div>}
       {!cargando && !error && pestana === 'resumen' && (
-        <ResumenPropioVista nombre={nombre} anio={anio} mes={mes} enCurso={r.enCurso} mtd={r.mtd} cuotaMes={r.cuotaMes} yoyMes={r.yoyMes} so={so} serie={r.serie} falta={falta} cobranza={cobranza} pagos={pagos} acuerdos={acuerdos} marketing={marketing}
-          onProponer={(skus) => nav.navegar({ pagina: 'propuestas', extra: { clienteKey: ck, skus } })} onPagos={() => nav.navegar({ pagina: 'pagos', extra: { cliente: ck } })} onAgenda={() => nav.navegar({ pagina: 'agenda' })}
+        <ResumenPropioVista nombre={nombre} anio={anio} mes={mes} enCurso={r.enCurso} mtd={r.mtd} cuotaMes={r.cuotaMes} yoyMes={r.yoyMes} so={so} serie={r.serie} falta={falta} cobranza={cobranza} acuerdos={acuerdos} marketing={marketing} catSi={cats.si} catSo={cats.so}
+          onProponer={(skus) => nav.navegar({ pagina: 'propuestas', extra: { clienteKey: ck, skus } })} onAgenda={() => nav.navegar({ pagina: 'agenda' })}
           onMarketing={() => ir('marketing')} onCobranza={() => ir('cartera')} onSellOut={() => setPestana('sellout')} onSku={abrirSku} onCompartir={compartirFicha}
           visita={<BotonPrepararVisita clienteKey={ck} nombre={nombre} anio={anio} variante="bloque" />} />
       )}

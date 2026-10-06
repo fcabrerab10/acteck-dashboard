@@ -83,13 +83,13 @@ test('SSR · Resumen del cliente propio', () => {
   const falta = calc.queLeFalta({ skus, inv, nuestro: new Map([['AC-943154', 120]]), anio: 2026, mes: 10, roadmap: rd });
   const html = render(ResumenPropioVista, { nombre: 'Digitalife', anio: 2026, mes: 10, enCurso: true, mtd: 1020000, cuotaMes: 3300000, yoyMes: 8, so: { reporta: true, importe: 4900000, yoy: 12, soSi: 140, invValor: 2100000, semanas: 6, mesUsado: 9 }, serie, falta,
     cobranza: calc.resumenCobranza([{ saldo_actual: 3800000, saldo_vencido: 0, saldo_a_vencer: 3800000, dso: 38 }], [{ vencimiento: '2026-10-15', saldo_actual: 1100000 }], HOY),
-    pagos: calc.pagosDelMes([{ id: 1, concepto: 'Rebate Q3', monto: 412000, estado: 'calculado', fecha_programada: '2026-10-20' }], 2026, 10),
+    catSi: [{ label: 'Monitores', v: 1400000 }, { label: 'Gabinetes', v: 800000 }], catSo: [{ label: 'Monitores', v: 2200000 }],
     acuerdos: calc.acuerdosAbiertos([{ id: 'a', titulo: 'Cotizar bocinas Dynamic', estado: 'abierta', cuando: '2026-10-08' }], HOY),
-    marketing: calc.marketingResumen([{ nombre: 'Exhibición Buen Fin', fecha: '2026-10-20', inversion: 60000, estado: 'activa' }], HOY), onProponer() {}, onPagos() {}, onAgenda() {}, onMarketing() {}, onCobranza() {}, onSellOut() {}, onCompartir() {} });
+    marketing: calc.marketingResumen([{ nombre: 'Exhibición Buen Fin', fecha: '2026-10-20', inversion: 60000, estado: 'activa' }], HOY), onProponer() {}, onAgenda() {}, onMarketing() {}, onCobranza() {}, onSellOut() {}, onCompartir() {} });
   sano(html, 'resumen');
   assert.match(html, /Va al 31 % de la cuota ideal de octubre/); assert.match(html, /Cuota del mes/); assert.match(html, /Sell out · sep/); assert.match(html, /Inventario en Digitalife/); assert.match(html, /\$2\.1M/); assert.match(html, /Cobranza/);
   assert.match(html, /Sell in vs sell out · 2026/); assert.match(html, /Qué le falta/); assert.match(html, /Armar propuesta/); assert.match(html, /AC-943154 Monitor Vivid 27/); assert.match(html, /agotado en Digitalife/);
-  assert.match(html, /Pagos y rebates · octubre/); assert.match(html, /Rebate Q3/); assert.match(html, /Acuerdos abiertos/); assert.match(html, /Cotizar bocinas Dynamic/); assert.match(html, /Exhibición Buen Fin/); assert.match(html, /Compartir ficha/);
+  assert.doesNotMatch(html, /Pagos y rebates/); assert.match(html, /Categorías/); assert.match(html, /Monitores/); assert.match(html, /Acuerdos abiertos/); assert.match(html, /Cotizar bocinas Dynamic/); assert.match(html, /Exhibición Buen Fin/); assert.match(html, /Compartir ficha/);
 });
 
 test('SSR · Sell Out del cliente propio (Digitalife, PCEL y Dicotech)', () => {
@@ -100,7 +100,7 @@ test('SSR · Sell Out del cliente propio (Digitalife, PCEL y Dicotech)', () => {
   const d = render(SellOutPropioVista, { ...base, ck: 'digitalife', ensambles: [{ ensamble: 'Gamer X', sku: 'AC-943154', descripcion: 'Monitor', piezas: 89, ensambles: 53, monto: 35000 }] });
   sano(d, 'sell out digitalife');
   assert.match(d, /Desplazó \$4\.9M en septiembre, 12 % más que en septiembre 2025 y 1\.4 veces lo que le vendimos; tiene \$2\.1M en piso y 2 SKUs que vende están agotados\./);
-  assert.match(d, /Inventario en Digitalife/); assert.match(d, /Agotados que vende/); assert.match(d, /Ensambles · 2026/); assert.match(d, /53 PCs/); assert.match(d, /Sell out por día/); assert.match(d, /Sell out · 12 meses/); assert.match(d, /Categorías · 12 m/); assert.match(d, /Productos × 12 m · con su inventario/); assert.match(d, /Inv \$/); assert.match(d, /Ensambles por modelo/); assert.match(d, /Armar propuesta con lo agotado · 2/); // con mes = sep los cerrados son jun-ago: BR-937658 tiene 1.4 sem y no entra
+  assert.match(d, /Inventario en Digitalife/); assert.match(d, /Agotados que vende/); assert.match(d, /Ensambles · 2026/); assert.match(d, /53 PCs/); assert.match(d, /Sell out por día/); assert.match(d, /Sell out · 12 meses/); assert.match(d, /Categorías/); assert.match(d, /Monitores/); assert.match(d, /Productos × 12 m · con su inventario/); assert.match(d, /Inv \$/); assert.match(d, /Ensambles por modelo/); assert.match(d, /Armar propuesta con lo agotado · 2/); // con mes = sep los cerrados son jun-ago: BR-937658 tiene 1.4 sem y no entra
   const p = render(SellOutPropioVista, { ...base, ck: 'pcel', nombre: 'PCEL', fila: { ...fila, cuenta: 'pcel' } });
   sano(p, 'sell out pcel');
   assert.match(p, /valuado a lista/); assert.match(p, /SKUs sin movimiento/); assert.match(p, /BR-945820/); assert.doesNotMatch(p, /Ensambles/);

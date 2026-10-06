@@ -2,7 +2,7 @@
 // ni costo nuestro; gráficas de línea (sólo el zoom diario en barras); el dinero en su piso es la cifra grande.
 //   $ · Piezas → HeroM → 4 KpiM (Sell out del mes · Inventario en el cliente $ · Agotados que vende · la cuarta según el
 //   cliente: Digitalife ensambles, PCEL SKUs sin movimiento, Dicotech clientes activos) → zoom diario → sell out 12 m
-//   (línea) → Dónde está el movimiento → categorías como líneas → Productos × 12 m con su inventario ($ y pz) → bloques
+//   (línea) → Dónde está el movimiento → categorías (pay) → Productos × 12 m con su inventario ($ y pz) → bloques
 //   por cliente (ensambles · sin movimiento · sucursales, vendedores y clientes finales) → Armar propuesta · Compartir.
 // Datos: los mismos hooks del Sell Out consolidado (sellout/datos.js) + inventario en la cuenta por SKU.
 import React, { useMemo, useState } from 'react';
@@ -11,7 +11,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
 import { useNav } from '../../nav';
-import { HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Segmented, Pill, Vacio, Skeleton, GraficaScrub, LeyendaScrub, BotonGrande, TituloSeccionM, CampoBusqueda, toast } from '../../piezas';
+import { HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Segmented, Pill, Vacio, Skeleton, PayM, BotonGrande, CampoBusqueda, toast } from '../../piezas';
 import { moneyCompact, int, deltaPct, MESES, N, MONO } from '../../util';
 import { useCuentas, useDias, useMensual, useCuotas, useDrillSkus, useDrillSucursales, useDrillVendedores, useDrillClientesFinales, useDrillInventario } from '../../../modules/comercial/sellout/datos';
 import { construirFilas, ultimoDiaConVenta, ultimoMesConVenta, agregarDimension, clientesFinalesDelMes, idxMes } from '../../../modules/comercial/sellout/calculo';
@@ -24,13 +24,12 @@ import { ChipsEntendido } from '../sellout/DetalleSkuAnual';
 import { categoriasDe } from '../sellout/skuAnual';
 import Producto360 from '../producto/Producto360';
 import { useEnsamblesModelo } from './datos';
-import { queLeFalta, categoriasSerie, sinMovimiento, filasSkuInv, colsSkuInv, compact } from './calculo';
+import { queLeFalta, sinMovimiento, filasSkuInv, colsSkuInv, compact } from './calculo';
 
 const SEG = [{ id: 'monto', label: '$' }, { id: 'piezas', label: 'Piezas' }];
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const FUENTE = { digitalife: 'sell out reportado por Digitalife', pcel: 'reporte semanal venta-marca de PCEL · valuado a lista', dicotech: 'sell out por sucursal y vendedor de Dicotech' };
 const fmtDe = (u) => (u === 'piezas' ? (n) => `${int(n)} pz` : moneyCompact);
-const COLORES = (theme) => [theme.accent, theme.purple || '#BF5AF2', theme.teal || '#64D2FF', theme.orange, theme.green];
 
 /** Tabla «Productos × 12 m · con su inventario»: 2 meses, total, Inv $, Inv pz. Tocar un encabezado ordena. */
 function TablaSkuInv({ columnas, filas, unidad, onSku }) {
@@ -82,8 +81,8 @@ export function SellOutPropioVista({ ck, nombre, fila, bloques = [], anio, mes, 
     ...(bloques.includes('clientes') ? [{ tipo: 'Cliente final', filas: cf, clave: 'cliente_final', valor: 'importe', piezas: 'cantidad' }] : []),
   ], anio: mAnio, mes: mMes, top: 6 }), mesLbl: MESES[mMes - 1].toLowerCase() }), [skus, suc, cf, bloques, rd, mAnio, mMes]);
   const falta = useMemo(() => queLeFalta({ skus, inv, anio, mes, roadmap: rd, top: 10 }), [skus, inv, anio, mes, rd]);
-  const cats = useMemo(() => categoriasSerie({ filas: skus, anio, mes, campoValor: campo, roadmap: rd }), [skus, anio, mes, campo, rd]);
-  const colores = COLORES(theme);
+  // Categorías como pay (Fernando 2026-10-06: la única gráfica que no es de línea, además del zoom diario).
+  const catPay = useMemo(() => { const m = new Map(); skus.forEach((x) => { if (N(x.anio) !== anio || N(x.mes) > mes) return; const c = String(rd.get(x.sku)?.categoria || x.categoria || 'Sin categoría').trim() || 'Sin categoría'; m.set(c, N(m.get(c)) + N(x[campo])); }); return [...m].map(([label, v]) => ({ label, v })); }, [skus, anio, mes, campo, rd]);
   const categorias = useMemo(() => categoriasDe([...rd.values()]), [rd]);
   const filas = useMemo(() => filasSkuInv({ skus, inv, anio, mes, unidad, roadmap: rd }), [skus, inv, anio, mes, unidad, rd]);
   const interp = useMemo(() => interpretarBusqueda(q, { categorias }), [q, categorias]);
@@ -121,15 +120,10 @@ export function SellOutPropioVista({ ck, nombre, fila, bloques = [], anio, mes, 
       <Evolucion12M titulo="Sell out · 12 meses" datos={evol} unidad={unidad} anio={anio} color={morado} />
       <MovimientoM titulo="Dónde está el movimiento" movs={movs} meta={`${movs.mesLbl} vs ${movs.mesPrevLbl} · en pesos`} nota="Mayores subidas y bajadas en pesos contra el mes anterior." onSku={onSku} />
 
-      {cats.cats.length > 0 && (
-        <>
-          <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta="arrastra para leer">Categorías · 12 m</TituloSeccionM>
-          <div style={{ margin: '0 16px', background: theme.surface, borderRadius: 14, padding: '10px 10px 6px' }}>
-            <GraficaScrub datos={cats.datos} formato={f} series={cats.series.map((s, i) => ({ ...s, color: colores[i % colores.length], area: i === 0, grosor: i === 0 ? 2.4 : 1.6 }))}
-              tooltip={(d) => <><b style={{ fontSize: 12.5 }}>{d.label}</b>{cats.series.map((s) => <span key={s.key}> · {s.label} <b style={{ fontSize: 12 }}>{f(d[s.key])}</b></span>).slice(0, 3)}</>} />
-            <LeyendaScrub items={cats.series.map((s, i) => ({ label: s.label, color: colores[i % colores.length] }))} />
-          </div>
-        </>
+      {catPay.length > 0 && (
+        <div style={{ padding: '0 16px', marginTop: 18 }}>
+          <PayM titulo="Categorías" filas={catPay} formato={f} centro={`YTD ${anio}`} vacio="Sin sell out en el año." />
+        </div>
       )}
 
       <div style={{ padding: '0 16px', marginTop: 18 }}>
