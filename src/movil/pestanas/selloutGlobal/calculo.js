@@ -85,6 +85,7 @@ export function resumenSellOut({ cuentas = [], mensual = [], dias = [], skuAnio 
   porCuentaSo.forEach((o) => { if (o.so > 0 && o.si > 0) { soNum += o.so; siDen += o.si; } });
   const soSi = siDen > 0 ? (soNum / siDen) * 100 : null;
   const soSiMes = pocoMes ? sm : null;
+  const sellInSoSi = siDen;
   const cuentasConSellOut = conFuente.filter((f) => (modo === 'mes' ? f.importe : f.ytd) > 0).length;
 
   // Inventario en cuentas: última foto (construirFilas ya la trae) y semanas al ritmo de los 3 meses cerrados.
@@ -134,6 +135,7 @@ export function resumenSellOut({ cuentas = [], mensual = [], dias = [], skuAnio 
   // SKUs activos frente al roadmap.
   const skusRoadmap = new Set(roadmap.map((r) => String(r.sku || '').toUpperCase()).filter(Boolean));
   const sinMovimiento = [...skusRoadmap].filter((s) => !activos.has(s)).length;
+  const activosRoadmap = [...activos].filter((s) => skusRoadmap.has(s)).length;
 
   // Tabla por SKU × 12 meses (ventana que termina en el mes usado).
   const tabla = filasSkuAnual({ rows: skuAnio, anio: anioU, mes: mesU, roadmap });
@@ -144,9 +146,9 @@ export function resumenSellOut({ cuentas = [], mensual = [], dias = [], skuAnio 
 
   return {
     anio: anioU, mes: mesU, esOtroMes: u.esOtroMes, vacio: !!u.vacio, enCurso, corteDia, modo, periodoLbl,
-    importe, importePrev, yoy, cantidad, sellIn, soSi, soSiMes, cuentasConSellOut, cuentasConFuente: conFuente.length,
+    importe, importePrev, yoy, cantidad, sellIn, sellInSoSi, soSi, soSiMes, cuentasConSellOut, cuentasConFuente: conFuente.length,
     inv: { valor: tot.invValor, piezas: invPiezas, cuentas: conInv.length, semanas },
-    skus: { activos: activos.size, roadmap: skusRoadmap.size, sinMovimiento },
+    skus: { activos: activosRoadmap, activosTotal: activos.size, roadmap: skusRoadmap.size, sinMovimiento, mes: pocoMes ? sm : null },
     top5, reparto, frase, serie, mixes, tabla, columnas, filas,
   };
 }
