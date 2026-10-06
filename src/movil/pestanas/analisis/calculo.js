@@ -59,13 +59,16 @@ export function resumenLista({ rows = [], cuotasRows = [], anio, mes, modo = 'me
       cliente: c.cliente, nombre: c.nombre, label: etiqueta(c), key: c.key, canal: c.canal, propio: c.propio,
       cur, prev, yoy, ytd, ytdPrev, yoyYtd: yoyDe(ytd, ytdPrev), curMes,
       cuota, pctCuota: alcanceCuota(cur, cuota), cuotaYtd, pctCuotaYtd: alcanceCuota(ytd, cuotaYtd),
-      trazo6, riesgo: prev > 0 && yoy != null && yoy < -30, nuevo: ytd > 0 && prevAnioTotal <= 0,
+      // Relevante = cliente de verdad (≥ $50K en el año o con cuota); los conteos del hero y las tarjetas sólo cuentan a éstos,
+      // si no el ERP mete 1,700 clientes de mostrador y e-commerce de una sola compra (2026-10-05).
+      relevante: ytd >= 50000 || (cuotaYtd != null && cuotaYtd > 0),
+      trazo6, riesgo: prev > 0 && yoy != null && yoy < -30 && (ytd >= 50000 || (cuotaYtd != null && cuotaYtd > 0)), nuevo: ytd >= 50000 && prevAnioTotal <= 0,
       sinCompraMes: comproMesAnterior && curMes <= 0, mesesCompra12: c.mesesCompra12, ultimaCompra: c.ultimaCompra,
     };
   });
 
   const activos = clientes.filter((c) => c.cur > 0).length;
-  const conVentaAnio = clientes.filter((c) => c.ytd > 0).length;
+  const conVentaAnio = clientes.filter((c) => c.relevante).length;
   const riesgo = clientes.filter((c) => c.riesgo).length;
   const nuevos = clientes.filter((c) => c.nuevo);
   const conCuota = clientes.filter((c) => c.cuota != null && c.cuota > 0);
@@ -150,16 +153,23 @@ export function ritmoCompras(diario = [], hoy = new Date()) {
  */
 export function sellOutMesCuenta(mensual = [], cuenta, anio, mes, hoy = new Date()) {
   if (!cuenta) return null;
-  const act = mensual.find((r) => r.cuenta === cuenta && N(r.anio) === anio && N(r.mes) === mes) || null;
-  const prev = mensual.find((r) => r.cuenta === cuenta && N(r.anio) === anio - 1 && N(r.mes) === mes) || null;
-  const factor = fraccionMes(anio, mes, hoy);
+  // Si el mes pedido todavía no tiene sell out (las cuentas reportan por semanas o al cierre), se usa el último mes con
+  // sell out y se dice cuál es (mesUsado); así la tarjeta nunca pinta $0 por un mes que aún no llega (2026-10-05).
+  let act = mensual.find((r) => r.cuenta === cuenta && N(r.anio) === anio && N(r.mes) === mes) || null;
+  let anioU = anio, mesU = mes;
+  if (!act || N(act.importe) <= 0) {
+    const prevCon = mensual.filter((r) => r.cuenta === cuenta && N(r.importe) > 0 && idxSo(N(r.anio), N(r.mes)) < idxSo(anio, mes)).sort((a, b) => idxSo(N(b.anio), N(b.mes)) - idxSo(N(a.anio), N(a.mes)));
+    if (prevCon[0]) { act = prevCon[0]; anioU = N(act.anio); mesU = N(act.mes); }
+  }
+  const prev = mensual.find((r) => r.cuenta === cuenta && N(r.anio) === anioU - 1 && N(r.mes) === mesU) || null;
+  const factor = anioU === anio && mesU === mes ? fraccionMes(anio, mes, hoy) : 1;
   const importe = N(act?.importe), sellIn = act?.sell_in == null ? null : N(act.sell_in);
   // Último mes con foto de inventario (puede ser anterior al mes elegido).
   const conInv = mensual.filter((r) => r.cuenta === cuenta && r.inv_piezas != null && idxSo(N(r.anio), N(r.mes)) <= idxSo(anio, mes)).sort((a, b) => idxSo(N(b.anio), N(b.mes)) - idxSo(N(a.anio), N(a.mes)));
   const inv = conInv[0] || null;
   const pz3m = sumaUltimosMeses(mensual, cuenta, anio, mes, 3, 'cantidad', 1);
   return {
-    cuenta, importe, cantidad: N(act?.cantidad), sellIn, soSi: sellIn != null && sellIn > 0 ? (importe / sellIn) * 100 : null,
+    cuenta, anioUsado: anioU, mesUsado: mesU, esOtroMes: anioU !== anio || mesU !== mes, importe, cantidad: N(act?.cantidad), sellIn, soSi: sellIn != null && sellIn > 0 ? (importe / sellIn) * 100 : null,
     yoy: yoyDe(importe, N(prev?.importe) * factor), importePrev: N(prev?.importe) * factor,
     invPiezas: inv ? N(inv.inv_piezas) : null, invValor: inv ? N(inv.inv_valor) : null, invMes: inv ? { anio: N(inv.anio), mes: N(inv.mes) } : null,
     semanas: inv ? semanasInventario(N(inv.inv_piezas), pz3m) : null,

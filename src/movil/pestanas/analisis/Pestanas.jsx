@@ -249,13 +249,16 @@ export function SellOutVista({ cuenta, nombre, fila, bloques, nota, anio, mes, d
   const campo = unidad === 'piezas' ? 'cantidad' : 'importe';
   const f = fmtDe(unidad);
   const evol = useMemo(() => { const m = new Map(); mensualCuenta.forEach((r) => m.set(idxMes(N(r.anio), N(r.mes)), N(r[campo]))); return serie12De((k) => (m.has(k) ? m.get(k) : null), anio, mes); }, [mensualCuenta, anio, mes, campo]);
-  const movs = useMemo(() => movimientos({
+  const hoyM = new Date();
+  const pocoMes = anio === hoyM.getFullYear() && mes === hoyM.getMonth() + 1 && hoyM.getDate() < 10;
+  const [mAnio, mMes] = pocoMes ? (mes === 1 ? [anio - 1, 12] : [anio, mes - 1]) : [anio, mes];
+  const movs = useMemo(() => ({ ...movimientos({
     grupos: [
       { tipo: 'SKU', filas: skus, clave: 'sku', valor: 'importe', piezas: 'cantidad', etiqueta: (k) => rd.get(k)?.descripcion || '' },
       ...(bloques.includes('sucursales') ? [{ tipo: 'Sucursal', filas: suc, clave: 'sucursal', valor: 'importe', piezas: 'cantidad' }] : []),
       ...(bloques.includes('clientes') ? [{ tipo: 'Cliente final', filas: cf, clave: 'cliente_final', valor: 'importe', piezas: 'cantidad' }] : []),
-    ], anio, mes, top: 6,
-  }), [skus, suc, cf, bloques, rd, anio, mes]);
+    ], anio: mAnio, mes: mMes, top: 6,
+  }), mesLbl: MESES[mMes - 1].toLowerCase() }), [skus, suc, cf, bloques, rd, mAnio, mMes]);
   const estados = useMemo(() => porEstado(edo, anio, mes).filter((e) => e.estado !== 'SIN ESTADO' && e.importe > 0).slice(0, 8), [edo, anio, mes]);
   const totalEdo = estados.reduce((s, e) => s + e.importe, 0), maxEdo = Math.max(1, ...estados.map((e) => e.importe));
   const sucursales = useMemo(() => agregarDimension(suc, 'sucursal', anio, mes), [suc, anio, mes]);
@@ -277,7 +280,7 @@ export function SellOutVista({ cuenta, nombre, fila, bloques, nota, anio, mes, d
       {nota && <div style={{ margin: '10px 16px 0', padding: '10px 12px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, fontSize: 11.5, color: theme.textMuted, lineHeight: 1.45 }}>{nota}</div>}
       <ZoomDiarioM titulo="Sell out por día" filas={dias.map((r) => ({ anio: r.anio, mes: r.mes, dia: r.dia, valor: r[campo] }))} anio={anio} mes={mes} formato={f} cargando={cargando.dias} hoy={hoy} />
       <Evolucion12M titulo="Evolución · 12 meses" datos={evol} unidad={unidad} anio={anio} color={morado} />
-      {bloques.includes('cambios') && <MovimientoM titulo="Dónde está el movimiento" movs={movs} meta={`${mesL.toLowerCase()} vs ${movs.mesPrevLbl} · ${dimsTxt}`} nota="Mayores subidas y bajadas en pesos contra el mes anterior." onSku={onSku} />}
+      {bloques.includes('cambios') && <MovimientoM titulo="Dónde está el movimiento" movs={movs} meta={`${movs.mesLbl} vs ${movs.mesPrevLbl} · ${dimsTxt}`} nota="Mayores subidas y bajadas en pesos contra el mes anterior." onSku={onSku} />}
       {bloques.includes('mapa') && (
         <ListaAgrupada titulo="Dónde vende" meta={`por estado · ${mesL.toLowerCase()}`} style={{ marginTop: 18 }} pie="% del sell out del mes con estado; Δ contra el mismo mes del año anterior.">
           {cargando.edo && <div style={{ padding: 12 }}><Skeleton h={120} r={8} /></div>}

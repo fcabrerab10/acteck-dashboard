@@ -79,7 +79,7 @@ export function ResumenVista({ nombre, anio, mes, enCurso, mtd, yoyMes, cuotaMes
       </HeroM>
       <KpiGrid data-entrada-kpis style={{ marginTop: 12 }}>
         <KpiM eyebrow={`Sell in · ${mesL.toLowerCase()}`} big={moneyCompact(mtd)} sub={<span>{yoyMes != null ? <><span style={{ color: yoyMes >= 0 ? theme.green : theme.red }}>{deltaPct(yoyMes)}</span> vs {anio - 1}</> : `sin ${anio - 1}`}{cuotaMes ? ` · ${Math.round(pctCuota)} % de ${moneyCompact(cuotaMes)}` : ''}</span>} />
-        <KpiM eyebrow={`Sell out · ${mesL.toLowerCase()}`} big={so && so.reporta ? moneyCompact(so.importe) : '—'} sub={so && so.reporta ? <span>{so.soSi != null ? `SO/SI ${(so.soSi / 100).toFixed(2)}` : 'sin sell in ese mes'}{so.yoy != null ? <> · <span style={{ color: so.yoy >= 0 ? theme.green : theme.red }}>{deltaPct(so.yoy)}</span></> : ''}</span> : 'no reporta sell out'} />
+        <KpiM eyebrow={`Sell out · ${so?.mesUsado ? MESES[so.mesUsado - 1].toLowerCase() : mesL.toLowerCase()}${so?.esOtroMes ? ' (último)' : ''}`} big={so && so.reporta ? moneyCompact(so.importe) : '—'} sub={so && so.reporta ? <span>{so.soSi != null ? `SO/SI ${(so.soSi / 100).toFixed(2)}` : 'sin sell in ese mes'}{so.yoy != null ? <> · <span style={{ color: so.yoy >= 0 ? theme.green : theme.red }}>{deltaPct(so.yoy)}</span></> : ''}</span> : 'no reporta sell out'} />
         <KpiM eyebrow={`Inventario en ${nombre.split(' ')[0]}`} big={so && so.invPiezas != null ? (so.semanas != null ? `${Math.round(so.semanas)} sem` : `${int(so.invPiezas)} pz`) : '—'} sub={so && so.invPiezas != null ? `${so.invValor ? `${moneyCompact(so.invValor)} · ` : ''}${int(so.invPiezas)} pz${so.invMes && (so.invMes.mes !== mes || so.invMes.anio !== anio) ? ` · ${MESES[so.invMes.mes - 1].toLowerCase()}` : ''}` : 'no reporta inventario'} />
         <KpiM eyebrow="Última compra" big={ritmo?.diasDesde == null ? '—' : ritmo.diasDesde === 0 ? 'hoy' : `hace ${ritmo.diasDesde} d`} sub={ritmo?.diasDesde == null ? 'sin facturas en dos años' : `${ritmo.cadaDias ? `cada ${ritmo.cadaDias} días` : 'una sola compra en 6 m'}${ritmo.mesFacturas ? ` · ${int(ritmo.facturasMes)} factura${ritmo.facturasMes === 1 ? '' : 's'} en ${MESES[ritmo.mesFacturas.mes - 1].toLowerCase()}` : ''}`} />
       </KpiGrid>
@@ -90,7 +90,7 @@ export function ResumenVista({ nombre, anio, mes, enCurso, mtd, yoyMes, cuotaMes
         <LeyendaScrub items={[{ label: 'Sell in', color: theme.accent }, ...(so ? [{ label: 'Sell out', color: theme.purple || theme.indigo || theme.accent }] : []), ...(serie.some((f) => f.cuota) ? [{ label: 'Cuota', color: theme.orange, dash: true }] : [])]} />
       </div>
 
-      <MovimientoM titulo="Dónde está el movimiento" movs={movs} meta={`${mesL.toLowerCase()} vs ${movs.mesPrevLbl} · en pesos`} nota="Lo que más subió y lo que más bajó en este cliente respecto al mes anterior, mezclando SKUs y categorías." />
+      <MovimientoM titulo="Dónde está el movimiento" movs={movs} meta={`${movs.mesLbl || mesL.toLowerCase()} vs ${movs.mesPrevLbl} · en pesos`} nota="Lo que más subió y lo que más bajó en este cliente respecto al mes anterior, mezclando SKUs y categorías." />
 
       <div style={{ padding: '0 16px' }}>
         <PayM titulo="Categorías" filas={catFilas} formato={moneyCompact} centro={`YTD ${dimCat === 'si' ? 'SI' : 'SO'}`} vacio={dimCat === 'si' ? 'Sin sell in en el año.' : (so ? 'Sin sell out en el año.' : 'Este cliente no reporta sell out.')}
@@ -153,12 +153,15 @@ export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal
     const porCat = new Map();
     detalle.forEach((x) => { const c = catDe(x.articulo, x); const k = `${x.anio}-${x.mes}-${c}`; const o = porCat.get(k) || { anio: x.anio, mes: x.mes, categoria: c, fact_neta: 0 }; o.fact_neta += N(x.fact_neta); porCat.set(k, o); });
     const categoriaDe = {}; detalle.forEach((x) => { categoriaDe[x.articulo] = catDe(x.articulo, x); });
-    const movs = movimientos({
+    // Con menos de 10 días del mes en curso el «movimiento» compara el último mes cerrado contra el anterior (si no, todo sale «en oct nada»).
+    const pocoMes = anio === hoy.getFullYear() && mes === hoy.getMonth() + 1 && hoy.getDate() < 10;
+    const [mAnio, mMes] = pocoMes ? (mes === 1 ? [anio - 1, 12] : [anio, mes - 1]) : [anio, mes];
+    const movs = { ...movimientos({
       grupos: [
         { tipo: 'SKU', filas: detalle, clave: 'articulo', valor: 'fact_neta', piezas: 'piezas_venta_neta', etiqueta: (k) => rd.get(k)?.descripcion || '' },
         { tipo: 'Categoría', filas: [...porCat.values()], clave: 'categoria', valor: 'fact_neta' },
-      ], anio, mes, top: 6, categoriaDe,
-    });
+      ], anio: mAnio, mes: mMes, top: 6, categoriaDe,
+    }), mesLbl: MESES[mMes - 1].toLowerCase() };
     // Categorías YTD: sell in del cliente y sell out de la cuenta ligada.
     const si = new Map(), soCat = new Map();
     detalle.forEach((x) => { if (N(x.anio) !== anio || N(x.mes) > mes) return; const c = catDe(x.articulo, x); si.set(c, N(si.get(c)) + N(x.fact_neta)); });
