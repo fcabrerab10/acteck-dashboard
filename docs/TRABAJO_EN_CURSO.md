@@ -17,10 +17,11 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] S&OP del celular en blanco: corregido (3.80.1).
 - [x] S&OP (celular) Empresa · Mis clientes, Lo que viene con PO abrible, Producto 360 · Abasto, Proyectos y forecast con «Los tres» y captura del forecast en formato CRM desde el celular (3.83.0).
 - [x] «Resumen de Clientes» fuera del menú web (3.83.0).
-- [x] Clientes propios (celular): ficha nueva Resumen · Sell In · Sell Out para Digitalife, PCEL y Dicotech con las reglas de Fernando (3.84.0). Faltan Marketing y Crédito y cobranza dentro de la ficha (mockup c73e7c5c v2 en revisión).
+- [x] Clientes propios (celular): ficha nueva Resumen · Sell In · Sell Out · Marketing · Cobranza para Digitalife, PCEL y Dicotech con las reglas de Fernando (3.84.0–3.84.2; verificada con su sesión el 6-oct).
 
 ## Aprobado, por construir
-- [ ] **Clientes propios en el celular** (Resumen · Sell In · Sell Out · Marketing · Crédito y cobranza, para Digitalife, PCEL y Dicotech): mockup c73e7c5c revisado el 5-oct. Reglas: las ven los clientes → sin margen ni costo; gráficas lineales (sólo el zoom diario en barras); inventario en dinero grande, semanas en letra chica. Siguiente paso: mockup de los TRES clientes juntos con Marketing y Cobranza antes de codear PCEL y Dicotech; Digitalife se puede ir construyendo.
+- [ ] **Pagos del cliente propio (celular)**: Fernando (6-oct) quiere rebates, apoyos y pagos en su propia pestaña dentro del cliente (no en el Resumen). Mockup primero.
+- [ ] Revisión de Fernando (7-oct temprano) de 3.83–3.84: S&OP, Proyectos y forecast, ficha de clientes propios.
 - [ ] ~~Sell Out global (celular)~~, mockup 2b9599a5: hero, 4 tarjetas, gráfica vs año anterior, pay del mix, **tabla de detalle por SKU × 12 m** con Piezas · $, ordenar por cualquier columna y buscador que entiende (chips con lo entendido). Sin cuentas.
 - [ ] Sell In global (celular): mismo esqueleto con cuota, margen y clientes que compraron; tabla por SKU igual. Sin tabla de clientes.
 - [ ] Producto 360: hero completo (sell in, sell out, SO/SI, inventario nuestro, en cuentas, en camino), gráfica sell in vs sell out, Segmented «Quién lo desplaza · Quién lo compra» (ranking con piezas, Δ, semanas de inventario; clientes que dejaron de comprarlo), dónde se vende. Botones conectados: Preparar propuesta (canasta precargada + cliente + sugerido), Proponer (cliente puesto + pendiente en la Agenda), Ver en Inventario (buscador con el SKU), Precios (Ficha de producto). Cuentas y clientes tocables → Análisis por cliente.

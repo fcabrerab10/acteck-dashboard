@@ -189,7 +189,7 @@ export default function CobranzaCliente({ clienteKey, nombre, embebido = false }
         <>
           <HeroM eyebrow={`Corte ${fechaCorta(estado.fecha_corte)}${r.usoPct != null ? ` · uso de línea ${r.usoPct}%` : ''}`} frase={r.frase}
             sub={`Saldo ${money(r.saldoActual)} en ${r.facturas.length} factura${r.facturas.length === 1 ? '' : 's'}${r.deltaVenc != null && r.deltaVenc !== 0 ? ` · vencido ${r.deltaVenc > 0 ? 'subió' : 'bajó'} ${moneyCompact(Math.abs(r.deltaVenc))} vs corte anterior` : ''}`}
-            stats={[
+            stats={embebido ? [] : [
               { k: 'Saldo', v: moneyCompact(r.saldoActual), sub: r.lineaMXN > 0 ? `línea ${moneyCompact(r.lineaMXN)}` : `${r.facturas.length} facturas` },
               { k: 'Vencido', v: moneyCompact(r.saldoVencido), sub: `${r.pctVencido.toFixed(r.pctVencido < 10 ? 1 : 0)}% del saldo`, color: r.saldoVencido > 0 ? (theme.mode === 'dark' ? '#B00020' : '#FF6961') : undefined },
               { k: 'DSO', v: r.dso != null ? `${r.dso} d` : '—', sub: `plazo ${r.plazo} d` },
@@ -209,7 +209,7 @@ export default function CobranzaCliente({ clienteKey, nombre, embebido = false }
               <div style={{ margin: '0 16px', background: theme.surface, borderRadius: 14, padding: '10px 10px 6px' }}>
                 <GraficaScrub datos={serieCortes} formato={moneyCompact} series={[{ key: 'saldo', label: 'Saldo', color: theme.accent, area: true, grosor: 2.4 }, { key: 'vencido', label: 'Vencido', color: theme.red }]}
                   tooltip={(d) => <><b style={{ fontSize: 12.5 }}>{d.label}</b> · saldo <b style={{ fontSize: 12.5 }}>{moneyCompact(d.saldo)}</b> · vencido {moneyCompact(d.vencido)}{d.dso != null ? ` · DSO ${d.dso} d` : ''}</>}
-                  onTocar={(k) => { const d = serieCortes[k]; if (d?.id) setCorteSel(d.id); }} activo={Math.max(0, serieCortes.findIndex((d) => d.id === estado.id))} />
+                  onTocar={(k) => { const d = serieCortes[k]; if (d?.id) setCorteSel(d.id); }} activo={Math.max(0, serieCortes.findIndex((d) => d.id === estado.id))} etiqueta={(f, k) => (k % 2 === 0 || k === serieCortes.length - 1 ? String(f.label).split(' ')[0] : '')} />
                 <LeyendaScrub items={[{ label: 'Saldo', color: theme.accent }, { label: 'Vencido', color: theme.red }]} />
               </div>
             </>
