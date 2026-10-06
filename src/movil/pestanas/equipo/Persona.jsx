@@ -6,8 +6,8 @@
 //     · Semana     → entradas por día (L–D con minutos) + «lo que más tocó» + día por día con sesiones y acciones.
 //     · Pendientes → abiertos por fecha: palomita cierra, tocar abre en la Agenda, deslizar = Reasignar (HojaM con el equipo).
 //     · Evaluación → EvaluacionM.jsx (sólo perfiles.se_evalua).
-//   Botones: «Mandar mensaje» (texto con sus vencidos y lo de hoy por la hoja de compartir → WhatsApp; perfiles no guarda
-//   teléfono) · «Reasignar pendientes» (todos los vencidos a otra persona del equipo).
+//   Botones: «Mandar mensaje» (texto con sus vencidos y lo de hoy; con perfiles.telefono abre su chat de WhatsApp directo,
+//   si no, la hoja de compartir) · «Reasignar pendientes» (todos los vencidos a otra persona del equipo).
 // Todo el cálculo viene de src/modules/interno/equipo/calculo.js (web) y ./calculo.js (celular). Sin costos ni márgenes.
 import React, { useMemo, useState } from 'react';
 import { CalendarCheck, ChevronRight, MessageCircle, UserPlus } from 'lucide-react';
@@ -24,7 +24,7 @@ import SuDia, { datosSuDia } from '../../../modules/interno/equipo/SuDia';
 import { useNav } from '../../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Cabecera, Segmented, Pill, Vacio, BotonGrande, HojaM, Fila, FilaDeslizable, toast } from '../../piezas';
 import { PalomitaM } from '../agenda5/comun';
-import { subPersona, frasePersonaHoy, subPersonaHoy, vencidosPorGrupo, diasSemana, loQueMasToco, textoMensaje } from './calculo';
+import { subPersona, frasePersonaHoy, subPersonaHoy, vencidosPorGrupo, diasSemana, loQueMasToco, textoMensaje, urlWhatsApp } from './calculo';
 import EvaluacionM from './EvaluacionM';
 
 export default function Persona({ u, datos, agendaDisponible, evaluaciones, mesActual, registrosHoy = [], internos = [] }) {
@@ -36,7 +36,11 @@ export default function Persona({ u, datos, agendaDisponible, evaluaciones, mesA
 
   const mandarMensaje = async () => {
     const s = datosSuDia({ u, agenda: datos?.agenda, registrosHoy });
-    const ok = await compartir(textoMensaje({ u, vencidos: datos?.vencidos || [], deHoy: s.deHoy, hoy }), { titulo: `Pendientes de ${nombreCorto(u.nombre || u.email)}` });
+    const texto = textoMensaje({ u, vencidos: datos?.vencidos || [], deHoy: s.deHoy, hoy });
+    // Con celular en el perfil (perfiles.telefono, 3.88.2) abre su chat de WhatsApp directo; si no, la hoja de compartir.
+    const url = urlWhatsApp(u.telefono, texto);
+    if (url) { const w = window.open(url, '_blank', 'noopener'); if (!w) window.location.href = url; return; }
+    const ok = await compartir(texto, { titulo: `Pendientes de ${nombreCorto(u.nombre || u.email)}` });
     if (!ok) toast.info('Texto copiado: pégalo en WhatsApp');
   };
   const reasignarA = async (destino) => {
@@ -115,9 +119,12 @@ export function PersonaVista({ u, datos, agendaDisponible, evaluaciones, mesActu
 
         {!externo && vistaActiva !== 'evaluacion' && (
           <div style={{ display: 'flex', gap: 8, padding: '0 16px' }}>
-            <BotonGrande primario icon={MessageCircle} onClick={onMensaje} style={{ flex: 1 }}>Mandar mensaje</BotonGrande>
+            <BotonGrande primario icon={MessageCircle} onClick={onMensaje} style={{ flex: 1 }}>{u.telefono ? 'WhatsApp' : 'Mandar mensaje'}</BotonGrande>
             <BotonGrande icon={UserPlus} disabled={!vencidos.length} onClick={() => onReasignar?.(vencidos)} style={{ flex: 1 }}>Reasignar vencidos</BotonGrande>
           </div>
+        )}
+        {!externo && vistaActiva !== 'evaluacion' && !u.telefono && (
+          <div style={{ padding: '0 20px', fontSize: 11, color: theme.textSubtle || theme.textMuted, textAlign: 'center' }}>Sin celular en su perfil: el mensaje sale por la hoja de compartir. Se captura en Preferencias › Yo o en Administración.</div>
         )}
       </div>
     </>

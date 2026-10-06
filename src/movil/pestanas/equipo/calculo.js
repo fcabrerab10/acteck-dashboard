@@ -269,3 +269,18 @@ export function textoMensaje({ u, vencidos = [], deHoy = [], hoy }) {
   if (!vencidos.length && !deHoy.length) l.push('', 'No traes vencidos ni pendientes para hoy. ¡Gracias!');
   return l.join('\n');
 }
+
+/** Dígitos del celular para wa.me: quita todo lo que no sea número y antepone 52 si son 10 dígitos (México). null si no sirve. */
+export function telefonoWa(tel) {
+  const d = String(tel || '').replace(/\D/g, '');
+  if (!d) return null;
+  if (d.length === 10) return `52${d}`;
+  if (d.length >= 11 && d.length <= 15) return d;
+  return null;
+}
+
+/** URL de WhatsApp al número de la persona con el texto listo; null si no tiene celular válido. */
+export function urlWhatsApp(tel, texto) {
+  const n = telefonoWa(tel);
+  return n ? `https://wa.me/${n}?text=${encodeURIComponent(texto || '')}` : null;
+}

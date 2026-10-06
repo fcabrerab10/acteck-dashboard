@@ -18,7 +18,7 @@ export const DIAS_HISTORIA = 28;
 export const KEY_EQUIPO = ['equipo'];
 const STALE = 60 * 1000;
 
-const PERFIL_COLS = 'id,user_id,nombre,email,rol,tipo,puesto,activo,estado,es_super_admin,se_evalua,avatar_url,avatar_estado,avatar_fondo,genero,preferencias';
+const PERFIL_COLS = 'id,user_id,nombre,email,rol,tipo,puesto,activo,estado,es_super_admin,se_evalua,avatar_url,avatar_estado,avatar_fondo,genero,preferencias,telefono';
 
 // ISO del inicio (00:00 local) de hace N días — límite inferior de eventos y auditoría.
 function desdeISO(dias) {

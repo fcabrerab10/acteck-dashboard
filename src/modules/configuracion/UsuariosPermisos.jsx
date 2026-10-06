@@ -323,16 +323,16 @@ function FilaPermiso({ label, desc, value, onChange, disabled, title }) {
   );
 }
 
-// ─── Editar datos (nombre · puesto · tipo · activo) ───
+// ─── Editar datos (nombre · puesto · celular · tipo · activo) ───
 function ModalEditarDatos({ abierto, onClose, u, actualizar, onToggleActivo }) {
   const { theme } = useTheme();
-  const [f, setF] = useState({ nombre: '', puesto: '', tipo: 'interno' });
+  const [f, setF] = useState({ nombre: '', puesto: '', telefono: '', tipo: 'interno' });
   const [guardando, setGuardando] = useState(false);
-  useEffect(() => { if (abierto) setF({ nombre: u.nombre || '', puesto: u.puesto || '', tipo: tipoDe(u) }); }, [abierto, u]);
+  useEffect(() => { if (abierto) setF({ nombre: u.nombre || '', puesto: u.puesto || '', telefono: u.telefono || '', tipo: tipoDe(u) }); }, [abierto, u]);
   const guardar = async () => {
     setGuardando(true);
     try {
-      const patch = { nombre: f.nombre.trim() || u.nombre, puesto: f.puesto.trim() || null, tipo: f.tipo };
+      const patch = { nombre: f.nombre.trim() || u.nombre, puesto: f.puesto.trim() || null, telefono: f.telefono.trim() || null, tipo: f.tipo };
       if (f.tipo === 'externo' && tipoDe(u) !== 'externo') {
         // Al volverse externo, las globales que no aplican se ocultan (misma regla que el wizard).
         const p = normalizarPermisos(u.permisos);
@@ -352,6 +352,7 @@ function ModalEditarDatos({ abierto, onClose, u, actualizar, onToggleActivo }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '6px 0 2px' }}>
         <div><span style={lbl}>Nombre</span><Input value={f.nombre} onChange={(v) => setF({ ...f, nombre: v })} autoFocus /></div>
         <div><span style={lbl}>Puesto</span><Input value={f.puesto} onChange={(v) => setF({ ...f, puesto: v })} placeholder="Sólo informativo" /></div>
+        <div><span style={lbl}>Celular</span><Input value={f.telefono} onChange={(v) => setF({ ...f, telefono: v })} placeholder="52 33 1234 5678 · para WhatsApp" /></div>
         <div>
           <span style={lbl}>Tipo</span>
           <Segmented size="md" value={f.tipo} onChange={(v) => setF({ ...f, tipo: v })} options={[{ id: 'interno', label: 'Interno' }, { id: 'externo', label: 'Externo' }]} />

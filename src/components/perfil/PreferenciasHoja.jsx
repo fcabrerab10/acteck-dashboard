@@ -1,9 +1,9 @@
 // PreferenciasHoja · "Todas las preferencias" (hoja lateral derecha).
 //   <PreferenciasHoja abierto onClose perfil seccionInicial="cuenta|apariencia|menu|notificaciones|atajos|acerca" onNavegar onCerrarSesion />
 // Grupos: Mi cuenta · Apariencia · Menú · Notificaciones · Atajos · Acerca de.
-// Nombre y cargo se guardan en perfiles (nombre / puesto) vía RPC set_perfil_propio (la fila propia).
+// Nombre, cargo y celular se guardan en perfiles (nombre / puesto / telefono) vía RPC set_perfil_propio (la fila propia).
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Trash2, User, Briefcase, Mail, KeyRound, Sun, Moon, Palette, Monitor, Rows3, Rows4, Sparkles, LayoutGrid, Layers, Star, ArrowUp, ArrowDown, X, Bell, Keyboard, Info, LogOut, Shield, ChevronRight, Smartphone } from 'lucide-react';
+import { Camera, Trash2, User, Briefcase, Phone, Mail, KeyRound, Sun, Moon, Palette, Monitor, Rows3, Rows4, Sparkles, LayoutGrid, Layers, Star, ArrowUp, ArrowDown, X, Bell, Keyboard, Info, LogOut, Shield, ChevronRight, Smartphone } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
@@ -98,6 +98,7 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
           </Fila>
           <CampoPerfil theme={theme} perfil={perfil} campo="nombre" icon={User} label="Nombre para mostrar" placeholder="Tu nombre" />
           <CampoPerfil theme={theme} perfil={perfil} campo="puesto" icon={Briefcase} label="Cargo" placeholder="Ej. Director Comercial" />
+          <CampoPerfil theme={theme} perfil={perfil} campo="telefono" icon={Phone} label="Celular" placeholder="52 33 1234 5678" />
           <Fila theme={theme} icon={Mail} label="Correo" sub="Lo administra el super admin">
             <span style={{ fontSize: 12.5, color: theme.textMuted, fontFamily: TYPO.fontText, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>{perfil?.email}</span>
           </Fila>
@@ -258,10 +259,10 @@ function CampoPerfil({ theme, perfil, campo, icon, label, placeholder }) {
     setGuardando(false);
     if (error) { toast.error(`No se pudo guardar: ${error.message}`); setValor(perfil?.[campo] || ''); return; }
     aplicarPerfilLocal(perfil.user_id, { [campo]: v || null });
-    toast.ok(campo === 'nombre' ? 'Nombre actualizado' : 'Cargo actualizado');
+    toast.ok(campo === 'nombre' ? 'Nombre actualizado' : campo === 'telefono' ? 'Celular actualizado' : 'Cargo actualizado');
   };
   return (
-    <Fila theme={theme} icon={icon} label={label} sub={campo === 'puesto' && !perfil?.puesto ? `Hoy se muestra: ${cargoDe(perfil) || '—'}` : undefined}>
+    <Fila theme={theme} icon={icon} label={label} sub={campo === 'puesto' && !perfil?.puesto ? `Hoy se muestra: ${cargoDe(perfil) || '—'}` : campo === 'telefono' ? 'Con lada · para «Mandar mensaje» por WhatsApp' : undefined}>
       <Campo theme={theme} value={valor} onChange={setValor} placeholder={placeholder} disabled={guardando} onBlur={guardar}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setValor(perfil?.[campo] || ''); e.currentTarget.blur(); } }} />
     </Fila>

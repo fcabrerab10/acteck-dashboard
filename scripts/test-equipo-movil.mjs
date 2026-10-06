@@ -151,13 +151,18 @@ test('SSR · Equipo y Persona con datos de ejemplo', () => {
   const p = render(PersonaVista, { u: k, datos: porUsuario.get('u-k'), agendaDisponible: true, evaluaciones: [], mesActual: null, registrosHoy, hoy: HOY, nav, invalidar() {}, onMensaje() {}, onReasignar() {} });
   sano(p, 'persona');
   assert.match(p, /Karolina Ruiz/); assert.match(p, /asistente comercial · 8:30 → 13:00 · 14:00 → 18:00 · activa hace 8 min/); assert.match(p, /Su día/); assert.match(p, /Semana/); assert.match(p, /Pendientes/); assert.match(p, /Evaluación/);
-  assert.match(p, /Armó su día con 2 pendientes; lleva 1 hecho/); assert.match(p, /Esta semana/); assert.match(p, /A tiempo/); assert.match(p, /2 Digitalife · 1 sin cliente/); assert.match(p, /Mandar mensaje/); assert.match(p, /Reasignar vencidos/);
+  assert.match(p, /Armó su día con 2 pendientes; lleva 1 hecho/); assert.match(p, /Esta semana/); assert.match(p, /A tiempo/); assert.match(p, /2 Digitalife · 1 sin cliente/); assert.match(p, /Mandar mensaje/); assert.match(p, /Sin celular en su perfil/); assert.match(p, /Reasignar vencidos/);
   const sem = render(PersonaVista, { u: k, datos: porUsuario.get('u-k'), agendaDisponible: true, evaluaciones: [], mesActual: null, registrosHoy, hoy: HOY, nav, vistaInicial: 'semana' });
   sano(sem, 'semana'); assert.match(sem, /entradas por día/); assert.match(sem, /Día por día/); assert.match(sem, /Pantallas: /);
   const pen = render(PersonaVista, { u: k, datos: porUsuario.get('u-k'), agendaDisponible: true, evaluaciones: [], mesActual: null, registrosHoy, hoy: HOY, nav, vistaInicial: 'pendientes' });
   sano(pen, 'pendientes'); assert.match(pen, /Vencidos/); assert.match(pen, /Pendiente k3/); assert.match(pen, /Reasignar/);
   const ext = render(PersonaVista, { u: usuarios[3], datos: porUsuario.get('u-x'), agendaDisponible: true, evaluaciones: [], mesActual: null, registrosHoy, hoy: HOY, nav });
   sano(ext, 'externo'); assert.match(ext, /Externo/); assert.match(ext, /Digitalife/);
+});
+
+test('telefonoWa / urlWhatsApp: 10 dígitos → 52, con lada se respeta, basura → null', () => {
+  assert.equal(calc.telefonoWa('33 1234 5678'), '523312345678'); assert.equal(calc.telefonoWa('+52 (33) 1234-5678'), '523312345678'); assert.equal(calc.telefonoWa('12345'), null); assert.equal(calc.telefonoWa(null), null);
+  assert.equal(calc.urlWhatsApp('3312345678', 'Hola Karolina'), 'https://wa.me/523312345678?text=Hola%20Karolina'); assert.equal(calc.urlWhatsApp('', 'x'), null);
 });
 
 test('ruta: telemetria → Equipo (push)', () => {
