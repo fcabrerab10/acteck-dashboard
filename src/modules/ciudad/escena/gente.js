@@ -1,0 +1,6 @@
+// Acteck Ciudad · personas low-poly y su caminata por una ruta de puntos (piernas que se mueven al andar).
+import * as THREE from 'three';
+
+export function persona({ M }, col, s = 1) { const g = new THREE.Group(); const cuerpo = new THREE.Mesh(new THREE.CylinderGeometry(.32 * s, .38 * s, 1.1 * s, 8), M(col)); cuerpo.position.y = .95 * s; cuerpo.castShadow = true; const cab = new THREE.Mesh(new THREE.SphereGeometry(.3 * s, 10, 8), M(0xF3CFA8)); cab.position.y = 1.75 * s; cab.castShadow = true; const p1 = new THREE.Mesh(new THREE.CylinderGeometry(.11 * s, .11 * s, .5 * s, 6), M(0x3B4252)); p1.position.set(-.14 * s, .25 * s, 0); const p2 = p1.clone(); p2.position.x = .14 * s; g.add(cuerpo, cab, p1, p2); g.userData.piernas = [p1, p2]; return g; }
+
+export function caminar(per, ruta, s, origen) { const n = ruta.length; if (!n || !Number.isFinite(s)) return; const k = ((Math.floor(s) % n) + n) % n, f = ((s % 1) + 1) % 1; const a = ruta[k], b = ruta[(k + 1) % n]; const x = a[0] + (b[0] - a[0]) * f, z = a[1] + (b[1] - a[1]) * f; per.position.set(origen.x + x, per.position.y, origen.z + z); per.rotation.y = Math.atan2(b[0] - a[0], b[1] - a[1]); const mov = Math.hypot(b[0] - a[0], b[1] - a[1]) > .01; const sw = mov ? Math.sin(s * 14) * .5 : 0; per.userData.piernas[0].rotation.x = sw; per.userData.piernas[1].rotation.x = -sw; }
