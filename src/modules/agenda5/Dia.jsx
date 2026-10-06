@@ -48,9 +48,12 @@ export default function Dia({ d, uid, propietario, personasPorId, puedeEditar, o
   const crono = (it, acc) => cronometro(it, acc).catch((e) => toast.error(e.message));
   const fecha = `${DIAS_LARGO[hoy.getDay()]} ${hoy.getDate()} de ${MESES_L[hoy.getMonth()]}`;
   const saludo = ahora.getHours() < 12 ? 'Buenos días' : ahora.getHours() < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const [ancho, setAncho] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1400));
+  useEffect(() => { const f = () => setAncho(window.innerWidth); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
+  const conLado = ancho >= 1100;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 18, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: conLado ? 'minmax(0, 1fr) 320px' : 'minmax(0, 1fr)', gap: 18, alignItems: 'start' }}>
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
           <div>
@@ -63,13 +66,13 @@ export default function Dia({ d, uid, propietario, personasPorId, puedeEditar, o
         {f === 'guia' && <Guia theme={theme} h={h} s={s} ahora={ahora} areasPorId={areasPorId} personasPorId={personasPorId} uid={uid} puedeEditar={puedeEditar} onAbrirItem={onAbrirItem} onAbrirReunion={onAbrirReunion} toggle={toggle} crono={crono} hoyIso={hoyIso} onArmar={() => setFase('armar')} />}
         {f === 'cierre' && <Cierre theme={theme} h={h} uid={uid} propietario={propietario} hoyIso={hoyIso} registro={registroHoy} puedeEditar={puedeEditar} areasPorId={areasPorId} />}
       </div>
-      <div style={{ position: 'sticky', top: 8 }}>
+      {conLado && <div style={{ position: 'sticky', top: 8 }}>
         <Panel titulo="Reloj del día" padding="8px 10px">
           <Reloj h={h} hoyIso={hoyIso} esHoy puedeEditar={puedeEditar} onAbrir={(b) => (b.tipo === 'tarea' ? onAbrirItem(b.ref) : b.tipo === 'reunion' ? onAbrirReunion(b.ref) : null)}
             onSoltar={(id, hora) => actualizarItem(id, { hora, cuando: hoyIso, bandeja: false }).then(() => toast.ok(`Bloque a las ${hora}`)).catch((e) => toast.error(e.message))} />
         </Panel>
         <div style={{ marginTop: 10 }}><Panel titulo="Mes" padding="8px 10px"><MiniMes mes={mes} setMes={setMes} dia={hoyIso} onDia={() => {}} conteos={conteos} hoyIso={hoyIso} /></Panel></div>
-      </div>
+      </div>}
     </div>
   );
 }

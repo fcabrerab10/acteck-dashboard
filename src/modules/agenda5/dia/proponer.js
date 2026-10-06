@@ -48,14 +48,26 @@ export function proponer({ hoyIso, pagos = [], cuentas = [], propuestas = [], fr
   const push = (p) => out.push({ id: `${p.fuente}:${p.ref}`, prioridad: 1, ...p });
   const nombre = (ck) => nombres[ck] || ({ digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech' })[ck] || ck;
 
-  // Pagos por autorizar (calculado) o solicitados por Karolina.
-  for (const p of pagos) {
-    if (!['calculado', 'solicitado'].includes(p.estado)) continue;
+  // Pagos: los «solicitados» (Karolina pide autorización) van uno por uno; los «calculados» del período en curso o
+  // anterior se agrupan en una sola propuesta para no inundar el día (los fijos y spiffs futuros se quedan fuera).
+  const mesActual = hoyIso.slice(0, 7);
+  const solicitados = pagos.filter((p) => p.estado === 'solicitado');
+  const calculados = pagos.filter((p) => p.estado === 'calculado' && String(p.periodo || '').slice(0, 7) <= mesActual);
+  for (const p of solicitados.slice(0, 3)) {
     const dias = p.created_at ? diasEntre(String(p.created_at).slice(0, 10), hoyIso) : 0;
-    push({ fuente: 'pagos', ref: p.id, hilo: 'clientes', prioridad: p.estado === 'solicitado' ? 0 : 1, min: 10,
+    push({ fuente: 'pagos', ref: p.id, hilo: 'clientes', prioridad: 0, min: 10,
       titulo: `Autorizar ${p.concepto || p.tipo || 'pago'} · ${nombre(p.cliente)}`,
-      sub: `$${Math.round(N(p.monto)).toLocaleString('es-MX')}${p.periodo ? ` · ${p.periodo}` : ''}${dias > 0 ? ` · lleva ${dias} día${dias === 1 ? '' : 's'}` : ''}`,
-      porque: `Pagos: está «${p.estado}» y nadie lo ha autorizado.`, accion: { label: 'Abrir en Pagos', pagina: 'pagos', clienteKey: p.cliente } });
+      sub: `$${Math.round(N(p.monto)).toLocaleString('es-MX')}${p.periodo ? ` · ${p.periodo}` : ''}${dias > 0 ? ` · solicitado hace ${dias} día${dias === 1 ? '' : 's'}` : ''}`,
+      porque: 'Pagos: Karolina lo solicitó y espera tu autorización.', accion: { label: 'Abrir en Pagos', pagina: 'pagos', clienteKey: p.cliente } });
+  }
+  const resto = [...solicitados.slice(3), ...calculados];
+  if (resto.length) {
+    const total = resto.reduce((s, p) => s + N(p.monto), 0);
+    const clientes = [...new Set(resto.map((p) => nombre(p.cliente)))];
+    push({ fuente: 'pagos', ref: `pendientes-${mesActual}`, hilo: 'clientes', prioridad: 1, min: 15,
+      titulo: `Revisar ${resto.length} pago${resto.length === 1 ? '' : 's'} pendiente${resto.length === 1 ? '' : 's'} de ${clientes.join(', ')}`,
+      sub: `$${Math.round(total).toLocaleString('es-MX')} entre calculados y solicitados`,
+      porque: 'Pagos: están calculados o solicitados y no se han autorizado.', accion: { label: 'Abrir Pagos', pagina: 'pagos', clienteKey: resto[0].cliente } });
   }
   // Cuentas de seguimiento vencidas (convención CVA, mayoristas…).
   for (const c of cuentas) {

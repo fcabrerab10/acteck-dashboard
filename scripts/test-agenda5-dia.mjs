@@ -13,14 +13,15 @@ test('momento del día con las horas de Fernando', () => {
 });
 test('propone desde las fuentes y respeta decisiones', () => {
   const p = proponer({ hoyIso: hoy,
-    pagos: [{ id: 'p1', estado: 'calculado', cliente: 'digitalife', concepto: 'Rebate Q3', monto: 133675, created_at: '2026-10-02' }, { id: 'p2', estado: 'pagado', cliente: 'pcel', monto: 1 }],
+    pagos: [{ id: 'p1', estado: 'solicitado', cliente: 'digitalife', concepto: 'Rebate Q3', monto: 133675, created_at: '2026-10-02' }, { id: 'p2', estado: 'pagado', cliente: 'pcel', monto: 1 }, { id: 'p3', estado: 'calculado', cliente: 'pcel', periodo: '2026-09', monto: 10 }, { id: 'p4', estado: 'calculado', cliente: 'pcel', periodo: '2026-12', monto: 10 }],
     cuentas: [{ id: 'c1', nombre: 'Eduardo Macías', empresa: 'Compu Lan', proximo_seguimiento: '2026-09-25', estado: 'activa', telefono: '33' }, { id: 'c2', nombre: 'X', proximo_seguimiento: '2026-10-20', estado: 'activa' }],
     propuestas: [{ id: 'pr1', estado: 'enviada', enviada_at: '2026-09-28', cliente_key: 'pcel', nombre: 'Productos por colocar', resumen: { skus: 18, total: 1694443 } }, { id: 'pr2', estado: 'enviada', enviada_at: '2026-10-03', cliente_key: 'pcel' }],
     frescura: [{ fuente: 'guias_erp', etiqueta: 'Guías ERP', estado: 'atrasada', dias: 56, umbral_dias: 7 }, { fuente: 'erp_ventas', estado: 'atrasada', dias: 9, umbral_dias: 7 }],
     forecastLotes: [], viajes: [{ id: 'v1', titulo: 'Viaje', fecha: '2026-10-10' }],
     decisiones: [{ fuente: 'cuenta', ref: 'c1', decision: 'descartada', hasta: '2026-10-19' }] });
   const ids = p.map((x) => x.id);
-  assert.ok(ids.includes('pagos:p1') && !ids.includes('pagos:p2'), 'sólo pagos calculados/solicitados');
+  assert.ok(ids.includes('pagos:p1') && !ids.includes('pagos:p2'), 'solicitado uno por uno');
+  assert.ok(ids.includes('pagos:pendientes-2026-10') && !ids.includes('pagos:p3') && !ids.includes('pagos:p4'), 'calculados del período agrupados; futuros fuera');
   assert.ok(!ids.includes('cuenta:c1'), 'descartada hasta el 19 no vuelve');
   assert.ok(!ids.includes('cuenta:c2'), 'seguimiento futuro no se propone');
   assert.ok(ids.includes('propuesta:pr1') && !ids.includes('propuesta:pr2'), 'propuesta con 5+ días');
