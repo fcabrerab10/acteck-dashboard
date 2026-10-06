@@ -7,7 +7,7 @@
 //   fetchKpisClientes()                            → { clienteKey: { cuota, facturado, gap } } del mes en curso
 import { supabase } from '../../../lib/supabase';
 import { hoyISO } from '../../../lib/format.js';
-import { fetchAll, fetchAllQ, cachedQuery } from '../../../lib/queries';
+import { fetchAll, fetchAllQ, cachedQuery, fetchPreciosLista } from '../../../lib/queries';
 import { MES_ACTUAL, CLIENTES, mesesCerrados } from './constantes';
 import { indiceDe } from './filtros';
 
@@ -141,7 +141,7 @@ export async function fetchCatalogo(clienteKey) {
     invAckDataP,
     invCliQuery,
     // 9,653 filas: en una sola petición PostgREST corta en 5,000 y faltaban precios de media lista (2026-10-05) → paginado.
-    fetchAll('v_estrategia_precios_lista', 'sku,lista,precio').then((rows) => ({ data: rows })),
+    fetchPreciosLista().then((rows) => ({ data: rows })),
     // Costo promedio = medida del director (v_medidas_inventario_sku), la misma que Estrategia de Precios e Inventario.
     // Antes se pedía precios_sku.costo_promedio, columna que no existe: todo salía «sin costo» (2026-09-24).
     cachedQuery(supabase.from('v_medidas_inventario_sku').select('articulo,costo_promedio')),

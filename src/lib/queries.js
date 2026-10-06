@@ -356,6 +356,19 @@ export function useInventarioCliente(clienteKey) {
 // query fns puntuales sin escribir un hook dedicado.
 export { fetchAll };
 
+/**
+ * Lista de precios completa (2026-10-05): una petición a v_precios_lista_por_sku (1 fila por SKU con sus listas en
+ * jsonb, 40 KB gz) en vez de 2 páginas + count de v_estrategia_precios_lista (9.6 K filas, 55 KB gz). Devuelve la
+ * misma forma plana [{ sku, lista, precio }] que usaban las pantallas (Estrategia, Proyectos, Propuestas, modo visita).
+ */
+export async function fetchPreciosLista() {
+  const rows = await fetchAll('v_precios_lista_por_sku', 'sku,precios');
+  const out = [];
+  for (const r of rows || []) { const m = r.precios || {}; for (const lista in m) out.push({ sku: r.sku, lista, precio: m[lista] }); }
+  return out;
+}
+
+
 // ─── Medidas del director · inventario (2026-09-12) ───
 // UNA sola fila con Inv Actual, Inv Total, Dias de Inv, Costo Promedio, Vueltas…
 // Es la fuente ÚNICA de inventario para Inicio, Visión General, Inventario

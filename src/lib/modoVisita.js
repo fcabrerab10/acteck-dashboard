@@ -22,7 +22,7 @@
 //   await prepararVisita('pcel', { onProgreso: (hecho, total, paso) => … });
 //
 import { supabase } from './supabase';
-import { fetchAll, cachedQuery } from './queries';
+import { fetchAll, cachedQuery, fetchPreciosLista } from './queries';
 import { queryClient } from './queryClient';
 
 const SIETE_DIAS = 7 * 24 * 60 * 60 * 1000;
@@ -103,7 +103,7 @@ export function pasosDeVisita(clienteKey, { anio = new Date().getFullYear() } = 
     label: 'Listas de precios',
     run: () => Promise.all([
       fetchAll('v_estrategia_precios_lista', LISTAS_PRECIOS_SELECT),
-      fetchAll('v_estrategia_precios_lista', 'sku,lista,precio'),
+      fetchPreciosLista(),
       queryClient.fetchQuery({ queryKey: ['precios_sku'], queryFn: () => fetchAll('precios_sku', '*'), gcTime: SIETE_DIAS }),
     ]),
   });

@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { hoyISO } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
 import { queryClient } from '../../../lib/queryClient';
-import { fetchAll } from '../../../lib/queries';
+import { fetchAll, fetchPreciosLista } from '../../../lib/queries';
 import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
 // Buzón de salida: los proyectos se capturan en la visita, muchas veces sin señal.
 import { escribir } from '../../../lib/buzon';
@@ -60,7 +60,7 @@ export function useAbasto() {
         opcional(fetchAll('embarques_compras', 'codigo,descripcion,arribo_cedis,estatus',
           (q) => q.or(`arribo_cedis.gte.${hoy},arribo_cedis.is.null`))),
         // Listas de precio por SKU (v_estrategia_precios_lista): el precio de cada línea se elige de aquí o es personalizado.
-        opcional(fetchAll('v_estrategia_precios_lista', 'sku,lista,precio')),
+        opcional(fetchPreciosLista()),
       ]);
       const precios = new Map();
       for (const r of preciosLista) { if (!r.sku || !r.lista) continue; const m = precios.get(r.sku) || {}; m[r.lista] = Number(r.precio) || 0; precios.set(r.sku, m); }

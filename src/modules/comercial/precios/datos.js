@@ -12,7 +12,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { hoyISO } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
-import { fetchAll, cachedQuery, useRoadmap, invalidateDataCache } from '../../../lib/queries';
+import { fetchAll, cachedQuery, useRoadmap, invalidateDataCache, fetchPreciosLista } from '../../../lib/queries';
 import { cambiosPorSku, factPorSku, elasticidadPorCategoria } from './calculo';
 
 const STALE = 5 * 60 * 1000;
@@ -26,7 +26,7 @@ export function useDatosPrecios(sensible) {
     queryFn: async () => {
       const hoy = new Date();
       const [precios, bajos, promos, cambios, costos, desde] = await Promise.all([
-        fetchAll('v_estrategia_precios_lista', 'sku,lista,precio,anio,mes'),
+        fetchPreciosLista(),
         fetchAll('v_estrategia_precios_bajo', 'sku,cliente_bajo,precio_bajo,piezas_bajo'),
         fetchAll('promos_temporada', 'sku,campania,promo_pct,anio,mes,descripcion', (q) => q.eq('anio', hoy.getFullYear()).eq('mes', hoy.getMonth() + 1)),
         fetchAll('v_precios_cambios_mes', 'sku,lista,anio,mes,precio_actual,precio_anterior,anio_prev,mes_prev,delta_pct,tipo'),
