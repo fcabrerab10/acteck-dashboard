@@ -14,7 +14,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { GraficaLineas } from '../../../components/kit';
 import { compartir, copiar } from '../../../lib/whatsapp';
-import { BONO_BASE, BONO_PCT, serieBonos } from '../../../modules/interno/equipo/calculo.js';
+import { BONO_BASE, BONO_PCT, serieBonos, evaluacionPendiente } from '../../../modules/interno/equipo/calculo.js';
 import { MESES, MESES_CORTO } from '../../../modules/interno/equipo/textos.js';
 import { useDetalleMes, upsertEvaluacion, useInvalidarEquipo } from '../../../modules/interno/equipo/datos.js';
 import { RATINGS, textoResumen } from '../../../modules/interno/equipo/Evaluacion.jsx';
@@ -29,7 +29,8 @@ const sumaAjustes = (a) => (a || []).reduce((s, x) => s + (Number(x.monto) || 0)
 export default function EvaluacionM({ u, agenda, evaluaciones, mesActual }) {
   const { theme } = useTheme();
   const hoy = useMemo(() => new Date(), []);
-  const [mesRef, setMesRef] = useState({ anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 });
+  // Abre en el mes que falta por cerrar (normalmente el anterior); si ya está cerrado, en el mes en curso.
+  const [mesRef, setMesRef] = useState(() => { const p = evaluacionPendiente(u, evaluaciones, { hoy }); return p ? { anio: p.anio, mes: p.mes } : { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 }; });
   const invalidar = useInvalidarEquipo();
 
   const meses = useMemo(() => {
