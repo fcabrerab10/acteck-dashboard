@@ -66,7 +66,14 @@ Sin cambiar comportamiento, todo lo que la V5 importaba de la V4 se movió (con 
   reunión ese día). `test-agenda-calculo`, `test-agenda-etiquetas` y `test-agenda-reparto` apuntan a `agenda5/base/`.
   Arranque medido: 181.6 KB gz → 181.2 KB gz (ya no se precarga el chunk de la V4).
 
+## «La Agenda te lleva» (3.78 · 5-oct)
+Módulo Día en web y celular: Armar el día (propuestas desde el negocio: `dia/proponer.js`) → Guía (una cosa a la vez,
+cronómetro, acción, Hecha/Después) → Cierre (planeado vs real, arrastre a mañana, energía, mañana empiezo por).
+Hilos: Mis clientes · Área de ventas · Internos · Personales (`agenda_areas.hilo`). Horas por persona en
+`preferencias.agenda.horas`. Decisiones en `agenda_dia_decisiones`. Ver CLAUDE.md «Agenda que te lleva».
+
 ## Pendiente
+0. Recordatorios del cron a las horas por persona (hoy 08:15 / 17:00 fijos).
 1. Check-in semanal del lunes y «on this day».
 2. Celular: arrastrar al reloj (hoy sólo web) y hilo de reuniones V5 (hoy usa la lista de reuniones heredada, en
    `pestanas/agenda5/Reuniones.jsx`).
