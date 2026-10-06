@@ -50,7 +50,7 @@
     },
     {
       "path": "/api/cron?task=agenda-correo",
-      "schedule": "30 14 * * 1-5"
+      "schedule": "0 15 * * 1-5"
     },
     {
       "path": "/api/cron?task=agenda-correo",
@@ -58,7 +58,7 @@
     },
     {
       "path": "/api/cron?task=agenda-correo",
-      "schedule": "0 23 * * 1-5"
+      "schedule": "0 4 * * 2-6"
     }
   ],
   "rewrites": [

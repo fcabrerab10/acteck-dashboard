@@ -1326,7 +1326,7 @@ async function taskAgendaHoy({ dryRun = esDryRun() } = {}) {
 // La task mira la hora CDMX y manda lo que toca. `?momento=` y `?para=` fuerzan un envío (pruebas).
 const AGENDA_CORREOS = [
   { email: 'karolina.veliz@acteck.com', manana: '08:15', tarde: '15:00' },
-  { email: 'fernando.cabrera@acteck.com', manana: '08:30', tarde: '17:00' },
+  { email: 'fernando.cabrera@acteck.com', manana: '09:00', tarde: '22:00' }, // Agenda «que te lleva» (2026-10-05): arma el día a las 9, cierra a las 22
 ];
 // Ventana alrededor de la hora exacta (el cron de Vercel no dispara al minuto). Tiene que ser
 // menor a la mitad de la distancia entre dos horarios (08:15 y 08:30 están a 15 min).
@@ -1449,9 +1449,9 @@ async function taskAgendaCorreo({ dryRun = esDryRun(), momento = null, para = nu
     const deHoy = mios.filter((i) => i.cuando === hoy.iso || (!i.cuando && i.fecha_limite === hoy.iso)).length;
     const reus = reuniones.filter((r) => String(r.fecha).slice(0, 10) === hoy.iso).length;
     if (dst.momento === 'manana') recordatorios.push({ tipo: 'agenda_planear', severidad: deAyer ? 'media' : 'info', clave: `agenda_planear|${p.user_id}|${hoy.iso}`, para_usuario: p.user_id, area: 'agenda',
-      titulo: `Planea tu día: ${deHoy} para hoy${deAyer ? ` · ${deAyer} de ayer` : ''}${reus ? ` · ${reus} reunión${reus === 1 ? '' : 'es'}` : ''}`, detalle: 'Revisa lo que quedó, estima tiempos y ponle hora a lo importante en el reloj del día.', cliente_key: null, sku: null, accion: { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Abrir Hoy' }, caduca_at: `${hoy.iso}T23:59:59-06:00`, generada_at: new Date().toISOString() });
+      titulo: `Arma tu día: ${deHoy} para hoy${deAyer ? ` · ${deAyer} de ayer` : ''}${reus ? ` · ${reus} reunión${reus === 1 ? '' : 'es'}` : ''}`, detalle: 'La Agenda ya te propone el día con lo que el negocio sabe: acepta, manda a mañana o descarta, y empieza.', cliente_key: null, sku: null, accion: { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Abrir Hoy' }, caduca_at: `${hoy.iso}T23:59:59-06:00`, generada_at: new Date().toISOString() });
     if (dst.momento === 'tarde' && enMinutos(ahora) >= enMinutos('16:30')) recordatorios.push({ tipo: 'agenda_cierre', severidad: 'info', clave: `agenda_cierre|${p.user_id}|${hoy.iso}`, para_usuario: p.user_id, area: 'agenda',
-      titulo: `Cierra el día: ${deHoy} abiertas`, detalle: 'Marca lo hecho, mueve lo que no se hizo, deja una línea de reflexión y tu check-in para el equipo.', cliente_key: null, sku: null, accion: { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Cerrar el día' }, caduca_at: `${hoy.iso}T23:59:59-06:00`, generada_at: new Date().toISOString() });
+      titulo: `Cierra el día: ${deHoy} abiertas`, detalle: 'Planeado contra real, lo que no se hizo se va a mañana, y una línea para empezar mañana.', cliente_key: null, sku: null, accion: { tipo: 'navegar', clienteKey: null, pagina: 'agenda', label: 'Cerrar el día' }, caduca_at: `${hoy.iso}T23:59:59-06:00`, generada_at: new Date().toISOString() });
   }
   let recordUpsert = null;
   if (recordatorios.length && !dryRun) {

@@ -179,9 +179,9 @@ test('el correo de la Agenda se arma con lo correcto y no se manda vacío', asyn
 
   // Horarios: 08:15 Karolina · 08:30 Fernando · 15:00 Karolina · 17:00 Fernando (L-V).
   assert.deepEqual(destinatariosAhora('08:15'), [{ email: 'karolina.veliz@acteck.com', momento: 'manana' }]);
-  assert.deepEqual(destinatariosAhora('08:30'), [{ email: 'fernando.cabrera@acteck.com', momento: 'manana' }]);
+  assert.deepEqual(destinatariosAhora('09:00'), [{ email: 'fernando.cabrera@acteck.com', momento: 'manana' }]);
   assert.deepEqual(destinatariosAhora('15:00'), [{ email: 'karolina.veliz@acteck.com', momento: 'tarde' }]);
-  assert.deepEqual(destinatariosAhora('17:00'), [{ email: 'fernando.cabrera@acteck.com', momento: 'tarde' }]);
+  assert.deepEqual(destinatariosAhora('22:00'), [{ email: 'fernando.cabrera@acteck.com', momento: 'tarde' }]);
   assert.deepEqual(destinatariosAhora('11:00'), [], 'fuera de horario no se manda nada');
   // David Millán nunca está en la lista.
   assert.equal(['08:15', '08:30', '15:00', '17:00'].some((h) => destinatariosAhora(h).some((x) => /dmillan/.test(x.email))), false);
@@ -192,7 +192,7 @@ test('los crones de la Agenda están declarados en vercel.json', async () => {
   const v = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   const agenda = v.crons.filter((c) => c.path.includes('agenda-correo'));
   // Hobby rechaza los horarios múltiples ("15,30"): una entrada por horario (commit eb71192).
-  assert.deepEqual(agenda.map((c) => c.schedule).sort(), ['0 21 * * 1-5', '0 23 * * 1-5', '15 14 * * 1-5', '30 14 * * 1-5']);
+  assert.deepEqual(agenda.map((c) => c.schedule).sort(), ['0 15 * * 1-5', '0 21 * * 1-5', '0 4 * * 2-6', '15 14 * * 1-5']);
   assert.equal(v.crons.some((c) => c.path.includes('agenda-hoy')), false, 'agenda-hoy se reemplazó por agenda-correo');
   // Plan Hobby: 12 funciones serverless; los crones no cuentan, pero conviene no dispararse.
   assert.ok(v.crons.length <= 20, 'demasiadas entradas de cron');
