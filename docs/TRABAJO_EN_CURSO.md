@@ -8,16 +8,17 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] iPad mini: vertical = celular, horizontal = web (3.76.11).
 - [x] Historial de cambios sin ruido, lista de precios en una petición, Propuestas 9,653 precios, etc. (3.76.x).
 
-## Construido, pendiente de publicar (se publica junto con el Análisis por cliente)
-- [ ] Recordatorios de la Agenda a las 9:00 y 22:00 (cron + `AGENDA_CORREOS`).
-- [ ] «Mi ritmo»: cuestionario por usuario (inicio, pausa, cierre, qué vas a hacer hoy), web y celular.
-- [ ] «Su día» por persona en Actividad del equipo (ritmo, hoy, cierre), web y celular.
+- [x] Recordatorios de la Agenda a las 9:00 y 22:00; «Mi ritmo»; «Su día» en Actividad del equipo (3.79.0).
+- [x] Análisis por cliente (celular) (3.79.0–3.79.1), mockup aprobado (artifact 6ecfc3fe): lista estándar · Resumen del cliente (hero, 4 tarjetas, sell in vs sell out, «Dónde está el movimiento», categorías como pay, cuotas por Q) · Sell In con Piezas · $ · Sell Out por cuenta según lo que reporta + detalle por SKU · «Abrir sell out completo» = la cuenta frente al resto (ranking, peso, SO/SI vs promedio, oportunidades, inventario en cuenta, clientes finales nuevos/perdidos).
 
-## En construcción
-- [ ] Análisis por cliente (celular), mockup aprobado (artifact 6ecfc3fe): lista estándar · Resumen del cliente (hero, 4 tarjetas, sell in vs sell out, «Dónde está el movimiento», categorías como pay, cuotas por Q) · Sell In con Piezas · $ · Sell Out por cuenta según lo que reporta + detalle por SKU · «Abrir sell out completo» = la cuenta frente al resto (ranking, peso, SO/SI vs promedio, oportunidades, inventario en cuenta, clientes finales nuevos/perdidos).
+- [x] Sell Out global y Sell In global con tabla por SKU (3.80.0–3.80.1).
+- [x] Producto 360 (3.81.0–3.81.1).
+- [x] Inventario (3.81.0) y Estrategia de Precios con calculadora y propuesta (3.81.0).
+- [x] S&OP del celular en blanco: corregido (3.80.1).
 
 ## Aprobado, por construir
-- [ ] Sell Out global (celular), mockup 2b9599a5: hero, 4 tarjetas, gráfica vs año anterior, pay del mix, **tabla de detalle por SKU × 12 m** con Piezas · $, ordenar por cualquier columna y buscador que entiende (chips con lo entendido). Sin cuentas.
+- [ ] S&OP (celular): mockup v2 (artifact 696658b3) esperando el visto bueno de Fernando.
+- [ ] ~~Sell Out global (celular)~~, mockup 2b9599a5: hero, 4 tarjetas, gráfica vs año anterior, pay del mix, **tabla de detalle por SKU × 12 m** con Piezas · $, ordenar por cualquier columna y buscador que entiende (chips con lo entendido). Sin cuentas.
 - [ ] Sell In global (celular): mismo esqueleto con cuota, margen y clientes que compraron; tabla por SKU igual. Sin tabla de clientes.
 - [ ] Producto 360: hero completo (sell in, sell out, SO/SI, inventario nuestro, en cuentas, en camino), gráfica sell in vs sell out, Segmented «Quién lo desplaza · Quién lo compra» (ranking con piezas, Δ, semanas de inventario; clientes que dejaron de comprarlo), dónde se vende. Botones conectados: Preparar propuesta (canasta precargada + cliente + sugerido), Proponer (cliente puesto + pendiente en la Agenda), Ver en Inventario (buscador con el SKU), Precios (Ficha de producto). Cuentas y clientes tocables → Análisis por cliente.
 
