@@ -2,7 +2,7 @@
 //   node --test scripts/test-sop-movil-calculo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mesesDesde, arribosPorPo, resumenEmpresa, serieDemanda, comprarAhora, filasDetalle, calcularMisClientes, fraseMisClientes, diasCobertura } from '../src/movil/pestanas/sop/calculo.js';
+import { cedisCorto as sop_cedis, mesesDesde, arribosPorPo, resumenEmpresa, serieDemanda, comprarAhora, filasDetalle, calcularMisClientes, fraseMisClientes, diasCobertura } from '../src/movil/pestanas/sop/calculo.js';
 import { estadoCliente, sumarClientes, fraseForecast, diasAlLimite, lineaMeses, filasParaPlantilla } from '../src/movil/pestanas/forecast/calculo.js';
 
 const HOY = new Date(2026, 9, 5, 12); // 5 oct 2026
@@ -54,16 +54,18 @@ test('comprarAhora ordena agotado → menos cobertura → USD, con línea legibl
   const c = comprarAhora(rows);
   assert.equal(c.total, 3); assert.deepEqual(c.lista.map((x) => x.sku), ['AC-3', 'AC-1', 'BR-2']);
   assert.equal(c.lista[0].linea, 'agotado · LT 98 d · sin PO');
+  assert.equal(sop_cedis('ALMACENES 1 ZAPOPAN'), 'Zapopan');
   assert.equal(c.lista[1].linea, 'cobertura 1.1 sem · LT 105 d · llega 10 nov');
   assert.equal(c.piezas, 5000); assert.equal(Math.round(c.usd), 3000 * 82 + 1200 * 98 + 800 * 8.2);
 });
 
 test('filasDetalle: filtros críticos / sin PO / marca y valores en orden', () => {
-  assert.deepEqual(filasDetalle(rows).map((f) => f.sku), ['AC-1', 'BR-2', 'AC-3', 'AC-4']);
-  assert.deepEqual(filasDetalle(rows, { filtro: 'criticos' }).map((f) => f.sku), ['AC-1', 'BR-2', 'AC-3']);
-  assert.deepEqual(filasDetalle(rows, { filtro: 'sinPo' }).map((f) => f.sku), ['BR-2', 'AC-3']);
+  assert.deepEqual(filasDetalle(rows).map((f) => f.sku), ['AC-3', 'AC-1', 'BR-2', 'AC-4']); // agotado con demanda → menos días
+  assert.deepEqual(filasDetalle(rows, { filtro: 'criticos' }).map((f) => f.sku), ['AC-3', 'AC-1', 'BR-2']);
+  assert.equal(filasDetalle([{ sku: 'X', inv: 0, demMes: 0 }])[0].dias, null); // sin stock ni demanda: no hay qué medir
+  assert.deepEqual(filasDetalle(rows, { filtro: 'sinPo' }).map((f) => f.sku), ['AC-3', 'BR-2']);
   assert.deepEqual(filasDetalle(rows, { filtro: 'balam rush' }).map((f) => f.sku), ['BR-2']);
-  assert.deepEqual(filasDetalle(rows)[0].valores, [8, 2310, 700, 3360, 3000]);
+  assert.deepEqual(filasDetalle(rows)[1].valores, [8, 2310, 700, 3360, 3000]);
   assert.equal(diasCobertura({ coberturaDias: 12 }), 12);
 });
 

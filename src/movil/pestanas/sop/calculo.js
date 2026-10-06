@@ -99,7 +99,7 @@ export function resumenEmpresa({ rows = [], arribos = [], hoy = new Date(), sens
 
 export const fechaLarga = (iso) => { if (!iso) return '—'; const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`); return `${d.getDate()} de ${MESES_LARGO[d.getMonth()]}`; };
 export const fechaCorta = (iso) => { if (!iso) return '—'; const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`); return `${d.getDate()} ${MESES[d.getMonth()].toLowerCase()}`; };
-export const cedisCorto = (c) => (c ? String(c).replace(/^ALMACENES\s+/i, '').replace(/^CEDIS\s+/i, '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) : '');
+export const cedisCorto = (c) => (c ? String(c).replace(/^ALMACENES\s+/i, '').replace(/^CEDIS\s+/i, '').replace(/^\d+\s*[-·]?\s*/, '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) : '');
 
 /**
  * Demanda contra lo que tendremos, mes a mes (6 meses). Por SKU: stock de hoy + lo que llega en el mes (por ETA) cubre la
@@ -137,7 +137,7 @@ export function comprarAhora(rows = [], { top = 8 } = {}) {
     const inv = N(r.inv);
     const semanas = dias != null ? Math.round(dias / 7 * 10) / 10 : null;
     const prox = (Array.isArray(r.embarques) ? r.embarques : []).filter((e) => e?.eta && N(e.cantidad) > 0).sort((a, b) => String(a.eta).localeCompare(String(b.eta)))[0] || null;
-    const linea = [inv <= 0 ? 'agotado' : semanas != null ? `cobertura ${semanas} sem` : `${Math.round(inv).toLocaleString('es-MX')} pz`, r.ltDias ? `LT ${Math.round(r.ltDias)} d` : null, prox ? `llega ${fechaCorta(prox.eta)}` : 'sin PO'].filter(Boolean).join(' · ');
+    const linea = [inv <= 0 ? 'agotado' : dias != null && dias <= 0 ? 'sin cobertura' : semanas != null ? `cobertura ${semanas} sem` : `${Math.round(inv).toLocaleString('es-MX')} pz`, r.ltDias ? `LT ${Math.round(r.ltDias)} d` : null, prox ? `llega ${fechaCorta(prox.eta)}` : 'sin PO'].filter(Boolean).join(' · ');
     return { sku: r.sku, descripcion: r.descripcion || '', marca: r.marca || '', piezas: N(r.sugerido), usd: N(r.sugerido) * costoDe(r), dias, inv, linea, urgencia: inv <= 0 ? 0 : dias == null ? 999 : dias, row: r };
   }).sort((a, b) => a.urgencia - b.urgencia || b.usd - a.usd);
   return { lista: lista.slice(0, top), total: lista.length, piezas: lista.reduce((s, x) => s + x.piezas, 0), usd: lista.reduce((s, x) => s + x.usd, 0), todos: lista };
@@ -152,7 +152,13 @@ export function filasDetalle(rows = [], { filtro = 'todos' } = {}) {
     if (filtro && filtro !== 'todos') return String(r.marca || '').toLowerCase() === filtro;
     return true;
   });
-  return f.map((r) => ({ sku: r.sku, label: r.sku, sub: r.descripcion || r.marca || '', descripcion: r.descripcion || '', marca: r.marca || '', categoria: r.familia || '', valores: [diasCobertura(r) ?? 0, Math.round(N(r.demMes)), Math.round(N(r.inv)), Math.round(N(r.traCant)), Math.round(N(r.sugerido))], dias: diasCobertura(r) }));
+  // Días: null cuando el SKU no tiene ni stock ni demanda (no hay qué medir). Orden: agotados con demanda → menos días →
+  // los que no se pueden medir al final.
+  return f.map((r) => {
+    const inv = N(r.inv), dem = N(r.demMes);
+    const dias = inv <= 0 && dem <= 0 ? null : (diasCobertura(r) ?? (inv <= 0 ? 0 : null));
+    return { sku: r.sku, label: r.sku, sub: r.descripcion || r.marca || '', descripcion: r.descripcion || '', marca: r.marca || '', categoria: r.familia || '', valores: [dias, Math.round(dem), Math.round(inv), Math.round(N(r.traCant)), Math.round(N(r.sugerido))], dias, urgencia: dias == null ? 1e9 : dias };
+  }).sort((a, b) => a.urgencia - b.urgencia || b.valores[1] - a.valores[1]);
 }
 
 // ─── Mis clientes ──────────────────────────────────────────────────────────────────────────────────────────────────

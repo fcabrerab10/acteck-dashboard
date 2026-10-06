@@ -100,7 +100,7 @@ export function AbastoVista({ row: r, arribos = [], sensible = false, puedeEdita
         <HeroM eyebrow="Abasto" frase={fraseAbasto(r, arribos)} sub={[`venta ${int(r.ritmo3m)} pz/mes`, `stock ${int(inv)}`, r.supplier ? `${r.supplier}${r.ltDias ? ` · LT ${Math.round(r.ltDias)} d` : ''}` : (r.ltDias ? `LT ${Math.round(r.ltDias)} d` : null)].filter(Boolean).join(' · ')} />
       </div>
       <KpiGrid style={{ marginTop: 10 }}>
-        <KpiM eyebrow="Cobertura" big={inv <= 0 ? 'Agotado' : dias != null ? `${int(dias)} d` : '—'} bigColor={color} sub={inv <= 0 ? `${int(r.demMes)} pz/mes de demanda` : sem != null ? `${sem} sem · meta 90 d` : 'sin ritmo de venta'} />
+        <KpiM eyebrow="Cobertura" big={inv <= 0 ? 'Agotado' : dias != null ? `${int(dias)} d` : '—'} bigColor={color} sub={inv <= 0 ? (N(r.demMes) > 0 ? `${int(r.demMes)} pz/mes de demanda` : 'sin demanda en 3 meses') : sem != null ? `${sem} sem · meta 90 d` : 'sin ritmo de venta'} />
         <KpiM eyebrow="Sugerido" big={N(r.sugerido) > 0 ? `${int(r.sugerido)} pz` : '—'} bigColor={N(r.sugerido) > 0 ? theme.orange : undefined} sub={N(r.sugerido) > 0 ? [sensible && costoDe(r) ? `${usdCompact(N(r.sugerido) * costoDe(r))} USD` : null, r.esConsolidado ? 'consolidado' : ppc > 0 ? `${r.contenedoresSugeridos} cnt × ${int(ppc)}` : null].filter(Boolean).join(' · ') || 'piezas exactas' : N(r.necesidadNeta) > 0 ? `necesidad ${int(r.necesidadNeta)} pz` : 'sin brecha a 3 meses'} />
       </KpiGrid>
       <ListaAgrupada titulo="Lo que llega" meta={arribos.length ? `${arribos.length} PO · ${int(r.traCant)} pz` : undefined} style={{ marginTop: 18 }}>

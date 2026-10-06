@@ -19,7 +19,7 @@ import { interpretarBusqueda, coincideSku, indiceSku, quitarChip } from '../../.
 import { useSolicitudes } from '../../../modules/comercial/forecast/useSolicitudes';
 import { useNav } from '../../nav';
 import { Cabecera, TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Segmented, Pill, Vacio, Skeleton, GraficaScrub, LeyendaScrub, CampoBusqueda, BotonGrande, toast } from '../../piezas';
-import TablaAnual from '../sellout/TablaAnual';
+import TablaSop from './TablaSop';
 import { ChipsEntendido } from '../sellout/DetalleSkuAnual';
 import SOPExport from '../SOPExport';
 import Producto360 from '../producto/Producto360';
@@ -62,7 +62,6 @@ export function SopEmpresaVista({ res, serie, comprar, filas, categorias = [], s
   const indices = useMemo(() => new Map(filas.map((f) => [f.sku, indiceSku(f)])), [filas]);
   const visibles = useMemo(() => (interp.vacio ? filas : filas.filter((f) => coincideSku(f, interp, indices.get(f.sku)))), [filas, interp, indices]);
   const tabla = useMemo(() => (todas ? visibles : visibles.slice(0, 80)).map((f) => ({ ...f, onClick: onSku ? () => onSku(f.sku) : undefined })), [visibles, todas, onSku]);
-  const fmtTabla = (n) => (n == null ? '—' : Math.round(n).toLocaleString('es-MX'));
   const mesLbl = (m) => MESES_LARGO[m.mes - 1];
   const sig = res.siguiente;
   return (
@@ -103,7 +102,7 @@ export function SopEmpresaVista({ res, serie, comprar, filas, categorias = [], s
         <CampoBusqueda value={q} onChange={setQ} placeholder="SKU, marca, categoría, pulgadas…" />
         <ChipsEntendido chips={interp.chips} onQuitar={(c) => setQ(quitarChip(q, c, { categorias }))} />
         <div style={{ marginTop: 8 }}>
-          <TablaAnual columnas={COLS_DETALLE} filas={tabla} fmt={fmtTabla} etiquetaFilas="SKU" conTotalFila={false} conTotalCol={false} conProm={false} ordenable vacio="Ningún SKU con esos filtros." />
+          <TablaSop columnas={COLS_DETALLE} filas={tabla} vacio="Ningún SKU con esos filtros." />
         </div>
         {visibles.length > 80 && !todas && <button type="button" onClick={() => setTodas(true)} style={{ width: '100%', marginTop: 8, height: 40, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.accent, fontFamily: TYPO.fontText, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Mostrar los {visibles.length}</button>}
         <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8, lineHeight: 1.4 }}>Días = cobertura con la venta real de 3 meses · Venta/mes = demanda mensual del motor · Llega = en tránsito · Sug. = sugerido de compra. Toca un encabezado para ordenar y un SKU para abrirlo.</div>
@@ -175,7 +174,7 @@ export default function SopM({ inicial = null }) {
   const res = useMemo(() => (data ? resumenEmpresa({ rows, arribos, hoy, sensible }) : null), [data, rows, arribos, hoy, sensible]);
   const serie = useMemo(() => (data ? serieDemanda({ rows, llegadas: data.llegadas, hoy, meses: 6 }) : []), [data, rows, hoy]);
   const comprar = useMemo(() => comprarAhora(rows), [rows]);
-  const filas = useMemo(() => filasDetalle(rows, { filtro }).sort((a, b) => (a.dias ?? 1e9) - (b.dias ?? 1e9) || b.valores[1] - a.valores[1]), [rows, filtro]);
+  const filas = useMemo(() => filasDetalle(rows, { filtro }), [rows, filtro]);
   const categorias = useMemo(() => [...new Set(rows.map((r) => String(r.familia || '').trim()).filter(Boolean))].sort(), [rows]);
   const ventana = useMemo(() => mesesDesde(hoy, 6, 1), [hoy]);
   const costos = useMemo(() => new Map(rows.map((r) => [r.sku, costoDe(r)])), [rows]);
