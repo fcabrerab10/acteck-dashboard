@@ -32,8 +32,10 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   const sprites = []; // etiquetas
   const raiz = new THREE.Group();
   const add = (m, tag) => { raiz.add(m); if (tag) { m.traverse((o) => { if (o.isMesh) { o.userData.tag = tag; interact.push(o); } }); } return m; };
-  const box = (w, h, d, color, extra) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(color, extra)); m.castShadow = true; m.receiveShadow = true; m.position.y = h / 2; return m; };
-  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, box, add, interact, animados, sprites, arboles: [] };
+  const geos = new Map(); // cajas compartidas por medidas (antes cada caja creaba su BoxGeometry)
+  const G = (w, h, d) => { const k = `${w}|${h}|${d}`; if (!geos.has(k)) geos.set(k, new THREE.BoxGeometry(w, h, d)); return geos.get(k); };
+  const box = (w, h, d, color, extra) => { const m = new THREE.Mesh(G(w, h, d), M(color, extra)); m.castShadow = true; m.receiveShadow = true; m.position.y = h / 2; return m; };
+  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, G, box, add, interact, animados, sprites, arboles: [] };
 
   luces(ctx);
   scene.add(raiz);
