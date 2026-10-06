@@ -25,6 +25,8 @@ import { saludo, diaLargo, nombreCorto, moneyCompact, money, pct, deltaPct, tono
 import FichaCliente from './FichaCliente';
 
 const fmtM = (n) => moneyCompact(n);
+// El hero de escritorio termina con «N asuntos requieren decisión hoy»; en el celular esa frase sobra (Fernando: nada de «requiere decisión»).
+const sinDecision = (t) => String(t || '').replace(/\s*(Sin asuntos críticos pendientes\.|[^.]*requieren? decisión hoy\.)/g, '').trim();
 
 /** Barra de cuota (se llena y cambia de color: rojo < 60 · naranja < 85 · azul < 100 · verde) con monto y %. */
 function BarraCuotaM({ valor, cuota, label }) {
@@ -135,7 +137,7 @@ export default function Inicio() {
 
       {/* La facturación de toda la empresa es sensible: sin el permiso, el hero es de sus clientes y su día. */}
       <HeroM eyebrow={sensible ? `Dirección general · ${modo === 'mes' ? `${r.mesL} ${anio}` : `Año ${anio}`}` : `Mis clientes · ${r.mesL} ${anio}`}
-        frase={sensible ? r.titulo : `Hoy tienes ${decision.length} aviso${decision.length === 1 ? '' : 's'} que atender.`}
+        frase={sensible ? sinDecision(r.titulo) : `Hoy tienes ${decision.length} aviso${decision.length === 1 ? '' : 's'} que atender.`}
         stats={sensible ? [
           { k: 'Margen MC', v: r.cur.mc != null ? pct(r.cur.mc) : '—', sub: r.dMc != null ? `${r.dMc >= 0 ? '+' : ''}${r.dMc.toFixed(1)} pp vs ${anio - 1}` : undefined },
           { k: 'Utilidad', v: fmtM(r.cur.utilidad_comercial), sub: r.yoyUtilidad != null ? `${deltaPct(r.yoyUtilidad)} ${r.yoyLabel}` : undefined },
