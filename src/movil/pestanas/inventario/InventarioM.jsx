@@ -1,208 +1,124 @@
-// Inventario global en el celular (2026-10-05 · nodo global `inventarioGlobal`; antes abría directo la Ficha de producto).
-//
-//   Hero: [Inv Actual] del director (a costo si el perfil ve sensible; en piezas si no) · [Dias de Inv] · SKUs agotados
-//   + FrescuraPill → 4 KPIs (piezas · críticos/riesgo · sobre-stock · en camino) → Segmented
-//   SKUs · Arribos · Agotados · Sobre-stock:
-//     · SKUs: buscador por palabras (sin acentos) y lista por valor; tocar → Ficha de producto (canasta de SKUs).
-//     · Arribos: una fila por PO ordenada por ETA (piezas, SKUs, naviera, «resuelve N agotados»); tocar → hoja con sus SKUs.
-//     · Agotados: sin stock y con demanda ERP (+ críticos < 30 d), con la PO que los cubre o «sin PO».
-//     · Sobre-stock: > 90 días de cobertura, por valor.
-//
-// Datos = los MISMOS de la web: inventario/useInventarioDatos.js (primer viaje sólo `en_inv_actual = true`; después
-// descripciones, tránsito, lead time, demanda de 3 meses cerrados y la fila de v_medidas_inventario), agregación pura
-// en inventario/agregar.js (agregarSkus · resumenInventario), POs en inventario/arribos.js (agruparPorPO) y tiempos
-// reales del Master Embarques en forecast/useEmbarquesTiempos.js. Cobertura por SKU en PIEZAS (ritmo ERP de 3 meses
-// cerrados); la del hero es [Dias de Inv] a costo: se muestran las dos con su etiqueta, como en la web.
-// `InventarioMVista` es pura: la renderiza scripts/test-movil-tracking-inventario-ssr.mjs.
+// Inventario de la empresa en el celular (3.81.0 · 2026-10-05 · nodo global `inventarioGlobal`; mockup
+// scratchpad/inventario-precios-movil.html, pantalla 1, con los cambios posteriores de Fernando: «sólo información
+// de valor»). Formato estándar:
+//   TituloGrande «Inventario» + FrescuraPill → HeroM inversa con la frase («$133.2M en piso, 127 días al ritmo de los
+//   3 meses cerrados; 41 SKUs agotados con demanda y $25.8M llegan en octubre», sub: piezas · SKUs con stock · costo
+//   promedio) → 4 KpiM: Valor del inventario actual · Cambio contra el mes pasado · Llega este mes / viene en total ·
+//   Vueltas de inventario del año → GraficaScrub 12 meses (inventario al cierre vs venta promedio 3 m; tooltip con los
+//   días de inventario del mes) → PayM Categoría · Marca · Almacén → Detalle por SKU × 12 meses (stock al cierre, Piezas · $,
+//   DetalleSkuAnual) → agotados con demanda plegados (hasta 10) con «Ver en S&OP». Tocar un SKU → FichaProducto.
+// Sin permiso sensible todo va en piezas (ni valor, ni costo, ni CV en dinero).
+// Datos: ./datos.js (8 consultas chicas) · agregación SKU × almacén = inventario/agregar.js (la de la web) · POs =
+// inventario/arribos.js#agruparPorPO · lecturas puras = ./calculo.js. `InventarioMVista` es pura: la renderiza
+// scripts/test-inventario-movil-ssr.mjs.
 import React, { useMemo, useState } from 'react';
-import { Boxes, Ship, PackageX } from 'lucide-react';
+import { PackageX, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
 import { usePerfil } from '../../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../../lib/permisos';
 import { Cargando } from '../../../components/kit';
 import FrescuraPill from '../../../components/FrescuraPill';
 import { inventarioDesdeVista } from '../../../lib/medidas';
-import useInventarioDatos from '../../../modules/comercial/inventario/useInventarioDatos';
 import { agregarSkus, resumenInventario } from '../../../modules/comercial/inventario/agregar';
 import { agruparPorPO } from '../../../modules/comercial/inventario/arribos';
-import { useEmbarquesTiempos, useNavieraPorContenedor, resumen as resumenEmbarques } from '../../../modules/comercial/forecast/useEmbarquesTiempos';
-import {
-  COBERTURA_CRITICA, COBERTURA_SOBRESTOCK, fmtCompact, fmtInt, fmtDias, fmtFechaCorta, tonoCobertura, etiquetaCobertura, tokensBusqueda, coincideTokens,
-} from '../../../modules/comercial/inventario/constantes';
+import { fmtFechaCorta } from '../../../modules/comercial/inventario/constantes';
 import { useNav } from '../../nav';
-import {
-  TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, CampoBusqueda, Segmented, Vacio, HojaM, Pill,
-} from '../../piezas';
-import { MONO } from '../../util';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Vacio, GraficaScrub, LeyendaScrub, PayM, ChipsPay, TituloSeccionM } from '../../piezas';
+import { MONO, deltaPct } from '../../util';
+import DetalleSkuAnual from '../sellout/DetalleSkuAnual';
+import { columnasVentana, categoriasDe } from '../sellout/skuAnual';
 import FichaProducto from '../../FichaProducto';
+import { useInventarioEmpresa } from './datos';
+import { resumenInventarioM, demandaDesdePivot, fmtDinero, fmtPz } from './calculo';
 
-const VISTAS = [{ id: 'skus', label: 'SKUs' }, { id: 'arribos', label: 'Arribos' }, { id: 'agotados', label: 'Agotados' }, { id: 'sobre', label: 'Sobre-stock' }];
-const PASO = 120;
-const TONO_ESTATUS = { 'TRANSITO MARITIMO': 'blue', 'PROXIMO A ZARPAR': 'purple', 'EN RESGUARDO': 'green', 'EN ESPERA DE CONSOLIDAR': 'orange', 'EN PRODUCCION': 'gray', 'Pendiente modular': 'gray' };
+const DIMS = [['categoria', 'Categoría'], ['marca', 'Marca'], ['almacen', 'Almacén']];
+const TOPE_AGOTADOS = 10;
 
-const colorTono = (theme, tone) => ({ red: theme.red, orange: theme.orange, green: theme.green, blue: theme.accent, gray: theme.textSubtle || theme.textMuted }[tone] || theme.textMuted);
-const etaRelativa = (dias) => (dias == null ? 'sin fecha' : dias < 0 ? `${Math.abs(dias)} d atrás` : dias === 0 ? 'hoy' : `en ${dias} d`);
-
-/** Frase del hero (pura, para la prueba SSR). */
-export function fraseInventario(res, sensible) {
-  const inv = sensible && res.valor != null ? `${fmtCompact(res.valor)} en inventario comercial` : `${fmtInt(res.piezas)} pz en inventario comercial`;
-  const partes = [inv];
-  if (res.diasInv != null) partes.push(`${fmtInt(res.diasInv)} días de inventario`);
-  let s = partes.join(', ');
-  if (res.agotados) s += `; ${fmtInt(res.agotados)} SKU${res.agotados === 1 ? '' : 's'} agotado${res.agotados === 1 ? '' : 's'} con demanda`;
-  else if (res.criticos) s += `; ${fmtInt(res.criticos)} en cobertura crítica`;
-  return s + '.';
-}
-
-/** Fila de SKU (lista principal, agotados, sobre-stock). */
-function FilaSku({ r, sensible, onClick, valorSub }) {
+/** Vista pura (sin red). r = resumenInventarioM(...) · categorias = categoriasDe(roadmap). */
+export function InventarioMVista({ r, categorias = [], onSku, onSop, frescura = null, cargandoTabla = false }) {
   const { theme } = useTheme();
-  const tono = r.tieneStock ? tonoCobertura(r.coberturaDias, true) : r.demandaMes > 0 ? 'red' : 'gray';
-  const sub = [r.marca || null, r.descripcion || null].filter(Boolean).join(' · ') || '—';
-  return (
-    <Fila alto={58} tono={colorTono(theme, tono)} onClick={onClick}
-      titulo={<span style={{ fontFamily: MONO, fontWeight: 600 }}>{r.sku}</span>} sub={sub}
-      valor={sensible ? fmtCompact(r.valor) : `${fmtInt(r.totalPz)} pz`}
-      valorSub={valorSub ?? (sensible ? `${fmtInt(r.totalPz)} pz · ${r.tieneStock ? fmtDias(r.coberturaDias) : 'agotado'}` : (r.tieneStock ? `${fmtDias(r.coberturaDias)} · ${etiquetaCobertura(r.coberturaDias, true)}` : 'agotado'))} />
+  const [dim, setDim] = useState('categoria');
+  const [verAgotados, setVerAgotados] = useState(false);
+  const gris = theme.textSubtle || theme.textMuted;
+  const { res, sensible, llega, cambio, serie, mixes, agotados, tabla, hoy } = r;
+  const fmt = sensible ? fmtDinero : (n) => `${fmtPz(n)} pz`;
+  const columnas = useMemo(() => columnasVentana(hoy.getFullYear(), hoy.getMonth() + 1), [hoy]);
+  const filasPay = useMemo(() => (mixes[dim] || []).map((x) => ({ key: x.key, label: x.label, v: x.v })), [mixes, dim]);
+  const conSerie = serie.some((d) => d.inv != null);
+
+  const sub = [
+    `${fmtPz(res.piezas)} pz`,
+    `${fmtPz(res.conStock)} SKUs con stock`,
+    sensible && r.medidas?.costo_promedio != null ? `costo promedio ${fmtDinero(r.medidas.costo_promedio)}` : null,
+  ].filter(Boolean).join(' · ');
+
+  const colorCambio = cambio.valor == null ? undefined : cambio.valor > 0 ? theme.orange : theme.green;
+  const signo = (v) => (v > 0 ? '+' : '');
+  const tooltip = (d) => (
+    <>
+      <b style={{ fontSize: 12.5 }}>{d.label}</b> · inventario <b style={{ fontSize: 12.5 }}>{d.inv != null ? fmt(d.inv) : '—'}</b>
+      {d.cv != null ? <> · venta 3 m {fmt(d.cv)}</> : null}
+      {d.dias != null ? <> · <b style={{ fontSize: 12.5 }}>{fmtPz(d.dias)} d</b></> : null}
+    </>
   );
-}
-
-/**
- * Vista pura. skuRows = agregarSkus(...) · res = resumenInventario(skuRows, medidas) · pos = agruparPorPO(...) ·
- * real = resumen(proveedores) de useEmbarquesTiempos (puede ser null).
- */
-export function InventarioMVista({ skuRows = [], res, pos = [], real = null, sensible = false, enriqueciendo = false, onVerSku, frescura = null, onVolver }) {
-  const { theme } = useTheme();
-  const [vista, setVista] = useState('skus');
-  const [q, setQ] = useState('');
-  const [limite, setLimite] = useState(PASO);
-  const [poAbierta, setPoAbierta] = useState(null);
-
-  const tokens = useMemo(() => tokensBusqueda(q), [q]);
-  const ordenados = useMemo(() => [...skuRows].sort((a, b) => (sensible ? b.valor - a.valor : b.totalPz - a.totalPz) || a.sku.localeCompare(b.sku)), [skuRows, sensible]);
-  const buscados = useMemo(() => (tokens.length ? ordenados.filter((r) => coincideTokens(r.indice || '', tokens)) : ordenados), [ordenados, tokens]);
-  const agotados = useMemo(() => skuRows.filter((r) => r.agotado).sort((a, b) => b.demandaMes - a.demandaMes), [skuRows]);
-  const criticos = useMemo(() => skuRows.filter((r) => r.critico).sort((a, b) => (a.coberturaDias ?? 0) - (b.coberturaDias ?? 0)), [skuRows]);
-  const sobre = useMemo(() => skuRows.filter((r) => r.sobrestock).sort((a, b) => (sensible ? b.valor - a.valor : b.totalPz - a.totalPz)), [skuRows, sensible]);
-  const po = useMemo(() => pos.find((p) => p.po === poAbierta) || null, [pos, poAbierta]);
-  const abrirSku = onVerSku ? (sku) => onVerSku(sku) : undefined;
-
-  const stats = [
-    sensible && res.valor != null
-      ? { k: 'Inv Actual', v: fmtCompact(res.valor), sub: `${fmtInt(res.piezas)} pz a costo` }
-      : { k: 'Inv Actual', v: `${fmtInt(res.piezas)} pz`, sub: `${fmtInt(res.conStock)} SKUs con stock` },
-    { k: 'Días de inv', v: res.diasInv != null ? fmtInt(res.diasInv) : '—', sub: res.diasInv != null ? 'a costo · 3 m cerrados' : 'sin medida' },
-    { k: 'Agotados', v: fmtInt(res.agotados), sub: res.agotados ? 'con demanda ERP' : 'ninguno', color: res.agotados ? theme.red : undefined },
-  ];
-
-  let cuerpo = null;
-  if (vista === 'skus') {
-    const lista = buscados.slice(0, limite);
-    cuerpo = (
-      <>
-        <div style={{ padding: '0 16px 12px' }}><CampoBusqueda value={q} onChange={(v) => { setQ(v); setLimite(PASO); }} placeholder="SKU, descripción, marca o familia" /></div>
-        {lista.length === 0
-          ? <Vacio icon={Boxes} color={theme.textMuted} titulo="Sin SKUs" sub={q ? `Nada coincide con «${q}».` : 'No hay inventario comercial cargado.'} />
-          : (
-            <ListaAgrupada titulo={q ? 'Resultados' : sensible ? 'Por valor' : 'Por piezas'} meta={fmtInt(buscados.length)}
-              pie={enriqueciendo ? 'Calculando cobertura y tránsito…' : `Cobertura en piezas al ritmo ERP de 3 meses cerrados: crítica < ${COBERTURA_CRITICA} d · sobre-stock > ${COBERTURA_SOBRESTOCK} d. Toca un SKU para ver su ficha.`}>
-              {lista.map((r) => <FilaSku key={r.sku} r={r} sensible={sensible} onClick={abrirSku ? () => abrirSku(r.sku) : undefined} />)}
-              {buscados.length > limite && (
-                <Fila key="mas" alto={44} chevron={false} onClick={() => setLimite((l) => l + PASO)}
-                  titulo={<span style={{ color: theme.accent, fontSize: 14 }}>Mostrar {fmtInt(Math.min(PASO, buscados.length - limite))} más</span>} sub={`${fmtInt(limite)} de ${fmtInt(buscados.length)}`} />
-              )}
-            </ListaAgrupada>
-          )}
-      </>
-    );
-  } else if (vista === 'arribos') {
-    cuerpo = pos.length === 0
-      ? <Vacio icon={Ship} color={theme.textMuted} titulo="Sin embarques pendientes" sub="No hay POs con piezas por llegar." />
-      : (
-        <ListaAgrupada titulo="Próximos arribos" meta={`${fmtInt(pos.length)} PO · ${fmtInt(pos.reduce((s, p) => s + p.piezas, 0))} pz`}
-          pie={real?.transitoMed ? `Tránsito real promedio ${fmtInt(real.transitoMed)} d (ETD → CEDIS de los contenedores ya arribados este año). Toca una PO para ver sus SKUs.` : 'Toca una PO para ver sus SKUs.'}>
-          {pos.map((p) => {
-            const tone = p.dias == null ? 'gray' : p.dias < 0 ? 'orange' : p.dias <= 7 ? 'green' : 'blue';
-            return (
-              <Fila key={p.po} alto={60} tono={colorTono(theme, tone)} onClick={() => setPoAbierta(p.po)}
-                titulo={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ fontFamily: MONO, fontWeight: 600 }}>PO {p.po}</span>{p.resuelve > 0 && <Pill tone="red" size="xs">resuelve {p.resuelve}</Pill>}</span>}
-                sub={[p.cedis || null, `${fmtInt(p.nSkus)} SKU${p.nSkus === 1 ? '' : 's'}`, p.naviera || null, p.diasEnTransito != null ? `navegando ${fmtInt(p.diasEnTransito)} d` : (p.estatus || null)].filter(Boolean).join(' · ')}
-                valor={`${fmtInt(p.piezas)} pz`} valorSub={<span style={{ color: colorTono(theme, tone) }}>{fmtFechaCorta(p.eta)} · {etaRelativa(p.dias)}</span>} />
-            );
-          })}
-        </ListaAgrupada>
-      );
-  } else if (vista === 'agotados') {
-    cuerpo = (
-      <>
-        {agotados.length === 0 && criticos.length === 0 && <Vacio titulo="Nada agotado" sub="Todos los SKUs con demanda tienen stock y más de 30 días de cobertura." />}
-        {agotados.length > 0 && (
-          <ListaAgrupada titulo="Agotados" meta={agotados.length} style={{ marginBottom: 16 }} pie={`Sin stock y con demanda ERP: se dejan de vender ${fmtInt(res.demandaPerdida)} pz al mes.`}>
-            {agotados.map((r) => (
-              <FilaSku key={r.sku} r={r} sensible={false} onClick={abrirSku ? () => abrirSku(r.sku) : undefined}
-                valorSub={r.transitoPz > 0 ? <span style={{ color: theme.accent }}>llega {fmtFechaCorta(r.transitoEta)} · {fmtInt(r.transitoPz)} pz</span> : <span style={{ color: theme.red }}>sin PO</span>} />
-            ))}
-          </ListaAgrupada>
-        )}
-        {criticos.length > 0 && (
-          <ListaAgrupada titulo="Críticos" meta={criticos.length} pie={`Menos de ${COBERTURA_CRITICA} días de cobertura · ${fmtInt(res.riesgo)} se agotan antes de que llegue su tránsito.`}>
-            {criticos.map((r) => (
-              <FilaSku key={r.sku} r={r} sensible={false} onClick={abrirSku ? () => abrirSku(r.sku) : undefined}
-                valorSub={<span style={{ color: r.riesgo ? theme.red : theme.orange }}>{fmtDias(r.coberturaDias)}{r.riesgo ? ' · riesgo' : r.transitoPz > 0 ? ` · llega ${fmtFechaCorta(r.transitoEta)}` : ' · sin PO'}</span>} />
-            ))}
-          </ListaAgrupada>
-        )}
-      </>
-    );
-  } else {
-    cuerpo = sobre.length === 0
-      ? <Vacio titulo="Sin sobre-stock" sub={`Ningún SKU pasa de ${COBERTURA_SOBRESTOCK} días de cobertura.`} />
-      : (
-        <ListaAgrupada titulo="Sobre-stock" meta={sobre.length} pie={`Más de ${COBERTURA_SOBRESTOCK} días de cobertura al ritmo ERP · ${sensible ? fmtCompact(res.valorSobre) : `${fmtInt(res.piezasSobre)} pz`} en total.`}>
-          {sobre.map((r) => <FilaSku key={r.sku} r={r} sensible={sensible} onClick={abrirSku ? () => abrirSku(r.sku) : undefined} valorSub={<span style={{ color: theme.orange }}>{fmtDias(r.coberturaDias)} · {fmtInt(r.demandaMes)} pz/mes</span>} />)}
-        </ListaAgrupada>
-      );
-  }
 
   return (
     <>
-      <Cabecera onVolver={onVolver} />
-      <TituloGrande titulo="Inventario" sub={`${fmtInt(res.nSkus)} SKUs comerciales · ${fmtInt(res.conStock)} con stock`} />
-      <HeroM eyebrow="Inventario comercial · Acteck" frase={fraseInventario(res, sensible)} stats={stats}>
+      <HeroM eyebrow={`Inv Actual · medida del director · ${r.mesLabel} ${hoy.getFullYear()}`} frase={r.frase} sub={sub}>
         {frescura && <div style={{ marginTop: 8 }}>{frescura}</div>}
       </HeroM>
 
-      <KpiGrid style={{ marginTop: 10 }}>
-        <KpiM eyebrow="Piezas" big={fmtInt(res.piezas)} sub={res.coberturaPz != null ? `${fmtInt(res.coberturaPz)} d de cobertura en pz` : `${fmtInt(res.conStock)} SKUs con stock`} />
-        <KpiM eyebrow="Críticos" big={fmtInt(res.criticos)} bigColor={res.criticos ? theme.orange : undefined} sub={`< ${COBERTURA_CRITICA} d · ${fmtInt(res.riesgo)} en riesgo`} onClick={() => setVista('agotados')} />
-        <KpiM eyebrow="Sobre-stock" big={fmtInt(res.sobrestock)} sub={sensible ? `${fmtCompact(res.valorSobre)} · > ${COBERTURA_SOBRESTOCK} d` : `${fmtInt(res.piezasSobre)} pz · > ${COBERTURA_SOBRESTOCK} d`} onClick={() => setVista('sobre')} />
-        <KpiM eyebrow="En camino" big={`${fmtInt(res.transitoPz)} pz`} sub={res.transitoPos ? `${fmtInt(res.transitoPos)} PO · próximo ${fmtFechaCorta(res.proximaEta)}` : 'sin embarques pendientes'} onClick={() => setVista('arribos')} />
+      <KpiGrid data-entrada-kpis style={{ marginTop: 12 }}>
+        <KpiM eyebrow="Valor del inventario actual" big={sensible && res.valor != null ? fmtDinero(res.valor) : `${fmtPz(res.piezas)} pz`}
+          sub={sensible && res.valor != null ? `${fmtPz(res.piezas)} pz · ${res.diasInv != null ? `${fmtPz(res.diasInv)} días` : 'sin medida de días'}` : `${fmtPz(res.conStock)} SKUs con stock${res.diasInv != null ? ` · ${fmtPz(res.diasInv)} días` : ''}`} />
+        <KpiM eyebrow="Cambio contra el mes pasado" big={cambio.valor == null ? '—' : `${signo(cambio.valor)}${fmt(cambio.valor)}`} bigColor={colorCambio}
+          sub={cambio.valor == null ? `sin cierre de ${cambio.mesLabel.toLowerCase()}` : <>{cambio.pct != null ? <span style={{ color: colorCambio }}>{deltaPct(cambio.pct)}</span> : null} vs cierre de {cambio.mesLabel.toLowerCase()}{cambio.fechaCierre ? ` (${fmtFechaCorta(cambio.fechaCierre)})` : ''}</>} />
+        <KpiM eyebrow={`Llega en ${llega.mesLabel}`} big={llega.mes.piezas > 0 ? (sensible && llega.mes.valor > 0 ? fmtDinero(llega.mes.valor) : `${fmtPz(llega.mes.piezas)} pz`) : 'Nada'}
+          sub={llega.total.piezas > 0 ? `${llega.mes.pos ? `${fmtPz(llega.mes.pos)} PO · ` : ''}en total ${sensible && llega.total.valor > 0 ? fmtDinero(llega.total.valor) : `${fmtPz(llega.total.piezas)} pz`} (${fmtPz(llega.total.pos)} PO)` : 'sin embarques pendientes'} />
+        <KpiM eyebrow="Vueltas de inventario del año" big={r.vueltas != null ? `${Number(r.vueltas).toFixed(1)}×` : '—'}
+          sub={r.vueltas != null ? (sensible && r.medidas?.ytd_costo_venta != null ? `costo de venta YTD ${fmtDinero(r.medidas.ytd_costo_venta)} / inv. promedio ${fmtDinero(r.medidas.inv_promedio)}` : 'YTD costo de venta / inventario promedio') : 'sin medida'} />
       </KpiGrid>
 
-      <div style={{ padding: '16px 16px 12px' }}>
-        <Segmented size="md" value={vista} onChange={setVista} options={VISTAS.map((v) => ({ ...v, badge: v.id === 'agotados' && res.agotados ? res.agotados : v.id === 'arribos' && pos.length ? pos.length : undefined }))} />
+      <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta="arrastra para leer">Inventario al cierre de mes</TituloSeccionM>
+      <div style={{ margin: '0 16px', background: theme.surface, borderRadius: 14, padding: '10px 10px 6px' }}>
+        {conSerie ? (
+          <GraficaScrub datos={serie} formato={fmt} tooltip={tooltip} activo={serie.length - 1}
+            series={[{ key: 'cv', label: 'Venta promedio 3 m', color: gris }, { key: 'inv', label: 'Inventario', color: theme.accent, area: true, grosor: 2.6 }]} />
+        ) : (
+          <div style={{ fontSize: 12.5, color: theme.textMuted, padding: '18px 6px', textAlign: 'center' }}>Sin fotos de cierre de mes todavía: la serie se llena con la foto diaria.</div>
+        )}
+        <LeyendaScrub items={[{ label: 'Inventario', color: theme.accent }, { label: 'Venta promedio 3 m', color: gris }]} derecha={sensible ? 'a costo' : 'en piezas'} />
+      </div>
+      <div style={{ fontSize: 11.5, color: gris, padding: '6px 28px 0', lineHeight: 1.4, fontFamily: TYPO.fontText }}>Días del mes = inventario al cierre / CV de los 3 meses cerrados × 90 (medida del director).</div>
+
+      <div style={{ padding: '0 16px' }}>
+        <PayM titulo="Mix del inventario actual" filas={filasPay} formato={fmt} centro="HOY" vacio="Sin inventario comercial cargado."
+          acciones={<ChipsPay opciones={DIMS} value={dim} onChange={setDim} />} />
+        {dim !== 'almacen' && <div style={{ fontSize: 11.5, color: gris, padding: '6px 12px 0', lineHeight: 1.4, fontFamily: TYPO.fontText }}>{dim === 'marca' ? 'Marca por prefijo del SKU y roadmap.' : 'Categoría del roadmap; sin roadmap, «Sin categoría».'}</div>}
       </div>
 
-      {cuerpo}
-      <div style={{ height: 24 }} />
+      <DetalleSkuAnual titulo="Stock al cierre por SKU" filas={tabla} columnas={columnas} categorias={categorias} onSku={onSku} cargando={cargandoTabla}
+        conTotalCol={false} soloPiezas={!sensible} vacio="Sin fotos de cierre de mes todavía." meta={`${tabla.length} SKUs · 12 meses`}
+        pie="Stock en almacenes comerciales el último día con foto de cada mes (el mes en curso = hoy) · Δ = los 12 meses frente a los mismos del año anterior. Toca el encabezado para ordenar y un SKU para abrir su ficha." />
 
-      <HojaM abierto={!!po} onClose={() => setPoAbierta(null)} titulo={po ? `PO ${po.po}` : ''} alto="80vh"
-        sub={po ? [fmtFechaCorta(po.eta) ? `ETA ${fmtFechaCorta(po.eta)} · ${etaRelativa(po.dias)}` : null, po.cedis || null, po.contenedor ? `contenedor ${po.contenedor}` : null, po.naviera || null].filter(Boolean).join(' · ') : ''}>
-        {po && (
-          <ListaAgrupada titulo="SKUs de la PO" meta={`${fmtInt(po.nSkus)} · ${fmtInt(po.piezas)} pz`}
-            accion={po.estatus ? <Pill tone={TONO_ESTATUS[po.estatus] || 'gray'} size="xs">{po.estatus}</Pill> : null}
-            pie={po.resuelve ? `${fmtInt(po.resuelve)} de estos SKUs están agotados o en cobertura crítica hoy.` : null}>
-            {[...po.skus].sort((a, b) => Number(b.necesitado) - Number(a.necesitado) || b.piezas - a.piezas).map((s) => (
-              <Fila key={s.sku} alto={56} onClick={abrirSku ? () => { setPoAbierta(null); abrirSku(s.sku); } : undefined}
-                tono={s.stock == null ? colorTono(theme, 'gray') : !s.tieneStock ? (s.demandaMes > 0 ? theme.red : colorTono(theme, 'gray')) : colorTono(theme, tonoCobertura(s.coberturaDias, true))}
-                titulo={<span style={{ fontFamily: MONO, fontWeight: 600 }}>{s.sku}</span>} sub={s.descripcion || '—'}
-                valor={`${fmtInt(s.piezas)} pz`}
-                valorSub={s.stock == null ? 'fuera del alcance' : !s.tieneStock ? (s.demandaMes > 0 ? <span style={{ color: theme.red }}>agotado</span> : 'sin stock') : `stock ${fmtInt(s.stock)} · ${fmtDias(s.coberturaDias)}`} />
-            ))}
-          </ListaAgrupada>
-        )}
-        <div style={{ height: 24 }} />
-      </HojaM>
+      {agotados.length > 0 && (
+        <ListaAgrupada titulo="Agotados con demanda" meta={fmtPz(agotados.length)} style={{ marginTop: 18 }}
+          accion={onSop ? <button type="button" onClick={onSop} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Ver en S&OP</button> : null}
+          pie={verAgotados ? `Sin stock y con venta en los 3 meses cerrados: se dejan de vender ${fmtPz(res.demandaPerdida)} pz al mes.` : null}>
+          {!verAgotados ? (
+            <Fila key="abrir" alto={46} chevron={false} onClick={() => setVerAgotados(true)}
+              titulo={<span style={{ color: theme.accent, fontSize: 14 }}>Ver los {fmtPz(Math.min(TOPE_AGOTADOS, agotados.length))} con más demanda</span>}
+              sub={`${fmtPz(res.demandaPerdida)} pz al mes sin vender`} />
+          ) : agotados.slice(0, TOPE_AGOTADOS).map((s) => (
+            <Fila key={s.sku} alto={56} tono={theme.red} onClick={onSku ? () => onSku(s.sku) : undefined}
+              titulo={<span style={{ fontFamily: MONO, fontWeight: 600 }}>{s.sku}</span>} sub={[s.marca || null, s.descripcion || null].filter(Boolean).join(' · ') || '—'}
+              valor={`${fmtPz(s.demandaMes)} pz/mes`}
+              valorSub={s.transitoPz > 0 ? <span style={{ color: theme.accent }}>llega {fmtFechaCorta(s.transitoEta)} · {fmtPz(s.transitoPz)} pz</span> : <span style={{ color: theme.red }}>sin PO</span>} />
+          ))}
+        </ListaAgrupada>
+      )}
+      <div style={{ height: 24 }} />
     </>
   );
 }
@@ -214,25 +130,36 @@ export default function InventarioM() {
   const perfil = usePerfil() || nav?.perfil;
   const puedeVer = puedeVerPestanaGlobal(perfil, 'inventario_global');
   const sensible = puedeVerSensible(perfil);
-  const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, medidas } = useInventarioDatos();
-  const navieraPor = useNavieraPorContenedor(puedeVer);
-  const { proveedores } = useEmbarquesTiempos(new Date().getFullYear(), puedeVer);
-  const real = useMemo(() => resumenEmbarques(proveedores), [proveedores]);
+  const d = useInventarioEmpresa(puedeVer);
 
-  const skuRows = useMemo(() => agregarSkus(filas, { descripciones, transito, leadTime, demanda }), [filas, descripciones, transito, leadTime, demanda]);
-  const res = useMemo(() => resumenInventario(skuRows, inventarioDesdeVista(medidas)), [skuRows, medidas]);
-  const porSku = useMemo(() => new Map(skuRows.map((r) => [r.sku, r])), [skuRows]);
-  const pos = useMemo(() => agruparPorPO({ transito, porSku, descripciones, navieraPor }), [transito, porSku, descripciones, navieraPor]);
+  const roadmapMap = useMemo(() => new Map((d.roadmap || []).map((x) => [x.sku, { descripcion: x.descripcion || '', marca: x.marca || '', familia: x.familia || '', rdmp: x.rdmp || '', categoria: x.categoria || '' }])), [d.roadmap]);
+  const r = useMemo(() => {
+    if (!d.filas) return null;
+    const demanda = demandaDesdePivot(d.demandaRows, d.cerrados);
+    const skuRows = agregarSkus(d.filas, { descripciones: roadmapMap, transito: d.transito, leadTime: new Map(), demanda });
+    const medidas = inventarioDesdeVista(d.medidasRow);
+    const res = resumenInventario(skuRows, medidas);
+    const porSku = new Map(skuRows.map((x) => [x.sku, x]));
+    const pos = agruparPorPO({ transito: d.transito, porSku, descripciones: roadmapMap, hoy: d.hoy });
+    return resumenInventarioM({ res, medidas, meses: d.meses, pos, porSku, precios: d.precios, filas: d.filas, roadmapMap, skuAnio: d.skuAnio, roadmap: d.roadmap, skuRows, hoy: d.hoy, sensible });
+  }, [d.filas, d.demandaRows, d.cerrados, d.transito, d.medidasRow, d.meses, d.precios, d.skuAnio, d.roadmap, d.hoy, roadmapMap, sensible]);
+  const categorias = useMemo(() => categoriasDe(d.roadmap), [d.roadmap]);
 
   if (!puedeVer) {
     return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Inventario" /><Vacio icon={PackageX} color={theme.textMuted} titulo="Sin acceso" sub="Tu perfil no tiene la pestaña Inventario." /></>);
   }
-  if (loading) return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Inventario" sub="Cargando…" /><Cargando pantalla="movilInventario" /></>);
+  const sub = <><span>La empresa · {sensible ? 'a costo' : 'en piezas'}</span><span>·</span><FrescuraPill pantalla="inventarioGlobal" detallado fila /></>;
+  if (d.error) return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Inventario" sub={sub} /><Vacio icon={AlertTriangle} color={theme.red} titulo="No se pudo cargar el inventario" sub={d.error.message} /></>);
+  if (d.loading || !r) return (<><Cabecera onVolver={nav.pop} /><TituloGrande titulo="Inventario" sub="Cargando…" /><Cargando pantalla="movilInventario" /></>);
 
   const verSku = (sku) => { nav.agregarSku?.(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const verSop = () => nav.navegar?.({ pagina: 'forecastClientes' });
 
   return (
-    <InventarioMVista skuRows={skuRows} res={res} pos={pos} real={real} sensible={sensible} enriqueciendo={enriqueciendo} onVerSku={verSku} onVolver={nav.pop}
-      frescura={<FrescuraPill pantalla="inventarioGlobal" inverso detallado />} />
+    <div data-stagger>
+      <Cabecera onVolver={nav.pop} />
+      <TituloGrande titulo="Inventario" sub={sub} />
+      <InventarioMVista r={r} categorias={categorias} onSku={verSku} onSop={verSop} />
+    </div>
   );
 }

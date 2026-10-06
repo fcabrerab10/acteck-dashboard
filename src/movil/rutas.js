@@ -10,7 +10,6 @@ import { CLIENTES_NAV } from '../components/nav/arbol';
 
 const FichaCliente  = lazy(() => import('./pestanas/FichaCliente'));
 const SellInCliente = lazy(() => import('./pestanas/SellInCliente'));
-const FichaProducto = lazy(() => import('./FichaProducto'));
 const Historial     = lazy(() => import('./pestanas/Historial'));
 const Fuentes       = lazy(() => import('./pestanas/Fuentes'));
 const VisionGeneral    = lazy(() => import('./pestanas/VisionGeneral'));
@@ -30,12 +29,12 @@ const FichaOC          = lazy(() => import('./pestanas/tracking/FichaOC'));
 const PagosMovil       = lazy(() => import('./pestanas/pagos/Pagos'));
 const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
 const InventarioM      = lazy(() => import('./pestanas/inventario/InventarioM')); // 2026-10-05 · Inventario global
+const EstrategiaPreciosM = lazy(() => import('./pestanas/precios/EstrategiaPreciosM')); // 2026-10-05 · calculadora de margen y propuesta
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Sólo `inicio` y `agenda` son nodos del árbol. */
 export const TABS_RAIZ = ['inicio', 'agenda', 'clientes', 'alertas', 'buscar'];
 
 const tab = (t, extra) => ({ tipo: 'tab', tab: t, extra: extra || null });
-const ficha = () => ({ tipo: 'push', key: 'ficha', el: h(FichaProducto) });
 
 // Páginas globales (nodo.clienteKey == null) → pantalla móvil.
 const GLOBALES = {
@@ -47,7 +46,9 @@ const GLOBALES = {
   alertas:           () => tab('alertas'),            // no son nodos del árbol: los usan la barra superior y Buscar
   buscar:            () => tab('buscar'),
   inventarioGlobal:  () => ({ tipo: 'push', key: 'inventario', el: h(InventarioM) }), // Inventario global (la Ficha de producto se abre desde la lista)
-  estrategiaPrecios: ficha,                           // Estrategia de precios → Ficha de producto (precio por lista)
+  // Estrategia de precios (3.82.0): calculadora de margen/descuento + propuesta real; `extra.sku` abre la calculadora con ese SKU.
+  // La Ficha de producto («Compartir disponibilidad») se abre desde la calculadora.
+  estrategiaPrecios: (extra) => ({ tipo: 'push', key: 'precios', el: h(EstrategiaPreciosM, { inicial: extra || null }) }),
   historialCambios:  () => ({ tipo: 'push', key: 'historial', el: h(Historial) }),
   telemetria:        () => ({ tipo: 'push', key: 'equipo', el: h(Equipo) }),   // Actividad del equipo (sólo super admin)
   actualizacion:     () => ({ tipo: 'push', key: 'fuentes', el: h(Fuentes) }), // Importador (sólo lectura)

@@ -42,10 +42,13 @@ export function ChipsEntendido({ chips = [], onQuitar }) {
  * @param {Function} p.onSku      (sku) → abre la ficha
  * @param {string} p.unidad / p.onUnidad  controlado desde fuera (opcional); si no, estado propio
  */
-export default function DetalleSkuAnual({ titulo = 'Detalle por SKU', filas = [], columnas = [], categorias = [], onSku, pie, cargando = false, unidad: unidadProp, onUnidad, meta }) {
+// 2026-10-05 (Inventario): `conTotalCol={false}` para series de saldo (stock al cierre: sumar los meses no significa
+// nada), `vacio` para el texto cuando no hay filas y `soloPiezas` (sin permiso sensible: ni Segmented ni $); los demás
+// usos no cambian.
+export default function DetalleSkuAnual({ titulo = 'Detalle por SKU', filas = [], columnas = [], categorias = [], onSku, pie, cargando = false, unidad: unidadProp, onUnidad, meta, conTotalCol = true, vacio = 'Sin movimiento en los últimos 12 meses.', soloPiezas = false }) {
   const { theme } = useTheme();
   const [unidadLocal, setUnidadLocal] = useState('monto');
-  const unidad = unidadProp || unidadLocal;
+  const unidad = soloPiezas ? 'piezas' : (unidadProp || unidadLocal);
   const setUnidad = onUnidad || setUnidadLocal;
   const [q, setQ] = useState('');
   const [todas, setTodas] = useState(false);
@@ -65,14 +68,14 @@ export default function DetalleSkuAnual({ titulo = 'Detalle por SKU', filas = []
   return (
     <>
       <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta={meta || `${filas.length} SKUs · 12 meses`}
-        accion={<Segmented value={unidad} onChange={setUnidad} options={SEG_UNIDAD} size="xs" />}>{titulo}</TituloSeccionM>
+        accion={soloPiezas ? null : <Segmented value={unidad} onChange={setUnidad} options={SEG_UNIDAD} size="xs" />}>{titulo}</TituloSeccionM>
       <div style={{ padding: '0 16px' }}><CampoBusqueda value={q} onChange={(v) => { setQ(v); setTodas(false); }} placeholder="SKU, descripción, marca o categoría" /></div>
       <ChipsEntendido chips={interp.chips} onQuitar={(c) => setQ(quitarChip(q, c, { categorias }))} />
       <div style={{ padding: '8px 16px 0' }}>
         {cargando ? <Skeleton h={200} r={12} /> : (
-          <TablaAnual columnas={columnas} filas={filasTabla} fmt={fmt} ordenable conDelta conProm={false}
+          <TablaAnual columnas={columnas} filas={filasTabla} fmt={fmt} ordenable conDelta conProm={false} conTotalCol={conTotalCol}
             etiquetaFilas={recorte ? `top ${TOPE}` : `${visibles.length} SKUs`} totalLabel="Total"
-            vacio={interp.vacio ? 'Sin movimiento en los últimos 12 meses.' : 'Ningún SKU coincide con lo que buscas.'} />
+            vacio={interp.vacio ? vacio : 'Ningún SKU coincide con lo que buscas.'} />
         )}
         {recorte && (
           <button type="button" onClick={() => setTodas(true)}

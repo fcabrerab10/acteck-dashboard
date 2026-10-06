@@ -20,11 +20,12 @@ import { tonoCobertura, etiquetaCobertura } from '../modules/comercial/inventari
 
 const ESTATUS_CORTO = { 'TRANSITO MARITIMO': 'En el mar', 'PROXIMO A ZARPAR': 'Por zarpar', 'EN PRODUCCION': 'En producción', 'EN ESPERA DE CONSOLIDAR': 'Por consolidar', 'EN RESGUARDO': 'En resguardo', 'Pendiente modular': 'Pendiente' };
 
-export default function FichaProducto({ raiz = false }) {
+// `listaInicial` (2026-10-05): la calculadora de precios abre la ficha con la lista ya elegida.
+export default function FichaProducto({ raiz = false, listaInicial = null }) {
   const { theme } = useTheme();
   const nav = useNav();
   const { canasta, agregarSku, quitarSku, limpiarCanasta } = nav;
-  const [lista, setLista] = useState(null);          // obligatoria, no se recuerda entre sesiones
+  const [lista, setLista] = useState(listaInicial || null);  // obligatoria, no se recuerda entre sesiones
   const [buscando, setBuscando] = useState(false);
   const [eligiendo, setEligiendo] = useState(false);
   const { data, isLoading, error } = useFichaProducto(canasta);

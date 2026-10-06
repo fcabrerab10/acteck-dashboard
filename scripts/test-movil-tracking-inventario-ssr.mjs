@@ -24,7 +24,8 @@ const { ThemeContext } = await vite.ssrLoadModule('/src/lib/themeContext.jsx');
 const { getTheme } = await vite.ssrLoadModule('/src/lib/themeTokens.js');
 const { NavContext } = await vite.ssrLoadModule('/src/movil/nav.jsx');
 const { TrackingMVista, embudoHoy } = await vite.ssrLoadModule('/src/movil/pestanas/tracking/TrackingM.jsx');
-const { InventarioMVista, fraseInventario } = await vite.ssrLoadModule('/src/movil/pestanas/inventario/InventarioM.jsx');
+const { InventarioMVista } = await vite.ssrLoadModule('/src/movil/pestanas/inventario/InventarioM.jsx');
+const calcInv = await vite.ssrLoadModule('/src/movil/pestanas/inventario/calculo.js');
 const { calcularTodo, resumen, surtirHoy, backorderPorSku } = await vite.ssrLoadModule('/src/modules/comercial/tracking/calculo.js');
 const { agregarSkus, resumenInventario } = await vite.ssrLoadModule('/src/modules/comercial/inventario/agregar.js');
 const { agruparPorPO } = await vite.ssrLoadModule('/src/modules/comercial/inventario/arribos.js');
@@ -199,37 +200,37 @@ test('inventario · agruparPorPO: una fila por PO, ETA más cercana primero, nav
   assert.deepEqual(agruparPorPO({ transito: new Map() }), []);
 });
 
-test('inventario · fraseInventario con y sin permiso sensible', () => {
-  assert.match(fraseInventario(resInv, true), /^\$399K en inventario comercial, 141 días de inventario; 1 SKU agotado con demanda\.$/);
-  assert.match(fraseInventario(resInv, false), /^6,250 pz en inventario comercial, 141 días/);
-  assert.equal(fraseInventario(resumenInventario([], null), false), '0 pz en inventario comercial.');
+// 3.81.0 (2026-10-05): la pantalla se rehízo (vista pura = InventarioMVista({ r }) con r de inventario/calculo.js#resumenInventarioM;
+// la frase y el detalle se prueban en scripts/test-inventario-movil-ssr.mjs). Aquí sólo que sigue montando con estos datos.
+const armarInv = (sensible) => calcInv.resumenInventarioM({ res: resInv, medidas, meses: [], pos, porSku, precios: new Map(), filas: filasInv, roadmapMap: descripciones, skuAnio: [], roadmap: [], skuRows, hoy: HOY, sensible });
+
+test('inventario · fraseInventario (calculo.js) con y sin permiso sensible', () => {
+  const llega = calcInv.llegadas({ pos, porSku, hoy: HOY });
+  assert.match(calcInv.fraseInventario({ res: resInv, llega, sensible: true }), /^\$399K en piso, 141 días al ritmo de los 3 meses cerrados; 1 SKU agotado con demanda y \$600K llegan en octubre\.$/);
+  assert.match(calcInv.fraseInventario({ res: resInv, llega, sensible: false }), /^6,250 pz en piso, 141 días/);
+  assert.equal(calcInv.fraseInventario({ res: resumenInventario([], null), llega: calcInv.llegadas({ pos: [], hoy: HOY }), sensible: false }), '0 pz en piso.');
 });
 
-test('inventario · InventarioMVista renderiza hero, KPIs y la lista de SKUs (sensible y no sensible)', () => {
-  const s = render(InventarioMVista, { skuRows, res: resInv, pos, real: { transitoMed: 31.5 }, sensible: true, onVerSku() {} });
+test('inventario · InventarioMVista renderiza hero, 4 KPIs y tabla (sensible y no sensible)', () => {
+  const s = render(InventarioMVista, { r: armarInv(true), categorias: [], onSku() {}, onSop() {} });
   sano(s, 'InventarioMVista sensible');
-  assert.match(s, /Inventario/);
-  assert.match(s, /\$399K/);
-  assert.match(s, /Días de inv/);
-  assert.match(s, /141/);
-  assert.match(s, /Agotados/);
-  assert.match(s, /En camino/);
-  assert.match(s, /2,500 pz/);
-  assert.match(s, /AC-943178/); assert.match(s, /BR-930012/);
-  assert.match(s, /Teclado gamer/);
-  assert.match(s, /Por valor/);
-  assert.match(s, /\$250K/, 'valor del SKU con sensible');
-  const s2 = render(InventarioMVista, { skuRows, res: resInv, pos, real: null, sensible: false, onVerSku() {} }, 'claro');
+  assert.match(s, /\$399K en piso/);
+  assert.match(s, /Valor del inventario actual/);
+  assert.match(s, /Cambio contra el mes pasado/);
+  assert.match(s, /Llega en octubre/); assert.match(s, /2 PO/);
+  assert.match(s, /Vueltas de inventario del año/);
+  assert.match(s, /Agotados con demanda/);
+  const s2 = render(InventarioMVista, { r: armarInv(false), categorias: [], onSku() {} }, 'claro');
   sano(s2, 'InventarioMVista no sensible');
   assert.ok(!/\$/.test(s2), 'sin permiso sensible no hay pesos a costo');
-  assert.match(s2, /6,250 pz/);
-  assert.match(s2, /Por piezas/);
+  assert.match(s2, /6,250 pz en piso/);
 });
 
 test('inventario · vista vacía no rompe', () => {
-  const s = render(InventarioMVista, { skuRows: [], res: resumenInventario([], null), pos: [], sensible: false });
+  const r0 = calcInv.resumenInventarioM({ res: resumenInventario([], null), medidas: null, meses: [], pos: [], filas: [], skuAnio: [], skuRows: [], hoy: HOY, sensible: false });
+  const s = render(InventarioMVista, { r: r0, categorias: [] });
   sano(s, 'InventarioMVista vacía');
-  assert.match(s, /Sin SKUs/);
+  assert.match(s, /Sin fotos de cierre de mes todavía/);
 });
 
 test('rutas · ordenesCompra → TrackingM e inventarioGlobal → InventarioM (push)', () => {
@@ -239,5 +240,5 @@ test('rutas · ordenesCompra → TrackingM e inventarioGlobal → InventarioM (p
   assert.equal(tOc.key, 'oc-x1', 'una alerta sigue abriendo la ficha de la OC');
   const i = destino({ pagina: 'inventarioGlobal' });
   assert.equal(i.tipo, 'push'); assert.equal(i.key, 'inventario');
-  assert.equal(destino({ pagina: 'estrategiaPrecios' }).key, 'ficha', 'Estrategia de precios sigue abriendo la Ficha de producto');
+  assert.equal(destino({ pagina: 'estrategiaPrecios' }).key, 'precios', 'Estrategia de precios abre su pantalla propia (3.82)');
 });
