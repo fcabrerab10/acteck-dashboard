@@ -2,7 +2,7 @@
 // borrador/enviada/cerrada y total), buscador, filtro por cliente y "+ Nueva". Misma tabla y mismo esquema
 // que el armador de escritorio (PropuestasTab.jsx): lo que se guarda aquí aparece allá y viceversa.
 // propuestas_borradores la escribe la app → se lee con supabase directo bajo useQuery (sin cachedQuery).
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, ClipboardList, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -31,9 +31,17 @@ export function usePropuestas(enabled = true) {
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-export default function Propuestas() {
+// `inicial.skus` (+ `inicial.clienteKey`): llega desde «<Cuenta> frente al resto» (2026-10-05) y abre una propuesta nueva
+// con esos SKUs ya en la canasta.
+export default function Propuestas({ inicial = null }) {
   const { theme } = useTheme();
   const nav = useNav();
+  const abierto = useRef(false);
+  useEffect(() => {
+    if (abierto.current || !inicial?.skus?.length) return;
+    abierto.current = true;
+    nav.push(<PropuestaEditor skusIniciales={inicial.skus} clienteInicial={inicial.clienteKey || null} />, 'propuesta-nueva');
+  }, [inicial, nav]);
   const puedeVer = puedeVerPestanaGlobal(nav.perfil, 'propuestas');
   const { data, isLoading, error } = usePropuestas(puedeVer);
   const [q, setQ] = useState('');

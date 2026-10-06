@@ -6,7 +6,7 @@
 // Fuera a propósito: agenda, «requiere decisión», sell out por cuenta, tabla de meses, detalle de inventario:
 // cada uno tiene su pestaña. Quien no tiene permiso sensible ve sus clientes y sus avisos.
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, ChevronDown } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import FrescuraPill from '../../components/FrescuraPill';
@@ -17,7 +17,7 @@ import GraficaScrub from './inicio/GraficaScrub';
 import PayMix from './inicio/PayMix';
 import { useAlertas } from '../../lib/alertas';
 import { useNav } from '../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Skeleton, Vacio, HojaM, Pill } from '../piezas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Skeleton, Vacio, SelectorPeriodoM, BarraCuotaM } from '../piezas';
 import { idNodo } from '../../components/nav/arbol';
 import { colorCliente } from '../datos';
 import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente, puedeVerInicio } from '../../lib/permisos';
@@ -28,57 +28,7 @@ const fmtM = (n) => moneyCompact(n);
 // El hero de escritorio termina con «N asuntos requieren decisión hoy»; en el celular esa frase sobra (Fernando: nada de «requiere decisión»).
 const sinDecision = (t) => String(t || '').replace(/\s*(Sin asuntos críticos pendientes\.|[^.]*requieren? decisión hoy\.)/g, '').trim();
 
-/** Barra de cuota (se llena y cambia de color: rojo < 60 · naranja < 85 · azul < 100 · verde) con monto y %. */
-function BarraCuotaM({ valor, cuota, label }) {
-  const { theme } = useTheme();
-  if (!cuota) return null;
-  const p = Math.max(0, (valor / cuota) * 100);
-  const color = p >= 100 ? theme.green : p >= 85 ? '#5AC8FA' : p >= 60 ? theme.orange : theme.red;
-  // Va dentro del HeroM (tarjeta inversa): en tema oscuro la tarjeta es clara, así que el texto es oscuro.
-  const texto = theme.textOnInverse || theme.textOnDark || '#FFF';
-  const muted = theme.mode === 'dark' ? 'rgba(29,29,31,0.62)' : 'rgba(245,245,247,0.7)';
-  const pista = theme.mode === 'dark' ? 'rgba(29,29,31,0.12)' : 'rgba(255,255,255,0.14)';
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11.5, color: muted, fontVariantNumeric: 'tabular-nums' }}>
-        <span><b style={{ color: texto, fontWeight: 600 }}>{fmtM(valor)}</b> de {fmtM(cuota)} de {label}</span>
-        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 700, color }}>{Math.round(p)}%</span>
-      </div>
-      <div style={{ marginTop: 4, height: 8, borderRadius: 999, background: pista, overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, p)}%`, background: color, borderRadius: 999, transition: 'width 420ms cubic-bezier(0.32,0.72,0,1)' }} /></div>
-    </div>
-  );
-}
-
-/** Botón «Sep 2026 ▾» + hoja con los meses (y «Año completo») del año en curso y los dos anteriores. */
-function SelectorPeriodoM({ anio, mes, anioHoy, mesHoy, onChange }) {
-  const { theme } = useTheme();
-  const [abierto, setAbierto] = useState(false);
-  const anios = [anioHoy, anioHoy - 1, anioHoy - 2];
-  const label = mes === 'anio' ? `Año ${anio}` : `${MESES[mes - 1]} ${anio}`;
-  return (
-    <>
-      <button type="button" onClick={() => setAbierto(true)}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 32, padding: '0 10px 0 12px', borderRadius: 9, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 }}>
-        {label}<ChevronDown size={14} style={{ color: theme.textMuted }} />
-      </button>
-      <HojaM abierto={abierto} onClose={() => setAbierto(false)} titulo="Período" sub="Mes o año completo · se compara con el año anterior" alto="75vh">
-        {anios.map((a) => (
-          <ListaAgrupada key={a} titulo={String(a)} style={{ marginBottom: 14 }}>
-            <Fila titulo={`Año ${a}`} sub={a === anioHoy ? 'Acumulado a hoy' : 'Año completo'} chevron={false} alto={44}
-              trailing={anio === a && mes === 'anio' ? <Pill tone="blue">Elegido</Pill> : undefined} onClick={() => { onChange(a, 'anio'); setAbierto(false); }} />
-            {MESES.map((lbl, i) => {
-              const m = i + 1;
-              if (a === anioHoy && m > mesHoy) return null;
-              const on = anio === a && mes === m;
-              return <Fila key={m} titulo={`${lbl} ${a}`} sub={a === anioHoy && m === mesHoy ? 'Mes en curso' : undefined} chevron={false} alto={44}
-                trailing={on ? <Pill tone="blue">Elegido</Pill> : undefined} onClick={() => { onChange(a, m); setAbierto(false); }} />;
-            })}
-          </ListaAgrupada>
-        ))}
-      </HojaM>
-    </>
-  );
-}
+// BarraCuotaM y SelectorPeriodoM viven en ../piezas desde el 2026-10-05 (los comparte Análisis por cliente).
 
 export default function Inicio() {
   const { theme } = useTheme();
@@ -150,7 +100,7 @@ export default function Inicio() {
       </HeroM>
 
       {sensible && (
-        <div style={{ marginTop: 18 }}>
+        <div style={{ marginTop: 18, padding: '0 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '0 4px 6px 2px' }}>
             <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text }}>{anio} frente a {anio - 1}</span>
             <span style={{ fontSize: 11.5, color: theme.textMuted }}>{mes !== 'anio' ? <button type="button" onClick={() => setMes('anio')} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 500, padding: 0, cursor: 'pointer' }}>Año completo ›</button> : metaGrafica}</span>
@@ -176,7 +126,7 @@ export default function Inicio() {
         </KpiGrid>
       )}
 
-      {sensible && <PayMix mixes={r.mixes} formato={fmtM} titulo={`Mix de sell in · ${periodoLbl}`} />}
+      {sensible && <PayMix mixes={r.mixes} formato={fmtM} titulo={`Mix de sell in · ${periodoLbl}`} style={{ margin: '18px 16px 0' }} />}
 
       {!sensible && <ListaAgrupada titulo={`Clientes · ${periodoLbl}`} style={{ marginTop: 18 }} pie="Toca un cliente para ver su ficha.">
         {r.clientes.map((cl) => (

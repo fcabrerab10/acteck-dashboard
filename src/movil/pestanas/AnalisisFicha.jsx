@@ -1,33 +1,35 @@
-// Ficha de análisis de UN cliente del ERP (push) · hero MTD / YTD / YoY, 12 meses en gráfica, top 10 SKUs del año
-// con piezas, sección "Interno" (alertas del cliente y cartera si es propio; etiquetada, nunca se comparte) y
-// "Compartir ficha" con texto limpio (textoFichaCliente: sin YoY negativo, sin alertas, márgenes ni cartera).
-// Fuentes: facturacion_clientes por cliente_nombre (2 años) · roadmap_sku / catalogo_articulos · alertas (lib/alertas) ·
-// estados_cuenta (último corte del cliente propio).
+// Página de UN cliente del ERP en el celular (3.79.0 · 2026-10-05, mockup scratchpad/analisis-movil.html pantalla 2).
+// Cabecera «‹ Análisis por cliente» · nombre · «canal · código · atiende <vendedor> · compra cada N días» · Segmented
+// Resumen · Sell In · Sell Out (las pestañas viven en analisis/Pestanas.jsx).
+// Resumen: HeroM con la frase del mes (cuota, YoY a mismo día, SO/SI, semanas de inventario) y barra de cuota → 4 KpiM
+// (sell in del mes con cuota · sell out del mes con SO/SI · inventario en el cliente · última compra y ritmo) → gráfica
+// sell in vs sell out del año con cuota punteada (GraficaScrub) → «Dónde está el movimiento» (movimiento.js) →
+// Categorías como pay Sell in · Sell out (PayM) → Cuotas por trimestre → Compartir ficha. Los top 10 SKUs se fueron.
+// Datos (8 consultas chicas): mv_analisis_cliente_mes del cliente (24 filas) · v_cuota_erp_mes · v_ventas_vendedor_cliente_mes ·
+// mv_sellin_cliente_dia · v_sellout_cuenta_mes (cuenta ligada por CUENTA_POR_ERP) · mv_analisis_cliente_sku_mes ·
+// mv_sellout_cuenta_sku_mes de la cuenta · roadmap_sku (descripciones, ya en cache).
 import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Share2, Copy, Lock, CreditCard, AlertTriangle } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { fetchAll, cachedQuery } from '../../lib/queries';
+import { Share2, Copy } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { useAlertas } from '../../lib/alertas';
-import { colorSev } from '../../components/notificaciones/Pila';
+import { useRoadmap } from '../../lib/queries';
+import { puedeVerSensible } from '../../lib/permisos';
 import { canalLabel } from '../../modules/general/inicio/config';
 import { textoFichaCliente, compartir, copiar } from '../../lib/whatsapp';
 import { GraficaLineas } from '../../components/kit';
 import { useNav } from '../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, HeatCell, Vacio, HojaM, BotonGrande, TituloSeccionM, Segmented, toast } from '../piezas';
-import { SellInM, SellOutM } from './analisis/Pestanas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, HojaM, BotonGrande, TituloSeccionM, Segmented, GraficaScrub, LeyendaScrub, PayM, ChipsPay, BarraCuotaM, toast } from '../piezas';
+import { PROPIOS, nombreCliente, colorCliente } from '../datos';
+import { moneyCompact, int, deltaPct, MESES, MONO, N } from '../util';
+import { useCuotasClientes, useSellInDia, useDetalleCliente } from '../../modules/comercial/analisis/useAnalisisData';
+import { mapaCuotas, cuotaPeriodo, alcanceCuota, idxMes, yoyDe } from '../../modules/comercial/analisis/calc';
+import { movimientos } from '../../modules/comercial/analisis/movimiento';
+import { useMensual, useDrillSkus, CUENTA_POR_ERP } from '../../modules/comercial/sellout/datos';
+import { useCodigoErp, useClienteMes, useVendedorCliente } from './analisis/datos';
+import { fraccionMes, ritmoCompras, sellOutMesCuenta, serieAnioSiSo, fraseCliente } from './analisis/calculo';
+import { SellInM, SellOutM, CuotasTrimestreM, MovimientoM } from './analisis/Pestanas';
 
 const PESTANAS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell In' }, { id: 'sellout', label: 'Sell Out' }];
-import { PROPIOS, nombreCliente, colorCliente } from '../datos';
-import { money, moneyCompact, int, pct, deltaPct, MESES, MONO, N } from '../util';
-import { catalogoSkus, ultimosMeses } from './SellInCliente';
-import FichaProducto from '../FichaProducto';
-
-const STALE = 5 * 60 * 1000;
-const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
-const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
 
 /** Nombre display: "CT INTERNACIONAL DEL NOROESTE" → "Ct Internacional Del Noroeste" (siglas ≤ 3 letras se respetan). */
 const PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'en', 'sa', 'cv', 'sapi']);
@@ -37,7 +39,7 @@ export const nombreBonito = (s) => String(s || '').trim().toLowerCase().split(/\
   return w.replace(/^(\S)/, (c) => c.toUpperCase());
 }).join(' ');
 
-/** Gráfica mínima de 12 meses (kit GraficaLineas compacto) con el mes actual resaltado. serie: [{ key, label, v, actual }]. */
+/** Gráfica mínima de 12 meses (kit GraficaLineas compacto) con el mes actual resaltado. La usa Visión General móvil. */
 export function MiniLineas({ serie, fmt = moneyCompact, alto = 150, nombre = 'Monto' }) {
   const { theme } = useTheme();
   return (
@@ -48,120 +50,146 @@ export function MiniLineas({ serie, fmt = moneyCompact, alto = 150, nombre = 'Mo
   );
 }
 
-function useAnalisisFicha(clienteNombre, anio) {
-  return useQuery({
-    queryKey: ['movil', 'analisis-ficha', clienteNombre, anio], staleTime: STALE, enabled: !!clienteNombre,
-    queryFn: async () => {
-      const rows = await fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto,cliente_key,canal', (q) => q.eq('cliente_nombre', clienteNombre).in('anio', [anio - 1, anio]));
-      const ck = rows.find((r) => r.cliente_key)?.cliente_key || null;
-      const propio = PROPIOS.includes(ck);
-      const porSku = new Map();
-      rows.filter((r) => N(r.anio) === anio && r.sku).forEach((r) => { const o = porSku.get(r.sku) || (porSku.set(r.sku, { sku: r.sku, piezas: 0, monto: 0 }), porSku.get(r.sku)); o.piezas += N(r.piezas); o.monto += N(r.monto); });
-      const top = [...porSku.values()].sort((a, b) => b.monto - a.monto).slice(0, 10);
-      const [cat, cartera] = await Promise.all([
-        catalogoSkus(top.map((t) => t.sku)),
-        propio ? cachedQuery(supabase.from('estados_cuenta').select('cliente,fecha_corte,saldo_actual,saldo_vencido,aging_mas90,dso').eq('cliente', ck).order('fecha_corte', { ascending: false }).limit(1)) : Promise.resolve({ data: [] }),
-      ]);
-      return { rows, ck, propio, canal: rows.find((r) => r.canal)?.canal || null, top: top.map((t) => ({ ...t, ...(cat.get(t.sku) || {}) })), cartera: cartera.data?.[0] || null };
-    },
-  });
+const norm = (s) => String(s || 'Sin categoría').trim();
+
+/** Vista pura del Resumen (sin red): la prueba scripts/test-analisis-movil-ssr.mjs. */
+export function ResumenVista({ nombre, anio, mes, enCurso, mtd, yoyMes, cuotaMes, so, ritmo, serie, movs, catSi, catSo, mensual, cuotasRows, codigo, onCompartir }) {
+  const { theme } = useTheme();
+  const [dimCat, setDimCat] = useState('si');
+  const mesL = MESES[mes - 1];
+  const pctCuota = alcanceCuota(mtd, cuotaMes);
+  const frase = fraseCliente({ nombre, anio, mes, mtd, pctCuota, yoy: yoyMes, soSi: so?.soSi ?? null, semanas: so?.semanas ?? null, enCurso });
+  const gris = theme.textSubtle || theme.textMuted;
+  const series = [
+    { key: 'cuota', label: 'Cuota', color: theme.orange, dash: true },
+    { key: 'so', label: 'Sell out', color: theme.purple || theme.indigo || theme.accent },
+    { key: 'si', label: 'Sell in', color: theme.accent, area: true, grosor: 2.6 },
+  ];
+  const tooltip = (f) => (
+    <>
+      <b style={{ fontSize: 12.5 }}>{f.label}{f.enCurso ? ' ·' : ''}</b> · sell in <b style={{ fontSize: 12.5 }}>{f.si != null ? moneyCompact(f.si) : '—'}</b>{f.so != null ? ` · sell out ${moneyCompact(f.so)}` : ''}<br />
+      {f.soSi != null ? `SO/SI ${f.soSi.toFixed(2)}` : ''}{f.cuota ? `${f.soSi != null ? ' · ' : ''}cuota ${moneyCompact(f.cuota)}${f.si != null && f.cuota > 0 ? ` (${Math.round((f.si / f.cuota) * 100)} %)` : ''}` : ''}
+    </>
+  );
+  const catFilas = dimCat === 'si' ? catSi : catSo;
+  return (
+    <>
+      <HeroM eyebrow={`${mesL} ${anio}${enCurso ? ' · a mismo día' : ''}`} frase={frase}>
+        <BarraCuotaM valor={mtd} cuota={cuotaMes} label={`cuota de ${mesL.toLowerCase()}`} />
+      </HeroM>
+      <KpiGrid data-entrada-kpis style={{ marginTop: 12 }}>
+        <KpiM eyebrow={`Sell in · ${mesL.toLowerCase()}`} big={moneyCompact(mtd)} sub={<span>{yoyMes != null ? <><span style={{ color: yoyMes >= 0 ? theme.green : theme.red }}>{deltaPct(yoyMes)}</span> vs {anio - 1}</> : `sin ${anio - 1}`}{cuotaMes ? ` · ${Math.round(pctCuota)} % de ${moneyCompact(cuotaMes)}` : ''}</span>} />
+        <KpiM eyebrow={`Sell out · ${mesL.toLowerCase()}`} big={so && so.reporta ? moneyCompact(so.importe) : '—'} sub={so && so.reporta ? <span>{so.soSi != null ? `SO/SI ${(so.soSi / 100).toFixed(2)}` : 'sin sell in ese mes'}{so.yoy != null ? <> · <span style={{ color: so.yoy >= 0 ? theme.green : theme.red }}>{deltaPct(so.yoy)}</span></> : ''}</span> : 'no reporta sell out'} />
+        <KpiM eyebrow={`Inventario en ${nombre.split(' ')[0]}`} big={so && so.invPiezas != null ? (so.semanas != null ? `${Math.round(so.semanas)} sem` : `${int(so.invPiezas)} pz`) : '—'} sub={so && so.invPiezas != null ? `${so.invValor ? `${moneyCompact(so.invValor)} · ` : ''}${int(so.invPiezas)} pz${so.invMes && (so.invMes.mes !== mes || so.invMes.anio !== anio) ? ` · ${MESES[so.invMes.mes - 1].toLowerCase()}` : ''}` : 'no reporta inventario'} />
+        <KpiM eyebrow="Última compra" big={ritmo?.diasDesde == null ? '—' : ritmo.diasDesde === 0 ? 'hoy' : `hace ${ritmo.diasDesde} d`} sub={ritmo?.diasDesde == null ? 'sin facturas en dos años' : `${ritmo.cadaDias ? `cada ${ritmo.cadaDias} días` : 'una sola compra en 6 m'}${ritmo.mesFacturas ? ` · ${int(ritmo.facturasMes)} factura${ritmo.facturasMes === 1 ? '' : 's'} en ${MESES[ritmo.mesFacturas.mes - 1].toLowerCase()}` : ''}`} />
+      </KpiGrid>
+
+      <TituloSeccionM style={{ margin: '18px 0 0', padding: '0 28px 6px' }} meta="arrastra para leer">Sell in vs sell out · {anio}</TituloSeccionM>
+      <div style={{ margin: '0 16px', background: theme.surface, borderRadius: 14, padding: '10px 10px 6px' }}>
+        <GraficaScrub series={series} datos={serie} formato={moneyCompact} tooltip={tooltip} activo={enCurso ? mes - 1 : null} />
+        <LeyendaScrub items={[{ label: 'Sell in', color: theme.accent }, ...(so ? [{ label: 'Sell out', color: theme.purple || theme.indigo || theme.accent }] : []), ...(serie.some((f) => f.cuota) ? [{ label: 'Cuota', color: theme.orange, dash: true }] : [])]} />
+      </div>
+
+      <MovimientoM titulo="Dónde está el movimiento" movs={movs} meta={`${mesL.toLowerCase()} vs ${movs.mesPrevLbl} · en pesos`} nota="Lo que más subió y lo que más bajó en este cliente respecto al mes anterior, mezclando SKUs y categorías." />
+
+      <div style={{ padding: '0 16px' }}>
+        <PayM titulo="Categorías" filas={catFilas} formato={moneyCompact} centro={`YTD ${dimCat === 'si' ? 'SI' : 'SO'}`} vacio={dimCat === 'si' ? 'Sin sell in en el año.' : (so ? 'Sin sell out en el año.' : 'Este cliente no reporta sell out.')}
+          acciones={<ChipsPay opciones={[['si', 'Sell in'], ['so', 'Sell out']]} value={dimCat} onChange={setDimCat} />} />
+      </div>
+
+      {codigo && <CuotasTrimestreM mensual={mensual} cuotasRows={cuotasRows} codigo={codigo} anio={anio} mes={mes} />}
+
+      {onCompartir && <div style={{ padding: '18px 16px 0' }}><BotonGrande primario icon={Share2} onClick={onCompartir}>Compartir ficha</BotonGrande></div>}
+    </>
+  );
 }
 
-export default function AnalisisFicha({ clienteNombre, canal, label }) {
+export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal, label }) {
   const { theme } = useTheme();
   const nav = useNav();
   const hoy = useMemo(() => new Date(), []);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
+  const [pestana, setPestana] = useState('resumen');
   const [compartiendo, setCompartiendo] = useState(false);
-  const [pestana, setPestana] = useState('resumen'); // mismas tres que la página web (2026-10-01)
-  const { data, isLoading, error } = useAnalisisFicha(clienteNombre, anio);
-  const { data: alertas = [] } = useAlertas({ clienteKey: data?.ck || null, enabled: !!data?.propio });
-  const nombre = label || (data?.propio ? nombreCliente(data.ck) : nombreBonito(clienteNombre));
+  const { data: codigoBuscado, isLoading: lCod } = useCodigoErp(clienteNombre, anio, !codigoProp);
+  const codigo = codigoProp || codigoBuscado || null;
+  const cuenta = codigo ? (CUENTA_POR_ERP[codigo] || null) : null;
+  const sensible = puedeVerSensible(nav.perfil);
+
+  const { data: rows = [], isLoading: lMes, error } = useClienteMes(codigo, anio);
+  const { data: cuotasRows = [] } = useCuotasClientes(anio);
+  const { data: vendedor } = useVendedorCliente(codigo, anio);
+  const { data: diario = [] } = useSellInDia(codigo, anio, !!codigo);
+  const { data: soMensual = [] } = useMensual(cuenta ? anio : null);
+  const { data: detalle = [] } = useDetalleCliente(codigo, anio, !!codigo);
+  const { data: skusSo = [] } = useDrillSkus(cuenta, anio, !!cuenta);
+  const { data: roadmap } = useRoadmap();
+  const rd = useMemo(() => { const m = new Map(); (roadmap || []).forEach((r) => m.set(r.sku, r)); return m; }, [roadmap]);
+
+  const info = useMemo(() => {
+    const r0 = rows.find((r) => N(r.anio) === anio) || rows[0] || {};
+    const ck = r0.cliente_key || null;
+    return { ck, propio: PROPIOS.includes(ck), canal: r0.canal || canal || null };
+  }, [rows, anio, canal]);
+  const nombre = label || (info.propio ? nombreCliente(info.ck) : nombreBonito(clienteNombre || rows[0]?.cliente_nombre));
+
+  const mensual = useMemo(() => {
+    const m = new Map();
+    rows.forEach((r) => { const k = idxMes(r.anio, r.mes); const o = m.get(k) || { fact_neta: 0, contribucion: 0, piezas: 0, fact_bruta: 0, devoluciones: 0, rmas: 0, bonificaciones: 0 }; o.fact_neta += N(r.fact_neta); o.contribucion += N(r.contribucion); o.piezas += N(r.piezas_venta_neta); o.fact_bruta += N(r.fact_bruta); o.devoluciones += N(r.devoluciones); o.rmas += N(r.rmas); o.bonificaciones += N(r.bonificaciones); m.set(k, o); });
+    return m;
+  }, [rows]);
+  const mapa = useMemo(() => mapaCuotas(cuotasRows), [cuotasRows]);
+  const ritmo = useMemo(() => ritmoCompras(diario, hoy), [diario, hoy]);
 
   const r = useMemo(() => {
-    if (!data) return null;
-    const de = (a, m) => data.rows.filter((x) => N(x.anio) === a && N(x.mes) === m);
-    const factor = Math.min(1, Math.max(1, hoy.getDate()) / new Date(anio, mes, 0).getDate());
-    const mtd = sum(de(anio, mes), (x) => x.monto), mtdPrev = sum(de(anio - 1, mes), (x) => x.monto);
-    const piezas = sum(de(anio, mes), (x) => x.piezas);
-    const ytd = sum(data.rows.filter((x) => N(x.anio) === anio && N(x.mes) <= mes), (x) => x.monto);
-    const ytdPrev = sum(data.rows.filter((x) => N(x.anio) === anio - 1 && N(x.mes) <= mes), (x) => x.monto);
-    const anioPrevTotal = sum(data.rows.filter((x) => N(x.anio) === anio - 1), (x) => x.monto);
-    const serie = ultimosMeses(anio, mes, 12).map((c) => ({ key: `${c.anio}-${c.mes}`, label: c.label, v: sum(de(c.anio, c.mes), (x) => x.monto), actual: c.anio === anio && c.mes === mes }));
-    const mesesActivos = new Set(data.rows.filter((x) => N(x.anio) === anio && N(x.monto) > 0).map((x) => N(x.mes))).size;
-    const yoy = delta(mtd, mtdPrev * factor), yoyYtd = delta(ytd, ytdPrev);
-    const frase = !mtd ? `Sin facturación en ${MESES[mes - 1].toLowerCase()}${ytd ? ` · ${moneyCompact(ytd)} en el año` : ''}`
-      : `${MESES[mes - 1]} lleva ${moneyCompact(mtd)}${yoy != null ? `, ${deltaPct(yoy)} vs ${anio - 1} a mismo día` : ''}`;
-    return { mtd, mtdPrev, piezas, ytd, ytdPrev, anioPrevTotal, yoy, yoyYtd, serie, mesesActivos, frase, maxTop: Math.max(0, ...data.top.map((t) => t.piezas)), totalTop: sum(data.top, (t) => t.monto) };
-  }, [data, anio, mes, hoy]);
+    if (!rows.length && !codigo) return null;
+    const kMes = idxMes(anio, mes), factor = fraccionMes(anio, mes, hoy);
+    const mtd = N(mensual.get(kMes)?.fact_neta), prev = N(mensual.get(kMes - 12)?.fact_neta) * factor;
+    const cuotaMes = cuotaPeriodo(mapa, codigo, anio, mes, 'mes');
+    const so = cuenta ? sellOutMesCuenta(soMensual, cuenta, anio, mes, hoy) : null;
+    const serie = serieAnioSiSo({ mensual, soMensual, cuenta, mapa, codigo, anio, hoy });
+    // Movimiento: SKUs (descripción del roadmap) + categorías (roadmap o ERP) del mes vs el anterior.
+    const catDe = (sku, r2) => norm(rd.get(sku)?.categoria || r2?.categoria);
+    const porCat = new Map();
+    detalle.forEach((x) => { const c = catDe(x.articulo, x); const k = `${x.anio}-${x.mes}-${c}`; const o = porCat.get(k) || { anio: x.anio, mes: x.mes, categoria: c, fact_neta: 0 }; o.fact_neta += N(x.fact_neta); porCat.set(k, o); });
+    const categoriaDe = {}; detalle.forEach((x) => { categoriaDe[x.articulo] = catDe(x.articulo, x); });
+    const movs = movimientos({
+      grupos: [
+        { tipo: 'SKU', filas: detalle, clave: 'articulo', valor: 'fact_neta', piezas: 'piezas_venta_neta', etiqueta: (k) => rd.get(k)?.descripcion || '' },
+        { tipo: 'Categoría', filas: [...porCat.values()], clave: 'categoria', valor: 'fact_neta' },
+      ], anio, mes, top: 6, categoriaDe,
+    });
+    // Categorías YTD: sell in del cliente y sell out de la cuenta ligada.
+    const si = new Map(), soCat = new Map();
+    detalle.forEach((x) => { if (N(x.anio) !== anio || N(x.mes) > mes) return; const c = catDe(x.articulo, x); si.set(c, N(si.get(c)) + N(x.fact_neta)); });
+    skusSo.forEach((x) => { if (N(x.anio) !== anio || N(x.mes) > mes) return; const c = norm(x.categoria); soCat.set(c, N(soCat.get(c)) + N(x.importe)); });
+    const top5 = (() => { const m = new Map(); detalle.forEach((x) => { if (N(x.anio) !== anio) return; const o = m.get(x.articulo) || { sku: x.articulo, piezas: 0, monto: 0, descripcion: rd.get(x.articulo)?.descripcion || '' }; o.piezas += N(x.piezas_venta_neta); o.monto += N(x.fact_neta); m.set(x.articulo, o); }); return [...m.values()].sort((a, b) => b.monto - a.monto).slice(0, 5); })();
+    const ytd = [...mensual.entries()].filter(([k]) => Math.floor(k / 12) === anio && (k % 12) + 1 <= mes).reduce((s, [, a]) => s + a.fact_neta, 0);
+    const ytdPrev = [...mensual.entries()].filter(([k]) => Math.floor(k / 12) === anio - 1 && (k % 12) + 1 <= mes).reduce((s, [, a]) => s + a.fact_neta, 0);
+    return { mtd, yoyMes: yoyDe(mtd, prev), cuotaMes, so, serie, movs, catSi: [...si].map(([label2, v]) => ({ label: label2, v })), catSo: [...soCat].map(([label2, v]) => ({ label: label2, v })), top5, ytd, yoyYtd: yoyDe(ytd, ytdPrev), enCurso: anio === hoy.getFullYear() && mes === hoy.getMonth() + 1 };
+  }, [rows, codigo, mensual, mapa, cuenta, soMensual, detalle, skusSo, rd, anio, mes, hoy]);
 
-  const texto = useMemo(() => (r ? textoFichaCliente({ cliente: nombre, mes, anio, mtd: r.mtd, ytd: r.ytd, yoyYtd: r.yoyYtd, top: data.top.slice(0, 5) }) : ''), [r, data, nombre, mes, anio]);
+  const texto = useMemo(() => (r ? textoFichaCliente({ cliente: nombre, mes, anio, mtd: r.mtd, ytd: r.ytd, yoyYtd: r.yoyYtd, top: r.top5 }) : ''), [r, nombre, mes, anio]);
   const onCompartir = async () => { const res = await compartir(texto, { titulo: `Ficha ${nombre}` }); if (res === 'share') toast.ok('Compartido'); };
   const onCopiar = async () => { if (await copiar(texto)) toast.ok('Texto copiado'); else toast.error('No se pudo copiar'); };
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
 
-  const color = data?.propio ? colorCliente(data.ck, theme) : theme.textMuted;
-  const canalTxt = canalLabel(canal || data?.canal || 'otros');
+  const color = info.propio ? colorCliente(info.ck, theme) : theme.textMuted;
+  const sub = [canalLabel(info.canal || 'otros'), codigo ? `código ${codigo}` : null, vendedor ? `atiende ${nombreBonito(vendedor)}` : null, ritmo.cadaDias ? `compra cada ${ritmo.cadaDias} días` : null].filter(Boolean).join(' · ');
+  const cargando = lCod || (lMes && !rows.length);
   return (
-    <>
-      <Cabecera onVolver={nav.pop} etiqueta="Análisis" />
-      <TituloGrande titulo={nombre} sub={<><span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block' }} />{data?.propio ? 'Cliente propio' : 'Cliente del ERP'} · {canalTxt} · {MESES[mes - 1]} {anio}</>} />
+    <div data-stagger>
+      <Cabecera onVolver={nav.pop} etiqueta="Análisis por cliente" />
+      <TituloGrande titulo={nombre} sub={<><span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block', flexShrink: 0 }} /><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span></>} />
       <div style={{ padding: '0 20px 10px' }}><Segmented value={pestana} onChange={setPestana} options={PESTANAS} /></div>
       {error && <Vacio titulo="No se pudo cargar el cliente" sub={error.message} color={theme.red} />}
-      {(isLoading || !r) && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><Skeleton h={84} r={12} /><Skeleton h={160} r={12} /><Skeleton h={300} r={12} /></div>}
-      {r && pestana === 'sellin' && <SellInM rows={data.rows} anio={anio} mes={mes} clienteNombre={clienteNombre} />}
-      {r && pestana === 'sellout' && <SellOutM clienteNombre={clienteNombre} nombre={nombre} anio={anio} />}
-      {r && pestana === 'resumen' && (
-        <>
-          <HeroM eyebrow={`Facturación · ${nombre}`} frase={r.frase} sub={`${money(r.mtd)} este mes${r.piezas ? ` · ${int(r.piezas)} pz` : ''} · activo ${r.mesesActivos} de ${mes} meses`}
-            stats={[
-              { k: 'MTD', v: moneyCompact(r.mtd), sub: r.yoy != null ? `${deltaPct(r.yoy)} a mismo día` : `${anio - 1}: ${moneyCompact(r.mtdPrev)}` },
-              { k: `YTD ${anio}`, v: moneyCompact(r.ytd), sub: r.yoyYtd != null ? `${deltaPct(r.yoyYtd)} vs ${anio - 1}` : undefined },
-              { k: `${anio - 1} total`, v: moneyCompact(r.anioPrevTotal), sub: r.ytdPrev ? `${moneyCompact(r.ytdPrev)} a ${MESES[mes - 1]}` : undefined },
-            ]} />
-          <KpiGrid style={{ marginTop: 12 }}>
-            <KpiM eyebrow={`YTD vs ${anio - 1}`} big={r.yoyYtd != null ? deltaPct(r.yoyYtd, 1) : '—'} bigColor={r.yoyYtd == null ? undefined : r.yoyYtd >= 0 ? theme.green : theme.red} sub={`${moneyCompact(r.ytdPrev)} el año pasado`} />
-            <KpiM eyebrow="Top 10 SKUs" big={r.ytd > 0 ? pct((r.totalTop / r.ytd) * 100, 0) : '—'} sub="del acumulado del año" />
-          </KpiGrid>
-
-          <TituloSeccionM style={{ marginTop: 18, padding: '0 28px 6px' }}>Últimos 12 meses</TituloSeccionM>
-          <MiniLineas serie={r.serie} nombre="Facturación" />
-
-          <ListaAgrupada titulo={`Top ${data.top.length} SKUs · ${anio}`} style={{ marginTop: 18 }} pie="Celda = piezas del año (intensidad relativa al SKU líder). Toca un SKU para ver disponibilidad y precio.">
-            {data.top.length === 0 && <Vacio icon={null} titulo="Sin facturación este año" />}
-            {data.top.map((t, i) => (
-              <button key={t.sku} type="button" onClick={() => abrirSku(t.sku)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, padding: '8px 12px', border: 0, background: 'transparent', color: theme.text, fontFamily: TYPO.fontText, textAlign: 'left', cursor: 'pointer', boxSizing: 'border-box' }}>
-                <span style={{ width: 20, fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.textSubtle || theme.textMuted, fontVariantNumeric: 'tabular-nums', flexShrink: 0, textAlign: 'right' }}>{i + 1}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sku}<span style={{ fontWeight: 500, color: theme.textMuted, marginLeft: 8, fontFamily: TYPO.fontText, fontSize: 13 }}>{money(t.monto)}</span></span>
-                  <span style={{ display: 'block', fontSize: 12, color: theme.textMuted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.descripcion || 'Sin descripción'}</span>
-                </span>
-                <HeatCell v={t.piezas} max={r.maxTop} />
-              </button>
-            ))}
-          </ListaAgrupada>
-
-          <ListaAgrupada style={{ marginTop: 18 }} titulo={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Lock size={11} />Interno · no se comparte</span>}
-            pie={'Alertas y cartera sólo aparecen para clientes propios; el texto de "Compartir ficha" nunca las incluye.'}>
-            {!data.propio && <Vacio icon={null} titulo="Sin datos internos" sub="Este cliente no tiene pestaña propia: no hay alertas ni cartera cargadas." style={{ padding: '18px' }} />}
-            {data.propio && data.cartera && (
-              <Fila icon={CreditCard} color={N(data.cartera.saldo_vencido) > 0 ? theme.red : theme.green} titulo="Cartera" chevron={false}
-                sub={`corte ${data.cartera.fecha_corte}${data.cartera.dso != null ? ` · DSO ${Math.round(N(data.cartera.dso))} d` : ''}`}
-                valor={money(data.cartera.saldo_actual)} valorSub={N(data.cartera.saldo_vencido) > 0 ? `${moneyCompact(data.cartera.saldo_vencido)} vencido` : 'sin vencidos'} />
-            )}
-            {data.propio && !data.cartera && <Fila icon={CreditCard} color={theme.textMuted} titulo="Cartera" sub="sin estado de cuenta cargado" chevron={false} />}
-            {data.propio && alertas.length === 0 && <Fila icon={AlertTriangle} color={theme.green} titulo="Sin alertas activas" chevron={false} />}
-            {data.propio && alertas.slice(0, 5).map((a) => (
-              <Fila key={a.id} tono={colorSev(theme, a.severidad)} titulo={a.titulo} sub={[a.sku, a.detalle].filter(Boolean).join(' · ')} chevron={false} pill={{ tone: a.severidad === 'critica' ? 'red' : a.severidad === 'alta' ? 'orange' : 'gray', label: a.severidad }} />
-            ))}
-          </ListaAgrupada>
-
-          <div style={{ padding: '18px 16px 0' }}>
-            <BotonGrande primario icon={Share2} disabled={!r.ytd} onClick={() => setCompartiendo(true)}>Compartir ficha</BotonGrande>
-          </div>
-        </>
+      {!error && !codigo && !lCod && <Vacio titulo="Cliente sin código en el ERP" sub="No hay ventas con ese nombre en los dos últimos años." />}
+      {cargando && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /></div><Skeleton h={200} r={12} /></div>}
+      {!cargando && r && pestana === 'resumen' && (
+        <ResumenVista nombre={nombre} anio={anio} mes={mes} enCurso={r.enCurso} mtd={r.mtd} yoyMes={r.yoyMes} cuotaMes={r.cuotaMes} so={r.so} ritmo={ritmo} serie={r.serie} movs={r.movs}
+          catSi={r.catSi} catSo={r.catSo} mensual={mensual} cuotasRows={cuotasRows} codigo={codigo} onCompartir={() => setCompartiendo(true)} />
       )}
+      {!cargando && r && pestana === 'sellin' && <SellInM codigo={codigo} mensual={mensual} detalle={detalle} diario={diario} cuotasRows={cuotasRows} anio={anio} mes={mes} sensible={sensible} rd={rd} />}
+      {!cargando && r && pestana === 'sellout' && <SellOutM codigo={codigo} nombre={nombre} anio={anio} propio={info.propio} clienteKey={info.ck} />}
 
       <HojaM abierto={compartiendo} onClose={() => setCompartiendo(false)} titulo="Compartir ficha" sub="Texto limpio · sin alertas, márgenes ni cartera" alto="70vh">
         <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -170,6 +198,7 @@ export default function AnalisisFicha({ clienteNombre, canal, label }) {
           <BotonGrande icon={Copy} onClick={onCopiar}>Copiar texto</BotonGrande>
         </div>
       </HojaM>
-    </>
+    </div>
   );
 }
+

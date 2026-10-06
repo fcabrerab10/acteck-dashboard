@@ -74,7 +74,9 @@ function useSelloutCliente(clienteKey, enabled) {
   });
 }
 
-export default function PropuestaEditor({ id }) {
+// `skusIniciales` / `clienteInicial` (2026-10-05): propuesta nueva con la canasta precargada (piezas 1; precio y lista
+// se completan solos al llegar la información de los SKUs, como cuando se agregan a mano).
+export default function PropuestaEditor({ id, skusIniciales = null, clienteInicial = null }) {
   const { theme } = useTheme();
   const nav = useNav();
   const qc = useQueryClient();
@@ -88,19 +90,19 @@ export default function PropuestaEditor({ id }) {
   const mesesOpc = useMemo(() => [hoy, new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1)].map((d) => ({ id: mesKey(d), label: `${MES_LABEL[d.getMonth()]} ${d.getFullYear()}` })), [hoy]);
   const [cargado, setCargado] = useState(!id);
   const [modo, setModo] = useState('editar');          // 'editar' | 'detalle'
-  const [clienteKey, setClienteKey] = useState('digitalife');
+  const [clienteKey, setClienteKey] = useState(CLIENTES.some((c) => c.key === clienteInicial) ? clienteInicial : 'digitalife');
   const [nombre, setNombre] = useState('Cierre');
   const [mes, setMes] = useState(mesKey(hoy));
   const [vigencia, setVigencia] = useState(() => vigenciaDeMes(mesKey(hoy)));
   const [vigenciaManual, setVigenciaManual] = useState(false); // true cuando Fernando la cambió a mano: ya no sigue al mes
-  const [lista, setLista] = useState(LISTA_POR_CLIENTE.digitalife);
-  const [lineas, setLineas] = useState({});            // sku → { piezas, precio, listaSel, descripcion, marca, familia }
+  const [lista, setLista] = useState(LISTA_POR_CLIENTE[CLIENTES.some((c) => c.key === clienteInicial) ? clienteInicial : 'digitalife'] || LISTA_POR_CLIENTE.digitalife);
+  const [lineas, setLineas] = useState(() => Object.fromEntries((skusIniciales || []).map((s) => String(s || '').trim().toUpperCase()).filter(Boolean).map((s) => [s, { sku: s, piezas: 1, precio: 0, listaSel: '', descripcion: '', marca: '', familia: '' }])));            // sku → { piezas, precio, listaSel, descripcion, marca, familia }
   const [estado, setEstado] = useState('borrador');
   const [exportado, setExportado] = useState(null);    // exported_filename
   const [buscando, setBuscando] = useState(false);
   const [eligiendoLista, setEligiendoLista] = useState(null); // 'todas' | sku
   const [ocupado, setOcupado] = useState(false);
-  const [sucio, setSucio] = useState(false);
+  const [sucio, setSucio] = useState(!!skusIniciales?.length);
   const xlsxListo = useRef(false);
 
   // Carga de una propuesta existente (una sola vez).

@@ -58,7 +58,8 @@ const GLOBALES = {
   analisisClientes:  () => ({ tipo: 'push', key: 'analisis', el: h(AnalisisClientes) }),
   cobranzaGlobal:    () => ({ tipo: 'push', key: 'cobranza-global', el: h(CobranzaGlobalM) }), // Cobranza general (2026-10-04)
   forecastClientes:  () => ({ tipo: 'push', key: 'sop', el: h(SOP) }),
-  propuestas:        () => ({ tipo: 'push', key: 'propuestas', el: h(Propuestas) }),
+  // `extra.skus` (+ `extra.clienteKey`) precarga una propuesta nueva con esos SKUs (desde «<Cuenta> frente al resto», 2026-10-05).
+  propuestas:        (extra) => ({ tipo: 'push', key: 'propuestas', el: h(Propuestas, { inicial: extra || null }) }),
   // Tracking de pedidos (OCs de clientes). `extra.ocId` (alerta de tracking) abre la ficha de la OC.
   ordenesCompra:     (extra) => (extra?.ocId
     ? { tipo: 'push', key: `oc-${extra.ocId}`, el: h(FichaOC, { ocId: extra.ocId }) }
