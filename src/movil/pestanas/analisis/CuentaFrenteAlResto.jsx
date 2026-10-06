@@ -8,6 +8,7 @@
 // Datos (≤ 8): v_sellout_cuentas · v_sellout_cuenta_mes · mv_sellout_cuenta_dia · mv_sellout_cuenta_sku_mes (cuenta + pares,
 // 3 meses) · mv_sellout_cuenta_sku_mes de la cuenta (2 años) · v_sellout_inventario_cuenta_sku · mv_sellout_cliente_final_mes · roadmap_sku.
 import React, { useMemo } from 'react';
+import Producto360 from '../producto/Producto360';
 import { Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -123,7 +124,7 @@ export default function CuentaFrenteAlResto({ cuenta, nombre, anio, mes, corteDi
   const cf = useMemo(() => (conClientes ? clientesNuevosPerdidos(cfQ.data || [], anio, mes, 6) : null), [conClientes, cfQ.data, anio, mes]);
   const paresNombre = useMemo(() => pares.map((p) => { const c = cuentas.find((x) => x.cuenta === p); const n = String(c?.nombre || p).split(' ')[0]; return n.length <= 3 ? n : n.charAt(0) + n.slice(1).toLowerCase(); }), [pares, cuentas]);
 
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellout" />, `producto-${sku}`); // Producto 360 (2026-10-05)
   const armarPropuesta = () => nav.navegar({ pagina: 'propuestas', extra: { clienteKey: clienteKey || (PROPIOS.includes(cuenta) ? cuenta : null), skus: oport.lista.map((o) => o.sku) } });
   const cargando = lCta || lMes || lDias;
   return (

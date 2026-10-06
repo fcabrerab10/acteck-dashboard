@@ -9,6 +9,7 @@
 //              Tocar una sucursal o un vendedor abre HojaM con sus SKUs del mes. Al final «Abrir sell out completo»
 //              → CuentaFrenteAlResto. Todos los cálculos son los de la web (sellout/calculo.js, analisis/*).
 import React, { useMemo, useState } from 'react';
+import Producto360 from '../producto/Producto360';
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingBag } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -199,7 +200,7 @@ export function SellInVista({ codigo, mensual, detalle = [], diario = [], cuotas
 
 export function SellInM({ codigo, mensual, detalle, diario, cuotasRows, anio, mes, sensible, rd }) {
   const nav = useNav();
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellout" />, `producto-${sku}`); // Producto 360 (2026-10-05)
   return <SellInVista codigo={codigo} mensual={mensual} detalle={detalle} diario={diario} cuotasRows={cuotasRows} anio={anio} mes={mes} sensible={sensible} rd={rd} onSku={abrirSku} />;
 }
 
@@ -360,7 +361,7 @@ export function SellOutM({ codigo, nombre, anio, propio, clienteKey }) {
   }
   if (lDias || lMes || !fila) return <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /></div><Skeleton h={200} r={12} /><Skeleton h={240} r={12} /></div>;
 
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellout" />, `producto-${sku}`); // Producto 360 (2026-10-05)
   const abrirCompleto = () => nav.push(<CuentaFrenteAlResto cuenta={cuenta} nombre={nombre} anio={anio} mes={mes} corteDia={corteDia} propio={propio} clienteKey={clienteKey} conClientes={bloques.includes('clientes')} />, `frente-${cuenta}`);
   return (
     <>

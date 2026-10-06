@@ -9,6 +9,7 @@
 // Datos (5 consultas): v_sellout_cuentas · mv_sellout_cuenta_dia · v_sellout_cuenta_mes (sellout/datos.js, las de la
 // web) · v_sellout_sku_anio (3 años pivotados) · roadmap_sku. Cálculo puro en ./calculo.js. Nada sensible.
 import React, { useMemo, useState } from 'react';
+import Producto360 from '../producto/Producto360';
 import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -94,7 +95,7 @@ export default function SellOutGlobal() {
   const r = useMemo(() => (cuentas.length && mensual.length ? resumenSellOut({ cuentas, mensual, dias, skuAnio, roadmap, anio, mes, modo, hoy }) : null),
     [cuentas, mensual, dias, skuAnio, roadmap, anio, mes, modo, hoy]);
   const categorias = useMemo(() => categoriasDe(roadmap), [roadmap]);
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellout" />, `producto-${sku}`); // Producto 360 (2026-10-05)
 
   const periodoLbl = modo === 'mes' ? `${MESES[mes - 1]} ${anio}` : `${anio} a ${MESES[mes - 1].toLowerCase()}`;
   const sub = <><span>La empresa · sin IVA</span><span>·</span><FrescuraPill pantalla="sellOutGlobal" detallado fila etiquetas={{ sellout_general: 'Puente', sellout_pcel: 'PCEL', inventario_cliente: 'Inv. clientes' }} /></>;

@@ -8,6 +8,7 @@
 // Datos: sellin/datos.js#useSellInEmpresa (6 consultas) + useRoadmap. Cálculo puro en ./calculo.js.
 // ApoyoM.jsx y EquipoM.jsx (3.24) quedan en la carpeta sin uso desde esta pantalla.
 import React, { useMemo, useState } from 'react';
+import Producto360 from '../producto/Producto360';
 import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -98,7 +99,7 @@ export default function SellInGlobal() {
   const { data: roadmap = [] } = useRoadmap();
   const r = useMemo(() => (data ? resumenSellIn({ ...data, roadmap }, { anio, mes, modo, hoy, sensible }) : null), [data, roadmap, anio, mes, modo, hoy, sensible]);
   const categorias = useMemo(() => categoriasDe(roadmap), [roadmap]);
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha', 'inventarioGlobal'); };
+  const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellin" />, `producto-${sku}`); // Producto 360 (2026-10-05)
 
   const periodoLbl = modo === 'mes' ? `${MESES[mes - 1]} ${anio}` : `${anio} a ${MESES[mes - 1].toLowerCase()}`;
   const sub = <><span>La empresa · Fact. neta</span><span>·</span><FrescuraPill pantalla="sellIn" detallado fila /></>;
