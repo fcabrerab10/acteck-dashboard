@@ -1,6 +1,7 @@
 // Acteck Ciudad · escena 3D (three.js, low-poly cálido). Sólo se importa desde Ciudad.jsx dentro de un import()
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
 //   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), oscuro }) → { destruir(), resize(), irA(tag), stats() }
+//   Arranca en la Vista Base (oficina + CEDIS + puerto de cerca); irA({ tipo: 'base' }) regresa a ella.
 // Este archivo sólo orquesta: arma el contexto compartido (ctx) y llama a los módulos de escena/ en orden
 // (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion, detalle). El estilo vive en luz-clima.js.
 import * as THREE from 'three';
@@ -13,6 +14,7 @@ import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
+import { encuadre } from './modelo.js';
 
 export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
@@ -62,7 +64,12 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
 
   const inter = crearInteraccion(canvas, camara, { onClick });
 
-  function irA(tag) { let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) p = distritoPos.get(tag.ciudad); if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
+  // Vista Base (inicial): oficina, CEDIS y puerto encuadrados de cerca según el tamaño del lienzo y el giro actual.
+  const puntosBase = [{ ...ofiPos, r: 8 }, { ...cedisPos, r: 8 }, { ...puertoPos, r: 9 }];
+  const vistaBase = () => encuadre(puntosBase, { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
+  const b0 = vistaBase(); if (b0) { vista.cx = vista.cxObj = b0.cx; vista.cz = vista.czObj = b0.cz; vista.zoom = vista.zoomObj = b0.zoom; resize(); camara.colocarCam(); }
+
+  function irA(tag) { if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) p = distritoPos.get(tag.ciudad); if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
 
   // Dibujar sólo cuando hace falta: con la pestaña del navegador oculta se pausa del todo; en calma (15 s sin gestos y la
   // cámara quieta) baja a ~10 fps; cualquier gesto la regresa a 60 al instante.

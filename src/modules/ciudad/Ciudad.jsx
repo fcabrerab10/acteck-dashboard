@@ -101,7 +101,7 @@ export default function Ciudad({ onNavegar }) {
             </div>
           )}
         </div>
-        <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'cedis' })} title="Volver a Acteck" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Crosshair size={14} />Acteck</button>
+        <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Crosshair size={14} />Acteck</button>
       </div>
       <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas</div>
       {/* Leyenda: color por cliente */}
