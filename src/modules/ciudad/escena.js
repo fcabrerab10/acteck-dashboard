@@ -2,7 +2,7 @@
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
 //   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), oscuro }) → { destruir(), resize(), irA(tag), stats() }
 // Este archivo sólo orquesta: arma el contexto compartido (ctx) y llama a los módulos de escena/ en orden
-// (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion). El estilo vive en luz-clima.js.
+// (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion, detalle). El estilo vive en luz-clima.js.
 import * as THREE from 'three';
 import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
@@ -12,6 +12,7 @@ import { oficina, cedis, puerto, distritos } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
+import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 
 export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
@@ -57,6 +58,8 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   vendedoresRuta(ctx, rutas);
   plantarInstancias(ctx); // tiendas, casitas, gente y vehículos: un InstancedMesh por pieza, tocables por instanceId
 
+  const detalle = prepararDetalle(raiz); // gente y piezas finas que se ocultan de lejos
+
   const inter = crearInteraccion(canvas, camara, { onClick });
 
   function irA(tag) { let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) p = distritoPos.get(tag.ciudad); if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
@@ -84,6 +87,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
     const dt = Math.max(0, Math.min(.11, (now - ultimo) / 1000)); // tope .11: en calma (10 fps) el tiempo sigue a velocidad real
     ultimo = now; tiempo += dt; // 3.90.3: desde 3.76.9 esta línea había quedado dentro del comentario y nada se movía
     camara.mover(dt, inter.st);
+    aplicarDetalle(detalle, vista.zoom);
     for (const f of animados) f(tiempo);
     actualizarInstancias(ctx);
     escalarEtiquetas(sprites, vista.zoom);

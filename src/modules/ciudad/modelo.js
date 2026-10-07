@@ -54,6 +54,11 @@ export const CIUDADES = {
   IRAPUATO: { lat: 20.67, lon: -101.35, estado: 'GUANAJUATO' },
   CELAYA: { lat: 20.52, lon: -100.81, estado: 'GUANAJUATO' },
 };
+// Nivel de detalle por zoom (escena/detalle.js): con la cámara más lejos que esto (zoom = media altura visible) se ocultan
+// la gente y lo fino (ventanas, letreros, vitrinas, puertas). Lejos sólo quedan volúmenes y etiquetas de ciudad.
+export const DETALLE = { gente: 50, fino: 65 };
+export const capasVisibles = (zoom) => ({ gente: !(zoom > DETALLE.gente), fino: !(zoom > DETALLE.fino) });
+
 export const ESC = 11; // unidades de escena por grado de longitud (México ≈ 330 × 180 unidades; Fernando: «muy amontonado»)
 export const ORIGEN = CIUDADES.GUADALAJARA;
 // Proyección del mapa de Sell Out (sellout/mexico-estados.json, viewBox 1000 × 626.6), ajustada por mínimos cuadrados

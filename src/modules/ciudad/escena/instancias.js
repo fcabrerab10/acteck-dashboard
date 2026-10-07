@@ -16,11 +16,11 @@ export function plantarInstancias(ctx) {
   raiz.updateMatrixWorld(true);
   const aRaiz = new THREE.Matrix4().copy(raiz.matrixWorld).invert();
   const grupos = new Map();
-  for (const it of instancias) { it.tag ||= it.malla.userData.tag || null; const k = `${it.malla.geometry.uuid}|${it.malla.material.uuid}|${it.dinamico ? 1 : 0}|${it.tag ? 1 : 0}`; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(it); }
+  for (const it of instancias) { it.tag ||= it.malla.userData.tag || null; const k = `${it.malla.geometry.uuid}|${it.malla.material.uuid}|${it.dinamico ? 1 : 0}|${it.tag ? 1 : 0}|${it.malla.userData.detalle || ''}`; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(it); }
   const m = new THREE.Matrix4(); const quitar = new Set(); ctx.dinamicas = [];
   for (const lista of grupos.values()) {
     const { geometry, material, castShadow, receiveShadow } = lista[0].malla;
-    const im = new THREE.InstancedMesh(geometry, material, lista.length); im.castShadow = castShadow; im.receiveShadow = receiveShadow;
+    const im = new THREE.InstancedMesh(geometry, material, lista.length); im.castShadow = castShadow; im.receiveShadow = receiveShadow; if (lista[0].malla.userData.detalle) im.userData.detalle = lista[0].malla.userData.detalle;
     const tags = lista.map((it, i) => { im.setMatrixAt(i, m.multiplyMatrices(aRaiz, it.malla.matrixWorld)); quitar.add(it.malla); if (it.dinamico) it.malla.visible = false; else it.malla.removeFromParent(); return it.tag; });
     if (lista[0].dinamico) ctx.dinamicas.push({ im, mallas: lista.map((it) => it.malla), aRaiz });
     im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); raiz.add(im);
@@ -36,6 +36,7 @@ const _m = new THREE.Matrix4();
 export function actualizarInstancias({ dinamicas }) {
   if (!dinamicas) return;
   for (const { im, mallas, aRaiz } of dinamicas) {
+    if (!im.visible) continue; // oculta por nivel de detalle: no se calcula
     for (let i = 0; i < mallas.length; i++) { mallas[i].updateWorldMatrix(true, false); im.setMatrixAt(i, _m.multiplyMatrices(aRaiz, mallas[i].matrixWorld)); }
     im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); // se mueven: sin esto el raycast y el recorte de cámara usan la esfera vieja
   }

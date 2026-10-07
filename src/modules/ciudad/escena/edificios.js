@@ -18,7 +18,7 @@ export function oficina(ctx) {
   const techo = box(9.8, .6, 7.8, P.oficinaTecho); techo.position.set(0, 9.6, 0); g.add(techo);
   const letrero = box(5, .9, .3, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); letrero.position.set(0, 10.4, 3.6); g.add(letrero);
   const vm = M(P.ventana, { roughness: .4 }); const vOn = M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.4 : .15, roughness: .4 });
-  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); g.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); g.add(v2); }
+  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.userData.detalle = 'fino'; v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); g.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); g.add(v2); }
   const puerta = new THREE.Mesh(G(1.6, 2.2, .12), M(0x5A4636)); puerta.position.set(0, 1.35, 3.56); g.add(puerta);
   // sala de juntas (anexo bajo) que se enciende con reunión
   const sala = box(4.5, 3.2, 4.5, P.oficina); sala.position.set(-6, 1.85, -3); g.add(sala);
@@ -50,7 +50,7 @@ export function cedis(ctx) {
   const techo = box(17, .7, 12, P.cedisTecho); techo.position.set(0, 6.6, -1); g.add(techo);
   for (let i = 0; i < 3; i++) { const cl = box(2.2, .4, 3, P.cedisTecho); cl.position.set(-5 + i * 5, 7.1, -1); g.add(cl); }
   for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(G(2.4, 2.6, .14), M(0x4A4F5C)); p.position.set(-5 + i * 5, 1.5, 4.57); g.add(p); }
-  for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(G(1.6, .8, .12), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .12, roughness: .4 })); v.position.set(-6.5 + i * 2.6, 4.6, 4.57); g.add(v); }
+  for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(G(1.6, .8, .12), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .12, roughness: .4 })); v.userData.detalle = 'fino'; v.position.set(-6.5 + i * 2.6, 4.6, 4.57); g.add(v); }
   const rotulo = box(5.5, .9, .25, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); rotulo.position.set(0, 7.4, 4.6); g.add(rotulo);
   // racks al frente (altura por días de inventario) y tarimas descargando
   for (let i = 0; i < modelo.cedis.racks; i++) { const col = i % 2 ? 0xC58A3A : 0xD49A4A; for (let k = 0; k < 1 + (i % 3); k++) { const c = box(1.3, 1, 1.3, col); c.position.set(-9 + (i % 5) * 2.2, .75 + k * 1.05, 6.5 + Math.floor(i / 5) * 2); g.add(c); } }
@@ -103,6 +103,7 @@ export function distritos(ctx, cedisPos) {
       const letrero = box(1.5, .34, .12, t.vendio ? col : P.ventana, { emissive: t.vendio ? col : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.6 : .3) : 0 }); letrero.position.set(0, 1.78, 1.06); tg.add(letrero);
       const vit = new THREE.Mesh(G(1.1, .75, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .75, 1.05); tg.add(vit);
       const puerta = new THREE.Mesh(G(.5, 1.1, .1), M(0x5A4636)); puerta.position.set(.6, .55, 1.05); tg.add(puerta);
+      for (const pz of [letrero, vit, puerta]) pz.userData.detalle = 'fino'; // de lejos la tienda es volumen + toldo de color
       for (const pz of [cuerpo, techo, toldo, letrero, vit, puerta]) instanciar(ctx, pz, tag); // un InstancedMesh por pieza+color (3.90.3)
       if (oscuro && t.vendio) { const l = new THREE.PointLight(col, .8, 6); l.position.set(0, 2.2, 1.8); tg.add(l); }
       if (t.cartera && t.cartera.vencido > 0) { const palo = box(.1, 3.2, .1, 0x6b6e76); palo.position.set(-1.1, 1.6, -1.1); tg.add(palo); const bandera = box(.9, .55, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .3 }); bandera.position.set(-.65, 2.9, -1.1); tg.add(bandera); animados.push((tt) => { bandera.rotation.y = Math.sin(tt * 3) * .25; }); }

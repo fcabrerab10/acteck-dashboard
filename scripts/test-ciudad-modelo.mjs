@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -53,4 +53,12 @@ test('modelo completo', () => {
   assert.equal(m.vendedoresRuta.length, 1); assert.equal(m.vendedoresRuta[0].destinos[0].ciudad, 'HERMOSILLO');
   assert.ok(m.kpis.tiendas >= 5);
   assert.ok(!JSON.stringify(m).includes('NaN'));
+});
+
+test('nivel de detalle por zoom: lejos sólo volúmenes', () => {
+  assert.deepEqual(capasVisibles(18), { gente: true, fino: true }, 'irA acerca a 18: todo visible');
+  assert.deepEqual(capasVisibles(70), { gente: false, fino: false }, 'vista inicial (70): sin gente ni ventanas');
+  assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true }, 'intermedio: ventanas sí, gente no');
+  assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true }, 'el umbral cuenta como cerca');
+  assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true }, 'zoom inválido no esconde nada');
 });

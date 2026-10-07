@@ -5,7 +5,7 @@ import { instanciar, geo } from './instancias.js';
 // 3.90.4: geometrías de tamaño 1 compartidas (la escala va en la malla) y todas las piezas instanciadas como dinámicas.
 export function persona(ctx, col, s = 1) {
   const { M } = ctx; const g = new THREE.Group();
-  const pieza = (k, crear, color, y) => { const m = new THREE.Mesh(geo(ctx, k, crear), M(color)); m.scale.setScalar(s); m.position.y = y * s; m.castShadow = true; return m; };
+  const pieza = (k, crear, color, y) => { const m = new THREE.Mesh(geo(ctx, k, crear), M(color)); m.scale.setScalar(s); m.position.y = y * s; m.castShadow = true; m.userData.detalle = 'gente'; return m; };
   const cuerpo = pieza('perCuerpo', () => new THREE.CylinderGeometry(.32, .38, 1.1, 8), col, .95);
   const cab = pieza('perCabeza', () => new THREE.SphereGeometry(.3, 10, 8), 0xF3CFA8, 1.75);
   const p1 = pieza('perPierna', () => new THREE.CylinderGeometry(.11, .11, .5, 6), 0x3B4252, .25); p1.castShadow = false; p1.position.x = -.14 * s; const p2 = p1.clone(); p2.position.x = .14 * s;
