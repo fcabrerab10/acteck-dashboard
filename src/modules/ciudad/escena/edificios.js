@@ -67,6 +67,7 @@ export function cedis(ctx) {
 
 // Campus de la base: calles con banqueta y raya punteada (avenida al frente, calle interior entre oficina y CEDIS) y el
 // patio de maniobras al oriente del CEDIS con 3 andenes; en cada andén se forma un tráiler por factura reciente (hasta 3).
+// Detalle: estacionamiento (un coche por persona del equipo), barda, jardín y faroles; lo chico va en la capa fina.
 export function campusCalles(ctx, cedisPos) {
   const { P, M, G, box, add, raiz, modelo, campus: c } = ctx;
   if (!c) return;
@@ -96,6 +97,29 @@ export function campusCalles(ctx, cedisPos) {
     add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${cam.cliente} · ${cam.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(cam.ciudad)}${cam.piezas ? ` · ${cam.piezas.toLocaleString('es-MX')} pz` : ''}`, pagina: 'sellIn' });
   }
   add(pg, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `${pt.andenes.length} andenes · ${formados} tráiler${formados === 1 ? '' : 'es'} cargando · ${(modelo.camiones || []).length} envíos recientes`, pagina: 'sellIn' });
+  // detalle del campus (3.90.11): estacionamiento con un coche por persona del equipo, barda, jardín y faroles
+  const { oscuro } = ctx; const dg = new THREE.Group(); const est = c.estacionamiento;
+  const lote = box(est.ancho, .22, est.largo, P.calle); lote.castShadow = false; lote.position.set(est.x, .11, est.z); dg.add(lote);
+  const porFila = est.cajones / 2, paso = est.ancho / porFila;
+  for (let f = 0; f < 2; f++) for (let k = 0; k <= porFila; k++) { const l = box(.12, .02, 2.6, 0xF2E6C8); l.castShadow = false; l.position.set(est.x - est.ancho / 2 + k * paso, .23, est.z + (f ? 1.9 : -1.9)); l.userData.detalle = 'fino'; dg.add(l); instanciar(ctx, l); }
+  const coches = Math.min(est.cajones, (modelo.oficina?.personas?.length || 0) + (modelo.oficina?.genericos || 0));
+  for (let i = 0; i < coches; i++) {
+    const f = i % 2, k = Math.floor(i / 2); const x = est.x - est.ancho / 2 + paso * (k + .5), z = est.z + (f ? 1.9 : -1.9);
+    const col = [0xD9534F, 0xF2F2F2, 0x4A6FA5, 0x6B6E76, 0xE0B04A][i % 5];
+    const cuerpo = box(1, .6, 1.8, col); cuerpo.position.set(x, .55, z); dg.add(cuerpo); instanciar(ctx, cuerpo);
+    const cab = box(.9, .45, 1, 0x2B3340); cab.position.set(x, 1.05, z + (f ? .15 : -.15)); cab.userData.detalle = 'fino'; dg.add(cab); instanciar(ctx, cab);
+  }
+  add(dg, { tipo: 'estacionamiento', titulo: 'Estacionamiento Acteck', sub: `${coches} de ${est.cajones} cajones ocupados · el equipo de hoy`, pagina: 'agenda' });
+  const bg = new THREE.Group();
+  for (const b of c.bardas) { const dx = b.b.x - b.a.x, dz = b.b.z - b.a.z, L = Math.hypot(dx, dz); if (!L) continue; const m = box(L, .9, .25, 0xB9AD96); m.position.set((b.a.x + b.b.x) / 2, .45, (b.a.z + b.b.z) / 2); m.rotation.y = -Math.atan2(dz, dx); bg.add(m); }
+  const jd = c.jardin; const pasto = box(jd.ancho, .3, jd.largo, P.cerro); pasto.castShadow = false; pasto.position.set(jd.x, .15, jd.z); bg.add(pasto);
+  for (let i = 0; i < 4; i++) arbol(ctx, bg, jd.x + (i % 2 ? .6 : -.6), jd.z - jd.largo / 2 + 2 + i * (jd.largo - 4) / 3, i % 2 ? .7 : .85); // chicos: capa fina
+  raiz.add(bg);
+  for (const fz of c.faroles) {
+    const farol = box(.12, 2.6, .12, 0x6b6e76); farol.position.set(fz.x, 1.3, fz.z); raiz.add(farol);
+    const foco = new THREE.Mesh(geo(ctx, 'foco', () => new THREE.SphereGeometry(.22, 8, 6)), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.6 : .2 })); foco.position.set(fz.x, 2.7, fz.z); raiz.add(foco);
+    for (const pz of [farol, foco]) { pz.userData.detalle = 'fino'; instanciar(ctx, pz); }
+  }
 }
 
 // Puerto de Manzanillo: muelle, grúa y contenedores (los barcos viven en vehiculos.js).
