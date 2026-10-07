@@ -58,7 +58,8 @@ export const CIUDADES = {
 // la gente y lo fino (ventanas, letreros, vitrinas, puertas). Lejos sólo quedan volúmenes y etiquetas de ciudad.
 // `mapa` (3.90.12) es al revés: lo que cae dentro del campus (León, Querétaro, Morelia… quedan encima del CEDIS y el patio
 // en la Vista Base) sólo se ve de lejos, con el zoom por arriba de DETALLE.mapa; su posición en el mapa no cambia.
-export const DETALLE = { gente: 50, fino: 65, mapa: 45 };
+// `pin` (Vista Mapa): más lejos que esto la etiqueta de cada ciudad cambia por su pin con tiendas activas y camiones llegando.
+export const DETALLE = { gente: 50, fino: 65, mapa: 45, pin: 90 };
 export const capasVisibles = (zoom) => ({ gente: !(zoom > DETALLE.gente), fino: !(zoom > DETALLE.fino), mapa: !(zoom <= DETALLE.mapa) });
 // Una pieza puede ir en varias capas ('fino+mapa'): se ve sólo si todas están visibles.
 export const juntarCapas = (...cs) => [...new Set(cs.flatMap((c) => String(c || '').split('+')).filter(Boolean))].sort().join('+') || undefined;
@@ -155,6 +156,13 @@ export const posDe = (c) => { const p = aPx(c.lon, c.lat); return pxAEscena(p.X,
 // Vista Mapa de México (etapa 2): las puntas del país (Tijuana, Mexicali, Juárez, Piedras Negras, Matamoros, Cancún,
 // Tapachula, Los Cabos) encuadradas según el giro y el lienzo, para ver el país completo con todas sus ciudades.
 export const EXTREMOS_MEXICO = [[32.53, -117.12], [32.72, -114.72], [31.75, -106.48], [28.7, -100.52], [25.87, -97.5], [21.16, -86.85], [14.9, -92.26], [22.89, -109.91]].map(([lat, lon]) => ({ lat, lon }));
+// Pin de cada ciudad en la Vista Mapa: tiendas activas (físicas; las virtuales no son un lugar) y camiones que van hacia ella.
+export function pinCiudad(distrito, camiones = []) {
+  const nombre = distrito?.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : String(distrito?.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
+  const activas = (distrito?.tiendas || []).filter((t) => t.vendio && !t.virtual).length;
+  const llegando = (camiones || []).filter((c) => c && c.ciudad === distrito?.ciudad).length;
+  return { activas, llegando, texto: [nombre, `🏬 ${activas}`, llegando ? `🚚 ${llegando}` : null].filter(Boolean).join(' · ') };
+}
 export function vistaMapa({ ang = Math.PI / 4, aspecto = 1.6 } = {}) {
   return encuadre(EXTREMOS_MEXICO.map((c) => ({ ...posDe(c), r: 4 })), { ang, aspecto, margen: 1.05, min: ZOOM_MIN, max: ZOOM_MAX });
 }
