@@ -30,7 +30,7 @@
         "-l",
         "4174",
         "-n",
-        ".claude/proto"
+        ".ciudad-proto"
       ],
       "port": 4174
     }

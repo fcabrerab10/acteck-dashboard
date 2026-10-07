@@ -22,3 +22,5 @@ bridge/google-oauth-client.json
 bridge/google-oauth-token.json
 .claude/proto/
 .claude/settings.local.json
+# Harness de la Ciudad (fuera de .claude/: Claude siempre pide permiso para escribir ahí y el agente nocturno se atoraba)
+.ciudad-proto/
