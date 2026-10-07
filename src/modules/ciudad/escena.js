@@ -9,12 +9,12 @@ import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
 import { terreno, carretera, plantarArboles } from './escena/terreno.js';
 import { plantarInstancias, actualizarInstancias } from './escena/instancias.js';
-import { oficina, cedis, puerto, distritos } from './escena/edificios.js';
+import { oficina, cedis, puerto, distritos, campusCalles } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
-import { encuadre } from './modelo.js';
+import { encuadre, campus } from './modelo.js';
 
 export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
@@ -40,6 +40,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   const G = (w, h, d) => { const k = `${w}|${h}|${d}`; if (!geos.has(k)) geos.set(k, new THREE.BoxGeometry(w, h, d)); return geos.get(k); };
   const box = (w, h, d, color, extra) => { const m = new THREE.Mesh(G(w, h, d), M(color, extra)); m.castShadow = true; m.receiveShadow = true; m.position.y = h / 2; return m; };
   const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, G, box, add, interact, animados, sprites, arboles: [], instancias: [] };
+  ctx.campus = campus(ctx.esc); // trazo de la base: oficina, CEDIS, patio, calles y distrito GDL
 
   luces(ctx);
   scene.add(raiz);
@@ -49,6 +50,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   // Acteck en Guadalajara (oficina + CEDIS) y el puerto de Manzanillo con sus barcos.
   const ofiPos = oficina(ctx);
   const cedisPos = cedis(ctx);
+  campusCalles(ctx, cedisPos); // calles, banquetas y patio de maniobras con andenes
   const puertoPos = puerto(ctx);
   barcos(ctx, puertoPos);
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);

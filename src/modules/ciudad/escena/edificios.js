@@ -11,7 +11,7 @@ import { instanciar, geo } from './instancias.js';
 // Oficina + sala de juntas + equipo caminando entre oficina, sala y CEDIS.
 export function oficina(ctx) {
   const { P, M, G, box, add, oscuro, modelo, esc, animados } = ctx;
-  const ofiPos = { x: esc.x - 7, z: esc.z + 2 };
+  const ofiPos = { ...(ctx.campus?.oficina || { x: esc.x - 7, z: esc.z + 2 }) };
   const g = new THREE.Group(); g.position.set(ofiPos.x, 0, ofiPos.z);
   const base = box(14, .5, 14, P.banqueta); g.add(base);
   const cuerpo = box(9, 9, 7, P.oficina); cuerpo.position.set(0, 4.75, 0); g.add(cuerpo);
@@ -43,7 +43,7 @@ export function oficina(ctx) {
 // CEDIS: nave, racks, tarimas descargando y montacargas.
 export function cedis(ctx) {
   const { P, M, G, box, add, oscuro, modelo, esc, animados } = ctx;
-  const cedisPos = { x: esc.x + 9, z: esc.z - 2 };
+  const cedisPos = { ...(ctx.campus?.cedis || { x: esc.x + 9, z: esc.z - 2 }) };
   const g = new THREE.Group(); g.position.set(cedisPos.x, 0, cedisPos.z);
   g.add(box(22, .5, 16, P.banqueta));
   const nave = box(16, 6, 11, P.cedis); nave.position.set(0, 3.25, -1); g.add(nave);
@@ -65,6 +65,39 @@ export function cedis(ctx) {
   return cedisPos;
 }
 
+// Campus de la base: calles con banqueta y raya punteada (avenida al frente, calle interior entre oficina y CEDIS) y el
+// patio de maniobras al oriente del CEDIS con 3 andenes; en cada andén se forma un tráiler por factura reciente (hasta 3).
+export function campusCalles(ctx, cedisPos) {
+  const { P, M, G, box, add, raiz, modelo, campus: c } = ctx;
+  if (!c) return;
+  const g = new THREE.Group();
+  for (const k of c.calles) {
+    const dx = k.b.x - k.a.x, dz = k.b.z - k.a.z, L = Math.hypot(dx, dz); if (!L) continue;
+    const ang = -Math.atan2(dz, dx); const cx = (k.a.x + k.b.x) / 2, cz = (k.a.z + k.b.z) / 2;
+    const banq = box(L + 1.2, .22, k.ancho + 1.2, P.banqueta); banq.position.set(cx, .11, cz); banq.rotation.y = ang; banq.castShadow = false; g.add(banq);
+    const asf = new THREE.Mesh(G(L, .02, k.ancho), M(P.calle, { roughness: 1 })); asf.position.set(cx, .23, cz); asf.rotation.y = ang; asf.receiveShadow = true; g.add(asf);
+    for (let s = 1.2; s < L - .6; s += 2.4) { const r = box(1.1, .02, .14, 0xF2E6C8); r.castShadow = false; r.position.set(k.a.x + dx * s / L, .25, k.a.z + dz * s / L); r.rotation.y = ang; r.userData.detalle = 'fino'; g.add(r); instanciar(ctx, r); }
+  }
+  raiz.add(g);
+  // patio de maniobras: asfalto con cajones pintados, andenes pegados a la nave y tráileres formados
+  const pt = c.patio; const pg = new THREE.Group();
+  const piso = box(pt.ancho, .22, pt.largo, P.calle); piso.castShadow = false; piso.position.set(pt.x, .11, pt.z); pg.add(piso);
+  const cajones = [...pt.andenes.map((z) => z - 2), pt.andenes[pt.andenes.length - 1] + 2];
+  for (const z of cajones) { const l = box(7, .02, .14, 0xF2E6C8); l.castShadow = false; l.position.set(pt.x - pt.ancho / 2 + 3.5, .23, cedisPos.z + z); l.userData.detalle = 'fino'; pg.add(l); instanciar(ctx, l); }
+  pt.andenes.forEach((z) => {
+    const anden = box(3, 1.1, 3, P.banqueta); anden.position.set(cedisPos.x + 9.5, .55, cedisPos.z + z); pg.add(anden);
+    const cortina = new THREE.Mesh(G(.14, 2.4, 2.4), M(0x4A4F5C)); cortina.position.set(cedisPos.x + 8.08, 1.7, cedisPos.z + z); pg.add(cortina);
+  });
+  const formados = Math.min(pt.andenes.length, (modelo.camiones || []).length);
+  for (let i = 0; i < formados; i++) {
+    const cam = modelo.camiones[i]; const z = cedisPos.z + pt.andenes[i]; const x0 = cedisPos.x + 11;
+    const tr = new THREE.Group(); const caja = box(6, 2.4, 2.2, 0xF2F2F2); caja.position.set(x0 + 3.2, 1.6, z); tr.add(caja);
+    const cabina = box(1.8, 2, 2.1, ACC.azul); cabina.position.set(x0 + 7.3, 1.2, z); tr.add(cabina);
+    add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${cam.cliente} · ${cam.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(cam.ciudad)}${cam.piezas ? ` · ${cam.piezas.toLocaleString('es-MX')} pz` : ''}`, pagina: 'sellIn' });
+  }
+  add(pg, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `${pt.andenes.length} andenes · ${formados} tráiler${formados === 1 ? '' : 'es'} cargando · ${(modelo.camiones || []).length} envíos recientes`, pagina: 'sellIn' });
+}
+
 // Puerto de Manzanillo: muelle, grúa y contenedores (los barcos viven en vehiculos.js).
 export function puerto(ctx) {
   const { P, box, add, modelo } = ctx;
@@ -83,11 +116,11 @@ export function distritos(ctx, cedisPos) {
   const distritoPos = new Map(); const rutas = new Map();
   modelo.distritos.forEach((d) => {
     const esGDL = d.ciudad === 'GUADALAJARA';
-    const base = esGDL ? { x: esc.x - 4, z: esc.z + 16 } : d.pos;
-    distritoPos.set(d.ciudad, base);
     const n = d.tiendas.length; const cols = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(Math.max(1, n) * 1.5)))); const filas = Math.max(1, Math.ceil(n / cols));
-    const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const ancho = cols * 2.7 + 1.6, largo = filas * 2.9 + 1.6;
+    const base = esGDL ? (ctx.campus ? ctx.campus.distritoGDL(ancho, largo) : { x: esc.x - 4, z: esc.z + 16 }) : d.pos; // GDL: abajo de la avenida del campus
+    distritoPos.set(d.ciudad, base);
+    const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const piso = box(ancho, .3, largo, P.banqueta); piso.position.y = .15; g.add(piso);
     piso.userData.tag = { tipo: 'ciudad', titulo: d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; interact.push(piso);
     const calleH = new THREE.Mesh(new THREE.PlaneGeometry(ancho + 2, 1.4), M(P.calle, { roughness: 1 })); calleH.rotation.x = -Math.PI / 2; calleH.position.set(0, .32, largo / 2 + .9); g.add(calleH);
