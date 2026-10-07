@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop } from './modelo';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
@@ -65,6 +65,7 @@ export default function Ciudad({ onNavegar }) {
     if (tag.tipo === 'tienda' || tag.tipo === 'vendedor') detail.extra = { cuenta: tag.cuenta };
     if (onNavegar) onNavegar(null, tag.pagina, detail.extra); else window.dispatchEvent(new CustomEvent('acteck:navegar', { detail }));
   };
+  const top = useMemo(() => ciudadesTop(modelo, 5), [modelo]); // acceso rápido: las 5 ciudades con más actividad
   const resultados = useMemo(() => {
     if (!modelo || !busca.trim()) return [];
     const q = busca.trim().toUpperCase();
@@ -109,6 +110,11 @@ export default function Ciudad({ onNavegar }) {
           ? <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Home size={14} />Base</button>
           : <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Ver el mapa de México completo con todas las ciudades" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><MapaIcono size={14} />Mapa</button>}
       </div>
+      {top.length > 0 && (
+        <div style={{ position: 'absolute', left: 14, top: 52, zIndex: 3, display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 'calc(50% - 28px)' }}>
+          {top.map((c) => <button key={c.ciudad} type="button" onClick={() => escenaRef.current?.irA({ tipo: 'ciudad', ciudad: c.ciudad })} title={`Ir a ${c.nombre}: ${c.activas} tienda${c.activas === 1 ? '' : 's'} activa${c.activas === 1 ? '' : 's'}${c.llegando ? ` · ${c.llegando} camión${c.llegando === 1 ? '' : 'es'} llegando` : ''}`} style={{ ...card, padding: '4px 9px', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: theme.text }}>{c.nombre} <span style={{ color: theme.textMuted, fontWeight: 500 }}>{c.actividad}</span></button>)}
+        </div>
+      )}
       <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas</div>
       {/* Leyenda: color por cliente */}
       <div style={{ position: 'absolute', right: 14, top: 52, zIndex: 3, ...card, padding: '8px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', maxWidth: 420, fontSize: 11 }}>

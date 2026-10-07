@@ -75,6 +75,8 @@ Principios que no se rompen en ninguna etapa:
         - [x] Oficina, patio y puerto (3.90.21): ventanas de la oficina, andenes, cortinas, tráileres formados y patas de la grúa con `instanciar()` (cada una con su tag, siguen tocables). Harness: Base 160 → 131 llamadas, Mapa 187 → 178.
         - [x] Barcos y montacargas (3.90.22): sus piezas van como instancias dinámicas (proa y ruedas con geometría compartida), siguen tocables y animadas. Harness: Base 131 → 128 llamadas, Mapa 178 → 146.
 - [ ] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
+  - [x] Acceso rápido (3.90.23): fila de botones arriba a la izquierda con las 5 ciudades con más actividad (`ciudadesTop()` en `modelo.js`: tiendas activas + camiones llegando); tocar una viaja a su Vista Ciudad.
+  - [ ] Plano chico en una esquina (SVG con el contorno `EXTREMOS_MEXICO` y un punto por ciudad) con un marcador de dónde está la cámara; tocarlo viaja ahí. Necesita que `crearEscena` avise el centro de la vista (p. ej. en `onNivel` o un `onVista`).
 - [ ] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
 
 ### Etapa 3 · Edificios visitables (tocar y ver)
@@ -131,6 +133,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 15:32 · v3.90.23 · Minimapa (paso 1): acceso rápido a las 5 ciudades con más actividad (`ciudadesTop()` probado en `modelo.js`) como botones arriba a la izquierda; cada uno viaja a su Vista Ciudad.
 - 2026-10-07 15:30 · v3.90.22 · Sólo el nivel visible (paso 2e): barcos y montacargas como instancias dinámicas (proa y ruedas con geometría compartida), siguen tocables y animados. Harness: Base 131 → 128 llamadas, Mapa 178 → 146, sin errores.
 - 2026-10-07 15:27 · v3.90.21 · Sólo el nivel visible (paso 2d): ventanas de la oficina, andenes y cortinas del patio, tráileres formados y patas de la grúa van instanciados con su tag (siguen tocables). Harness: Base 160 → 131 llamadas, Mapa 187 → 178, sin errores.
 - 2026-10-07 15:21 · v3.90.20 · Sólo el nivel visible (paso 2c): racks, claraboyas y portones del CEDIS van instanciados con el tag del CEDIS (siguen tocables). Harness: Base 176 → 161 llamadas, Mapa ~200 → ~185, sin errores.
