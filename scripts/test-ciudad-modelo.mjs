@@ -56,12 +56,12 @@ test('modelo completo', () => {
 });
 
 test('nivel de detalle por zoom: lejos sólo volúmenes', () => {
-  assert.deepEqual(capasVisibles(18), { gente: true, fino: true, mapa: false }, 'irA acerca a 18: todo visible');
-  assert.deepEqual(capasVisibles(70), { gente: false, fino: false, mapa: true }, 'vista inicial (70): sin gente ni ventanas');
-  assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true, mapa: true }, 'intermedio: ventanas sí, gente no');
-  assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true, mapa: true }, 'el umbral cuenta como cerca');
+  assert.deepEqual(capasVisibles(18), { gente: true, fino: true, mapa: false, cerca: true }, 'irA acerca a 18: todo visible');
+  assert.deepEqual(capasVisibles(70), { gente: false, fino: false, mapa: true, cerca: true }, 'vista inicial (70): sin gente ni ventanas');
+  assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true, mapa: true, cerca: true }, 'intermedio: ventanas sí, gente no');
+  assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true, mapa: true, cerca: true }, 'el umbral cuenta como cerca');
   assert.equal(esChico(.8), true, 'árbol .8 es chico (capa fina)'); assert.equal(esChico(1), false, 'escala 1 no es chico'); assert.equal(esChico(1.2), false); assert.equal(esChico(undefined), false, 'sin escala no es chico');
-  assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true, mapa: true }, 'zoom inválido no esconde nada');
+  assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true, mapa: true, cerca: true }, 'zoom inválido no esconde nada');
 });
 
 test('etiquetas por prioridad: no se enciman', () => {
@@ -77,7 +77,7 @@ test('vista base: encuadre de oficina, CEDIS y puerto', () => {
   const pts = [{ x: -7, z: 2, r: 7 }, { x: 9, z: -2, r: 7 }, { x: -10.7, z: 18.5, r: 9 }];
   const e = encuadre(pts, { aspecto: 1.6 });
   assert.ok(e.zoom > 8 && e.zoom < 50, `cerca, con gente visible (zoom ${e.zoom.toFixed(1)})`);
-  assert.deepEqual(capasVisibles(e.zoom), { gente: true, fino: true, mapa: false }, 'la base se ve con detalle y sin los distritos encimados');
+  assert.deepEqual(capasVisibles(e.zoom), { gente: true, fino: true, mapa: false, cerca: true }, 'la base se ve con detalle y sin los distritos encimados');
   assert.ok(e.cx > -11 && e.cx < 9 && e.cz > -2 && e.cz < 18.5, 'el centro cae entre los tres');
   const uno = encuadre([{ x: 5, z: -3 }]); assert.ok(Math.abs(uno.cx - 5) < 1e-9 && Math.abs(uno.cz + 3) < 1e-9, 'un punto: centrado en él'); assert.equal(uno.zoom, 8, 'un punto sin radio: zoom mínimo');
   assert.ok(encuadre(pts, { aspecto: .6 }).zoom > e.zoom, 'pantalla angosta (iPad vertical) aleja la cámara');
@@ -135,6 +135,12 @@ test('distritos reales encima del campus: capa mapa, sólo de lejos (3.90.12)', 
   assert.equal(capaVisible(lejos, 'fino+mapa'), true); assert.equal(capaVisible(capasVisibles(70), 'fino+mapa'), false, 'muy lejos lo fino se va');
   assert.equal(capaVisible(cerca, undefined), true, 'sin capa siempre se ve');
   assert.ok(DETALLE.mapa < DETALLE.gente, 'hay un tramo donde se ven los distritos y todavía la gente');
+  const mapa = capasVisibles(DETALLE.pin + 1);
+  assert.deepEqual(mapa, { gente: false, fino: false, mapa: true, cerca: false }, 'Vista Mapa: se va la capa cerca');
+  assert.equal(capasVisibles(DETALLE.pin).cerca, true, 'el umbral del pin todavía cuenta como cerca');
+  assert.equal(capaVisible(mapa, 'cerca+mapa'), false, 'casitas de un distrito sobre el campus: tampoco en el mapa');
+  assert.equal(capaVisible(lejos, 'cerca+mapa'), true, 'y sí entre DETALLE.mapa y DETALLE.pin');
+  assert.ok(DETALLE.fino < DETALLE.pin, 'lo cerca se va después de lo fino');
 });
 
 test('Vista Mapa: México completo cabe en pantalla con cualquier giro y lienzo', () => {

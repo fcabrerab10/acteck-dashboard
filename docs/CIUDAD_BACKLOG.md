@@ -66,6 +66,8 @@ Principios que no se rompen en ninguna etapa:
 - [ ] **Viajar**: tocar una ciudad en el mapa → transición animada (acercamiento) a la **Vista Ciudad** con sus manzanas y tiendas; botón «← Volver al mapa». Sólo se dibuja el nivel visible (mejora el rendimiento).
   - [x] Tocar el pin (o las manzanas) de una ciudad desde lejos acerca la cámara a su **Vista Ciudad** (`vistaCiudad()` encuadra el distrito, zoom ≤ `DETALLE.gente`); el botón pasa a «← Volver al mapa» (`nivelVista()` → 'base' | 'ciudad' | 'lejos'). El buscador también usa ese encuadre.
   - [ ] Sólo dibujar el nivel visible. Medido en el harness (2026-10-06, 3.90.16): Vista Ciudad 83 llamadas (el recorte por cámara ya deja fuera los distritos lejanos), Base 232, **Mapa 350**. El ahorro está en el mapa: de lejos (zoom > `DETALLE.pin`) dejar cada distrito como maqueta simple (piso + volúmenes juntos) y ocultar lo que no se distingue, medido con `?fps`.
+    - [x] Capa `cerca` (3.90.17): con zoom > `DETALLE.pin` se ocultan las casitas de clientes finales y la calle de cada distrito.
+    - [ ] Maqueta simple por distrito en el mapa: piso + volúmenes de tiendas juntos en una sola malla, medido con `?fps` (Mapa 350 llamadas).
 - [ ] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
 - [ ] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
 
@@ -123,6 +125,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 13:36 · v3.90.17 · Sólo el nivel visible (paso 1): nueva capa `cerca` en `capasVisibles()`; en la Vista Mapa (zoom > `DETALLE.pin`) se ocultan casitas de clientes finales y calles de distrito (menos llamadas de dibujo); pruebas nuevas.
 - 2026-10-06 22:20 · v3.90.16 · Viajar (paso 1): tocar una ciudad en el mapa (pin o manzanas) acerca la cámara a su Vista Ciudad (`vistaCiudad()`), el pin ya es tocable y el botón ofrece «← Volver al mapa» (`nivelVista()`); harness con `window.nivel`.
 - 2026-10-06 21:46 · v3.90.15 · Vista Mapa (paso 3, cierra la Vista Mapa): un solo botón que cambia según dónde estás, «🗺 Mapa» en la base y «🏠 Base» cuando estás lejos (`enLaBase()` en `modelo.js` con pruebas; la escena avisa con `onNivel` cada 10 cuadros). Probado en el harness: lejos al ir al mapa, base al volver.
 - 2026-10-06 21:40 · v3.90.14 · Vista Mapa (paso 2): con el zoom por arriba de `DETALLE.pin` (90) la etiqueta de cada ciudad se cambia por su pin «Ciudad · 🏬 tiendas activas · 🚚 camiones llegando» (`pinCiudad()` en `modelo.js`, con pruebas; tiendas virtuales no cuentan). Probado en el harness con todo México.
