@@ -72,7 +72,8 @@ Principios que no se rompen en ninguna etapa:
       - [x] Volúmenes de tiendas de lejos (3.90.19): ya iban instanciados desde 3.90.3 (un InstancedMesh por pieza+color para todos los distritos). Medido con un desglose en el harness: el gasto del mapa estaba en los 42 estados y las 36 carreteras sueltas → ahora una malla cada uno. Harness (ejemplo): Base 226 → 176 llamadas, Mapa 277 → ~200.
       - [ ] Campus y barcos de lejos: ~94 cajas sueltas de oficina, CEDIS, patio y barcos (con su tag) siguen siendo una llamada cada una; en la Vista Mapa juntarlas o instanciarlas (cuidando que sigan tocables).
         - [x] CEDIS (3.90.20): racks, claraboyas y portones con `instanciar()` (tag del CEDIS, siguen tocables). Harness: Base 176 → 161, Mapa ~200 → ~185.
-        - [ ] Oficina, patio y barcos: lo estático con `instanciar()`; lo que se mueve (barcos, montacargas) como dinámico o junto en una malla por barco.
+        - [x] Oficina, patio y puerto (3.90.21): ventanas de la oficina, andenes, cortinas, tráileres formados y patas de la grúa con `instanciar()` (cada una con su tag, siguen tocables). Harness: Base 160 → 131 llamadas, Mapa 187 → 178.
+        - [ ] Barcos y montacargas (lo que se mueve): instanciar como dinámico (`instanciar(ctx, m, null, true)`) o juntar cada barco en una malla.
 - [ ] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
 - [ ] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
 
@@ -130,6 +131,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 15:27 · v3.90.21 · Sólo el nivel visible (paso 2d): ventanas de la oficina, andenes y cortinas del patio, tráileres formados y patas de la grúa van instanciados con su tag (siguen tocables). Harness: Base 160 → 131 llamadas, Mapa 187 → 178, sin errores.
 - 2026-10-07 15:21 · v3.90.20 · Sólo el nivel visible (paso 2c): racks, claraboyas y portones del CEDIS van instanciados con el tag del CEDIS (siguen tocables). Harness: Base 176 → 161 llamadas, Mapa ~200 → ~185, sin errores.
 - 2026-10-07 15:17 · v3.90.19 · Sólo el nivel visible (paso 2b): los 42 estados de México van en una sola ExtrudeGeometry y todas las carreteras en una sola malla (`plantarCarreteras()`); las tiendas ya estaban instanciadas. Harness: Base 226 → 176 llamadas, Mapa 277 → ~200, sin errores.
 - 2026-10-07 13:58 · v3.90.18 · Sólo el nivel visible (paso 2a): los pisos de todos los distritos van en un solo InstancedMesh (caja unitaria escalada, tag por instancia, siguen tocables); una llamada de dibujo por distrito menos.

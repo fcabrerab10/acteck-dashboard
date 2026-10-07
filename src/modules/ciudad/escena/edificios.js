@@ -18,7 +18,7 @@ export function oficina(ctx) {
   const techo = box(9.8, .6, 7.8, P.oficinaTecho); techo.position.set(0, 9.6, 0); g.add(techo);
   const letrero = box(5, .9, .3, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); letrero.position.set(0, 10.4, 3.6); g.add(letrero);
   const vm = M(P.ventana, { roughness: .4 }); const vOn = M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.4 : .15, roughness: .4 });
-  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.userData.detalle = 'fino'; v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); g.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); g.add(v2); }
+  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.userData.detalle = 'fino'; v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); g.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); g.add(v2); instanciar(ctx, v); instanciar(ctx, v2); } // ventanas: InstancedMesh con el tag de la oficina (3.90.21)
   const puerta = new THREE.Mesh(G(1.6, 2.2, .12), M(0x5A4636)); puerta.position.set(0, 1.35, 3.56); g.add(puerta);
   // sala de juntas (anexo bajo) que se enciende con reunión
   const sala = box(4.5, 3.2, 4.5, P.oficina); sala.position.set(-6, 1.85, -3); g.add(sala);
@@ -86,14 +86,14 @@ export function campusCalles(ctx, cedisPos) {
   const cajones = [...pt.andenes.map((z) => z - 2), pt.andenes[pt.andenes.length - 1] + 2];
   for (const z of cajones) { const l = box(7, .02, .14, 0xF2E6C8); l.castShadow = false; l.position.set(pt.x - pt.ancho / 2 + 3.5, .23, cedisPos.z + z); l.userData.detalle = 'fino'; pg.add(l); instanciar(ctx, l); }
   pt.andenes.forEach((z) => {
-    const anden = box(3, 1.1, 3, P.banqueta); anden.position.set(cedisPos.x + 9.5, .55, cedisPos.z + z); pg.add(anden);
-    const cortina = new THREE.Mesh(G(.14, 2.4, 2.4), M(0x4A4F5C)); cortina.position.set(cedisPos.x + 8.08, 1.7, cedisPos.z + z); pg.add(cortina);
+    const anden = box(3, 1.1, 3, P.banqueta); anden.position.set(cedisPos.x + 9.5, .55, cedisPos.z + z); pg.add(anden); instanciar(ctx, anden);
+    const cortina = new THREE.Mesh(G(.14, 2.4, 2.4), M(0x4A4F5C)); cortina.position.set(cedisPos.x + 8.08, 1.7, cedisPos.z + z); pg.add(cortina); instanciar(ctx, cortina); // andenes y cortinas instanciados (3.90.21)
   });
   const formados = Math.min(pt.andenes.length, (modelo.camiones || []).length);
   for (let i = 0; i < formados; i++) {
     const cam = modelo.camiones[i]; const z = cedisPos.z + pt.andenes[i]; const x0 = cedisPos.x + 11;
-    const tr = new THREE.Group(); const caja = box(6, 2.4, 2.2, 0xF2F2F2); caja.position.set(x0 + 3.2, 1.6, z); tr.add(caja);
-    const cabina = box(1.8, 2, 2.1, ACC.azul); cabina.position.set(x0 + 7.3, 1.2, z); tr.add(cabina);
+    const tr = new THREE.Group(); const caja = box(6, 2.4, 2.2, 0xF2F2F2); caja.position.set(x0 + 3.2, 1.6, z); tr.add(caja); instanciar(ctx, caja);
+    const cabina = box(1.8, 2, 2.1, ACC.azul); cabina.position.set(x0 + 7.3, 1.2, z); tr.add(cabina); instanciar(ctx, cabina); // tráileres formados: caja y cabina instanciadas, cada una con el tag de su envío
     add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${cam.cliente} · ${cam.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(cam.ciudad)}${cam.piezas ? ` · ${cam.piezas.toLocaleString('es-MX')} pz` : ''}`, pagina: 'sellIn' });
   }
   add(pg, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `${pt.andenes.length} andenes · ${formados} tráiler${formados === 1 ? '' : 'es'} cargando · ${(modelo.camiones || []).length} envíos recientes`, pagina: 'sellIn' });
@@ -128,7 +128,7 @@ export function puerto(ctx) {
   const puertoPos = modelo.puertoPos;
   const g = new THREE.Group(); g.position.set(puertoPos.x, 0, puertoPos.z);
   const muelle = box(10, .6, 4, P.banqueta); muelle.position.set(0, .3, 2); g.add(muelle);
-  const grua = new THREE.Group(); const pata1 = box(.5, 7, .5, ACC.rojo); pata1.position.set(-2, 3.5, 0); const pata2 = pata1.clone(); pata2.position.x = 2; const viga = box(7, .5, .5, ACC.rojo); viga.position.set(0, 7.2, 0); grua.add(pata1, pata2, viga); grua.position.set(0, .6, 2); g.add(grua);
+  const grua = new THREE.Group(); const pata1 = box(.5, 7, .5, ACC.rojo); pata1.position.set(-2, 3.5, 0); const pata2 = pata1.clone(); pata2.position.x = 2; const viga = box(7, .5, .5, ACC.rojo); viga.position.set(0, 7.2, 0); grua.add(pata1, pata2, viga); instanciar(ctx, pata1); instanciar(ctx, pata2); grua.position.set(0, .6, 2); g.add(grua);
   for (let i = 0; i < 3; i++) { const c = box(2.2, 1, 1.2, [ACC.azul, ACC.naranja, ACC.verde][i]); c.position.set(-3 + i * 3, 1.1, 1.2); g.add(c); }
   add(g, { tipo: 'puerto', titulo: 'Puerto de Manzanillo', sub: `${modelo.puerto.barcos.length} contenedores navegando · ${modelo.puerto.totalPiezas.toLocaleString('es-MX')} pz`, pagina: 'inventarioGlobal' });
   return puertoPos;
