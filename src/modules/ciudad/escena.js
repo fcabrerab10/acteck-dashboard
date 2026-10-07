@@ -4,6 +4,7 @@
 //   Arranca en la Vista Base (oficina + CEDIS + puerto de cerca); irA({ tipo: 'base' }) regresa a ella e irA({ tipo: 'mapa' }) encuadra México completo.
 //   irA({ tipo: 'punto', x, z }) mueve la cámara a ese punto sin cambiar el zoom (minimapa); onVista avisa el centro y zoom
 //   de la cámara (como mucho ~4 veces por segundo y sólo si cambió) para el marcador del minimapa.
+//   vistaInicial { cx, cz, zoom } (la última vista guardada) arranca ahí en lugar de la Vista Base.
 //   Viajar: tocar una ciudad (pin o manzanas) desde lejos acerca la cámara a su Vista Ciudad; irA({ ciudad }) también la usa.
 // Este archivo sólo orquesta: arma el contexto compartido (ctx) y llama a los módulos de escena/ en orden
 // (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion, detalle). El estilo vive en luz-clima.js.
@@ -19,7 +20,7 @@ import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE } from './modelo.js';
 
-export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, vistaInicial, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   const P = noche ? PAL.noche : PAL.dia;
@@ -74,7 +75,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   // Vista Base (inicial): oficina, CEDIS y puerto encuadrados de cerca según el tamaño del lienzo y el giro actual.
   const puntosBase = [{ ...ofiPos, r: 8 }, { ...cedisPos, r: 8 }, { ...puertoPos, r: 9 }];
   const vistaBase = () => encuadre(puntosBase, { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
-  const b0 = vistaBase(); if (b0) { vista.cx = vista.cxObj = b0.cx; vista.cz = vista.czObj = b0.cz; vista.zoom = vista.zoomObj = b0.zoom; resize(); camara.colocarCam(); }
+  const b0 = vistaInicial && Number.isFinite(vistaInicial.cx) && Number.isFinite(vistaInicial.cz) && Number.isFinite(vistaInicial.zoom) ? vistaInicial : vistaBase(); if (b0) { vista.cx = vista.cxObj = b0.cx; vista.cz = vista.czObj = b0.cz; vista.zoom = vista.zoomObj = b0.zoom; resize(); camara.colocarCam(); }
 
   let destino = null; // ciudad a la que viajaste: con ella el botón ofrece «← Volver al mapa»
   const vistaDe = (ciudad) => vistaCiudad(distritoPos.get(ciudad), { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });

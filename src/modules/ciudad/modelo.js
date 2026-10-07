@@ -204,6 +204,16 @@ export function planoMini(distritos = [], { ancho = 150, alto = 96, margen = 6 }
   const cercana = (u, v, maxPx = 8) => { let mejor = null, dm = maxPx; for (const p of puntos) { const dd = Math.hypot(p.u - u, p.v - v); if (dd <= dm) { dm = dd; mejor = p.ciudad; } } return mejor; };
   return { ancho, alto, contorno, puntos, aSvg, aEscena, marco, cercana };
 }
+// Última vista por usuario (localStorage): clave por user_id y lectura tolerante. leerVista(texto) → { cx, cz, zoom } o null si
+// el texto no es JSON, faltan números o el centro cae fuera de México (con un margen); el zoom se acota a [ZOOM_MIN, ZOOM_MAX].
+export const claveVista = (userId) => `acteck.ciudad.vista.${userId || 'anon'}`;
+export function leerVista(texto) {
+  let v; try { v = JSON.parse(texto); } catch { return null; }
+  if (!v || !Number.isFinite(v.cx) || !Number.isFinite(v.cz) || !Number.isFinite(v.zoom)) return null;
+  const pts = EXTREMOS_MEXICO.map(posDe), m = 40;
+  if (v.cx < Math.min(...pts.map((p) => p.x)) - m || v.cx > Math.max(...pts.map((p) => p.x)) + m || v.cz < Math.min(...pts.map((p) => p.z)) - m || v.cz > Math.max(...pts.map((p) => p.z)) + m) return null;
+  return { cx: v.cx, cz: v.cz, zoom: zoomEnRango(v.zoom) };
+}
 export function vistaMapa({ ang = Math.PI / 4, aspecto = 1.6 } = {}) {
   return encuadre(EXTREMOS_MEXICO.map((c) => ({ ...posDe(c), r: 4 })), { ang, aspecto, margen: 1.05, min: ZOOM_MIN, max: ZOOM_MAX });
 }

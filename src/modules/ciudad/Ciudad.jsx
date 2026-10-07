@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista } from './modelo';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
@@ -30,6 +30,11 @@ export default function Ciudad({ onNavegar }) {
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
   const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
+  // Última vista por usuario (localStorage, puede fallar en privado): la escena arranca ahí, también al cambiar tema o clima.
+  const clave = claveVista(perfil?.user_id);
+  const ultimaVista = useRef({ clave: null, v: null }); // se relee si cambia el usuario (el perfil llega después del primer render)
+  if (ultimaVista.current.clave !== clave) { let v = null; try { v = leerVista(window.localStorage.getItem(clave)); } catch { v = null; } ultimaVista.current = { clave, v }; }
+  const alMoverVista = (v) => { setVistaCam(v); ultimaVista.current = { clave, v }; try { window.localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento: sólo no se recuerda */ } };
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
   useEffect(() => {
@@ -52,7 +57,7 @@ export default function Ciudad({ onNavegar }) {
           oscuro, clima, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
           onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
           onClick: (tag) => setSel(tag),
-          onNivel: setNivel, onVista: setVistaCam,
+          onNivel: setNivel, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
         });
         setListo(true);
       } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }

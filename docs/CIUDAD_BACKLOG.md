@@ -77,7 +77,7 @@ Principios que no se rompen en ninguna etapa:
 - [x] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
   - [x] Acceso rápido (3.90.23): fila de botones arriba a la izquierda con las 5 ciudades con más actividad (`ciudadesTop()` en `modelo.js`: tiendas activas + camiones llegando); tocar una viaja a su Vista Ciudad.
   - [x] Plano chico (3.90.24) en una esquina (SVG con el contorno `EXTREMOS_MEXICO` y un punto por ciudad) con un marcador de dónde está la cámara; tocarlo viaja ahí. Necesita que `crearEscena` avise el centro de la vista (p. ej. en `onNivel` o un `onVista`).
-- [ ] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
+- [x] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
 
 ### Etapa 3 · Edificios visitables (tocar y ver)
 - [ ] **Tarjeta del edificio** al tocar (estilo menú de Hay Day, flotando junto al edificio, no panel lateral): nombre, 3–4 números clave de su pestaña, estado (verde/ámbar/rojo) y botón «Abrir en el dashboard». Una sola plantilla para todos.
@@ -133,6 +133,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 16:00 · v3.90.25 · Última vista por usuario: `Ciudad.jsx` guarda centro y zoom de la cámara en `localStorage` (`acteck.ciudad.vista.<user_id>`, con try/catch) y la escena arranca ahí (`vistaInicial` de `crearEscena`), también al cambiar tema o clima; `leerVista()` probado descarta textos rotos o fuera de México. El nivel (base/ciudad/lejos) se recalcula solo.
 - 2026-10-07 15:57 · v3.90.24 · Minimapa (paso 2): plano chico abajo a la izquierda (`planoMini()` probado en `modelo.js`: contorno de México, un punto por ciudad, las 5 más activas resaltadas) con un círculo rojo donde está la cámara (`onVista` de `crearEscena`); tocar junto a una ciudad viaja a su Vista Ciudad, tocar otro punto mueve la cámara ahí (`irA({ tipo: 'punto', x, z })`).
 - 2026-10-07 15:32 · v3.90.23 · Minimapa (paso 1): acceso rápido a las 5 ciudades con más actividad (`ciudadesTop()` probado en `modelo.js`) como botones arriba a la izquierda; cada uno viaja a su Vista Ciudad.
 - 2026-10-07 15:30 · v3.90.22 · Sólo el nivel visible (paso 2e): barcos y montacargas como instancias dinámicas (proa y ruedas con geometría compartida), siguen tocables y animados. Harness: Base 131 → 128 llamadas, Mapa 178 → 146, sin errores.
