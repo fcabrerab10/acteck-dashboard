@@ -1,6 +1,6 @@
 // Acteck Ciudad · terreno: mar con oleaje, contorno real de México, sierras, carreteras curvas y árboles.
 import * as THREE from 'three';
-import { pxAEscena } from '../modelo.js';
+import { pxAEscena, esChico } from '../modelo.js';
 import MEXICO from '../../comercial/sellout/mexico-estados.json';
 
 export function terreno({ raiz, P, M, animados }) {
@@ -47,10 +47,16 @@ export function plantarArboles({ raiz, P, M, arboles = [] }) {
     { geo: geo(new THREE.ConeGeometry(.7, 1.4, 7), 2.8), mat: M(P.arbol), cual: () => true },
   ];
   const m = new THREE.Matrix4(), local = new THREE.Matrix4(), esc = new THREE.Matrix4();
+  // árboles chicos (escala < 1, adorno de las manzanas) van aparte en la capa fina: de lejos sólo quedan los grandes (3.90.7)
   for (const pt of partes) {
-    const lista = arboles.filter(pt.cual); if (!lista.length) { pt.geo.dispose(); continue; }
-    const im = new THREE.InstancedMesh(pt.geo, pt.mat, lista.length); im.castShadow = true;
-    lista.forEach((a, i) => { local.makeTranslation(a.x, 0, a.z).multiply(esc.makeScale(a.s, a.s, a.s)); m.multiplyMatrices(aRaiz, a.g.matrixWorld).multiply(local); im.setMatrixAt(i, m); });
-    im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); raiz.add(im);
+    const todos = arboles.filter(pt.cual); let usada = false;
+    for (const lista of [todos.filter((a) => !esChico(a.s)), todos.filter((a) => esChico(a.s))]) {
+      if (!lista.length) continue;
+      const im = new THREE.InstancedMesh(pt.geo, pt.mat, lista.length); im.castShadow = true; usada = true;
+      if (esChico(lista[0].s)) im.userData.detalle = 'fino';
+      lista.forEach((a, i) => { local.makeTranslation(a.x, 0, a.z).multiply(esc.makeScale(a.s, a.s, a.s)); m.multiplyMatrices(aRaiz, a.g.matrixWorld).multiply(local); im.setMatrixAt(i, m); });
+      im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); raiz.add(im);
+    }
+    if (!usada) pt.geo.dispose();
   }
 }

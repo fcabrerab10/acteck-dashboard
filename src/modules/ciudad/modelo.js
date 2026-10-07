@@ -58,6 +58,8 @@ export const CIUDADES = {
 // la gente y lo fino (ventanas, letreros, vitrinas, puertas). Lejos sólo quedan volúmenes y etiquetas de ciudad.
 export const DETALLE = { gente: 50, fino: 65 };
 export const capasVisibles = (zoom) => ({ gente: !(zoom > DETALLE.gente), fino: !(zoom > DETALLE.fino) });
+// Árbol chico (escala menor a 1): adorno que va en la capa fina y se oculta de lejos (3.90.7).
+export const esChico = (s) => Number.isFinite(s) && s < 1;
 
 // Etiquetas sin encimarse: cajas en pixeles de pantalla { x, y (centro), w, h, prioridad }; se quedan las de mayor prioridad
 // (empate: la primera) y se esconden las que chocan con una ya puesta. Regresa un arreglo de booleanos en el orden recibido.

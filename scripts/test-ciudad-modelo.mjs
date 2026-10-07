@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, etiquetasSinEncimar } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -60,6 +60,7 @@ test('nivel de detalle por zoom: lejos sólo volúmenes', () => {
   assert.deepEqual(capasVisibles(70), { gente: false, fino: false }, 'vista inicial (70): sin gente ni ventanas');
   assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true }, 'intermedio: ventanas sí, gente no');
   assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true }, 'el umbral cuenta como cerca');
+  assert.equal(esChico(.8), true, 'árbol .8 es chico (capa fina)'); assert.equal(esChico(1), false, 'escala 1 no es chico'); assert.equal(esChico(1.2), false); assert.equal(esChico(undefined), false, 'sin escala no es chico');
   assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true }, 'zoom inválido no esconde nada');
 });
 
