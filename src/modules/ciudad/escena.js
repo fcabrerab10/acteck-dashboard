@@ -1,6 +1,6 @@
 // Acteck Ciudad · escena 3D (three.js, low-poly cálido). Sólo se importa desde Ciudad.jsx dentro de un import()
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
-//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), oscuro }) → { destruir(), resize(), irA(tag), stats() }
+//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'lejos'), oscuro }) → { destruir(), resize(), irA(tag), stats() }
 //   Arranca en la Vista Base (oficina + CEDIS + puerto de cerca); irA({ tipo: 'base' }) regresa a ella e irA({ tipo: 'mapa' }) encuadra México completo.
 // Este archivo sólo orquesta: arma el contexto compartido (ctx) y llama a los módulos de escena/ en orden
 // (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion, detalle). El estilo vive en luz-clima.js.
@@ -14,9 +14,9 @@ import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
-import { encuadre, campus, vistaMapa } from './modelo.js';
+import { encuadre, campus, vistaMapa, enLaBase } from './modelo.js';
 
-export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   const P = noche ? PAL.noche : PAL.dia;
@@ -90,6 +90,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   }
   const onVisible = () => { if (!document.hidden && viva && pausada) { pausada = false; ultimo = performance.now(); requestAnimationFrame(frame); } };
   document.addEventListener('visibilitychange', onVisible);
+  let cuadros = 0, nivel = 'base';
   function paso(now) {
     // El primer timestamp de rAF puede ser ANTERIOR al performance.now() de la construcción (Chrome fija la hora al inicio del
     // cuadro): sin el tope en 0, `tiempo` quedaba negativo y caminar() pedía ruta[-1] → «reading '0'» (3.76.3).
@@ -97,6 +98,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
     ultimo = now; tiempo += dt; // 3.90.3: desde 3.76.9 esta línea había quedado dentro del comentario y nada se movía
     camara.mover(dt, inter.st);
     aplicarDetalle(detalle, vista.zoom);
+    if (++cuadros % 10 === 0) { const nb = enLaBase(vista, vistaBase()) ? 'base' : 'lejos'; if (nb !== nivel) { nivel = nb; onNivel?.(nb); } } // cada 10 cuadros basta para el botón
     for (const f of animados) f(tiempo);
     actualizarInstancias(ctx);
     escalarEtiquetas(sprites, vista.zoom, cam, canvas.clientWidth, canvas.clientHeight);

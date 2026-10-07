@@ -27,6 +27,7 @@ export default function Ciudad({ onNavegar }) {
   const [sel, setSel] = useState(null);
   const [busca, setBusca] = useState('');
   const [listo, setListo] = useState(false);
+  const [nivel, setNivel] = useState('base'); // 'base' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
@@ -50,6 +51,7 @@ export default function Ciudad({ onNavegar }) {
           oscuro, clima, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
           onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
           onClick: (tag) => setSel(tag),
+          onNivel: setNivel,
         });
         setListo(true);
       } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }
@@ -101,8 +103,9 @@ export default function Ciudad({ onNavegar }) {
             </div>
           )}
         </div>
-        <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Home size={14} />Base</button>
-        <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Ver el mapa de México completo con todas las ciudades" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><MapaIcono size={14} />Mapa</button>
+        {nivel === 'lejos'
+          ? <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Home size={14} />Base</button>
+          : <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Ver el mapa de México completo con todas las ciudades" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><MapaIcono size={14} />Mapa</button>}
       </div>
       <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas</div>
       {/* Leyenda: color por cliente */}
