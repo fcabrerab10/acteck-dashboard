@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
 import { terreno, carretera, plantarArboles } from './escena/terreno.js';
-import { plantarInstancias } from './escena/instancias.js';
+import { plantarInstancias, actualizarInstancias } from './escena/instancias.js';
 import { oficina, cedis, puerto, distritos } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
@@ -51,11 +51,11 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
   const { distritoPos, rutas } = distritos(ctx, cedisPos);
   plantarArboles(ctx); // después de todos los arbol(): oficina, CEDIS y distritos
-  plantarInstancias(ctx); // tiendas y casitas: un InstancedMesh por pieza, tocables por instanceId
   const etA = etiqueta(ctx, 'acteck. · Guadalajara', '#0A84FF'); etA.position.set(ctx.esc.x + 1, 17, ctx.esc.z - 4); raiz.add(etA);
   const etP = etiqueta(ctx, 'Manzanillo', '#1D1D1F'); etP.position.set(puertoPos.x, 10, puertoPos.z + 2); raiz.add(etP);
   camiones(ctx, rutas);
   vendedoresRuta(ctx, rutas);
+  plantarInstancias(ctx); // tiendas, casitas, gente y vehículos: un InstancedMesh por pieza, tocables por instanceId
 
   const inter = crearInteraccion(canvas, camara, { onClick });
 
@@ -85,6 +85,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
     ultimo = now; tiempo += dt; // 3.90.3: desde 3.76.9 esta línea había quedado dentro del comentario y nada se movía
     camara.mover(dt, inter.st);
     for (const f of animados) f(tiempo);
+    actualizarInstancias(ctx);
     escalarEtiquetas(sprites, vista.zoom);
     inter.hover(interact, onHover);
     R.render(scene, cam);
@@ -94,7 +95,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);
   return {
     resize, irA,
-    stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
+    stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh && o.visible) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
     destruir() { viva = false; ro.disconnect(); inter.quitar(); document.removeEventListener('visibilitychange', onVisible); scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); } }); R.dispose(); },
   };
 }

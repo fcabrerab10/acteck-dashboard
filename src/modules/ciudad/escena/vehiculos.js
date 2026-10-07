@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { fmtK, capital } from './etiquetas.js';
+import { instanciar, geo } from './instancias.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos({ P, M, box, add, modelo, animados }, puertoPos) {
@@ -20,22 +21,26 @@ export function barcos({ P, M, box, add, modelo, animados }, puertoPos) {
 }
 
 // Camiones (facturas y envíos) y vendedores del ERP (coches) por las carreteras de cada ciudad.
-export function camiones({ P, M, box, add, oscuro, modelo, animados }, rutas) {
+export function camiones(ctx, rutas) {
+  const { P, M, box, add, oscuro, modelo, animados } = ctx;
   modelo.camiones.forEach((c, i) => {
     const curva = rutas.get(c.ciudad); if (!curva) return;
     const g = new THREE.Group(); const caja = box(2.6, 1.4, 1.2, c.envio ? 0xDCE6F2 : P.camion); caja.position.set(-.4, .95, 0); g.add(caja); const cab = box(1, 1.1, 1.2, c.envio ? ACC.azul : P.cabina); cab.position.set(1.5, .8, 0); g.add(cab);
-    [[-1.1, .5], [-1.1, -.5], [1.4, .5], [1.4, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(new THREE.CylinderGeometry(.28, .28, .22, 10), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); g.add(r); });
+    [[-1.1, .5], [-1.1, -.5], [1.4, .5], [1.4, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCamion', () => new THREE.CylinderGeometry(.28, .28, .22, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); g.add(r); });
+    g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.4: el tag lo pone add() y se lee al plantar
     if (oscuro) { const f = new THREE.PointLight(0xFFF2C0, .9, 7); f.position.set(2.2, .8, 0); g.add(f); }
     add(g, { tipo: 'camion', titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}`, sub: c.envio ? `${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''} · salió ${c.fecha} · va a ${capital(c.ciudad)}` : `${c.cliente} · $${fmtK(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${capital(c.ciudad)}`, pagina: 'ordenesCompra' });
     animados.push((t) => { const p = (c.progreso + t * .025 + i * .07) % 1; const pt = curva.getPointAt(p); const q = curva.getPointAt(Math.min(1, p + .01)); g.position.set(pt.x, .1, pt.z); g.rotation.y = -Math.atan2(q.z - pt.z, q.x - pt.x); });
   });
 }
 
-export function vendedoresRuta({ M, box, add, modelo, animados }, rutas) {
+export function vendedoresRuta(ctx, rutas) {
+  const { M, box, add, modelo, animados } = ctx;
   modelo.vendedoresRuta.forEach((v, i) => {
     const dest = v.destinos.find((d) => rutas.has(d.ciudad)); const curva = dest ? rutas.get(dest.ciudad) : null; if (!curva) return;
     const g = new THREE.Group(); const cuerpo = box(1.8, .7, 1, ACC.azul); cuerpo.position.y = .55; g.add(cuerpo); const techo = box(1, .5, .9, 0xDCE6F2); techo.position.set(-.1, 1.1, 0); g.add(techo);
-    [[-.55, .45], [-.55, -.45], [.55, .45], [.55, -.45]].forEach(([x, z]) => { const r = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .2, 10), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .22, z); g.add(r); });
+    [[-.55, .45], [-.55, -.45], [.55, .45], [.55, -.45]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCoche', () => new THREE.CylinderGeometry(.22, .22, .2, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .22, z); g.add(r); });
+    g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); });
     add(g, { tipo: 'vendedorErp', titulo: v.nombre, sub: `Equipo comercial · ${v.clientes} clientes · va a ${dest.cliente} (${capital(dest.ciudad)})`, pagina: 'sellIn' });
     animados.push((t) => { const p = (v.fase + t * .04 + i * .03) % 2; const q = p < 1 ? p : 2 - p; const pt = curva.getPointAt(q); const pq = curva.getPointAt(Math.max(0, Math.min(1, q + (p < 1 ? .01 : -.01)))); g.position.set(pt.x + .9, .08, pt.z + .9); g.rotation.y = -Math.atan2(pq.z - pt.z, pq.x - pt.x); });
   });
