@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -138,11 +138,16 @@ export function puerto(ctx) {
 export function distritos(ctx, cedisPos) {
   const { P, M, G, box, add, oscuro, modelo, esc, raiz, interact, animados } = ctx;
   const distritoPos = new Map(); const rutas = new Map();
+  const medidas = (n) => { const cols = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(Math.max(1, n) * 1.5)))); const filas = Math.max(1, Math.ceil(n / cols)); return { cols, ancho: cols * 2.7 + 1.6, largo: filas * 2.9 + 1.6 }; };
+  // distritos reales que caen sobre el campus o el distrito GDL (3.90.12): capa `mapa`, sólo se ven de lejos
+  const dGDL = modelo.distritos.find((d) => d.ciudad === 'GUADALAJARA'); let cajaGDL = null;
+  if (dGDL && ctx.campus) { const m = medidas(dGDL.tiendas.length); const p = ctx.campus.distritoGDL(m.ancho, m.largo); cajaGDL = { x0: p.x - m.ancho / 2 - 2.8, x1: p.x + m.ancho / 2, z0: p.z - m.largo / 2, z1: p.z + m.largo / 2 + 4 }; }
   modelo.distritos.forEach((d) => {
     const esGDL = d.ciudad === 'GUADALAJARA';
-    const n = d.tiendas.length; const cols = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(Math.max(1, n) * 1.5)))); const filas = Math.max(1, Math.ceil(n / cols));
-    const ancho = cols * 2.7 + 1.6, largo = filas * 2.9 + 1.6;
+    const n = d.tiendas.length; const { cols, ancho, largo } = medidas(n);
     const base = esGDL ? (ctx.campus ? ctx.campus.distritoGDL(ancho, largo) : { x: esc.x - 4, z: esc.z + 16 }) : d.pos; // GDL: abajo de la avenida del campus
+    const enMapa = !esGDL && encimaDelCampus(ctx.campus, base, ancho, largo, cajaGDL);
+    const aMapa = (o) => { if (enMapa) o.traverse((x) => { x.userData.detalle = juntarCapas(x.userData.detalle, 'mapa'); }); return o; };
     distritoPos.set(d.ciudad, base);
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const piso = box(ancho, .3, largo, P.banqueta); piso.position.y = .15; g.add(piso);
@@ -174,11 +179,11 @@ export function distritos(ctx, cedisPos) {
     const farol = box(.12, 2.6, .12, 0x6b6e76); farol.position.set(ancho / 2 + .6, 1.3, largo / 2 + .6); g.add(farol); const foco = new THREE.Mesh(geo(ctx, 'foco', () => new THREE.SphereGeometry(.22, 8, 6)), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.6 : .2 })); foco.position.set(ancho / 2 + .6, 2.7, largo / 2 + .6); g.add(foco);
     for (const pz of [farol, foco]) { pz.userData.detalle = 'fino'; instanciar(ctx, pz); } // faroles: un InstancedMesh por pieza y capa fina (3.90.7)
     // vendedores del cliente en su ciudad
-    d.vendedores.forEach((v, i) => { const per = persona(ctx, COLOR_CUENTA[v.cuenta] || ACC.gris, .85); per.position.set(base.x - ancho / 2 + 1 + i * 1.6, .3, base.z + largo / 2 + 2.6); add(per, { tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${v.activo ? 'vendiendo este mes' : 'sin venta reciente'} · $${fmtK(v.importe)} en el año`, pagina: 'sellOut', cuenta: v.cuenta }); const ruta = [[0, 0], [ancho * .6, 0], [ancho * .6, 1.2], [0, 1.2]]; animados.push((t) => caminar(per, ruta, t * .15 + i * .9, { x: base.x - ancho / 2 + 1 + i * 1.6, z: base.z + largo / 2 + 2.6 })); });
-    raiz.add(g);
-    if (n >= 3) { const cuantos = Math.min(4, Math.ceil(n / 3)); for (let i = 0; i < cuantos; i++) { const per = persona(ctx, [0x9AA0AB, 0xC9B79C, 0x7A8AA6, 0xB58A7A][i % 4], .8); const o = { x: base.x - ancho / 2 + 1 + i * 2.4, z: base.z + largo / 2 + 1.1 }; per.position.set(o.x, .3, o.z); raiz.add(per); const ruta = [[0, 0], [ancho - 2, 0], [ancho - 2, .9], [0, .9]]; animados.push((t) => caminar(per, ruta, t * .12 + i * 1.7 + n, o)); } }
+    d.vendedores.forEach((v, i) => { const per = persona(ctx, COLOR_CUENTA[v.cuenta] || ACC.gris, .85); per.position.set(base.x - ancho / 2 + 1 + i * 1.6, .3, base.z + largo / 2 + 2.6); add(per, { tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${v.activo ? 'vendiendo este mes' : 'sin venta reciente'} · $${fmtK(v.importe)} en el año`, pagina: 'sellOut', cuenta: v.cuenta }); aMapa(per); const ruta = [[0, 0], [ancho * .6, 0], [ancho * .6, 1.2], [0, 1.2]]; animados.push((t) => caminar(per, ruta, t * .15 + i * .9, { x: base.x - ancho / 2 + 1 + i * 1.6, z: base.z + largo / 2 + 2.6 })); });
+    raiz.add(aMapa(g));
+    if (n >= 3) { const cuantos = Math.min(4, Math.ceil(n / 3)); for (let i = 0; i < cuantos; i++) { const per = persona(ctx, [0x9AA0AB, 0xC9B79C, 0x7A8AA6, 0xB58A7A][i % 4], .8); const o = { x: base.x - ancho / 2 + 1 + i * 2.4, z: base.z + largo / 2 + 1.1 }; per.position.set(o.x, .3, o.z); raiz.add(aMapa(per)); const ruta = [[0, 0], [ancho - 2, 0], [ancho - 2, .9], [0, .9]]; animados.push((t) => caminar(per, ruta, t * .12 + i * 1.7 + n, o)); } }
     // etiqueta de ciudad (sprite de texto)
-    const et = etiqueta(ctx, d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); et.userData.minZoom = n >= 4 ? 999 : 40; et.userData.prioridad = (d.vendio ? 2 : 1) + Math.min(n, 99) / 100; raiz.add(et);
+    const et = etiqueta(ctx, d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); et.userData.minZoom = n >= 4 ? 999 : 40; et.userData.prioridad = (d.vendio ? 2 : 1) + Math.min(n, 99) / 100; if (enMapa) { et.userData.minZoom = 999; et.userData.desdeZoom = DETALLE.mapa; } raiz.add(et);
     if (!esGDL) rutas.set(d.ciudad, carretera(ctx, { x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x, z: base.z + largo / 2 + 2.2 }));
     else rutas.set(d.ciudad, carretera(ctx, { x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x + ancho / 2 + 3, z: base.z }, 1.2));
   });

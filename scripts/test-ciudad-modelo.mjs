@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -56,12 +56,12 @@ test('modelo completo', () => {
 });
 
 test('nivel de detalle por zoom: lejos sólo volúmenes', () => {
-  assert.deepEqual(capasVisibles(18), { gente: true, fino: true }, 'irA acerca a 18: todo visible');
-  assert.deepEqual(capasVisibles(70), { gente: false, fino: false }, 'vista inicial (70): sin gente ni ventanas');
-  assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true }, 'intermedio: ventanas sí, gente no');
-  assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true }, 'el umbral cuenta como cerca');
+  assert.deepEqual(capasVisibles(18), { gente: true, fino: true, mapa: false }, 'irA acerca a 18: todo visible');
+  assert.deepEqual(capasVisibles(70), { gente: false, fino: false, mapa: true }, 'vista inicial (70): sin gente ni ventanas');
+  assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true, mapa: true }, 'intermedio: ventanas sí, gente no');
+  assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true, mapa: true }, 'el umbral cuenta como cerca');
   assert.equal(esChico(.8), true, 'árbol .8 es chico (capa fina)'); assert.equal(esChico(1), false, 'escala 1 no es chico'); assert.equal(esChico(1.2), false); assert.equal(esChico(undefined), false, 'sin escala no es chico');
-  assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true }, 'zoom inválido no esconde nada');
+  assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true, mapa: true }, 'zoom inválido no esconde nada');
 });
 
 test('etiquetas por prioridad: no se enciman', () => {
@@ -77,7 +77,7 @@ test('vista base: encuadre de oficina, CEDIS y puerto', () => {
   const pts = [{ x: -7, z: 2, r: 7 }, { x: 9, z: -2, r: 7 }, { x: -10.7, z: 18.5, r: 9 }];
   const e = encuadre(pts, { aspecto: 1.6 });
   assert.ok(e.zoom > 8 && e.zoom < 50, `cerca, con gente visible (zoom ${e.zoom.toFixed(1)})`);
-  assert.deepEqual(capasVisibles(e.zoom), { gente: true, fino: true }, 'la base se ve con detalle');
+  assert.deepEqual(capasVisibles(e.zoom), { gente: true, fino: true, mapa: false }, 'la base se ve con detalle y sin los distritos encimados');
   assert.ok(e.cx > -11 && e.cx < 9 && e.cz > -2 && e.cz < 18.5, 'el centro cae entre los tres');
   const uno = encuadre([{ x: 5, z: -3 }]); assert.ok(Math.abs(uno.cx - 5) < 1e-9 && Math.abs(uno.cz + 3) < 1e-9, 'un punto: centrado en él'); assert.equal(uno.zoom, 8, 'un punto sin radio: zoom mínimo');
   assert.ok(encuadre(pts, { aspecto: .6 }).zoom > e.zoom, 'pantalla angosta (iPad vertical) aleja la cámara');
@@ -119,4 +119,20 @@ test('campus de la base: estacionamiento, bardas, jardín y faroles en su lugar'
   assert.ok(c.faroles.every((f) => Math.abs(f.x - interior.a.x) > 1.5), 'ningún farol en el cruce con la calle interior');
   assert.ok(c.faroles.every((f) => f.z >= Math.max(ofi.z1, ced.z1, pat.z1) + 2 && f.z < c.distritoGDL(10, 10).z - 5), 'faroles entre el campus y el distrito GDL, sin tocar edificios');
   for (const b of c.bardas) { const bx = { x0: Math.min(b.a.x, b.b.x) + .01, x1: Math.max(b.a.x, b.b.x) - .01, z0: Math.min(b.a.z, b.b.z), z1: Math.max(b.a.z, b.b.z) }; assert.ok(!choca(bx, ced) && !choca(bx, pat), 'la barda rodea, no cruza, CEDIS y patio'); }
+});
+
+test('distritos reales encima del campus: capa mapa, sólo de lejos (3.90.12)', () => {
+  const c = campus(posDe(CIUDADES.GUADALAJARA)); const gdl = { ...c.distritoGDL(15, 10), w: 15, l: 10 };
+  const cajaGDL = { x0: gdl.x - 7.5 - 2.8, x1: gdl.x + 7.5, z0: gdl.z - 5, z1: gdl.z + 9 };
+  for (const k of ['LEON', 'QUERETARO', 'MORELIA']) assert.equal(encimaDelCampus(c, posDe(CIUDADES[k]), 7, 4.5, cajaGDL), true, `${k} cae sobre la base`);
+  for (const k of ['MONTERREY', 'CIUDAD DE MEXICO', 'MANZANILLO', 'TOLUCA']) assert.equal(encimaDelCampus(c, posDe(CIUDADES[k]), 7, 4.5, cajaGDL), false, `${k} no toca la base`);
+  assert.deepEqual([CIUDADES.LEON, CIUDADES.QUERETARO].map((x) => posDe(x)), [posDe(CIUDADES.LEON), posDe(CIUDADES.QUERETARO)], 'su posición en el mapa no cambia');
+  assert.equal(encimaDelCampus(null, { x: 0, z: 0 }), false); assert.equal(encimaDelCampus(c, { x: NaN, z: 0 }), false, 'datos inválidos no esconden nada');
+  assert.equal(juntarCapas('fino', 'mapa'), 'fino+mapa'); assert.equal(juntarCapas('mapa+fino', 'mapa'), 'fino+mapa', 'sin repetir');
+  assert.equal(juntarCapas(undefined, false, ''), undefined); assert.equal(juntarCapas(false, 'mapa'), 'mapa');
+  const cerca = capasVisibles(30), lejos = capasVisibles(DETALLE.mapa + 1);
+  assert.equal(capaVisible(cerca, 'mapa'), false, 'de cerca no se ve'); assert.equal(capaVisible(lejos, 'mapa'), true, 'de lejos sí');
+  assert.equal(capaVisible(lejos, 'fino+mapa'), true); assert.equal(capaVisible(capasVisibles(70), 'fino+mapa'), false, 'muy lejos lo fino se va');
+  assert.equal(capaVisible(cerca, undefined), true, 'sin capa siempre se ve');
+  assert.ok(DETALLE.mapa < DETALLE.gente, 'hay un tramo donde se ven los distritos y todavía la gente');
 });

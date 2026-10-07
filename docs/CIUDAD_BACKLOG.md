@@ -54,11 +54,11 @@ Principios que no se rompen en ninguna etapa:
 - [x] Liberar memoria al salir de la pestaña (geometrías, texturas, materiales) y comprobar que entrar y salir 5 veces no crece la memoria.
 
 ### Etapa 2 · Base y mapa (dos niveles, como Clash of Clans)
-- [ ] **Vista Base**: Guadalajara de cerca con la oficina, el CEDIS y el puerto juntos en un «campus» con calles, más grande y detallado. Es la vista inicial.
+- [x] **Vista Base**: Guadalajara de cerca con la oficina, el CEDIS y el puerto juntos en un «campus» con calles, más grande y detallado. Es la vista inicial.
   - [x] Arrancar en la Vista Base: la cámara encuadra oficina + CEDIS + puerto de cerca según el lienzo (`encuadre()` en `modelo.js`); el botón «Acteck» regresa ahí (`irA({ tipo: 'base' })`).
   - [x] Campus con calles: calles y banquetas uniendo oficina y CEDIS, patio de maniobras con andenes, y el distrito «Guadalajara» movido para que no se encime con el puerto.
   - [x] Más grande y detallado: estacionamiento, bardas, jardines y faroles en el campus (capa fina), revisando el medidor `?fps`.
-  - [ ] Distritos reales pegados al campus: León, Querétaro y Morelia quedan junto al patio de maniobras y al distrito GDL en la Vista Base; separarlos (o atenuarlos de cerca) sin mover su posición en el mapa.
+  - [x] Distritos reales pegados al campus: León, Querétaro y Morelia quedan junto al patio de maniobras y al distrito GDL en la Vista Base; separarlos (o atenuarlos de cerca) sin mover su posición en el mapa.
 - [ ] **Vista Mapa de México**: país completo con cada ciudad como un pin/maqueta pequeña con su estado (tiendas activas, camiones llegando). Botón fijo «🗺 Mapa» / «🏠 Base».
 - [ ] **Viajar**: tocar una ciudad en el mapa → transición animada (acercamiento) a la **Vista Ciudad** con sus manzanas y tiendas; botón «← Volver al mapa». Sólo se dibuja el nivel visible (mejora el rendimiento).
 - [ ] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
@@ -118,6 +118,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-06 21:09 · v3.90.12 · Vista Base (paso 4, cierra la Vista Base): los distritos reales que caen sobre el campus o el distrito GDL (León, Querétaro, Morelia, y cualquiera que caiga ahí) van en una capa nueva `mapa` (`DETALLE.mapa` 45, `encimaDelCampus()`/`juntarCapas()`/`capaVisible()` puros en `modelo.js`, con pruebas): de cerca no se dibujan ni se tocan (raycast ignora lo oculto) y de lejos aparecen en su lugar de siempre; tiendas, casitas, gente, árboles y etiqueta (`desdeZoom`) siguen la capa. Verificado en el harness.
 - 2026-10-06 21:01 · v3.90.11 · Vista Base (paso 3): detalle del campus en `campus()` (con pruebas): estacionamiento al norte de la oficina con un coche por persona del equipo de hoy (tocable), barda al norte y oriente del CEDIS y patio, jardín con árboles chicos al poniente de la oficina y 8 faroles en la banqueta de la avenida; cajones, cabinas, faroles y árboles chicos en la capa fina e instanciados. Medidor harness: 241 → 252 llamadas.
 - 2026-10-06 20:58 · v3.90.10 · Vista Base (paso 2): campus con calles: `campus()` puro en `modelo.js` (con pruebas de que nada se encima) separa oficina y CEDIS con una calle interior, avenida al frente con banquetas y raya punteada (capa fina, instanciada), patio de maniobras al oriente del CEDIS con 3 andenes y un tráiler por envío reciente (tocable, tipo `patio`), y el distrito «Guadalajara» bajo la avenida, lejos del puerto.
 - 2026-10-06 20:24 · v3.90.9 · Vista Base (paso 1): la Ciudad arranca de cerca encuadrando oficina, CEDIS y puerto según el tamaño del lienzo y el giro (`encuadre()` puro en `modelo.js`, con pruebas; zoom ≈ 16 en 1024×768, con gente y ventanas visibles); el botón «Acteck» regresa a la base. «Vista Base» partida en 3 sub-pasos.

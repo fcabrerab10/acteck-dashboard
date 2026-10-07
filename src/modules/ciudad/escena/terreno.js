@@ -1,6 +1,6 @@
 // Acteck Ciudad · terreno: mar con oleaje, contorno real de México, sierras, carreteras curvas y árboles.
 import * as THREE from 'three';
-import { pxAEscena, esChico } from '../modelo.js';
+import { pxAEscena, esChico, juntarCapas } from '../modelo.js';
 import MEXICO from '../../comercial/sellout/mexico-estados.json';
 
 export function terreno({ raiz, P, M, animados }) {
@@ -50,10 +50,11 @@ export function plantarArboles({ raiz, P, M, arboles = [] }) {
   // árboles chicos (escala < 1, adorno de las manzanas) van aparte en la capa fina: de lejos sólo quedan los grandes (3.90.7)
   for (const pt of partes) {
     const todos = arboles.filter(pt.cual); let usada = false;
-    for (const lista of [todos.filter((a) => !esChico(a.s)), todos.filter((a) => esChico(a.s))]) {
+    const enMapa = (a) => String(a.g.userData.detalle || '').includes('mapa'); // árboles de un distrito encima del campus (3.90.12)
+    for (const lista of [[false, false], [true, false], [false, true], [true, true]].map(([ch, mp]) => todos.filter((a) => esChico(a.s) === ch && enMapa(a) === mp))) {
       if (!lista.length) continue;
       const im = new THREE.InstancedMesh(pt.geo, pt.mat, lista.length); im.castShadow = true; usada = true;
-      if (esChico(lista[0].s)) im.userData.detalle = 'fino';
+      const capa = juntarCapas(esChico(lista[0].s) && 'fino', enMapa(lista[0]) && 'mapa'); if (capa) im.userData.detalle = capa;
       lista.forEach((a, i) => { local.makeTranslation(a.x, 0, a.z).multiply(esc.makeScale(a.s, a.s, a.s)); m.multiplyMatrices(aRaiz, a.g.matrixWorld).multiply(local); im.setMatrixAt(i, m); });
       im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); raiz.add(im);
     }

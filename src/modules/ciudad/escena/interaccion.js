@@ -42,7 +42,7 @@ export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn 
   // Cada cuadro: qué objeto queda bajo el cursor, cursor de mano y posición en pantalla para el globo.
   let hovPrev = null; const mtx = new THREE.Matrix4();
   function hover(interact, onHover) {
-    if (st.mouse.x >= 0 && !st.drag) { const r = canvas.getBoundingClientRect(); vec.set(((st.mouse.x - r.left) / r.width) * 2 - 1, -((st.mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false); st.hov = hs.length ? hs[0].object : null; st.hovId = hs.length ? hs[0].instanceId : undefined; }
+    if (st.mouse.x >= 0 && !st.drag) { const r = canvas.getBoundingClientRect(); vec.set(((st.mouse.x - r.left) / r.width) * 2 - 1, -((st.mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false).filter((h) => h.object.visible); /* lo oculto por zoom no se toca */ st.hov = hs.length ? hs[0].object : null; st.hovId = hs.length ? hs[0].instanceId : undefined; }
     const hov = st.hov; const tag = hov ? tagDe(hov, st.hovId) : null;
     if (tag !== hovPrev) { hovPrev = tag; canvas.style.cursor = tag ? 'pointer' : 'grab'; }
     if (onHover) { if (tag) { const p = new THREE.Vector3(); if (hov.isInstancedMesh && st.hovId != null) { hov.getMatrixAt(st.hovId, mtx); p.setFromMatrixPosition(mtx).applyMatrix4(hov.matrixWorld); } else hov.getWorldPosition(p); p.y += (hov.geometry?.parameters?.height || 1) + 1.2; const sp = p.project(cam); const r = canvas.getBoundingClientRect(); onHover(tag, { x: r.left + (sp.x + 1) / 2 * r.width, y: r.top + (1 - sp.y) / 2 * r.height }); } else onHover(null); }

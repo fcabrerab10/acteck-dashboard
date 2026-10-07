@@ -56,8 +56,13 @@ export const CIUDADES = {
 };
 // Nivel de detalle por zoom (escena/detalle.js): con la cámara más lejos que esto (zoom = media altura visible) se ocultan
 // la gente y lo fino (ventanas, letreros, vitrinas, puertas). Lejos sólo quedan volúmenes y etiquetas de ciudad.
-export const DETALLE = { gente: 50, fino: 65 };
-export const capasVisibles = (zoom) => ({ gente: !(zoom > DETALLE.gente), fino: !(zoom > DETALLE.fino) });
+// `mapa` (3.90.12) es al revés: lo que cae dentro del campus (León, Querétaro, Morelia… quedan encima del CEDIS y el patio
+// en la Vista Base) sólo se ve de lejos, con el zoom por arriba de DETALLE.mapa; su posición en el mapa no cambia.
+export const DETALLE = { gente: 50, fino: 65, mapa: 45 };
+export const capasVisibles = (zoom) => ({ gente: !(zoom > DETALLE.gente), fino: !(zoom > DETALLE.fino), mapa: !(zoom <= DETALLE.mapa) });
+// Una pieza puede ir en varias capas ('fino+mapa'): se ve sólo si todas están visibles.
+export const juntarCapas = (...cs) => [...new Set(cs.flatMap((c) => String(c || '').split('+')).filter(Boolean))].sort().join('+') || undefined;
+export const capaVisible = (capas, detalle) => String(detalle || '').split('+').filter(Boolean).every((k) => capas?.[k] !== false);
 // Árbol chico (escala menor a 1): adorno que va en la capa fina y se oculta de lejos (3.90.7).
 export const esChico = (s) => Number.isFinite(s) && s < 1;
 
@@ -116,7 +121,20 @@ export function campus(esc = { x: 0, z: 0 }) {
     faroles: Array.from({ length: 9 }, (_, i) => ({ x: x - 16 + i * 6, z: avenidaZ + 1.5 })).filter((f) => Math.abs(f.x - (x - 1)) > 1.5),
     // distrito GDL: su borde de arriba sobre la avenida y su borde izquierdo (con casitas, ~2.8 más) a la derecha de x + 2
     distritoGDL: (ancho = 0, largo = 0) => ({ x: x + 5 + (Number(ancho) || 0) / 2, z: avenidaZ + 2 + (Number(largo) || 0) / 2 }),
+    // terreno del campus (oficina, estacionamiento, jardín, CEDIS, patio, bardas y la banqueta de los faroles) para saber qué
+    // distritos reales le caen encima (3.90.12)
+    caja: { x0: x - 20, x1: x + 33, z0: z - 14, z1: avenidaZ + 2 },
   };
+}
+
+// ¿El distrito { x, z } de ancho × largo (más las casitas, ~2.8 a la izquierda) cae sobre el campus o sobre el distrito GDL
+// (otra caja { x0, x1, z0, z1 })? Esos van en la capa `mapa`: de cerca no se dibujan encima de la base.
+export function encimaDelCampus(c, d, ancho = 0, largo = 0, gdl = null, margen = 1) {
+  if (!c?.caja || !d || !Number.isFinite(d.x) || !Number.isFinite(d.z)) return false;
+  const w = Number(ancho) || 0, l = Number(largo) || 0;
+  const r = { x0: d.x - w / 2 - 2.8 - margen, x1: d.x + w / 2 + margen, z0: d.z - l / 2 - margen, z1: d.z + l / 2 + margen };
+  const choca = (b) => !!b && r.x0 < b.x1 && b.x0 < r.x1 && r.z0 < b.z1 && b.z0 < r.z1;
+  return choca(c.caja) || choca(gdl);
 }
 
 export const ESC = 11; // unidades de escena por grado de longitud (México ≈ 330 × 180 unidades; Fernando: «muy amontonado»)
