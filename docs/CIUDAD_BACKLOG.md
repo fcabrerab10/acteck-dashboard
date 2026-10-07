@@ -69,7 +69,8 @@ Principios que no se rompen en ninguna etapa:
     - [x] Capa `cerca` (3.90.17): con zoom > `DETALLE.pin` se ocultan las casitas de clientes finales y la calle de cada distrito.
     - [ ] Maqueta simple por distrito en el mapa: piso + volúmenes de tiendas juntos en una sola malla, medido con `?fps` (Mapa 350 llamadas).
       - [x] Pisos de distrito (3.90.18): caja unitaria escalada y `instanciar()` con su tag → un solo InstancedMesh para todos los pisos (antes una llamada por distrito).
-      - [ ] Volúmenes de tiendas de lejos: cuerpo+techo+toldo en una sola malla por distrito (o instancia) con zoom > `DETALLE.pin`, medido con `?fps`.
+      - [x] Volúmenes de tiendas de lejos (3.90.19): ya iban instanciados desde 3.90.3 (un InstancedMesh por pieza+color para todos los distritos). Medido con un desglose en el harness: el gasto del mapa estaba en los 42 estados y las 36 carreteras sueltas → ahora una malla cada uno. Harness (ejemplo): Base 226 → 176 llamadas, Mapa 277 → ~200.
+      - [ ] Campus y barcos de lejos: ~94 cajas sueltas de oficina, CEDIS, patio y barcos (con su tag) siguen siendo una llamada cada una; en la Vista Mapa juntarlas o instanciarlas (cuidando que sigan tocables).
 - [ ] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
 - [ ] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
 
@@ -127,6 +128,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 15:17 · v3.90.19 · Sólo el nivel visible (paso 2b): los 42 estados de México van en una sola ExtrudeGeometry y todas las carreteras en una sola malla (`plantarCarreteras()`); las tiendas ya estaban instanciadas. Harness: Base 226 → 176 llamadas, Mapa 277 → ~200, sin errores.
 - 2026-10-07 13:58 · v3.90.18 · Sólo el nivel visible (paso 2a): los pisos de todos los distritos van en un solo InstancedMesh (caja unitaria escalada, tag por instancia, siguen tocables); una llamada de dibujo por distrito menos.
 - 2026-10-07 13:36 · v3.90.17 · Sólo el nivel visible (paso 1): nueva capa `cerca` en `capasVisibles()`; en la Vista Mapa (zoom > `DETALLE.pin`) se ocultan casitas de clientes finales y calles de distrito (menos llamadas de dibujo); pruebas nuevas.
 - 2026-10-06 22:20 · v3.90.16 · Viajar (paso 1): tocar una ciudad en el mapa (pin o manzanas) acerca la cámara a su Vista Ciudad (`vistaCiudad()`), el pin ya es tocable y el botón ofrece «← Volver al mapa» (`nivelVista()`); harness con `window.nivel`.

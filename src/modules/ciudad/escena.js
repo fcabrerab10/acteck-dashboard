@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
-import { terreno, carretera, plantarArboles } from './escena/terreno.js';
+import { terreno, carretera, plantarArboles, plantarCarreteras } from './escena/terreno.js';
 import { plantarInstancias, actualizarInstancias } from './escena/instancias.js';
 import { oficina, cedis, puerto, distritos, campusCalles } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
@@ -57,6 +57,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
   const { distritoPos, rutas } = distritos(ctx, cedisPos);
   plantarArboles(ctx); // después de todos los arbol(): oficina, CEDIS y distritos
+  plantarCarreteras(ctx); // después de todas las carretera(): una sola malla
   const etA = etiqueta(ctx, 'acteck. · Guadalajara', '#0A84FF'); etA.position.set(ctx.esc.x + 1, 17, ctx.esc.z - 4); etA.userData.prioridad = 4; raiz.add(etA);
   const etP = etiqueta(ctx, 'Manzanillo', '#1D1D1F'); etP.position.set(puertoPos.x, 10, puertoPos.z + 2); etP.userData.prioridad = 3; raiz.add(etP);
   camiones(ctx, rutas);
