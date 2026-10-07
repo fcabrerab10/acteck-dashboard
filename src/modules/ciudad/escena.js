@@ -100,6 +100,18 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   return {
     resize, irA,
     stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh && o.visible) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
-    destruir() { viva = false; ro.disconnect(); inter.quitar(); document.removeEventListener('visibilitychange', onVisible); scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); } }); R.dispose(); },
+    // Liberar memoria al salir (3.90.8): cada geometría, material y textura una sola vez (escena + cachés, aunque ya no estén
+    // colgadas), buffers de instancias y mapas de sombra; se sueltan las listas para que la escena vieja no quede retenida.
+    // Regresa lo que el renderer aún tenía vivo antes de cerrarse (debe ser 0 · 0; el harness lo revisa).
+    destruir() {
+      viva = false; ro.disconnect(); inter.quitar(); document.removeEventListener('visibilitychange', onVisible);
+      const geoms = new Set([...geos.values(), ...(ctx.geoComp?.values() || [])]); const materiales = new Set(mats.values());
+      scene.traverse((o) => { if (o.geometry) geoms.add(o.geometry); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => materiales.add(m)); if (o.isInstancedMesh || o.isLight) o.dispose?.(); });
+      geoms.forEach((g) => g.dispose()); materiales.forEach((m) => { m.map?.dispose(); m.dispose(); });
+      const quedan = { geometrias: R.info.memory.geometries, texturas: R.info.memory.textures };
+      scene.clear(); mats.clear(); geos.clear(); ctx.geoComp?.clear(); for (const l of [interact, animados, sprites]) l.length = 0; ctx.dinamicas = null;
+      R.renderLists.dispose(); R.dispose();
+      return quedan;
+    },
   };
 }

@@ -51,7 +51,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] Capas `gente` y `fino` (ventanas, letreros, vitrinas y puertas) que se ocultan de lejos (`DETALLE` en `modelo.js`, `escena/detalle.js`); las instancias ocultas no se recalculan. Harness: lejos 415 → 328 llamadas.
   - [x] Etiquetas por prioridad: ocultar las que se enciman en pantalla dejando las de mayor prioridad (Guadalajara/Manzanillo > ciudades con venta > resto).
   - [x] Más piezas finas a la capa (árboles chicos, faroles, tarimas del puerto) si el medidor muestra que vale la pena.
-- [ ] Liberar memoria al salir de la pestaña (geometrías, texturas, materiales) y comprobar que entrar y salir 5 veces no crece la memoria.
+- [x] Liberar memoria al salir de la pestaña (geometrías, texturas, materiales) y comprobar que entrar y salir 5 veces no crece la memoria.
 
 ### Etapa 2 · Base y mapa (dos niveles, como Clash of Clans)
 - [ ] **Vista Base**: Guadalajara de cerca con la oficina, el CEDIS y el puerto juntos en un «campus» con calles, más grande y detallado. Es la vista inicial.
@@ -114,6 +114,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-06 20:20 · v3.90.8 · Liberar memoria al salir: los eventos del canvas (pointer, rueda, touch) ya se quitan con un `AbortController` — Ciudad.jsx rearma la escena sobre el mismo canvas y cada escena vieja quedaba retenida por sus listeners; `destruir()` libera cada geometría/material/textura una vez (escena + cachés), buffers de instancias y sombras, vacía listas y regresa lo que quedó vivo. Harness: 0 geometrías · 0 texturas tras destruir; 10 rearmados siguen en 363 llamadas · 188 geometrías.
 - 2026-10-06 20:16 · v3.90.7 · Más piezas en la capa fina (paso 3 del nivel de detalle): faroles (poste + foco con esfera compartida) y tarimas del CEDIS pasan a `InstancedMesh` y se ocultan de lejos; árboles chicos (`esChico`, escala < 1) van en su propio `InstancedMesh` de capa fina. Harness de ejemplo, todo visible: 415 → 363 llamadas · 216 → 188 geometrías.
 - 2026-10-06 19:49 · v3.90.6 · Etiquetas sin encimarse (paso 2 del nivel de detalle): cada cuadro se proyectan a pantalla y se esconden las que chocan con otra de más prioridad (`etiquetasSinEncimar` en `modelo.js`; acteck 4 > Manzanillo 3 > ciudades con venta 2 + tiendas/100 > resto 1).
 - 2026-10-06 19:46 · v3.90.5 · Nivel de detalle por zoom (paso 1): gente y piezas finas (ventanas, letreros, vitrinas, puertas) se ocultan con zoom > 50 / > 65 (`DETALLE`/`capasVisibles` en `modelo.js`, `escena/detalle.js`); de lejos la escena baja de 415 a 328 llamadas de dibujo.
