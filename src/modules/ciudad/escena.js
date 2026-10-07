@@ -52,8 +52,8 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
   const { distritoPos, rutas } = distritos(ctx, cedisPos);
   plantarArboles(ctx); // después de todos los arbol(): oficina, CEDIS y distritos
-  const etA = etiqueta(ctx, 'acteck. · Guadalajara', '#0A84FF'); etA.position.set(ctx.esc.x + 1, 17, ctx.esc.z - 4); raiz.add(etA);
-  const etP = etiqueta(ctx, 'Manzanillo', '#1D1D1F'); etP.position.set(puertoPos.x, 10, puertoPos.z + 2); raiz.add(etP);
+  const etA = etiqueta(ctx, 'acteck. · Guadalajara', '#0A84FF'); etA.position.set(ctx.esc.x + 1, 17, ctx.esc.z - 4); etA.userData.prioridad = 4; raiz.add(etA);
+  const etP = etiqueta(ctx, 'Manzanillo', '#1D1D1F'); etP.position.set(puertoPos.x, 10, puertoPos.z + 2); etP.userData.prioridad = 3; raiz.add(etP);
   camiones(ctx, rutas);
   vendedoresRuta(ctx, rutas);
   plantarInstancias(ctx); // tiendas, casitas, gente y vehículos: un InstancedMesh por pieza, tocables por instanceId
@@ -90,7 +90,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
     aplicarDetalle(detalle, vista.zoom);
     for (const f of animados) f(tiempo);
     actualizarInstancias(ctx);
-    escalarEtiquetas(sprites, vista.zoom);
+    escalarEtiquetas(sprites, vista.zoom, cam, canvas.clientWidth, canvas.clientHeight);
     inter.hover(interact, onHover);
     R.render(scene, cam);
     med.cuadros++; if (now - med.desde >= 1000) { med.fps = Math.round(med.cuadros * 1000 / (now - med.desde)); med.cuadros = 0; med.desde = now; }

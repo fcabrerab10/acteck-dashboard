@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, etiquetasSinEncimar } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -61,4 +61,13 @@ test('nivel de detalle por zoom: lejos sólo volúmenes', () => {
   assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true }, 'intermedio: ventanas sí, gente no');
   assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true }, 'el umbral cuenta como cerca');
   assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true }, 'zoom inválido no esconde nada');
+});
+
+test('etiquetas por prioridad: no se enciman', () => {
+  const c = (x, y, prioridad) => ({ x, y, w: 100, h: 20, prioridad });
+  assert.deepEqual(etiquetasSinEncimar([c(0, 0, 1), c(50, 5, 3), c(300, 0, 1)]), [false, true, true], 'gana la de más prioridad; la lejana sigue');
+  assert.deepEqual(etiquetasSinEncimar([c(0, 0, 2), c(10, 0, 2)]), [true, false], 'empate: la primera');
+  assert.deepEqual(etiquetasSinEncimar([c(0, 0, 1), c(0, 30, 1)]), [true, true], 'una arriba de otra con aire');
+  assert.deepEqual(etiquetasSinEncimar([c(0, 0, 1), { x: NaN, y: 0, w: 1, h: 1 }]), [true, false], 'caja inválida se esconde sin tirar nada');
+  assert.deepEqual(etiquetasSinEncimar([]), []);
 });
