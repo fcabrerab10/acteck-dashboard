@@ -5,16 +5,18 @@ import { fmtK, capital } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
-export function barcos({ P, M, box, add, modelo, animados }, puertoPos) {
+export function barcos(ctx, puertoPos) {
+  const { P, M, box, add, modelo, animados } = ctx;
   modelo.puerto.barcos.forEach((b, i) => {
     const g = new THREE.Group();
     const casco = box(5, 1.1, 1.8, P.barco); casco.position.y = .5; g.add(casco);
-    const proa = new THREE.Mesh(new THREE.ConeGeometry(.9, 1.6, 4), M(P.barco)); proa.rotation.z = -Math.PI / 2; proa.rotation.y = Math.PI / 4; proa.position.set(3.1, .55, 0); proa.castShadow = true; g.add(proa);
+    const proa = new THREE.Mesh(geo(ctx, 'proa', () => new THREE.ConeGeometry(.9, 1.6, 4)), M(P.barco)); proa.rotation.z = -Math.PI / 2; proa.rotation.y = Math.PI / 4; proa.position.set(3.1, .55, 0); proa.castShadow = true; g.add(proa);
     const cab = box(1.3, 1.3, 1.5, P.barcoCab); cab.position.set(-1.6, 1.65, 0); g.add(cab);
     for (let k = 0; k < 3; k++) { const c = box(1, .7, 1.4, [ACC.azul, ACC.naranja, ACC.verde, ACC.morado][(k + i) % 4]); c.position.set(.2 + k * -.0 + (k - 1) * 1.1, 1.4, 0); g.add(c); }
     const ini = { x: puertoPos.x - 52 - (i % 4) * 9, z: puertoPos.z + 46 + (i % 3) * 8 }; const fin = { x: puertoPos.x - 3, z: puertoPos.z + 5 };
     g.position.set(ini.x + (fin.x - ini.x) * b.progreso, 0, ini.z + (fin.z - ini.z) * b.progreso); g.rotation.y = -Math.atan2(fin.z - ini.z, fin.x - ini.x);
     add(g, { tipo: 'barco', titulo: `Contenedor ${b.id}`, sub: `${b.naviera || b.supplier} · ${b.piezas.toLocaleString('es-MX')} pz · ${b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias <= 0 ? 'llegó' : `llega en ${b.llegaEnDias} d`}`, pagina: 'inventarioGlobal', barco: b });
+    g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.22: piezas del barco como instancias dinámicas (tag de su contenedor)
     const base = g.position.clone();
     animados.push((t) => { g.position.y = Math.sin(t * 1.4 + i) * .12; g.position.x = base.x + Math.sin(t * .11 + i) * .4; g.rotation.z = Math.sin(t * 1.1 + i) * .02; });
   });

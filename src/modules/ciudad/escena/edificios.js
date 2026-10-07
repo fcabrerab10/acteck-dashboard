@@ -59,7 +59,8 @@ export function cedis(ctx) {
   add(g, { tipo: 'cedis', titulo: 'CEDIS', sub: `$${(modelo.cedis.valor / 1e6).toFixed(1)} M · ${Math.round(modelo.cedis.dias)} días · ${modelo.puerto.tarimas.length} contenedor${modelo.puerto.tarimas.length === 1 ? '' : 'es'} descargando`, pagina: 'inventarioGlobal' });
   // montacargas
   const mc = new THREE.Group(); const cuerpo = box(1.6, 1, 1.1, ACC.naranja); mc.add(cuerpo); const mastil = box(.2, 2.2, .2, 0x444444); mastil.position.set(.9, 1.1, 0); mc.add(mastil); const carga = box(1, .8, 1, 0xC58A3A); carga.position.set(1.4, .6, 0); mc.add(carga);
-  [[-.5, .5], [-.5, -.5], [.5, .5], [.5, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(new THREE.CylinderGeometry(.3, .3, .25, 10), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); mc.add(r); });
+  [[-.5, .5], [-.5, -.5], [.5, .5], [.5, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaMc', () => new THREE.CylinderGeometry(.3, .3, .25, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); mc.add(r); });
+  mc.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // montacargas: instancias dinámicas (3.90.22)
   mc.position.set(cedisPos.x - 2, 0, cedisPos.z + 5); add(mc, { tipo: 'montacargas', titulo: 'Montacargas', sub: 'moviendo tarimas', pagina: 'inventarioGlobal' });
   animados.push((t) => { const p = (t * .18) % 1; const x = cedisPos.x - 6 + Math.abs(Math.sin(p * Math.PI * 2)) * 12; mc.position.x = x; mc.rotation.y = Math.cos(p * Math.PI * 2) > 0 ? 0 : Math.PI; });
   return cedisPos;
