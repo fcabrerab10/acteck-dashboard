@@ -166,6 +166,20 @@ export function pinCiudad(distrito, camiones = []) {
 // Botón único Base/Mapa: estás «en la base» si la cámara está cerca del encuadre de la Vista Base (centro a menos de medio
 // encuadre y zoom no más de 1.5× el de la base); si no, estás lejos y el botón ofrece volver. Sin datos cuenta como base.
 export function enLaBase(v, b) { if (!v || !b || !Number.isFinite(v.zoom) || !Number.isFinite(b.zoom)) return true; return Math.hypot(v.cx - b.cx, v.cz - b.cz) <= b.zoom * 0.5 && v.zoom <= b.zoom * 1.5; }
+// Viajar (3.90.16): Vista Ciudad = encuadre de las manzanas de un distrito ({ x, z, ancho, largo }) con la calle de enfrente;
+// el zoom no pasa de DETALLE.gente para que de cerca se vean la gente y las tiendas.
+export function vistaCiudad(caja, { ang = Math.PI / 4, aspecto = 1.6 } = {}) {
+  if (!caja || !Number.isFinite(caja.x) || !Number.isFinite(caja.z)) return null;
+  const w = Number.isFinite(caja.ancho) && caja.ancho > 0 ? caja.ancho : 8, l = Number.isFinite(caja.largo) && caja.largo > 0 ? caja.largo : 8;
+  const esq = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => ({ x: caja.x + a * w / 2, z: caja.z + b * l / 2 + (b > 0 ? 2 : 0), r: 2 }));
+  return encuadre(esq, { ang, aspecto, margen: 1.2, min: 14, max: DETALLE.gente - 5 });
+}
+// Nivel para el botón: 'base' (campus), 'ciudad' (cerca de la ciudad a la que viajaste) o 'lejos' (mapa o en medio).
+export function nivelVista(v, base, ciudad = null) {
+  if (enLaBase(v, base)) return 'base';
+  if (ciudad && Number.isFinite(ciudad.zoom) && enLaBase(v, ciudad)) return 'ciudad';
+  return 'lejos';
+}
 export function vistaMapa({ ang = Math.PI / 4, aspecto = 1.6 } = {}) {
   return encuadre(EXTREMOS_MEXICO.map((c) => ({ ...posDe(c), r: 4 })), { ang, aspecto, margen: 1.05, min: ZOOM_MIN, max: ZOOM_MAX });
 }

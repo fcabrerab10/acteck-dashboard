@@ -1,7 +1,8 @@
 // Acteck Ciudad · escena 3D (three.js, low-poly cálido). Sólo se importa desde Ciudad.jsx dentro de un import()
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
-//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'lejos'), oscuro }) → { destruir(), resize(), irA(tag), stats() }
+//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'ciudad'|'lejos'), oscuro }) → { destruir(), resize(), irA(tag), stats() }
 //   Arranca en la Vista Base (oficina + CEDIS + puerto de cerca); irA({ tipo: 'base' }) regresa a ella e irA({ tipo: 'mapa' }) encuadra México completo.
+//   Viajar: tocar una ciudad (pin o manzanas) desde lejos acerca la cámara a su Vista Ciudad; irA({ ciudad }) también la usa.
 // Este archivo sólo orquesta: arma el contexto compartido (ctx) y llama a los módulos de escena/ en orden
 // (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion, detalle). El estilo vive en luz-clima.js.
 import * as THREE from 'three';
@@ -14,7 +15,7 @@ import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
-import { encuadre, campus, vistaMapa, enLaBase } from './modelo.js';
+import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE } from './modelo.js';
 
 export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
@@ -64,14 +65,17 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
 
   const detalle = prepararDetalle(raiz); // gente y piezas finas que se ocultan de lejos
 
-  const inter = crearInteraccion(canvas, camara, { onClick });
+  // Viajar: desde lejos (mapa), tocar una ciudad acerca la cámara a ella; de cerca el clic sólo abre su panel.
+  const inter = crearInteraccion(canvas, camara, { onClick: (tag) => { if (tag?.tipo === 'ciudad' && tag.ciudad && vista.zoom > DETALLE.mapa) irA(tag); onClick?.(tag); } });
 
   // Vista Base (inicial): oficina, CEDIS y puerto encuadrados de cerca según el tamaño del lienzo y el giro actual.
   const puntosBase = [{ ...ofiPos, r: 8 }, { ...cedisPos, r: 8 }, { ...puertoPos, r: 9 }];
   const vistaBase = () => encuadre(puntosBase, { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
   const b0 = vistaBase(); if (b0) { vista.cx = vista.cxObj = b0.cx; vista.cz = vista.czObj = b0.cz; vista.zoom = vista.zoomObj = b0.zoom; resize(); camara.colocarCam(); }
 
-  function irA(tag) { if (tag?.tipo === 'mapa') { const m = vistaMapa({ ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) }); if (m) { vista.cxObj = m.cx; vista.czObj = m.cz; vista.zoomObj = m.zoom; } return; } if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) p = distritoPos.get(tag.ciudad); if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
+  let destino = null; // ciudad a la que viajaste: con ella el botón ofrece «← Volver al mapa»
+  const vistaDe = (ciudad) => vistaCiudad(distritoPos.get(ciudad), { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
+  function irA(tag) { if (tag?.tipo === 'mapa') { const m = vistaMapa({ ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) }); if (m) { vista.cxObj = m.cx; vista.czObj = m.cz; vista.zoomObj = m.zoom; } return; } if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) { const c = vistaDe(tag.ciudad); if (c) { destino = tag.ciudad; vista.cxObj = c.cx; vista.czObj = c.cz; vista.zoomObj = c.zoom; return; } p = distritoPos.get(tag.ciudad); } if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
 
   // Dibujar sólo cuando hace falta: con la pestaña del navegador oculta se pausa del todo; en calma (15 s sin gestos y la
   // cámara quieta) baja a ~10 fps; cualquier gesto la regresa a 60 al instante.
@@ -98,7 +102,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     ultimo = now; tiempo += dt; // 3.90.3: desde 3.76.9 esta línea había quedado dentro del comentario y nada se movía
     camara.mover(dt, inter.st);
     aplicarDetalle(detalle, vista.zoom);
-    if (++cuadros % 10 === 0) { const nb = enLaBase(vista, vistaBase()) ? 'base' : 'lejos'; if (nb !== nivel) { nivel = nb; onNivel?.(nb); } } // cada 10 cuadros basta para el botón
+    if (++cuadros % 10 === 0) { const nb = nivelVista(vista, vistaBase(), destino ? vistaDe(destino) : null); if (nb !== nivel) { nivel = nb; onNivel?.(nb); } } // cada 10 cuadros basta para el botón
     for (const f of animados) f(tiempo);
     actualizarInstancias(ctx);
     escalarEtiquetas(sprites, vista.zoom, cam, canvas.clientWidth, canvas.clientHeight);

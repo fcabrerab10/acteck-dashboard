@@ -64,6 +64,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] Pin/maqueta por ciudad en la vista de mapa (lejos): marcador con el número de tiendas activas y camiones llegando, que crece por zoom para leerse; se oculta de cerca.
   - [x] El botón cambia según dónde estás («🗺 Mapa» cuando estás en la base, «🏠 Base» cuando estás lejos), en vez de los dos.
 - [ ] **Viajar**: tocar una ciudad en el mapa → transición animada (acercamiento) a la **Vista Ciudad** con sus manzanas y tiendas; botón «← Volver al mapa». Sólo se dibuja el nivel visible (mejora el rendimiento).
+  - [x] Tocar el pin (o las manzanas) de una ciudad desde lejos acerca la cámara a su **Vista Ciudad** (`vistaCiudad()` encuadra el distrito, zoom ≤ `DETALLE.gente`); el botón pasa a «← Volver al mapa» (`nivelVista()` → 'base' | 'ciudad' | 'lejos'). El buscador también usa ese encuadre.
+  - [ ] Sólo dibujar el nivel visible: en la Vista Ciudad ocultar los distritos lejanos (y en el mapa las piezas finas que ya no se ven), medido con `?fps`.
 - [ ] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
 - [ ] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
 
@@ -121,6 +123,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-06 22:20 · v3.90.16 · Viajar (paso 1): tocar una ciudad en el mapa (pin o manzanas) acerca la cámara a su Vista Ciudad (`vistaCiudad()`), el pin ya es tocable y el botón ofrece «← Volver al mapa» (`nivelVista()`); harness con `window.nivel`.
 - 2026-10-06 21:46 · v3.90.15 · Vista Mapa (paso 3, cierra la Vista Mapa): un solo botón que cambia según dónde estás, «🗺 Mapa» en la base y «🏠 Base» cuando estás lejos (`enLaBase()` en `modelo.js` con pruebas; la escena avisa con `onNivel` cada 10 cuadros). Probado en el harness: lejos al ir al mapa, base al volver.
 - 2026-10-06 21:40 · v3.90.14 · Vista Mapa (paso 2): con el zoom por arriba de `DETALLE.pin` (90) la etiqueta de cada ciudad se cambia por su pin «Ciudad · 🏬 tiendas activas · 🚚 camiones llegando» (`pinCiudad()` en `modelo.js`, con pruebas; tiendas virtuales no cuentan). Probado en el harness con todo México.
 - 2026-10-06 21:37 · v3.90.13 · Vista Mapa (paso 1): botones «Base» y «Mapa» en la barra; «Mapa» encuadra todo México con `vistaMapa()` (puntas del país, con pruebas para varios giros y lienzos) y el zoom máximo sube de 120 a 180 (`ZOOM_MAX`/`zoomEnRango` compartidos con rueda y pellizco). Probado en el harness: país completo sin errores.

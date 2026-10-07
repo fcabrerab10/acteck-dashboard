@@ -148,7 +148,7 @@ export function distritos(ctx, cedisPos) {
     const base = esGDL ? (ctx.campus ? ctx.campus.distritoGDL(ancho, largo) : { x: esc.x - 4, z: esc.z + 16 }) : d.pos; // GDL: abajo de la avenida del campus
     const enMapa = !esGDL && encimaDelCampus(ctx.campus, base, ancho, largo, cajaGDL);
     const aMapa = (o) => { if (enMapa) o.traverse((x) => { x.userData.detalle = juntarCapas(x.userData.detalle, 'mapa'); }); return o; };
-    distritoPos.set(d.ciudad, base);
+    distritoPos.set(d.ciudad, { x: base.x, z: base.z, ancho, largo }); // con medidas: la Vista Ciudad las encuadra
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const piso = box(ancho, .3, largo, P.banqueta); piso.position.y = .15; g.add(piso);
     piso.userData.tag = { tipo: 'ciudad', titulo: d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; interact.push(piso);
@@ -187,6 +187,7 @@ export function distritos(ctx, cedisPos) {
     // Vista Mapa: de muy lejos la etiqueta se cambia por el pin de la ciudad (tiendas activas y camiones llegando).
     et.userData.minZoom = Math.min(et.userData.minZoom, DETALLE.pin); const pin = pinCiudad(d, ctx.modelo.camiones);
     const etPin = etiqueta(ctx, pin.texto, pin.activas ? '#1D1D1F' : '#8E8E93'); etPin.position.copy(et.position); etPin.userData.desdeZoom = DETALLE.pin; etPin.userData.prioridad = et.userData.prioridad + pin.llegando / 1000; raiz.add(etPin);
+    etPin.userData.tag = piso.userData.tag; interact.push(etPin); // el pin se toca: en el mapa lleva a la ciudad (Viajar, 3.90.16)
     if (!esGDL) rutas.set(d.ciudad, carretera(ctx, { x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x, z: base.z + largo / 2 + 2.2 }));
     else rutas.set(d.ciudad, carretera(ctx, { x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x + ancho / 2 + 3, z: base.z }, 1.2));
   });
