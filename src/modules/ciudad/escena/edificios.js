@@ -150,8 +150,8 @@ export function distritos(ctx, cedisPos) {
     const aMapa = (o) => { if (enMapa) o.traverse((x) => { x.userData.detalle = juntarCapas(x.userData.detalle, 'mapa'); }); return o; };
     distritoPos.set(d.ciudad, { x: base.x, z: base.z, ancho, largo }); // con medidas: la Vista Ciudad las encuadra
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
-    const piso = box(ancho, .3, largo, P.banqueta); piso.position.y = .15; g.add(piso);
-    piso.userData.tag = { tipo: 'ciudad', titulo: d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; interact.push(piso);
+    const piso = box(1, .3, 1, P.banqueta); piso.scale.set(ancho, 1, largo); piso.position.y = .15; g.add(piso); // caja unitaria escalada: todos los pisos van en un InstancedMesh
+    piso.userData.tag = { tipo: 'ciudad', titulo: d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; instanciar(ctx, piso); // tocable por su tag en userData.tags (3.90.18)
     const calleH = new THREE.Mesh(new THREE.PlaneGeometry(ancho + 2, 1.4), M(P.calle, { roughness: 1 })); calleH.rotation.x = -Math.PI / 2; calleH.position.set(0, .32, largo / 2 + .9); g.add(calleH); calleH.userData.detalle = 'cerca';
     d.tiendas.forEach((t, i) => {
       const c = i % cols, f = Math.floor(i / cols);
