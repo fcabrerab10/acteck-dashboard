@@ -2,6 +2,7 @@
 // zoom con rueda hacia el cursor, pellizco en iPad, teclado y hover/clic sobre lo tocable.
 import * as THREE from 'three';
 import { tagDe } from './instancias.js';
+import { zoomEnRango } from '../modelo.js';
 
 export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn }, { onClick }) {
   const st = { hov: null, drag: null, mouse: { x: -1, y: -1 }, inercia: { x: 0, z: 0 }, teclas: {}, ultimoInput: performance.now() };
@@ -31,10 +32,10 @@ export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn 
   on('pointerup', soltar); on('pointercancel', () => { st.drag = null; });
   on('contextmenu', (e) => e.preventDefault());
   // Rueda: zoom hacia el cursor (el punto bajo el mouse no se mueve).
-  on('wheel', (e) => { e.preventDefault(); despertar(); const antes = suelo(e.clientX, e.clientY); const f = e.deltaY > 0 ? 1.1 : .9; const z = Math.max(8, Math.min(120, vista.zoom * f)); if (antes) { const k = z / vista.zoom; vista.cxObj = antes.x + (vista.cxObj - antes.x) * k; vista.czObj = antes.z + (vista.czObj - antes.z) * k; } vista.zoomObj = z; }, { passive: false });
+  on('wheel', (e) => { e.preventDefault(); despertar(); const antes = suelo(e.clientX, e.clientY); const f = e.deltaY > 0 ? 1.1 : .9; const z = zoomEnRango(vista.zoom * f); if (antes) { const k = z / vista.zoom; vista.cxObj = antes.x + (vista.cxObj - antes.x) * k; vista.czObj = antes.z + (vista.czObj - antes.z) * k; } vista.zoomObj = z; }, { passive: false });
   // pellizco (iPad) → zoom; un dedo arrastra (pointer events)
   let pinch = null; on('touchstart', (e) => { despertar(); if (e.touches.length === 2) pinch = { d: Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), z: vista.zoomObj }; }, { passive: true });
-  on('touchmove', (e) => { if (pinch && e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); vista.zoomObj = Math.max(8, Math.min(120, pinch.z * pinch.d / d)); } }, { passive: true });
+  on('touchmove', (e) => { if (pinch && e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); vista.zoomObj = zoomEnRango((pinch.z * pinch.d / d)); } }, { passive: true });
   on('touchend', () => { pinch = null; });
   const onKey = (e) => { if (/INPUT|TEXTAREA/.test(e.target?.tagName || '')) return; despertar(); st.teclas[e.key.toLowerCase()] = e.type === 'keydown'; };
   window.addEventListener('keydown', onKey, { signal: ab.signal }); window.addEventListener('keyup', onKey, { signal: ab.signal });

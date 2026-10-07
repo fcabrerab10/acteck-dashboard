@@ -83,6 +83,9 @@ export function etiquetasSinEncimar(cajas, margen = 4) {
 // desde (cos ang, sin ang)·300 a 240 de altura (escena/camara.js); el ancho visible es 2·zoom·aspecto y el alto 2·zoom.
 // Regresa { cx, cz, zoom } (zoom = media altura visible, con margen y dentro de [min, max]) o null si no hay puntos válidos.
 export const ELEV_CAM = Math.atan2(240, 300);
+// Límites del zoom (media altura visible). El máximo deja ver México completo aun en pantallas angostas (Vista Mapa, 3.90.x).
+export const ZOOM_MIN = 8, ZOOM_MAX = 180;
+export const zoomEnRango = (z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Number.isFinite(z) ? z : ZOOM_MAX));
 export function encuadre(puntos, { ang = Math.PI / 4, aspecto = 1.6, margen = 1.15, alto = 12, min = 8, max = 120 } = {}) {
   const ok = (puntos || []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
   if (!ok.length) return null;
@@ -149,6 +152,12 @@ export const aPx = (lon, lat) => ({ X: PX.a * lon + PX.b, Y: PX.c * lat + PX.d }
 export const PX_ORIGEN = aPx(ORIGEN.lon, ORIGEN.lat);
 export const pxAEscena = (X, Y) => ({ x: (X - PX_ORIGEN.X) * K, z: (Y - PX_ORIGEN.Y) * K });
 export const posDe = (c) => { const p = aPx(c.lon, c.lat); return pxAEscena(p.X, p.Y); };
+// Vista Mapa de México (etapa 2): las puntas del país (Tijuana, Mexicali, Juárez, Piedras Negras, Matamoros, Cancún,
+// Tapachula, Los Cabos) encuadradas según el giro y el lienzo, para ver el país completo con todas sus ciudades.
+export const EXTREMOS_MEXICO = [[32.53, -117.12], [32.72, -114.72], [31.75, -106.48], [28.7, -100.52], [25.87, -97.5], [21.16, -86.85], [14.9, -92.26], [22.89, -109.91]].map(([lat, lon]) => ({ lat, lon }));
+export function vistaMapa({ ang = Math.PI / 4, aspecto = 1.6 } = {}) {
+  return encuadre(EXTREMOS_MEXICO.map((c) => ({ ...posDe(c), r: 4 })), { ang, aspecto, margen: 1.05, min: ZOOM_MIN, max: ZOOM_MAX });
+}
 
 /** Color de cada cuenta (toldo y letrero de sus tiendas, sus vendedores, la leyenda). */
 export const COLOR_CUENTA = { ct: 0x0A84FF, cva: 0xFF9F0A, dicotech: 0x30D158, digitalife: 0xBF5AF2, pcel: 0xFF453A, ingram: 0x5AC8FA, pch: 0xFFD60A, loma: 0x64D2FF, guc: 0xFF6482, kabik: 0xA2845E, dcmayorista: 0x7D8BFF, exel: 0x30B0C7, techsmart: 0xAC8E68, arroba: 0xD4A5FF, ingram_retail: 0x5AC8FA, directo: 0x8E8E93 };

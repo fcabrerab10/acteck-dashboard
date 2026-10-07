@@ -3,7 +3,7 @@
 // clientes, los vendedores (del ERP y de los mayoristas), los camiones con las facturas y los contenedores navegando.
 // Nada de esto carga con el resto del dashboard: datos (useCiudadData) y three.js (import() de ./escena) se piden sólo aquí.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, Search, Crosshair } from 'lucide-react';
+import { Building2, Search, Home, Map as MapaIcono } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
@@ -101,7 +101,8 @@ export default function Ciudad({ onNavegar }) {
             </div>
           )}
         </div>
-        <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Crosshair size={14} />Acteck</button>
+        <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Home size={14} />Base</button>
+        <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Ver el mapa de México completo con todas las ciudades" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><MapaIcono size={14} />Mapa</button>
       </div>
       <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas</div>
       {/* Leyenda: color por cliente */}
