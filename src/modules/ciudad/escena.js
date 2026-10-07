@@ -1,7 +1,9 @@
 // Acteck Ciudad · escena 3D (three.js, low-poly cálido). Sólo se importa desde Ciudad.jsx dentro de un import()
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
-//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'ciudad'|'lejos'), oscuro }) → { destruir(), resize(), irA(tag), stats() }
+//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'ciudad'|'lejos'), onVista({ cx, cz, zoom }), oscuro }) → { destruir(), resize(), irA(tag), stats() }
 //   Arranca en la Vista Base (oficina + CEDIS + puerto de cerca); irA({ tipo: 'base' }) regresa a ella e irA({ tipo: 'mapa' }) encuadra México completo.
+//   irA({ tipo: 'punto', x, z }) mueve la cámara a ese punto sin cambiar el zoom (minimapa); onVista avisa el centro y zoom
+//   de la cámara (como mucho ~4 veces por segundo y sólo si cambió) para el marcador del minimapa.
 //   Viajar: tocar una ciudad (pin o manzanas) desde lejos acerca la cámara a su Vista Ciudad; irA({ ciudad }) también la usa.
 // Este archivo sólo orquesta: arma el contexto compartido (ctx) y llama a los módulos de escena/ en orden
 // (camara, luz-clima, terreno, edificios, vehiculos, gente, etiquetas, interaccion, detalle). El estilo vive en luz-clima.js.
@@ -17,7 +19,7 @@ import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE } from './modelo.js';
 
-export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   const P = noche ? PAL.noche : PAL.dia;
@@ -76,7 +78,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
 
   let destino = null; // ciudad a la que viajaste: con ella el botón ofrece «← Volver al mapa»
   const vistaDe = (ciudad) => vistaCiudad(distritoPos.get(ciudad), { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
-  function irA(tag) { if (tag?.tipo === 'mapa') { const m = vistaMapa({ ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) }); if (m) { vista.cxObj = m.cx; vista.czObj = m.cz; vista.zoomObj = m.zoom; } return; } if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) { const c = vistaDe(tag.ciudad); if (c) { destino = tag.ciudad; vista.cxObj = c.cx; vista.czObj = c.cz; vista.zoomObj = c.zoom; return; } p = distritoPos.get(tag.ciudad); } if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
+  function irA(tag) { if (tag?.tipo === 'punto') { if (Number.isFinite(tag.x) && Number.isFinite(tag.z)) { vista.cxObj = tag.x; vista.czObj = tag.z; } return; } if (tag?.tipo === 'mapa') { const m = vistaMapa({ ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) }); if (m) { vista.cxObj = m.cx; vista.czObj = m.cz; vista.zoomObj = m.zoom; } return; } if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) { const c = vistaDe(tag.ciudad); if (c) { destino = tag.ciudad; vista.cxObj = c.cx; vista.czObj = c.cz; vista.zoomObj = c.zoom; return; } p = distritoPos.get(tag.ciudad); } if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
 
   // Dibujar sólo cuando hace falta: con la pestaña del navegador oculta se pausa del todo; en calma (15 s sin gestos y la
   // cámara quieta) baja a ~10 fps; cualquier gesto la regresa a 60 al instante.
@@ -95,7 +97,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   }
   const onVisible = () => { if (!document.hidden && viva && pausada) { pausada = false; ultimo = performance.now(); requestAnimationFrame(frame); } };
   document.addEventListener('visibilitychange', onVisible);
-  let cuadros = 0, nivel = 'base';
+  let cuadros = 0, nivel = 'base', vistaAvisada = '';
   function paso(now) {
     // El primer timestamp de rAF puede ser ANTERIOR al performance.now() de la construcción (Chrome fija la hora al inicio del
     // cuadro): sin el tope en 0, `tiempo` quedaba negativo y caminar() pedía ruta[-1] → «reading '0'» (3.76.3).
@@ -104,6 +106,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     camara.mover(dt, inter.st);
     aplicarDetalle(detalle, vista.zoom);
     if (++cuadros % 10 === 0) { const nb = nivelVista(vista, vistaBase(), destino ? vistaDe(destino) : null); if (nb !== nivel) { nivel = nb; onNivel?.(nb); } } // cada 10 cuadros basta para el botón
+    if (onVista && cuadros % 15 === 0) { const v = { cx: Math.round(vista.cx), cz: Math.round(vista.cz), zoom: Math.round(vista.zoom) }; const k = `${v.cx}|${v.cz}|${v.zoom}`; if (k !== vistaAvisada) { vistaAvisada = k; onVista(v); } } // minimapa
     for (const f of animados) f(tiempo);
     actualizarInstancias(ctx);
     escalarEtiquetas(sprites, vista.zoom, cam, canvas.clientWidth, canvas.clientHeight);

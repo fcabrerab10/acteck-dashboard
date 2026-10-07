@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini } from './modelo';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
@@ -29,6 +29,7 @@ export default function Ciudad({ onNavegar }) {
   const [listo, setListo] = useState(false);
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
+  const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function Ciudad({ onNavegar }) {
           oscuro, clima, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
           onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
           onClick: (tag) => setSel(tag),
-          onNivel: setNivel,
+          onNivel: setNivel, onVista: setVistaCam,
         });
         setListo(true);
       } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }
@@ -66,6 +67,15 @@ export default function Ciudad({ onNavegar }) {
     if (onNavegar) onNavegar(null, tag.pagina, detail.extra); else window.dispatchEvent(new CustomEvent('acteck:navegar', { detail }));
   };
   const top = useMemo(() => ciudadesTop(modelo, 5), [modelo]); // acceso rápido: las 5 ciudades con más actividad
+  const plano = useMemo(() => planoMini(modelo?.distritos), [modelo]); // minimapa: México chico con un punto por ciudad
+  const marco = plano.marco(vistaCam);
+  const tocarPlano = (e) => {
+    // Tocar el minimapa: si cae junto a una ciudad viaja a su Vista Ciudad; si no, mueve la cámara a ese punto sin cambiar el zoom.
+    const r = e.currentTarget.getBoundingClientRect(); if (!r.width || !r.height) return;
+    const u = (e.clientX - r.left) * plano.ancho / r.width, v = (e.clientY - r.top) * plano.alto / r.height;
+    const ciudad = plano.cercana(u, v, 7);
+    escenaRef.current?.irA(ciudad ? { tipo: 'ciudad', ciudad } : { tipo: 'punto', ...plano.aEscena(u, v) });
+  };
   const resultados = useMemo(() => {
     if (!modelo || !busca.trim()) return [];
     const q = busca.trim().toUpperCase();
@@ -132,11 +142,21 @@ export default function Ciudad({ onNavegar }) {
         {modelo.distritos.slice(0, 3).map((d) => <div key={d.ciudad}>🏬 {capital(d.ciudad)}: {d.tiendas.filter((t) => t.vendio).length} de {d.tiendas.length} tiendas activas</div>)}
         {!modelo.camiones.length && !modelo.puerto.barcos.length && <div style={{ color: theme.textMuted }}>Sin movimiento registrado hoy.</div>}
       </div>
-      {/* KPIs */}
-      <div style={{ position: 'absolute', left: 14, bottom: 14, display: 'flex', gap: 8, zIndex: 3, flexWrap: 'wrap' }}>
+      {/* Minimapa + KPIs (columna abajo a la izquierda para que no se encimen) */}
+      <div style={{ position: 'absolute', left: 14, bottom: 14, right: 298, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, zIndex: 3, pointerEvents: 'none' }}>
+      <div style={{ ...card, padding: 4, pointerEvents: 'auto' }} title="Minimapa: toca una ciudad para viajar ahí o cualquier punto para mover la cámara">
+        <svg width={plano.ancho} height={plano.alto} viewBox={`0 0 ${plano.ancho} ${plano.alto}`} onClick={tocarPlano} style={{ display: 'block', cursor: 'pointer' }} role="img" aria-label="Minimapa de México">
+          <polygon points={plano.contorno} fill={oscuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)'} stroke={theme.border} strokeWidth={1} strokeLinejoin="round" />
+          {plano.puntos.map((p) => { const esTop = top.some((c) => c.ciudad === p.ciudad); return <circle key={p.ciudad} cx={p.u} cy={p.v} r={esTop ? 2.6 : 1.7} fill={esTop ? theme.accent : theme.textMuted}><title>{capital(p.ciudad)}</title></circle>; })}
+          {marco && <circle cx={marco.u} cy={marco.v} r={marco.r} fill="none" stroke={theme.red} strokeWidth={1.5} pointerEvents="none" />}
+          {marco && <circle cx={marco.u} cy={marco.v} r={1.5} fill={theme.red} pointerEvents="none" />}
+        </svg>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', pointerEvents: 'auto' }}>
         {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} en ruta`], ['Clientes finales', `${k.clientesFinales.toLocaleString('es-MX')} · 2 meses`], ['CEDIS', `${fmtM(modelo.cedis.valor)} · ${Math.round(modelo.cedis.dias)} d`], ['Oficina', `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reuniones`]].map(([l, v]) => (
           <div key={l} style={{ ...card, padding: '8px 12px', minWidth: 110 }}><div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</div></div>
         ))}
+      </div>
       </div>
       {/* hover */}
       {hover && !sel && (

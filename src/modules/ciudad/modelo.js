@@ -187,6 +187,23 @@ export function nivelVista(v, base, ciudad = null) {
   if (ciudad && Number.isFinite(ciudad.zoom) && enLaBase(v, ciudad)) return 'ciudad';
   return 'lejos';
 }
+// Minimapa (paso 2): plano chico norte arriba de ancho × alto px con el contorno EXTREMOS_MEXICO, un punto por ciudad y el
+// paso escena ↔ plano. aSvg(x, z) → { u, v }; aEscena(u, v) → { x, z }; marco(vista) = { u, v, r } del marcador de la cámara;
+// cercana(u, v, maxPx) = la ciudad más cerca del toque (o null si ninguna queda a menos de maxPx).
+export function planoMini(distritos = [], { ancho = 150, alto = 96, margen = 6 } = {}) {
+  const pts = EXTREMOS_MEXICO.map(posDe);
+  const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x)), z0 = Math.min(...pts.map((p) => p.z)), z1 = Math.max(...pts.map((p) => p.z));
+  const s = Math.min((ancho - 2 * margen) / (x1 - x0), (alto - 2 * margen) / (z1 - z0));
+  const ox = (ancho - (x1 - x0) * s) / 2, oz = (alto - (z1 - z0) * s) / 2;
+  const aSvg = (x, z) => ({ u: ox + (x - x0) * s, v: oz + (z - z0) * s });
+  const aEscena = (u, v) => ({ x: x0 + (u - ox) / s, z: z0 + (v - oz) / s });
+  const r1 = (n) => Math.round(n * 10) / 10;
+  const contorno = pts.map((p) => { const q = aSvg(p.x, p.z); return `${r1(q.u)},${r1(q.v)}`; }).join(' ');
+  const puntos = (distritos || []).filter((d) => d?.ciudad && Number.isFinite(d?.pos?.x) && Number.isFinite(d?.pos?.z)).map((d) => { const q = aSvg(d.pos.x, d.pos.z); return { ciudad: d.ciudad, u: r1(q.u), v: r1(q.v) }; });
+  const marco = (vista) => { if (!vista || !Number.isFinite(vista.cx) || !Number.isFinite(vista.cz)) return null; const q = aSvg(vista.cx, vista.cz); return { u: r1(Math.max(0, Math.min(ancho, q.u))), v: r1(Math.max(0, Math.min(alto, q.v))), r: r1(Math.max(3, Math.min(alto / 2, (Number.isFinite(vista.zoom) ? vista.zoom : 0) * s))) }; };
+  const cercana = (u, v, maxPx = 8) => { let mejor = null, dm = maxPx; for (const p of puntos) { const dd = Math.hypot(p.u - u, p.v - v); if (dd <= dm) { dm = dd; mejor = p.ciudad; } } return mejor; };
+  return { ancho, alto, contorno, puntos, aSvg, aEscena, marco, cercana };
+}
 export function vistaMapa({ ang = Math.PI / 4, aspecto = 1.6 } = {}) {
   return encuadre(EXTREMOS_MEXICO.map((c) => ({ ...posDe(c), r: 4 })), { ang, aspecto, margen: 1.05, min: ZOOM_MIN, max: ZOOM_MAX });
 }
