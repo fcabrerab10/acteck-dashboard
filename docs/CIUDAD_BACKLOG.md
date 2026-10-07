@@ -65,7 +65,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] El botón cambia según dónde estás («🗺 Mapa» cuando estás en la base, «🏠 Base» cuando estás lejos), en vez de los dos.
 - [ ] **Viajar**: tocar una ciudad en el mapa → transición animada (acercamiento) a la **Vista Ciudad** con sus manzanas y tiendas; botón «← Volver al mapa». Sólo se dibuja el nivel visible (mejora el rendimiento).
   - [x] Tocar el pin (o las manzanas) de una ciudad desde lejos acerca la cámara a su **Vista Ciudad** (`vistaCiudad()` encuadra el distrito, zoom ≤ `DETALLE.gente`); el botón pasa a «← Volver al mapa» (`nivelVista()` → 'base' | 'ciudad' | 'lejos'). El buscador también usa ese encuadre.
-  - [ ] Sólo dibujar el nivel visible: en la Vista Ciudad ocultar los distritos lejanos (y en el mapa las piezas finas que ya no se ven), medido con `?fps`.
+  - [ ] Sólo dibujar el nivel visible. Medido en el harness (2026-10-06, 3.90.16): Vista Ciudad 83 llamadas (el recorte por cámara ya deja fuera los distritos lejanos), Base 232, **Mapa 350**. El ahorro está en el mapa: de lejos (zoom > `DETALLE.pin`) dejar cada distrito como maqueta simple (piso + volúmenes juntos) y ocultar lo que no se distingue, medido con `?fps`.
 - [ ] Minimapa en una esquina con dónde estás y acceso rápido a Base, Mapa y las 5 ciudades con más actividad.
 - [ ] Guardar la última vista (nivel, ciudad, zoom) por usuario en `localStorage` con try/catch.
 
