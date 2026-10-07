@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
 import { terreno, carretera, plantarArboles } from './escena/terreno.js';
+import { plantarInstancias } from './escena/instancias.js';
 import { oficina, cedis, puerto, distritos } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
@@ -35,7 +36,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   const geos = new Map(); // cajas compartidas por medidas (antes cada caja creaba su BoxGeometry)
   const G = (w, h, d) => { const k = `${w}|${h}|${d}`; if (!geos.has(k)) geos.set(k, new THREE.BoxGeometry(w, h, d)); return geos.get(k); };
   const box = (w, h, d, color, extra) => { const m = new THREE.Mesh(G(w, h, d), M(color, extra)); m.castShadow = true; m.receiveShadow = true; m.position.y = h / 2; return m; };
-  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, G, box, add, interact, animados, sprites, arboles: [] };
+  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, G, box, add, interact, animados, sprites, arboles: [], instancias: [] };
 
   luces(ctx);
   scene.add(raiz);
@@ -50,6 +51,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
   const { distritoPos, rutas } = distritos(ctx, cedisPos);
   plantarArboles(ctx); // después de todos los arbol(): oficina, CEDIS y distritos
+  plantarInstancias(ctx); // tiendas y casitas: un InstancedMesh por pieza, tocables por instanceId
   const etA = etiqueta(ctx, 'acteck. · Guadalajara', '#0A84FF'); etA.position.set(ctx.esc.x + 1, 17, ctx.esc.z - 4); raiz.add(etA);
   const etP = etiqueta(ctx, 'Manzanillo', '#1D1D1F'); etP.position.set(puertoPos.x, 10, puertoPos.z + 2); raiz.add(etP);
   camiones(ctx, rutas);
@@ -79,7 +81,8 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, oscuro 
   function paso(now) {
     // El primer timestamp de rAF puede ser ANTERIOR al performance.now() de la construcción (Chrome fija la hora al inicio del
     // cuadro): sin el tope en 0, `tiempo` quedaba negativo y caminar() pedía ruta[-1] → «reading '0'» (3.76.3).
-    const dt = Math.max(0, Math.min(.11, (now - ultimo) / 1000)); // tope .11: en calma (10 fps) el tiempo sigue a velocidad real ultimo = now; tiempo += dt;
+    const dt = Math.max(0, Math.min(.11, (now - ultimo) / 1000)); // tope .11: en calma (10 fps) el tiempo sigue a velocidad real
+    ultimo = now; tiempo += dt; // 3.90.3: desde 3.76.9 esta línea había quedado dentro del comentario y nada se movía
     camara.mover(dt, inter.st);
     for (const f of animados) f(tiempo);
     escalarEtiquetas(sprites, vista.zoom);

@@ -1,6 +1,7 @@
 // Acteck Ciudad · interacción: arrastrar (el punto agarrado se queda bajo el cursor), girar (botón derecho o shift),
 // zoom con rueda hacia el cursor, pellizco en iPad, teclado y hover/clic sobre lo tocable.
 import * as THREE from 'three';
+import { tagDe } from './instancias.js';
 
 export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn }, { onClick }) {
   const st = { hov: null, drag: null, mouse: { x: -1, y: -1 }, inercia: { x: 0, z: 0 }, teclas: {}, ultimoInput: performance.now() };
@@ -23,7 +24,7 @@ export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn 
     const ahora = performance.now(); if (ultimoMov) { const dt = Math.max(1, ahora - ultimoMov.t); st.inercia = { x: (nx - ultimoMov.x) / dt * 16, z: (nz - ultimoMov.z) / dt * 16 }; } ultimoMov = { x: nx, z: nz, t: ahora };
     vista.cx = vista.cxObj = nx; vista.cz = vista.czObj = nz; colocarCam();
   });
-  const soltar = () => { const drag = st.drag; if (drag && !drag.m) onClick?.(st.hov ? st.hov.userData.tag : null); if (drag && drag.m && performance.now() - (ultimoMov?.t || 0) > 80) st.inercia = { x: 0, z: 0 }; st.drag = null; };
+  const soltar = () => { const drag = st.drag; if (drag && !drag.m) onClick?.(st.hov ? tagDe(st.hov, st.hovId) : null); if (drag && drag.m && performance.now() - (ultimoMov?.t || 0) > 80) st.inercia = { x: 0, z: 0 }; st.drag = null; };
   canvas.addEventListener('pointerup', soltar); canvas.addEventListener('pointercancel', () => { st.drag = null; });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   // Rueda: zoom hacia el cursor (el punto bajo el mouse no se mueve).
@@ -36,12 +37,12 @@ export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn 
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
 
   // Cada cuadro: qué objeto queda bajo el cursor, cursor de mano y posición en pantalla para el globo.
-  let hovPrev = null;
+  let hovPrev = null; const mtx = new THREE.Matrix4();
   function hover(interact, onHover) {
-    if (st.mouse.x >= 0 && !st.drag) { const r = canvas.getBoundingClientRect(); vec.set(((st.mouse.x - r.left) / r.width) * 2 - 1, -((st.mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false); st.hov = hs.length ? hs[0].object : null; }
-    const hov = st.hov;
-    if (hov !== hovPrev) { hovPrev = hov; canvas.style.cursor = hov ? 'pointer' : 'grab'; }
-    if (onHover) { if (hov) { const p = new THREE.Vector3(); hov.getWorldPosition(p); p.y += (hov.geometry?.parameters?.height || 1) + 1.2; const sp = p.project(cam); const r = canvas.getBoundingClientRect(); onHover(hov.userData.tag, { x: r.left + (sp.x + 1) / 2 * r.width, y: r.top + (1 - sp.y) / 2 * r.height }); } else onHover(null); }
+    if (st.mouse.x >= 0 && !st.drag) { const r = canvas.getBoundingClientRect(); vec.set(((st.mouse.x - r.left) / r.width) * 2 - 1, -((st.mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false); st.hov = hs.length ? hs[0].object : null; st.hovId = hs.length ? hs[0].instanceId : undefined; }
+    const hov = st.hov; const tag = hov ? tagDe(hov, st.hovId) : null;
+    if (tag !== hovPrev) { hovPrev = tag; canvas.style.cursor = tag ? 'pointer' : 'grab'; }
+    if (onHover) { if (tag) { const p = new THREE.Vector3(); if (hov.isInstancedMesh && st.hovId != null) { hov.getMatrixAt(st.hovId, mtx); p.setFromMatrixPosition(mtx).applyMatrix4(hov.matrixWorld); } else hov.getWorldPosition(p); p.y += (hov.geometry?.parameters?.height || 1) + 1.2; const sp = p.project(cam); const r = canvas.getBoundingClientRect(); onHover(tag, { x: r.left + (sp.x + 1) / 2 * r.width, y: r.top + (1 - sp.y) / 2 * r.height }); } else onHover(null); }
   }
   return { st, hover, quitar() { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); } };
 }

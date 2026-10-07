@@ -45,7 +45,7 @@ Principios que no se rompen en ninguna etapa:
 - [ ] Objetos repetidos con `InstancedMesh` (árboles, personas, tiendas, coches) y materiales compartidos; medir antes/después (llamadas de dibujo y fps) con un contador en el harness (`?fps`).
   - [x] Medidor en el harness (`ciudad-dev?fps`, ojo: el servidor quita el `.html` y la query) y `esc.stats({ dibujar })`; árboles a 4 `InstancedMesh`. Base harness de ejemplo: 1092 llamadas · 1110 geometrías · ~2.2 ms CPU/cuadro → 905 · 886 · ~1.8 ms.
   - [x] Geometrías compartidas en `box()` y ventanas (hoy cada caja crea su `BoxGeometry`: 886 geometrías): caché por medidas o caja unitaria escalada.
-  - [ ] Tiendas y casitas de clientes finales instanciadas (cuidando que la tienda siga tocable: raycast con `instanceId` → tag).
+  - [x] Tiendas y casitas de clientes finales instanciadas (cuidando que la tienda siga tocable: raycast con `instanceId` → tag).
   - [ ] Personas y coches/camiones instanciados (se mueven: actualizar `instanceMatrix` por cuadro).
 - [ ] Nivel de detalle por zoom: lejos sólo volúmenes y etiquetas de ciudad; cerca, gente, ventanas y letreros. Las etiquetas se ocultan por prioridad para no encimarse.
 - [ ] Liberar memoria al salir de la pestaña (geometrías, texturas, materiales) y comprobar que entrar y salir 5 veces no crece la memoria.
@@ -111,6 +111,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-06 19:37 · v3.90.3 · Tiendas y casitas de clientes finales como `InstancedMesh` por pieza+color (`escena/instancias.js`: `instanciar`/`plantarInstancias`, tocables por `instanceId` → `userData.tags`, `tagDe` en la interacción): harness 905 → 571 llamadas, 971 → 586 mallas. Arreglo: desde 3.76.9 `ultimo = now; tiempo += dt` había quedado dentro de un comentario y la gente, camiones y banderas no se movían.
 - 2026-10-06 12:05 · v3.87.1 · Caché de `BoxGeometry` por medidas (`ctx.G`) en `box()`, ventanas, puertas y vitrinas: 886 → 364 geometrías en el harness, sin cambios visibles ni errores.
 - 2026-10-06 10:48 · v3.86.1 · Medidor `?fps` en el harness + `stats()` en la escena; árboles con `InstancedMesh` y geometrías compartidas (−187 llamadas de dibujo, −224 geometrías; ya no son tocables).
 - 2026-10-05 15:20 · v3.76.8 · `escena.js` partido en `escena/` (camara, luz-clima, terreno, edificios, gente, vehiculos, etiquetas, interaccion) con un `ctx` compartido; `escena.js` sólo orquesta. Sin cambios visibles (harness día/noche sin errores). `preparar-harness.mjs` copia también `escena/`.

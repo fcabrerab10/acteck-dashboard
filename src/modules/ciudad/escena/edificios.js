@@ -6,6 +6,7 @@ import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
 import { etiqueta, fmtK, capital } from './etiquetas.js';
+import { instanciar } from './instancias.js';
 
 // Oficina + sala de juntas + equipo caminando entre oficina, sala y CEDIS.
 export function oficina(ctx) {
@@ -95,18 +96,21 @@ export function distritos(ctx, cedisPos) {
       const x = -ancho / 2 + 2.1 + c * 2.7, z = -largo / 2 + 2.1 + f * 2.9;
       const col = COLOR_CUENTA[t.cuenta] || ACC.gris;
       const tg = new THREE.Group(); tg.position.set(x, .3, z);
+      const tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, ciudad: d.ciudad };
       const cuerpo = box(2, 1.9, 2, P.tienda); cuerpo.position.y = .95; tg.add(cuerpo);
       const techo = box(2.3, .3, 2.3, P.tiendaTecho); techo.position.y = 2.05; tg.add(techo);
       const toldo = box(2.2, .16, .8, col); toldo.position.set(0, 1.5, 1.35); tg.add(toldo);
       const letrero = box(1.5, .34, .12, t.vendio ? col : P.ventana, { emissive: t.vendio ? col : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.6 : .3) : 0 }); letrero.position.set(0, 1.78, 1.06); tg.add(letrero);
       const vit = new THREE.Mesh(G(1.1, .75, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .75, 1.05); tg.add(vit);
       const puerta = new THREE.Mesh(G(.5, 1.1, .1), M(0x5A4636)); puerta.position.set(.6, .55, 1.05); tg.add(puerta);
+      for (const pz of [cuerpo, techo, toldo, letrero, vit, puerta]) instanciar(ctx, pz, tag); // un InstancedMesh por pieza+color (3.90.3)
       if (oscuro && t.vendio) { const l = new THREE.PointLight(col, .8, 6); l.position.set(0, 2.2, 1.8); tg.add(l); }
       if (t.cartera && t.cartera.vencido > 0) { const palo = box(.1, 3.2, .1, 0x6b6e76); palo.position.set(-1.1, 1.6, -1.1); tg.add(palo); const bandera = box(.9, .55, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .3 }); bandera.position.set(-.65, 2.9, -1.1); tg.add(bandera); animados.push((tt) => { bandera.rotation.y = Math.sin(tt * 3) * .25; }); }
       g.add(tg);
-      interact.push(...(() => { const arr = []; tg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, ciudad: d.ciudad }; arr.push(o); } }); return arr; })());
+      tg.traverse((o) => { if (o.isMesh && !o.userData.tag) { o.userData.tag = tag; interact.push(o); } }); // sólo palo y bandera siguen sueltos
     });
-    for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const techo = new THREE.Mesh(new THREE.ConeGeometry(.95, .7, 4), M(P.tiendaTecho)); techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); cg.traverse((o) => { if (o.isMesh) { o.userData.tag = { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad }; interact.push(o); } }); }
+    const tagCasa = d.casas ? { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad } : null;
+    for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const techo = new THREE.Mesh(ctx.conoCasa ||= new THREE.ConeGeometry(.95, .7, 4), M(P.tiendaTecho)); techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); for (const pz of [cuerpo, techo, v]) instanciar(ctx, pz, tagCasa); }
     // árboles y farol
     arbol(ctx, g, -ancho / 2 - 1.2, -largo / 2 - 1.2, .9); arbol(ctx, g, ancho / 2 + 1.2, largo / 2 + 1.2, 1); if (n > 6) arbol(ctx, g, ancho / 2 + 1.2, -largo / 2 - 1.2, .8);
     const farol = box(.12, 2.6, .12, 0x6b6e76); farol.position.set(ancho / 2 + .6, 1.3, largo / 2 + .6); g.add(farol); const foco = new THREE.Mesh(new THREE.SphereGeometry(.22, 8, 6), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.6 : .2 })); foco.position.set(ancho / 2 + .6, 2.7, largo / 2 + .6); g.add(foco);
