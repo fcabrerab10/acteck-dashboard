@@ -1,6 +1,6 @@
 // Acteck Ciudad · terreno: mar con oleaje, contorno real de México, sierras, carreteras curvas y árboles.
 import * as THREE from 'three';
-import { pxAEscena, esChico, juntarCapas } from '../modelo.js';
+import { pxAEscena, esChico, juntarCapas, formaArbol } from '../modelo.js';
 import MEXICO from '../../comercial/sellout/mexico-estados.json';
 
 export function terreno({ raiz, P, M, animados }) {
@@ -42,17 +42,23 @@ export function plantarCarreteras({ raiz, P, M, calles }) {
 // Árboles instanciados (3.86.1): arbol() sólo anota dónde va cada uno (relativo a su grupo) y plantarArboles(), al final
 // de la construcción, los dibuja todos con 4 InstancedMesh (tronco, copa de dos tonos y punta) con geometrías compartidas:
 // antes eran 3 mallas y 3 geometrías nuevas por árbol. No son tocables (antes heredaban el tag de su edificio al pasar).
-export function arbol(ctx, g, x, z, s = 1) { (ctx.arboles ||= []).push({ g, x, z, s, tono: Math.random() > .5 ? 1 : 0 }); }
+export function arbol(ctx, g, x, z, s = 1) { (ctx.arboles ||= []).push({ g, x, z, s, ...formaArbol(g.position.x + x, g.position.z + z) }); } // forma y tono por posición (3.90.71)
 export function plantarArboles({ raiz, P, M, arboles = [] }) {
   if (!arboles.length) return;
   raiz.updateMatrixWorld(true);
   const aRaiz = new THREE.Matrix4().copy(raiz.matrixWorld).invert();
   const geo = (g, y) => { g.translate(0, y, 0); return g; };
   const partes = [
-    { geo: geo(new THREE.CylinderGeometry(.14, .2, 1.1, 6), .55), mat: M(P.tronco), cual: () => true },
-    { geo: geo(new THREE.ConeGeometry(.95, 2, 7), 1.9), mat: M(P.arbol2), cual: (a) => a.tono === 0 },
-    { geo: geo(new THREE.ConeGeometry(.95, 2, 7), 1.9), mat: M(P.arbol), cual: (a) => a.tono === 1 },
-    { geo: geo(new THREE.ConeGeometry(.7, 1.4, 7), 2.8), mat: M(P.arbol), cual: () => true },
+    { geo: geo(new THREE.CylinderGeometry(.14, .2, 1.1, 6), .55), mat: M(P.tronco), cual: (a) => a.forma === 'pino' || a.forma === 'redondo' },
+    { geo: geo(new THREE.ConeGeometry(.95, 2, 7), 1.9), mat: M(P.arbol2), cual: (a) => a.forma === 'pino' && a.tono === 0 },
+    { geo: geo(new THREE.ConeGeometry(.95, 2, 7), 1.9), mat: M(P.arbol), cual: (a) => a.forma === 'pino' && a.tono === 1 },
+    { geo: geo(new THREE.ConeGeometry(.7, 1.4, 7), 2.8), mat: M(P.arbol), cual: (a) => a.forma === 'pino' },
+    // kit low-poly (3.90.71): redondos (copa facetada), palmas (tronco delgado + penacho) y arbustos
+    { geo: geo(new THREE.IcosahedronGeometry(.95, 0), 1.9), mat: M(P.arbol), cual: (a) => a.forma === 'redondo' && a.tono === 0 },
+    { geo: geo(new THREE.IcosahedronGeometry(.95, 0), 1.9), mat: M(P.arbol2), cual: (a) => a.forma === 'redondo' && a.tono === 1 },
+    { geo: geo(new THREE.CylinderGeometry(.08, .14, 2.6, 5), 1.3), mat: M(P.tronco), cual: (a) => a.forma === 'palma' },
+    { geo: geo(new THREE.ConeGeometry(1.1, .55, 7).rotateX(Math.PI), 2.6), mat: M(P.arbol), cual: (a) => a.forma === 'palma' },
+    { geo: geo(new THREE.DodecahedronGeometry(.6, 0), .45), mat: M(P.arbol2), cual: (a) => a.forma === 'arbusto' },
   ];
   const m = new THREE.Matrix4(), local = new THREE.Matrix4(), esc = new THREE.Matrix4();
   // árboles chicos (escala < 1, adorno de las manzanas) van aparte en la capa fina: de lejos sólo quedan los grandes (3.90.7)

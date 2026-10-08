@@ -810,6 +810,14 @@ export function camionesTemporada(m, hoy = new Date()) {
  * @param d  { perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes }
  * @returns  modelo para la escena
  */
+// Forma de árbol (3.90.71, kit low-poly): estable por posición (misma ciudad = mismos árboles en cada recarga).
+// ~45 % pino, 30 % redondo, 15 % palma, 10 % arbusto; `tono` 0/1 para alternar el verde.
+export function formaArbol(x = 0, z = 0) {
+  const r = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
+  const forma = r < .45 ? 'pino' : r < .75 ? 'redondo' : r < .9 ? 'palma' : 'arbusto';
+  return { forma, tono: Math.floor(r * 100) % 2 };
+}
+
 // Ventanas de la oficina (3.90.70, kit low-poly): cuántas se prenden según quién está (todos menos los de viaje), repartidas
 // parejo entre las `total` ventanas. Sin personas: el patrón de siempre (2 de cada 3).
 export function ventanasOficina(personas = [], total = 12) {
