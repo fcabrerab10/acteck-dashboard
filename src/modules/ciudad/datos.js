@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
-import { construirModelo, ponerPosEnPuerto, topSkus } from './modelo';
+import { construirModelo, ponerPosEnPuerto, topSkus, cuotasPorCuenta } from './modelo';
 import { venceEn, estaVencido } from '../comercial/pagosv3/estados'; // banco: mismas reglas de vencimiento que la bandeja de Pagos
 
 const STALE = 5 * 60 * 1000;
@@ -21,7 +21,7 @@ export function useCiudadData(enabled = true) {
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
       const seg = (p, nombre) => Promise.resolve(p).catch((e) => { console.warn(`[ciudad] ${nombre}:`, e?.message || e); return []; });
       const mes = hoy.getMonth() + 1; const mesPrev = mes === 1 ? 12 : mes - 1;
-      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku] = await Promise.all([
+      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku, cuotaMes, ventaMes] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,pos,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
@@ -51,8 +51,12 @@ export function useCiudadData(enabled = true) {
         seg(fetchAll('roadmap_sku', 'sku,marca'), 'marcas'),
         // Días de inventario por marca: demanda de los 3 meses cerrados del pivote de sell in (como Inventario en el celular).
         seg(fetchAll('v_sellin_global_sku_anio', 'sku,anio,piezas', (q) => q.in('anio', [...new Set([1, 2, 3].map((i) => new Date(anio, hoy.getMonth() - i, 1).getFullYear()))])), 'demanda por SKU'),
+        // Capa «Cuota» (3.90.49): cuota del mes por cliente ERP con su cuenta de sell out y la venta del mes, como Análisis.
+        seg(fetchAll('v_cuota_erp_mes', 'cliente_erp,cuenta_sellout,cuota_venta', (q) => q.eq('anio', anio).eq('mes', mes)), 'cuotas del mes'),
+        seg(fetchAll('mv_analisis_cliente_mes', 'cliente,fact_neta', (q) => q.eq('anio', anio).eq('mes', mes)), 'venta del mes por cliente'),
       ]);
       const modelo = construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
+      try { modelo.cuotas = cuotasPorCuenta(cuotaMes, ventaMes); } catch (e) { console.warn('[ciudad] cuotas', e); } // capa «Cuota»: falla sola
       // Números de PO de los contenedores dibujados (tarjeta del barco). Consulta chica; si falla, la tarjeta muestra sólo el conteo.
       const ids = [...(modelo.puerto?.barcos || []), ...(modelo.puerto?.tarimas || [])].map((b) => b.id).filter(Boolean);
       if (ids.length) ponerPosEnPuerto(modelo.puerto, await seg(fetchAll('embarques_compras', 'contenedor,po', (q) => q.in('contenedor', ids)), 'POs por contenedor'));

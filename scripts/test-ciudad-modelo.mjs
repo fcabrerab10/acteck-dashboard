@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -456,4 +456,18 @@ test('capas de información por ciudad (ventas y cartera)', () => {
   assert.equal(capaCiudades(m, 'inventario'), null); assert.equal(capaCiudades(null, 'ventas'), null);
   assert.equal(capaCiudades({}, 'ventas').porCiudad.size, 0);
   assert.ok(capaCiudades(construirModelo(d, hoy), 'cartera').porCiudad instanceof Map);
+});
+
+test('capa de cuota por ciudad', () => {
+  const q = cuotasPorCuenta([{ cliente_erp: 10, cuenta_sellout: 'a', cuota_venta: 100 }, { cliente_erp: 11, cuenta_sellout: 'a', cuota_venta: 100 }, { cliente_erp: 20, cuenta_sellout: 'b', cuota_venta: 400 }, { cliente_erp: 30, cuenta_sellout: null, cuota_venta: 50 }],
+    [{ cliente: '10', fact_neta: 80 }, { cliente: 11, fact_neta: 40 }, { cliente: 20, fact_neta: 100 }, { cliente: 99, fact_neta: 1e6 }]);
+  assert.deepEqual(q.get('a'), { venta: 120, cuota: 200 }); assert.deepEqual(q.get('b'), { venta: 100, cuota: 400 }); assert.equal(q.size, 2);
+  const m = { hoyIso: '2026-10-15', cuotas: q, distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a' }] }, { ciudad: 'MTY', tiendas: [{ cuenta: 'b' }] }, { ciudad: 'PUE', tiendas: [{ cuenta: 'z' }] }, { ciudad: 'CDMX', tiendas: [{ cuenta: 'a' }, { cuenta: 'b' }] }] };
+  const c = capaCiudades(m, 'cuota'); // ritmo al 15 de octubre = 15/31 ≈ 48 %
+  assert.deepEqual(['GDL', 'MTY', 'PUE', 'CDMX'].map((x) => c.porCiudad.get(x).tono), ['verde', 'rojo', 'gris', 'rojo']);
+  assert.equal(capaCiudades({ ...m, cuotas: new Map([['a', { venta: 85, cuota: 200 }]]) }, 'cuota').porCiudad.get('GDL').tono, 'ambar'); // 43 % vs ritmo 48 %
+  assert.equal(c.porCiudad.get('GDL').valor, 60); assert.equal(c.porCiudad.get('CDMX').valor, 37);
+  assert.equal(c.porCiudad.get('GDL').texto, '60 % de la cuota del mes (1 cuenta) · ritmo 48 %');
+  assert.equal(capaCiudades({ distritos: m.distritos }, 'cuota').porCiudad.get('GDL').tono, 'gris'); // sin datos de cuota: falla sola
+  assert.equal(cuotasPorCuenta(null, null).size, 0);
 });

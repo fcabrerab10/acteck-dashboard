@@ -255,13 +255,26 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
 
+// Cuota por cuenta (capa «Cuota», 3.90.49): filas de `v_cuota_erp_mes` del mes (cliente_erp, cuenta_sellout, cuota_venta) y
+// de `mv_analisis_cliente_mes` del mes (cliente = código ERP, fact_neta), las mismas de Análisis → Map(cuenta → { venta, cuota }).
+// La venta se suma sólo de los clientes ERP con cuota (su cuenta sale de la fila de cuota); el % se saca al agregar, nunca se suma.
+export function cuotasPorCuenta(cuotas = [], ventas = []) {
+  const cuentaDe = new Map(); const out = new Map();
+  for (const r of cuotas || []) {
+    if (!r?.cuenta_sellout) continue; const k = String(r.cliente_erp ?? ''); if (k) cuentaDe.set(k, r.cuenta_sellout);
+    const o = out.get(r.cuenta_sellout) || { venta: 0, cuota: 0 }; o.cuota += Number(r.cuota_venta) || 0; out.set(r.cuenta_sellout, o);
+  }
+  for (const v of ventas || []) { const c = cuentaDe.get(String(v?.cliente ?? '')); if (c) out.get(c).venta += Number(v.fact_neta) || 0; }
+  return out;
+}
+
 // Capas de información (etapa 4, paso 1, 3.90.47): color por ciudad para una capa, sin escalar por tamaño (se pinta la
 // tendencia o el estado, no quién es más grande). 'ventas' = sell out del mes vs mes anterior (mismas filas que las tiendas:
 // `importe` / `previo`); 'cartera' = cuentas con cartera vencida entre las tiendas de la ciudad (`kpis.cartera`). Devuelve
 // { capa, titulo, leyenda: [{ tono, texto }], porCiudad: Map(ciudad → { tono, valor, texto }) }. Capa desconocida → null.
 export const CAPA_TONOS = { verde: 0x34c759, ambar: 0xff9f0a, rojo: 0xff3b30, gris: 0x8e8e93 };
 export function capaCiudades(m, capa) {
-  if (!m || !['ventas', 'cartera'].includes(capa)) return null;
+  if (!m || !['ventas', 'cartera', 'cuota'].includes(capa)) return null;
   const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
   const porCiudad = new Map();
   if (capa === 'ventas') {
@@ -272,6 +285,18 @@ export function capaCiudades(m, capa) {
       porCiudad.set(d.ciudad, { tono, valor: pct, texto: `${pesos(act)}${pct == null ? '' : ` · ${pct > 0 ? '+' : ''}${pct} % vs mes anterior`}` });
     }
     return { capa, titulo: 'Sell out vs mes anterior', leyenda: [{ tono: 'verde', texto: 'Igual o arriba' }, { tono: 'ambar', texto: 'Hasta −20 %' }, { tono: 'rojo', texto: 'Más de −20 %' }, { tono: 'gris', texto: 'Sin venta' }], porCiudad };
+  }
+  if (capa === 'cuota') {
+    // Avance del mes de las cuentas con tiendas en la ciudad (venta ÷ cuota, sumadas) contra el ritmo esperado al día de hoy.
+    const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = m.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date();
+    const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+    for (const d of m.distritos || []) {
+      const cs = [...new Set((d.tiendas || []).map((t) => t.cuenta))].filter((c) => q.get(c)?.cuota > 0);
+      if (!cs.length) { porCiudad.set(d.ciudad, { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' }); continue; }
+      const venta = cs.reduce((s, c) => s + q.get(c).venta, 0), cuo = cs.reduce((s, c) => s + q.get(c).cuota, 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
+      porCiudad.set(d.ciudad, { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', valor: pct, texto: `${pct} % de la cuota del mes (${cs.length} cuenta${cs.length === 1 ? '' : 's'}) · ritmo ${Math.round(ritmo * 100)} %` });
+    }
+    return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
   const venc = new Map((m.kpis?.cartera || []).filter((c) => Number(c.vencido) > 0).map((c) => [c.cuenta, Number(c.vencido)]));
   for (const d of m.distritos || []) {

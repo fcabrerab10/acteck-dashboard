@@ -33,7 +33,7 @@ export default function Ciudad({ onNavegar }) {
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
   const [adentro, setAdentro] = useState(false); // false | 'cedis' (racks por marca) | 'oficina' (escritorios y sala, 3.90.38)
-  const [capa, setCapa] = useState(null); // capas de información (3.90.48): null | 'ventas' | 'cartera'
+  const [capa, setCapa] = useState(null); // capas de información (3.90.48): null | 'ventas' | 'cuota' | 'cartera'
   const [capaInfo, setCapaInfo] = useState(null); // lo que devolvió escena.capa(): título, leyenda y texto por ciudad
   const capaRef = useRef(null); capaRef.current = capa;
   const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
@@ -172,7 +172,7 @@ export default function Ciudad({ onNavegar }) {
       <div style={{ position: 'absolute', left: 14, bottom: 14, right: 298, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, zIndex: 3, pointerEvents: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', pointerEvents: 'auto' }}>
         <div style={{ ...card, padding: 3, display: 'flex', gap: 2 }} role="group" aria-label="Capas de información">
-          {[[null, 'Sin capa'], ['ventas', 'Ventas'], ['cartera', 'Cartera']].map(([c, l]) => <button key={l} type="button" onClick={() => ponerCapa(c)} aria-pressed={capa === c} title={c ? `Pintar las ciudades por ${l.toLowerCase()}` : 'Quitar la capa'} style={{ border: 0, borderRadius: 9, padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: capa === c ? theme.accent : 'transparent', color: capa === c ? '#fff' : theme.text }}>{l}</button>)}
+          {[[null, 'Sin capa'], ['ventas', 'Ventas'], ['cuota', 'Cuota'], ['cartera', 'Cartera']].map(([c, l]) => <button key={l} type="button" onClick={() => ponerCapa(c)} aria-pressed={capa === c} title={c ? `Pintar las ciudades por ${l.toLowerCase()}` : 'Quitar la capa'} style={{ border: 0, borderRadius: 9, padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: capa === c ? theme.accent : 'transparent', color: capa === c ? '#fff' : theme.text }}>{l}</button>)}
         </div>
         {capa && capaInfo && <div style={{ ...card, padding: '5px 9px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px 9px', fontSize: 11 }}>
           <b style={{ fontWeight: 700 }}>{capaInfo.titulo}</b>
