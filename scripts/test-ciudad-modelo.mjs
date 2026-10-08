@@ -414,3 +414,11 @@ test('burbujas de atención sobre edificios', () => {
   assert.deepEqual(burbujasAtencion(null), []); assert.deepEqual(burbujasAtencion({}, h), []);
   assert.ok(Array.isArray(burbujasAtencion(construirModelo(d, hoy), hoy)));
 });
+
+test('burbuja del CEDIS por pedidos de cliente detenidos', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  assert.deepEqual(burbujasAtencion({ ocDetenidas: 2 }, h).map((x) => [x.lugar, x.nivel, x.texto]), [['cedis', 'rojo', '2 pedidos de cliente detenidos']]);
+  assert.equal(burbujasAtencion({ ocDetenidas: 1 }, h)[0].texto, '1 pedido de cliente detenido');
+  assert.equal(construirModelo({ ...d, alertasOc: [{ tipo: 'oc_detenida' }, { tipo: 'oc_detenida' }] }, hoy).ocDetenidas, 2);
+  assert.equal(construirModelo(d, hoy).ocDetenidas, 0);
+});

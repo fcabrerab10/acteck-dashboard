@@ -334,6 +334,8 @@ export function burbujasAtencion(m, hoy = new Date()) {
   const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;
   if (tarde) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'rojo', texto: `${tarde} contenedor${tarde === 1 ? '' : 'es'} con ETA vencida` });
   else if (pronto) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'ambar', texto: `${pronto} contenedor${pronto === 1 ? ' llega' : 'es llegan'} en ≤ 3 días` });
+  const oc = Number(m.ocDetenidas) || 0; // alerta `oc_detenida` (pedidos de cliente detenidos) → CEDIS
+  if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: `${oc} pedido${oc === 1 ? '' : 's'} de cliente detenido${oc === 1 ? '' : 's'}` });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   const prox = (m.oficina?.agenda || []).find((r) => r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
   if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${prox.titulo} en ${prox.ini - ahora} min` });
@@ -640,5 +642,5 @@ export function construirModelo(d, hoy = new Date()) {
   const clientesFinales = distritos.reduce((s, x) => s + (x.clientesFinales?.n || 0), 0);
   const kpis = { clientesFinales, cartera: [...carteraPor.entries()].map(([k, c]) => ({ cuenta: k, ...c })), tiendas: distritos.reduce((s, x) => s + x.tiendas.length, 0), tiendasVendieron: distritos.reduce((s, x) => s + x.tiendas.filter((t) => t.vendio).length, 0), ciudades: distritos.length, barcos: puerto.barcos.length, camiones: camiones.length, vendedores: vendedoresRuta.length, enLinea: virtuales.length };
   const banco = resumenBanco(kpis.cartera, d.pagos, hoyIso, d.reglasPagos); const torre = resumenTorre(d.forecast, d.avisosForecast, hoyIso);
-  return { hoyIso, anio, mes, oficina, cedis, puerto, banco, torre, distritos, camiones, vendedoresRuta, kpis, origen: posDe(ORIGEN), puertoPos: posDe(CIUDADES.MANZANILLO) };
+  return { hoyIso, anio, mes, oficina, cedis, puerto, ocDetenidas: (d.alertasOc || []).length, banco, torre, distritos, camiones, vendedoresRuta, kpis, origen: posDe(ORIGEN), puertoPos: posDe(CIUDADES.MANZANILLO) };
 }

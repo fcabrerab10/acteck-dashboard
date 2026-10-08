@@ -107,7 +107,7 @@ function fotoPersona(p, ACC) {
 
 // Burbujas de atención (etapa 4, paso 2, 3.90.44): un globo con icono sobre el edificio que pide atención (reglas en
 // `burbujasAtencion`), rojo o ámbar, flotando. Tocarlo abre la tarjeta del edificio con el motivo como subtítulo.
-const BURBUJA = { banco: { titulo: 'Banco', pagina: 'pagos', y: 9 }, puerto: { titulo: 'Puerto de Manzanillo', pagina: 'inventarioGlobal', y: 11 }, oficina: { titulo: 'Oficina Acteck', pagina: 'agenda', y: 14 } };
+const BURBUJA = { banco: { titulo: 'Banco', pagina: 'pagos', y: 9 }, puerto: { titulo: 'Puerto de Manzanillo', pagina: 'inventarioGlobal', y: 11 }, oficina: { titulo: 'Oficina Acteck', pagina: 'agenda', y: 14 }, cedis: { titulo: 'CEDIS', pagina: 'ordenesCompra', y: 12.5 } };
 export function burbujas(ctx, posiciones) {
   const { add, modelo, animados } = ctx;
   burbujasAtencion(modelo, new Date()).forEach((b, i) => {
