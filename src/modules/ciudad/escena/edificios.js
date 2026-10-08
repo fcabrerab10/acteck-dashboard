@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -148,6 +148,29 @@ export function celebrar(ctx, basePos) {
     p.userData.detalle = 'fino'; raiz.add(p);
     animados.push((tt) => { const f = (tt / 3 + i * .37) % 1; p.position.set(pos.x, 3 + (1 - f) * 2.5, pos.z); p.rotation.y = tt * .8 + i; p.material.opacity = f > .8 ? (1 - f) / .2 : 1; });
   });
+}
+
+// Calendario comercial en la escena (etapa 6, 3.90.66): letrero flotante con la cuenta regresiva del cierre de mes sobre la
+// base, banderín «BUEN FIN» sobre cada ciudad con tiendas que venden (máx. 8, de cerca) y una guirnalda de foquitos alrededor de la base
+// en temporada navideña. La fecha es la de la barra de tiempo (`modelo.momento`) o hoy. Sin tags: sólo decoración.
+export function calendario(ctx, basePos) {
+  const { raiz, modelo, animados } = ctx; const f = modelo?.momento?.fecha ? new Date(modelo.momento.fecha) : new Date();
+  const ev = new Map(eventosCalendario(f).map((e) => [e.id, e]));
+  const flota = (sp, x, y, z, fase) => { sp.position.set(x, y, z); raiz.add(sp); animados.push((t) => { sp.position.y = y + Math.sin(t * 1.4 + fase) * .3; }); };
+  const cierre = ev.get('cierre');
+  if (cierre && basePos) { const sp = etiqueta(ctx, `${cierre.icono} ${cierre.texto}`, cierre.nivel ? '#FF9F0A' : '#1D1D1F'); sp.userData.prioridad = 5; flota(sp, basePos.x, 19, basePos.z + 2, 0); }
+  if (ev.has('buenfin')) (modelo.distritos || []).filter((d) => d.tiendas.some((t) => t.vendio && !t.virtual)).slice(0, 8).forEach((d, i) => { // un banderín por ciudad con tiendas que venden
+    const ps = d.tiendas.map((t) => ctx.tiendaPos?.get(`${t.cuenta}|${t.sucursal}`)).filter(Boolean); if (!ps.length) return;
+    const sp = etiqueta(ctx, '🏷️ BUEN FIN', '#FF453A'); sp.userData.minZoom = 60; sp.userData.prioridad = 1.5;
+    flota(sp, ps.reduce((a, p) => a + p.x, 0) / ps.length, 8.5, ps.reduce((a, p) => a + p.z, 0) / ps.length, i);
+  });
+  if (ev.has('navidad') && basePos) {
+    const n = 90, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), tmp = new THREE.Color(), cs = [0xFF453A, 0x30D158, 0xFFD60A, 0x0A84FF];
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; pos.set([basePos.x + Math.cos(a) * 9, 1.2 + Math.sin(i * 1.7) * .2, basePos.z + Math.sin(a) * 7.5], i * 3); tmp.set(cs[i % cs.length]); col.set([tmp.r, tmp.g, tmp.b], i * 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const p = new THREE.Points(g, new THREE.PointsMaterial({ size: 5, sizeAttenuation: false, vertexColors: true, transparent: true, depthWrite: false })); p.userData.detalle = 'fino'; raiz.add(p);
+    animados.push((t) => { p.material.opacity = .65 + Math.sin(t * 3) * .35; });
+  }
 }
 
 export function pensar(ctx) {

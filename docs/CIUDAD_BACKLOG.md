@@ -147,7 +147,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.64) Barra en `Ciudad.jsx`: `datos.js` guarda los crudos en el modelo; al elegir un momento, `construirModelo(datosEnFecha(crudos, fecha), fecha)` (+ pagosHechos/ultimaSync; cuotas sólo si es el mismo mes) y la escena se rearma; aviso «Viendo <momento> · aproximado: …» y botón «Volver a hoy».
 - [ ] **Eventos del calendario comercial** (como Animal Crossing): decoración y avisos según la fecha real — cierre de mes (cuenta regresiva en la base), Buen Fin, regreso a clases, Navidad — con su efecto en la ciudad (más camiones, letreros de promoción) usando sólo fechas y datos existentes.
   - [x] (3.90.65) `eventosCalendario(hoy)` puro y probado (cierre de mes con cuenta regresiva los últimos 7 días, Buen Fin = viernes–lunes del 3.er lunes de noviembre con aviso 14 días antes, regreso a clases 15 jul–31 ago, Navidad 1–25 dic) y chips arriba de «Hoy en Acteck» (siguen la barra de tiempo).
-  - [ ] En la escena: cuenta regresiva del cierre sobre la base (letrero), letreros de promoción en tiendas durante Buen Fin, luces navideñas en diciembre; harness `?fecha=AAAA-MM-DD` para verlos.
+  - [x] (3.90.66) En la escena (`escena/edificios.js#calendario`): letrero flotante «⏳ Cierre de mes en N días» sobre la oficina, banderín «🏷️ BUEN FIN» sobre cada ciudad con tiendas que venden (máx. 8, de cerca) y guirnalda de foquitos alrededor de la oficina en temporada navideña; sigue la barra de tiempo. Harness `?fecha=AAAA-MM-DD`.
   - [ ] Efecto con datos: en Buen Fin / cierre, resaltar camiones de facturas de esos días (ya vienen en `m.camiones`) — sin inventar volumen.
 
 ### Etapa 7 · Arte y sensación de juego
@@ -178,6 +178,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 00:43 · v3.90.66 · Calendario comercial, paso 2: letrero del cierre de mes sobre la oficina, banderines de Buen Fin por ciudad y foquitos navideños en la escena (harness `?fecha=`).
 - 2026-10-08 00:36 · v3.90.65 · Calendario comercial, paso 1: `eventosCalendario()` (cierre de mes, Buen Fin, regreso a clases, Navidad) y sus chips en el panel «Hoy en Acteck».
 - 2026-10-08 00:33 · v3.90.64 · Barra de tiempo en la UI (junto a las capas): Hoy / Ayer / Hace 7 días / Inicio de mes rearma la ciudad con `datosEnFecha(modelo.crudos, fecha)`; aviso «Viendo … · aproximado» arriba al centro con «Volver a hoy». Harness `?momento=ayer|semana|mes`.
 - 2026-10-08 00:32 · v3.90.63 · Barra de tiempo, paso 1: `momentosTiempo()` y `datosEnFecha()` puros y probados (reconstruyen facturas, envíos, contenedores y ventas mensuales a Ayer / Hace 7 días / Inicio de mes); falta la barra en la UI.

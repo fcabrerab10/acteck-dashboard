@@ -33,6 +33,8 @@ if (new URLSearchParams(location.search).has('atracar')) { [-2, 0, 3].forEach((d
 // ?cuota (3.90.61): cuotas de ejemplo (verde, ámbar, rojo por turnos) para ver los banderines de cuota en las manzanas.
 if (new URLSearchParams(location.search).has('cuota') && !(modelo.cuotas instanceof Map && modelo.cuotas.size)) { modelo.cuotas = new Map(); [...new Set(modelo.distritos.flatMap((d) => d.tiendas.map((t) => t.cuenta)))].forEach((c, i) => modelo.cuotas.set(c, { venta: [90, 30, 5][i % 3], cuota: 100 })); }
 // ?fiesta (3.90.62): cuota del mes cruzada (fuegos artificiales sobre la base) y la primera tienda sin venta el mes pasado (confeti).
+// ?fecha=AAAA-MM-DD (calendario comercial, 3.90.66): la escena decora como en esa fecha (cierre de mes, Buen Fin, Navidad).
+{ const fq = new URLSearchParams(location.search).get('fecha'); if (fq) { modelo.momento = { id: 'fecha', texto: fq, fecha: new Date(`${fq}T12:00:00`) }; } }
 if (new URLSearchParams(location.search).has('fiesta')) { modelo.cuotas = new Map([['x', { venta: 120, cuota: 100 }]]); const t = modelo.distritos.flatMap((d) => d.tiendas).find((x) => !x.reparto); if (t) { t.vendioMes = true; t.previo = 0; } }
 window.modelo = modelo; console.log('modelo', modeloReal ? 'REAL' : 'ejemplo', modelo.kpis, modelo.distritos.length);
 const tip = document.getElementById('tip');
