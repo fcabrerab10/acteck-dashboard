@@ -47,7 +47,7 @@ export function oficina(ctx) {
 // de la sala de juntas con las reuniones de hoy. Nace oculto; `ctx.oficinaAdentro(true)` oculta el cascarón y lo muestra.
 function interiorOficina(ctx, g, casco, ofiPos) {
   const { box, add, raiz, modelo } = ctx;
-  const dentro = []; const etiquetas = [];
+  const dentro = []; const etiquetas = []; const fotos = [];
   const piso = box(8.6, .06, 6.6, 0xE4DED2); piso.position.set(0, .53, 0); g.add(piso); dentro.push(piso);
   const gente = (modelo.oficina?.personas || []);
   acomodoEscritorios(gente.length, { ancho: 6, largo: 4.4, cols: 4 }).forEach((pos, i) => {
@@ -58,7 +58,8 @@ function interiorOficina(ctx, g, casco, ofiPos) {
     const silla = box(.5, .5, .5, p.actividad ? ACC.verde : p.pendientes ? ACC.naranja : ACC.gris); silla.position.set(0, .25, .65); eg.add(silla);
     add(eg, { tipo: 'persona', titulo: p.nombre, sub: p.actividad ? `pendiente principal: ${p.actividad}` : `${p.pendientes} pendiente${p.pendientes === 1 ? '' : 's'} hoy · ${p.hechas} hecha${p.hechas === 1 ? '' : 's'}`, pagina: 'agenda', persona: p });
     eg.traverse((o) => { if (o.isMesh) dentro.push(o); });
-    const et = etiqueta(ctx, String(p.nombre || '').split(' ')[0], '#1D1D1F'); et.position.set(eg.position.x, 2.4, eg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);
+    const foto = fotoPersona(p, ACC); foto.position.set(eg.position.x, 2.05, eg.position.z - .25); foto.visible = false; raiz.add(foto); fotos.push(foto); // 3.90.39: foto (o inicial) sobre el escritorio
+    const et = etiqueta(ctx, String(p.nombre || '').split(' ')[0], '#1D1D1F'); et.position.set(eg.position.x, 3.4, eg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);
   });
   // sala de juntas: mesa con sillas bajo el techo del anexo (que se oculta con el cascarón)
   const ag = modelo.oficina?.agenda || []; const enCurso = ag.some((r) => r.estado === 'en curso');
@@ -75,9 +76,29 @@ function interiorOficina(ctx, g, casco, ofiPos) {
     casco.visible = !on; for (const o of mallasCasco) o.visible = !on;
     for (const o of dentro) o.visible = on;
     for (const et of etiquetas) et.userData.minZoom = on ? 40 : -1;
+    for (const f of fotos) { f.visible = on; if (on) f.userData.cargar?.(); }
   };
   poner(false);
   ctx.oficinaAdentro = poner;
+}
+
+// Foto de la persona (3.90.39): círculo con su inicial (color de su rol) y, la primera vez que se entra a la oficina, su
+// `avatar_url` encima. Si la imagen no carga (CORS, 404) se queda la inicial.
+function fotoPersona(p, ACC) {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g2 = c.getContext('2d');
+  const col = { direccion: ACC.azul, comercial: ACC.morado, finanzas: ACC.verde, almacen: ACC.naranja }[p.rol] || ACC.gris;
+  g2.fillStyle = `#${new THREE.Color(col).getHexString()}`; g2.beginPath(); g2.arc(64, 64, 60, 0, Math.PI * 2); g2.fill();
+  g2.fillStyle = '#FFFFFF'; g2.font = 'bold 64px -apple-system, system-ui, sans-serif'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(String(p.nombre || '?').trim().charAt(0).toUpperCase() || '?', 64, 68);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true })); sp.scale.set(1, 1, 1);
+  let pedida = false;
+  sp.userData.cargar = () => {
+    if (pedida || !p.avatar) return; pedida = true;
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => { try { g2.save(); g2.beginPath(); g2.arc(64, 64, 60, 0, Math.PI * 2); g2.clip(); const k = Math.max(128 / img.width, 128 / img.height); g2.drawImage(img, 64 - img.width * k / 2, 64 - img.height * k / 2, img.width * k, img.height * k); g2.restore(); tex.needsUpdate = true; } catch { /* lienzo contaminado: se queda la inicial */ } };
+    img.src = p.avatar;
+  };
+  return sp;
 }
 
 // Banco/tesorería (3.90.28): edificio de columnas al norte del estacionamiento; bandera roja si hay pagos vencidos o cartera vencida.
