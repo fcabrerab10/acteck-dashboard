@@ -1,6 +1,6 @@
 // Acteck Ciudad · escena 3D (three.js, low-poly cálido). Sólo se importa desde Ciudad.jsx dentro de un import()
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
-//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'ciudad'|'lejos'), onVista({ cx, cz, zoom }), oscuro }) → { destruir(), resize(), irA(tag), stats() }
+//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'ciudad'|'lejos'), onVista({ cx, cz, zoom }), onSeleccion({x,y}|null) = dónde está en pantalla lo tocado, oscuro }) → { destruir(), resize(), irA(tag), stats() }
 //   Arranca en la Vista Base (oficina + CEDIS + puerto de cerca); irA({ tipo: 'base' }) regresa a ella e irA({ tipo: 'mapa' }) encuadra México completo.
 //   irA({ tipo: 'punto', x, z }) mueve la cámara a ese punto sin cambiar el zoom (minimapa); onVista avisa el centro y zoom
 //   de la cámara (como mucho ~4 veces por segundo y sólo si cambió) para el marcador del minimapa.
@@ -20,7 +20,7 @@ import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE } from './modelo.js';
 
-export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, vistaInicial, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, vistaInicial, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   const P = noche ? PAL.noche : PAL.dia;
@@ -98,7 +98,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   }
   const onVisible = () => { if (!document.hidden && viva && pausada) { pausada = false; ultimo = performance.now(); requestAnimationFrame(frame); } };
   document.addEventListener('visibilitychange', onVisible);
-  let cuadros = 0, nivel = 'base', vistaAvisada = '';
+  let cuadros = 0, nivel = 'base', vistaAvisada = '', selAvisada = '';
   function paso(now) {
     // El primer timestamp de rAF puede ser ANTERIOR al performance.now() de la construcción (Chrome fija la hora al inicio del
     // cuadro): sin el tope en 0, `tiempo` quedaba negativo y caminar() pedía ruta[-1] → «reading '0'» (3.76.3).
@@ -112,6 +112,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     actualizarInstancias(ctx);
     escalarEtiquetas(sprites, vista.zoom, cam, canvas.clientWidth, canvas.clientHeight);
     inter.hover(interact, onHover);
+    if (onSeleccion && inter.st.sel !== undefined && cuadros % 3 === 0) { const p = inter.posSeleccion(); const k = p ? `${Math.round(p.x)}|${Math.round(p.y)}` : ''; if (k !== selAvisada) { selAvisada = k; onSeleccion(p); } } // la tarjeta sigue al edificio
     R.render(scene, cam);
     med.cuadros++; if (now - med.desde >= 1000) { med.fps = Math.round(med.cuadros * 1000 / (now - med.desde)); med.cuadros = 0; med.desde = now; }
   }

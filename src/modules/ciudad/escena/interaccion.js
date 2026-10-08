@@ -28,7 +28,7 @@ export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn 
     const ahora = performance.now(); if (ultimoMov) { const dt = Math.max(1, ahora - ultimoMov.t); st.inercia = { x: (nx - ultimoMov.x) / dt * 16, z: (nz - ultimoMov.z) / dt * 16 }; } ultimoMov = { x: nx, z: nz, t: ahora };
     vista.cx = vista.cxObj = nx; vista.cz = vista.czObj = nz; colocarCam();
   });
-  const soltar = () => { const drag = st.drag; if (drag && !drag.m) onClick?.(st.hov ? tagDe(st.hov, st.hovId) : null); if (drag && drag.m && performance.now() - (ultimoMov?.t || 0) > 80) st.inercia = { x: 0, z: 0 }; st.drag = null; };
+  const soltar = () => { const drag = st.drag; if (drag && !drag.m) st.sel = st.hov ? { obj: st.hov, id: st.hovId } : null; /* la tarjeta sigue a lo tocado (3.90.27) */ if (drag && !drag.m) onClick?.(st.hov ? tagDe(st.hov, st.hovId) : null); if (drag && drag.m && performance.now() - (ultimoMov?.t || 0) > 80) st.inercia = { x: 0, z: 0 }; st.drag = null; };
   on('pointerup', soltar); on('pointercancel', () => { st.drag = null; });
   on('contextmenu', (e) => e.preventDefault());
   // Rueda: zoom hacia el cursor (el punto bajo el mouse no se mueve).
@@ -42,11 +42,15 @@ export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn 
 
   // Cada cuadro: qué objeto queda bajo el cursor, cursor de mano y posición en pantalla para el globo.
   let hovPrev = null; const mtx = new THREE.Matrix4();
+  // Posición en pantalla (px del documento) encima de un objeto o de una de sus instancias; null si queda fuera del lienzo.
+  function posPantalla(obj, id, dentro = false) { const p = new THREE.Vector3(); if (obj.isInstancedMesh && id != null) { obj.getMatrixAt(id, mtx); p.setFromMatrixPosition(mtx).applyMatrix4(obj.matrixWorld); } else obj.getWorldPosition(p); p.y += (obj.geometry?.parameters?.height || 1) + 1.2; const sp = p.project(cam); if (dentro && (Math.abs(sp.x) > 1 || Math.abs(sp.y) > 1)) return null; const r = canvas.getBoundingClientRect(); return { x: r.left + (sp.x + 1) / 2 * r.width, y: r.top + (1 - sp.y) / 2 * r.height }; }
   function hover(interact, onHover) {
     if (st.mouse.x >= 0 && !st.drag) { const r = canvas.getBoundingClientRect(); vec.set(((st.mouse.x - r.left) / r.width) * 2 - 1, -((st.mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false).filter((h) => h.object.visible); /* lo oculto por zoom no se toca */ st.hov = hs.length ? hs[0].object : null; st.hovId = hs.length ? hs[0].instanceId : undefined; }
     const hov = st.hov; const tag = hov ? tagDe(hov, st.hovId) : null;
     if (tag !== hovPrev) { hovPrev = tag; canvas.style.cursor = tag ? 'pointer' : 'grab'; }
-    if (onHover) { if (tag) { const p = new THREE.Vector3(); if (hov.isInstancedMesh && st.hovId != null) { hov.getMatrixAt(st.hovId, mtx); p.setFromMatrixPosition(mtx).applyMatrix4(hov.matrixWorld); } else hov.getWorldPosition(p); p.y += (hov.geometry?.parameters?.height || 1) + 1.2; const sp = p.project(cam); const r = canvas.getBoundingClientRect(); onHover(tag, { x: r.left + (sp.x + 1) / 2 * r.width, y: r.top + (1 - sp.y) / 2 * r.height }); } else onHover(null); }
+    if (onHover) { if (tag) onHover(tag, posPantalla(hov, st.hovId)); else onHover(null); }
   }
-  return { st, hover, quitar() { ab.abort(); } };
+  // Dónde está ahora en pantalla lo último que se tocó (para que la tarjeta lo siga); null si no hay o salió del lienzo.
+  const posSeleccion = () => (st.sel?.obj?.visible !== false && st.sel ? posPantalla(st.sel.obj, st.sel.id, true) : null);
+  return { st, hover, posSeleccion, quitar() { ab.abort(); } };
 }

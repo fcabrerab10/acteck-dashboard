@@ -24,7 +24,7 @@ export default function Ciudad({ onNavegar }) {
   const canvasRef = useRef(null);
   const escenaRef = useRef(null);
   const [hover, setHover] = useState(null);
-  const [sel, setSel] = useState(null); // { tag, pos } · pos = dónde se tocó (la tarjeta flota ahí)
+  const [sel, setSel] = useState(null); // { tag, pos } · pos = dónde está en pantalla lo tocado (la tarjeta flota ahí y lo sigue)
   const hoverPos = useRef(null);
   const [busca, setBusca] = useState('');
   const [listo, setListo] = useState(false);
@@ -35,7 +35,7 @@ export default function Ciudad({ onNavegar }) {
   const clave = claveVista(perfil?.user_id);
   const ultimaVista = useRef({ clave: null, v: null }); // se relee si cambia el usuario (el perfil llega después del primer render)
   if (ultimaVista.current.clave !== clave) { let v = null; try { v = leerVista(window.localStorage.getItem(clave)); } catch { v = null; } ultimaVista.current = { clave, v }; }
-  const alMoverVista = (v) => { setVistaCam(v); setSel((s) => (s?.pos ? { ...s, pos: null } : s)); /* la tarjeta flota junto al edificio; si la cámara se mueve se acomoda arriba a la derecha */ ultimaVista.current = { clave, v }; try { window.localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento: sólo no se recuerda */ } };
+  const alMoverVista = (v) => { setVistaCam(v); ultimaVista.current = { clave, v }; try { window.localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento: sólo no se recuerda */ } };
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
   useEffect(() => {
@@ -58,6 +58,7 @@ export default function Ciudad({ onNavegar }) {
           oscuro, clima, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
           onHover: (tag, pos) => { hoverPos.current = tag ? pos : null; setHover(tag ? { tag, pos } : null); },
           onClick: (tag) => setSel(tag ? { tag, pos: hoverPos.current } : null),
+          onSeleccion: (pos) => setSel((s) => (s ? { ...s, pos } : s)), // la tarjeta sigue al edificio; fuera de cuadro se acomoda arriba a la derecha
           onNivel: setNivel, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
         });
         setListo(true);
