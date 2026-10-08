@@ -281,6 +281,24 @@ export function acomodoEscritorios(n, { ancho = 7, largo = 5.2, cols = 4, max = 
   return Array.from({ length: k }, (_, i) => ({ x: c === 1 ? 0 : -ancho / 2 + (i % c) * (ancho / (c - 1)), z: filas === 1 ? 0 : -largo / 2 + Math.floor(i / c) * (largo / (filas - 1)) }));
 }
 
+// Presencia en la oficina (3.90.40, como Gather): pone `presencia` = { estado: 'viaje' | 'reunion' | 'disponible', titulo } en cada
+// persona. Viaje = reunión tipo 'viaje' vigente hoy (fecha … fecha_fin); reunión = una que está en curso ahora. Cuenta si la persona
+// es asistente (`asistentes[].user_id`) o quien la creó (`creado_por`). El viaje gana a la reunión.
+export function presenciaPersonas(personas = [], reuniones = [], viajes = [], hoy = new Date()) {
+  const dia = (x) => { const t = new Date(x); return Number.isNaN(t.getTime()) ? null : `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
+  const hoyD = dia(hoy), ahora = hoy.getTime();
+  const de = (r, id) => r && id && (r.creado_por === id || (Array.isArray(r.asistentes) && r.asistentes.some((a) => a && (a.user_id === id || a === id))));
+  const todas = [...(reuniones || []), ...(viajes || [])].filter(Boolean);
+  const vistos = new Set(); const unicas = todas.filter((r) => { const k = r.id || `${r.titulo}|${r.fecha}`; if (vistos.has(k)) return false; vistos.add(k); return true; });
+  const viajeHoy = unicas.filter((r) => r.tipo === 'viaje' && dia(r.fecha) && dia(r.fecha) <= hoyD && (dia(r.fecha_fin || r.fecha) || dia(r.fecha)) >= hoyD);
+  const enCurso = unicas.filter((r) => { if (r.tipo === 'viaje') return false; const t = new Date(r.fecha).getTime(); return !Number.isNaN(t) && t <= ahora && ahora < t + (Number(r.duracion_min) || 60) * 60000; });
+  for (const p of personas || []) {
+    const v = viajeHoy.find((r) => de(r, p.id)); const r = !v && enCurso.find((x) => de(x, p.id));
+    p.presencia = v ? { estado: 'viaje', titulo: v.titulo || 'Viaje' } : r ? { estado: 'reunion', titulo: r.titulo || 'Reunión' } : { estado: 'disponible', titulo: null };
+  }
+  return personas;
+}
+
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
   const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
   const por = new Map();
@@ -389,6 +407,7 @@ export function tarjetaDe(tag, modelo) {
     }
   } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {
     const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];
+    const pr = p.presencia; if (pr) t.numeros.unshift(['Ahora', pr.estado === 'viaje' ? `De viaje · ${pr.titulo}` : pr.estado === 'reunion' ? `En reunión · ${pr.titulo}` : 'Disponible']);
     t.estado = p.actividad ? 'verde' : p.pendientes > p.hechas ? 'ambar' : 'verde';
   } else if (tag.tipo === 'barco' && tag.barco) {
     const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', b.eta || '—'], ['Llega a CEDIS', b.arribo || '—']];
@@ -462,6 +481,7 @@ export function construirModelo(d, hoy = new Date()) {
   const reuniones = (d.reunionesHoy || []).filter((r) => r.tipo !== 'viaje');
   const ahoraMin = hoy.getHours() * 60 + hoy.getMinutes();
   const reunionEnCurso = reuniones.find((r) => { const t = new Date(r.fecha); const ini = t.getHours() * 60 + t.getMinutes(); return ini <= ahoraMin && ahoraMin < ini + (N(r.duracion_min) || 60); }) || null;
+  presenciaPersonas(personas, d.reunionesHoy, d.viajesHoy, hoy); // 3.90.40: en reunión / de viaje / disponible (como Gather)
   const oficina = { personas, genericos: 3, reuniones: reuniones.length, reunionEnCurso: reunionEnCurso ? { titulo: reunionEnCurso.titulo, cliente_key: reunionEnCurso.cliente_key } : null, agenda: reunionesDelDia(reuniones, hoy) };
 
   // ── CEDIS ──

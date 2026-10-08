@@ -33,10 +33,14 @@ export function oficina(ctx) {
   // gente: equipo con nombre + genéricos, caminando entre oficina, sala y CEDIS
   const rutasOf = [[0, 5.5], [-6, 1.2], [3, 7], [9, 2], [12, -3], [0, 5.5]];
   const todos = [...modelo.oficina.personas.map((p) => ({ ...p, generico: false })), ...Array.from({ length: modelo.oficina.genericos }, (_, i) => ({ nombre: ['Ventas', 'Almacén', 'Administración'][i % 3], generico: true, rol: ['comercial', 'almacen', 'finanzas'][i % 3] }))];
+  // presencia (3.90.40, como Gather): de viaje no aparece en la base; en reunión se queda de pie junto a la sala de juntas
+  let enSala = 0;
   todos.forEach((p, i) => {
+    const pr = p.presencia?.estado; if (pr === 'viaje') return;
     const col = { direccion: ACC.azul, comercial: ACC.morado, finanzas: ACC.verde, almacen: ACC.naranja }[p.rol] || ACC.gris;
     const per = persona(ctx, col, p.generico ? .9 : 1); per.position.set(ofiPos.x + rutasOf[0][0], .5, ofiPos.z + rutasOf[0][1]);
-    add(per, { tipo: 'persona', titulo: p.nombre, sub: p.generico ? 'equipo' : (p.actividad ? `ahora: ${p.actividad}` : `${p.pendientes} pendiente${p.pendientes === 1 ? '' : 's'} hoy · ${p.hechas} hecha${p.hechas === 1 ? '' : 's'}`), pagina: 'agenda', persona: p });
+    add(per, { tipo: 'persona', titulo: p.nombre, sub: p.generico ? 'equipo' : pr === 'reunion' ? `en reunión: ${p.presencia.titulo}` : (p.actividad ? `ahora: ${p.actividad}` : `${p.pendientes} pendiente${p.pendientes === 1 ? '' : 's'} hoy · ${p.hechas} hecha${p.hechas === 1 ? '' : 's'}`), pagina: 'agenda', persona: p });
+    if (pr === 'reunion') { const k = enSala++; per.position.set(ofiPos.x - 7 + (k % 4) * .9, .5, ofiPos.z - .2 + Math.floor(k / 4) * .9); per.rotation.y = Math.PI; return; }
     const fase = i * 1.37, vel = .22 + (i % 3) * .05;
     animados.push((t) => caminar(per, rutasOf, t * vel + fase, ofiPos));
   });
@@ -55,8 +59,8 @@ function interiorOficina(ctx, g, casco, ofiPos) {
     const mesa = box(1.5, .08, .8, 0xC9A27A); mesa.position.set(0, .72, 0); eg.add(mesa);
     for (const [x, z] of [[-.65, -.32], [.65, -.32], [-.65, .32], [.65, .32]]) { const pata = box(.07, .72, .07, 0x6B5A48); pata.position.set(x, .36, z); eg.add(pata); }
     const monitor = box(.7, .45, .05, 0x1D1D1F); monitor.position.set(0, 1.02, -.25); eg.add(monitor);
-    const silla = box(.5, .5, .5, p.actividad ? ACC.verde : p.pendientes ? ACC.naranja : ACC.gris); silla.position.set(0, .25, .65); eg.add(silla);
-    add(eg, { tipo: 'persona', titulo: p.nombre, sub: p.actividad ? `pendiente principal: ${p.actividad}` : `${p.pendientes} pendiente${p.pendientes === 1 ? '' : 's'} hoy · ${p.hechas} hecha${p.hechas === 1 ? '' : 's'}`, pagina: 'agenda', persona: p });
+    const silla = box(.5, .5, .5, p.presencia?.estado === 'viaje' ? 0xD5D9E0 : p.presencia?.estado === 'reunion' ? ACC.morado : p.actividad ? ACC.verde : p.pendientes ? ACC.naranja : ACC.gris); silla.position.set(0, .25, .65); eg.add(silla);
+    add(eg, { tipo: 'persona', titulo: p.nombre, sub: p.presencia?.estado === 'viaje' ? `de viaje: ${p.presencia.titulo}` : p.actividad ? `pendiente principal: ${p.actividad}` : `${p.pendientes} pendiente${p.pendientes === 1 ? '' : 's'} hoy · ${p.hechas} hecha${p.hechas === 1 ? '' : 's'}`, pagina: 'agenda', persona: p });
     eg.traverse((o) => { if (o.isMesh) dentro.push(o); });
     const foto = fotoPersona(p, ACC); foto.position.set(eg.position.x, 2.05, eg.position.z - .25); foto.visible = false; raiz.add(foto); fotos.push(foto); // 3.90.39: foto (o inicial) sobre el escritorio
     const et = etiqueta(ctx, String(p.nombre || '').split(' ')[0], '#1D1D1F'); et.position.set(eg.position.x, 3.4, eg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);

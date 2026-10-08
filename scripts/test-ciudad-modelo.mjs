@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -363,4 +363,23 @@ test('interior de la oficina: escritorios y sala de juntas', () => {
   const t = tarjetaDe({ tipo: 'sala' }, { oficina: { agenda: ag } });
   assert.deepEqual(t.numeros, [['09:00 · ✓', 'A'], ['10:30 · ahora', 'B'], ['16:00', 'C']]); assert.equal(t.estado, 'ambar');
   assert.deepEqual(tarjetaDe({ tipo: 'sala' }, { oficina: {} }).numeros, [['Reuniones hoy', 'ninguna']]);
+});
+
+test('presencia en la oficina: en reunión, de viaje o disponible', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  const gente = [{ id: 'f' }, { id: 'k' }, { id: 'm' }, { id: 'z' }];
+  const reu = [{ id: 1, titulo: 'Digitalife', fecha: '2026-10-05T10:30:00', duracion_min: 60, asistentes: [{ user_id: 'k', nombre: 'K' }] },
+    { id: 2, titulo: 'Más tarde', fecha: '2026-10-05T16:00:00', asistentes: [{ user_id: 'm' }] },
+    { id: 3, titulo: 'Junta f', fecha: '2026-10-05T10:45:00', creado_por: 'f' }];
+  const via = [{ id: 9, tipo: 'viaje', titulo: 'CDMX', fecha: '2026-10-03T08:00:00', fecha_fin: '2026-10-06T20:00:00', asistentes: [{ user_id: 'f' }] },
+    { id: 8, tipo: 'viaje', titulo: 'Ya pasó', fecha: '2026-10-01T08:00:00', fecha_fin: '2026-10-02T20:00:00', creado_por: 'z' }];
+  presenciaPersonas(gente, reu, via, h);
+  assert.deepEqual(gente.map((p) => p.presencia.estado), ['viaje', 'reunion', 'disponible', 'disponible']);
+  assert.equal(gente[0].presencia.titulo, 'CDMX', 'el viaje gana a la reunión'); assert.equal(gente[1].presencia.titulo, 'Digitalife');
+  presenciaPersonas(gente, [{ id: 7, tipo: 'viaje', titulo: 'Hoy', fecha: '2026-10-05T06:00:00', creado_por: 'm' }], [{ id: 7, tipo: 'viaje', titulo: 'Hoy', fecha: '2026-10-05T06:00:00', creado_por: 'm' }], h);
+  assert.equal(gente[2].presencia.estado, 'viaje', 'viaje de un día sin fecha_fin (sin duplicar)');
+  assert.doesNotThrow(() => presenciaPersonas([{ id: 'a' }], null, null, h));
+  const t = tarjetaDe({ tipo: 'persona', persona: { pendientes: 1, hechas: 0, presencia: { estado: 'reunion', titulo: 'Digitalife' } } }, {});
+  assert.deepEqual(t.numeros[0], ['Ahora', 'En reunión · Digitalife']);
+  const m = construirModelo(d, hoy); assert.ok(m.oficina.personas.every((p) => p.presencia));
 });

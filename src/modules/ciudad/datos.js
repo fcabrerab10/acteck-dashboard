@@ -21,7 +21,7 @@ export function useCiudadData(enabled = true) {
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
       const seg = (p, nombre) => Promise.resolve(p).catch((e) => { console.warn(`[ciudad] ${nombre}:`, e?.message || e); return []; });
       const mes = hoy.getMonth() + 1; const mesPrev = mes === 1 ? 12 : mes - 1;
-      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku] = await Promise.all([
+      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,pos,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
@@ -31,7 +31,9 @@ export function useCiudadData(enabled = true) {
         seg(fetchAll('v_sellout_cuentas', 'cuenta,nombre,canal_sellout,erp_cliente,propio,tiene_sellout'), 'cuentas'),
         seg(fetchAll('v_erp_facturas_oc', 'cliente_key,folio,fecha,piezas,monto', (q) => q.gte('fecha', hace10)), 'facturas'),
         seg(supabase.from('agenda_items').select('propietario,responsables,estado,titulo,cuando,fecha_limite,inicio_real').or(`cuando.eq.${hoyIso},fecha_limite.eq.${hoyIso}`).then((r) => r.data || []), 'agenda'),
-        seg(supabase.from('agenda_reuniones').select('titulo,fecha,duracion_min,tipo,cliente_key').gte('fecha', `${hoyIso}T00:00:00`).lte('fecha', `${hoyIso}T23:59:59`).then((r) => r.data || []), 'reuniones'),
+        seg(supabase.from('agenda_reuniones').select('id,titulo,fecha,duracion_min,tipo,cliente_key,asistentes,creado_por').gte('fecha', `${hoyIso}T00:00:00`).lte('fecha', `${hoyIso}T23:59:59`).then((r) => r.data || []), 'reuniones'),
+        // Presencia (3.90.40): viajes que empezaron antes y siguen hoy (tipo 'viaje' con fecha_fin).
+        seg(supabase.from('agenda_reuniones').select('id,titulo,fecha,fecha_fin,tipo,asistentes,creado_por').eq('tipo', 'viaje').lt('fecha', `${hoyIso}T00:00:00`).gte('fecha_fin', `${hoyIso}T00:00:00`).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'viajes'),
         seg(fetchAll('v_sellout_cuenta_mes', 'cuenta,anio,mes,importe', (q) => q.gte('anio', anio - 1)), 'cuenta mes'),
         // Etapa 2: clientes finales (dos meses, por estado), cartera de los propios y envíos en tránsito del Tracking.
         seg(fetchAll('mv_sellout_cliente_final_mes', 'cuenta,anio,mes,estado,importe', (q) => q.gte('anio', anio - (mes === 1 ? 1 : 0)).in('mes', [mes, mesPrev])), 'clientes finales'),
@@ -48,7 +50,7 @@ export function useCiudadData(enabled = true) {
         // Días de inventario por marca: demanda de los 3 meses cerrados del pivote de sell in (como Inventario en el celular).
         seg(fetchAll('v_sellin_global_sku_anio', 'sku,anio,piezas', (q) => q.in('anio', [...new Set([1, 2, 3].map((i) => new Date(anio, hoy.getMonth() - i, 1).getFullYear()))])), 'demanda por SKU'),
       ]);
-      const modelo = construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
+      const modelo = construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
       // Números de PO de los contenedores dibujados (tarjeta del barco). Consulta chica; si falla, la tarjeta muestra sólo el conteo.
       const ids = [...(modelo.puerto?.barcos || []), ...(modelo.puerto?.tarimas || [])].map((b) => b.id).filter(Boolean);
       if (ids.length) ponerPosEnPuerto(modelo.puerto, await seg(fetchAll('embarques_compras', 'contenedor,po', (q) => q.in('contenedor', ids)), 'POs por contenedor'));
