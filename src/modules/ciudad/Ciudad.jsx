@@ -3,7 +3,7 @@
 // clientes, los vendedores (del ERP y de los mayoristas), los camiones con las facturas y los contenedores navegando.
 // Nada de esto carga con el resto del dashboard: datos (useCiudadData) y three.js (import() de ./escena) se piden sólo aquí.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, Search, Home, Map as MapaIcono, HelpCircle } from 'lucide-react';
+import { Building2, Search, Home, Map as MapaIcono, HelpCircle, Volume2, VolumeX } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
@@ -11,6 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
+import { crearAmbiente } from './sonido';
 import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
@@ -63,6 +64,10 @@ export default function Ciudad({ onNavegar }) {
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
   const [tour, setTour] = useState(null); // recorrido de bienvenida (3.90.75): null | índice del paso
   useEffect(() => { if (!cargaFin || !modelo || fallo || recorridoMostrado) return; let visto = false; try { visto = recorridoVisto(window.localStorage.getItem(RECORRIDO_CLAVE)); } catch { visto = false; } recorridoMostrado = true; if (!visto) setTour(0); }, [cargaFin, !!modelo, !!fallo]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Sonido ambiente (3.90.76): apagado por defecto; se arma en el mismo clic (el navegador pide un gesto) y se apaga al salir.
+  const ambiente = useRef(null); const [sonido, setSonido] = useState(false);
+  const alternarSonido = () => { if (ambiente.current) { ambiente.current.detener(); ambiente.current = null; setSonido(false); return; } try { ambiente.current = crearAmbiente({ esDia: clima ? clima.esDia : !oscuro, lluvia: !!clima?.lluvia }); } catch (e) { console.warn('[ciudad] sonido', e); ambiente.current = null; } setSonido(!!ambiente.current); };
+  useEffect(() => () => { ambiente.current?.detener(); ambiente.current = null; }, []);
   const cerrarTour = () => { setTour(null); try { window.localStorage.setItem(RECORRIDO_CLAVE, '1'); } catch { /* sin almacenamiento */ } };
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
   useEffect(() => {
@@ -170,6 +175,7 @@ export default function Ciudad({ onNavegar }) {
           ? <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Home size={14} />Base</button>
           : <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Ver el mapa de México completo con todas las ciudades" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><MapaIcono size={14} />Mapa</button>}
         <button type="button" onClick={() => setTour(0)} title="Ver otra vez el recorrido de bienvenida" aria-label="Ayuda: recorrido de bienvenida" style={{ ...card, padding: '7px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><HelpCircle size={15} style={{ color: theme.textMuted }} /></button>
+        <button type="button" onClick={alternarSonido} title={sonido ? 'Apagar el sonido ambiente' : 'Prender el sonido ambiente (ciudad, pájaros o grillos, lluvia)'} aria-label={sonido ? 'Apagar sonido' : 'Prender sonido'} aria-pressed={sonido} style={{ ...card, padding: '7px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{sonido ? <Volume2 size={15} style={{ color: theme.accent }} /> : <VolumeX size={15} style={{ color: theme.textMuted }} />}</button>
       </div>
       {top.length > 0 && (
         <div style={{ position: 'absolute', left: 14, top: 52, zIndex: 3, display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 'calc(50% - 28px)' }}>

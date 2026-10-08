@@ -817,6 +817,17 @@ export function rebote(t, dur = .5) {
   return { y, xz: 1 - (y - 1) * .5, fin: false };
 }
 
+// Sonido ambiente (3.90.76, Etapa 7): qué capas suenan y a qué volumen según día/noche y lluvia. `ruido` = rumor de la ciudad
+// (ruido café filtrado), `lluvia` = ruido más brillante, `pajaros` de día y `grillos` de noche (cada cuántos segundos, aprox.).
+export function capasSonido({ esDia = true, lluvia = false } = {}) {
+  return {
+    ruido: esDia ? .05 : .025,
+    lluvia: lluvia ? .06 : 0,
+    pajaros: esDia && !lluvia ? 4 : 0,
+    grillos: !esDia && !lluvia ? 1.2 : 0,
+  };
+}
+
 // Recorrido de bienvenida (3.90.75, Etapa 7): 3 pasos la primera vez; el botón «?» lo repite. Se guarda como visto con
 // RECORRIDO_CLAVE = '1' en localStorage (si no hay almacenamiento, se muestra una vez por sesión).
 export const RECORRIDO_CLAVE = 'acteck-ciudad-recorrido';

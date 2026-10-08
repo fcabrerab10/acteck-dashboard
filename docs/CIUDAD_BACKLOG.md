@@ -163,7 +163,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.74) Gente que saluda: `saltito(t)` puro y probado; `crearSaludo()` en `escena/rebote.js` hace dar dos saltitos a la persona bajo el cursor (mueve su grupo; la instancia lo sigue).
 - [x] Recorrido de bienvenida la primera vez (3 pasos: así se mueve, así se toca un edificio, así se viaja) y botón «?» para repetirlo.
   - [x] (3.90.75) `RECORRIDO` / `recorridoVisto()` en `modelo.js` (probados) y tarjeta abajo al centro en `Ciudad.jsx` al terminar la carga (Saltar / Siguiente / ¡Listo!; visto = `acteck-ciudad-recorrido` en localStorage, sin almacenamiento sale una vez por sesión) + botón «?» junto al de nivel. Sin prueba visual: el harness no dibuja `Ciudad.jsx`.
-- [ ] Sonido ambiente opcional (apagado por defecto, interruptor en la esquina).
+- [x] Sonido ambiente opcional (apagado por defecto, interruptor en la esquina).
+  - [x] (3.90.76) `capasSonido()` puro y probado + `sonido.js` (WebAudio sintetizado, sin archivos: rumor de ciudad, lluvia, pájaros de día, grillos de noche, según el clima real o el tema) y botón 🔇/🔊 junto al «?»; se arma en el clic y se apaga al salir de la pestaña. Probado en Chrome headless (bundle aparte); la UI sin prueba visual.
 
 ### Etapa 8 · iPad, celular y para el equipo
 - [ ] Gestos táctiles completos (un dedo mueve, pellizco acerca, dos dedos giran, toque largo = info) y botones grandes; versión ligera automática en `pointer: coarse` (menos gente, sin sombras).
@@ -187,6 +188,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:14 · v3.90.76 · Sonido ambiente opcional (apagado por defecto): ciudad, pájaros o grillos y lluvia según el clima; cierra la Etapa 7.
 - 2026-10-08 01:10 · v3.90.75 · Recorrido de bienvenida de 3 pasos la primera vez y botón «?» para repetirlo.
 - 2026-10-08 01:07 · v3.90.74 · Animaciones de respuesta, paso 2 (cierra el pendiente): la gente da dos saltitos al pasarle el cursor.
 - 2026-10-08 01:04 · v3.90.73 · Animaciones de respuesta, paso 1: lo que tocas rebota (tiendas completas, oficina, CEDIS).
