@@ -35,7 +35,7 @@ export function useApoyoComercial(anio, clienteKey = null, enabled = true) {
       const codigos = [...new Set(filas.map((r) => r.cliente).filter(Boolean))];
       let fbCliente = [];
       if (!clienteKey && codigos.length) {
-        const { data } = await cachedQuery(supabase.from('mv_analisis_cliente_mes').select('cliente,anio,mes,fact_bruta').in('anio', anios).in('cliente', codigos.slice(0, 300)));
+        const { data } = await cachedQuery(supabase.from('v_analisis_cliente_mes').select('cliente,anio,mes,fact_bruta').in('anio', anios).in('cliente', codigos.slice(0, 300)));
         fbCliente = data || [];
       }
       return { filas, fb: fb || [], fbCliente };
@@ -57,7 +57,7 @@ export function useApoyoCliente(codigo, anio, enabled = true) {
           () => supabase.from('v_bonificaciones_concepto_mes').select(COLS_APOYO).eq('cliente', codigo).eq('anio', anio),
           { pageSize: 2000, orderCol: 'anio', label: 'v_bonificaciones_concepto_mes·cliente' },
         ),
-        cachedQuery(supabase.from('mv_analisis_cliente_mes').select('anio,mes,fact_bruta').eq('cliente', codigo).eq('anio', anio)).then((r) => r.data || []),
+        cachedQuery(supabase.from('v_analisis_cliente_mes').select('anio,mes,fact_bruta').eq('cliente', codigo).eq('anio', anio)).then((r) => r.data || []),
       ]);
       return { filas, fb };
     },

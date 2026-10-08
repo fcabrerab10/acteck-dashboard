@@ -68,7 +68,7 @@ export function useSellInEmpresa(anio) {
         cachedQuery(supabase.from('cuotas_canales').select('anio,dimension_tipo,dimension_valor,meta_facturacion,meta_margen_pct').eq('anio', anio)).then((r) => r.data || []).catch(() => []),
         fetchAll('v_cuota_global_mensual', 'anio,mes,cuota_min,cuota_ideal', (q) => q.in('anio', anios)),
         fetchAll('v_vision_factura_dimension_mes', 'anio,mes,dimension,valor,venta,piezas', (q) => q.in('anio', anios)),
-        fetchAll('mv_analisis_cliente_mes', 'cliente,anio,mes,fact_neta', (q) => q.in('anio', anios)),
+        fetchAll('v_analisis_cliente_mes', 'cliente,anio,mes,fact_neta', (q) => q.in('anio', anios)),
         fetchAllQ(() => supabase.from('v_sellin_global_sku_anio').select('sku,anio,piezas,monto').in('anio', [anio - 2, anio - 1, anio]),
           { pageSize: 5000, orderCol: 'sku', label: 'v_sellin_global_sku_anio' }),
       ]);

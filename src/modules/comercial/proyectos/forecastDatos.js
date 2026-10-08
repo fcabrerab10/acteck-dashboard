@@ -41,7 +41,7 @@ export function useVentasForecast(cliente) {
         (rows || []).forEach((r) => add(r.sku, r.anio, r.mes, r.piezas));
         if (series.size) return { series, fuente: 'sellout' };
       }
-      const rows = await fetchAllQ(() => supabase.from('mv_analisis_cliente_sku_mes').select('anio,mes,articulo,piezas_venta_neta').eq('cliente', cliente.codigo).gte('anio', anio - 2), { pageSize: 1000, orderCol: 'articulo', label: 'mv_analisis_cliente_sku_mes' });
+      const rows = await fetchAllQ(() => supabase.from('v_analisis_cliente_sku_mes').select('anio,mes,articulo,piezas_venta_neta').eq('cliente', cliente.codigo).gte('anio', anio - 2), { pageSize: 1000, orderCol: 'articulo', label: 'v_analisis_cliente_sku_mes' });
       (rows || []).forEach((r) => add(r.articulo, r.anio, r.mes, r.piezas_venta_neta));
       return { series, fuente: 'sellin' };
     },

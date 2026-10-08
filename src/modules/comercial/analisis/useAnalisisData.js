@@ -56,8 +56,8 @@ export function useDetalleCliente(clienteCodigo, anio, enabled = true) {
     queryKey: ['analisis_clientes', 'detalle', clienteCodigo, anio],
     enabled: enabled && !!clienteCodigo,
     queryFn: () => fetchAllQ(
-      () => supabase.from('mv_analisis_cliente_sku_mes').select('anio,mes,articulo,marca,categoria,fact_neta,contribucion,piezas_venta_neta').eq('cliente', clienteCodigo).in('anio', [anio - 1, anio]),
-      { pageSize: 1000, orderCol: 'articulo', label: 'mv_analisis_cliente_sku_mes' },
+      () => supabase.from('v_analisis_cliente_sku_mes').select('anio,mes,articulo,marca,categoria,fact_neta,contribucion,piezas_venta_neta').eq('cliente', clienteCodigo).in('anio', [anio - 1, anio]),
+      { pageSize: 1000, orderCol: 'articulo', label: 'v_analisis_cliente_sku_mes' },
     ),
     staleTime: 5 * 60 * 1000,
   });

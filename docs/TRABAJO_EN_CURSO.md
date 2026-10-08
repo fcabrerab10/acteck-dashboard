@@ -23,6 +23,8 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 - [x] Del celular a la web (3.90.0–3.90.1): ticket promedio por cuenta en Sell Out, buscador que entiende (Propuestas · Inventario · Precios), calculadora de precio con propuesta en curso, «Qué le falta» en el Resumen del cliente, S&OP «Mis clientes» y «por qué N pz», Inventario con cambio mensual y stock al cierre por SKU, conversión ponderada en Propuestas, Actividad del equipo con 4 semanas, ritmo, WhatsApp y reasignar.
 
+- [x] Seguridad de externos a nivel de datos (3.91.0, 8-oct): Camilo (Digitalife) ya sólo puede leer lo de Digitalife y sin costos ni márgenes, también por la API; internos sin cambios.
+
 ## Aprobado, por construir
 - [x] Pagos del cliente propio (celular): pestaña Pagos en la ficha con flujo del mes, rebate según la regla, apoyo por producto, apoyos por costo convenio y reglas editables (% y base) (3.85.0–3.85.1).
 - [x] Cobranza general (celular) rehecha con el formato estándar sobre los tres propios (3.86.0).
@@ -44,6 +46,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [ ] S&OP en el celular «ni siquiera me deja verla»: reproducir con la sesión de Fernando y corregir.
 
 ## Pendientes de Fernando
+- [ ] Pasarme los celulares de Karolina y David (con lada) para capturarlos en Administración → Editar datos; así «WhatsApp» en Actividad del equipo abre directo su chat.
 - [ ] Semana de ensambles 31 ago–6 sep 2026 (está en el correo de Alejandro del 7-sep; Google pide verificación para bajarla desde Chrome).
 - [ ] Lista completa de empleados y puestos (para la Ciudad).
 - [ ] Folio de sell out mutilado: se corrige en la base SELLOUT de la oficina.

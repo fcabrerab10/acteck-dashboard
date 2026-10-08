@@ -15,7 +15,7 @@ export function useListaAnalisis(anio) {
     queryKey: ['movil', 'analisis-lista', anio], staleTime: STALE, enabled: !!anio,
     queryFn: async () => {
       const [rows, cuotasRows] = await Promise.all([
-        fetchAll('mv_analisis_cliente_mes', 'cliente,cliente_nombre,cliente_key,canal,anio,mes,fact_neta', (q) => q.in('anio', [anio - 1, anio])),
+        fetchAll('v_analisis_cliente_mes', 'cliente,cliente_nombre,cliente_key,canal,anio,mes,fact_neta', (q) => q.in('anio', [anio - 1, anio])),
         fetchAll('v_cuota_erp_mes', 'cliente_erp,anio,mes,cuota_venta', (q) => q.eq('anio', anio)),
       ]);
       return { rows, cuotasRows };
@@ -28,7 +28,7 @@ export function useCodigoErp(clienteNombre, anio, enabled = true) {
   return useQuery({
     queryKey: ['movil', 'analisis-codigo', clienteNombre, anio], staleTime: STALE, enabled: enabled && !!clienteNombre,
     queryFn: async () => {
-      const { data } = await cachedQuery(supabase.from('mv_analisis_cliente_mes').select('cliente,fact_neta').eq('cliente_nombre', clienteNombre).in('anio', [anio - 1, anio]));
+      const { data } = await cachedQuery(supabase.from('v_analisis_cliente_mes').select('cliente,fact_neta').eq('cliente_nombre', clienteNombre).in('anio', [anio - 1, anio]));
       const por = new Map();
       (data || []).forEach((r) => por.set(r.cliente, (por.get(r.cliente) || 0) + N(r.fact_neta)));
       return [...por.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -41,7 +41,7 @@ export function useClienteMes(codigo, anio) {
   return useQuery({
     queryKey: ['movil', 'analisis-cliente-mes', codigo, anio], staleTime: STALE, enabled: !!codigo,
     queryFn: async () => {
-      const { data, error } = await cachedQuery(supabase.from('mv_analisis_cliente_mes')
+      const { data, error } = await cachedQuery(supabase.from('v_analisis_cliente_mes')
         .select('anio,mes,cliente,cliente_nombre,cliente_key,canal,fact_bruta,devoluciones,rmas,bonificaciones,fact_neta,contribucion,piezas_venta_neta')
         .eq('cliente', codigo).in('anio', [anio - 1, anio]));
       if (error) throw error;
@@ -89,7 +89,7 @@ export function useSkuMesCuentas(cuentas = [], meses = [], enabled = true) {
   return useQuery({
     queryKey: ['movil', 'analisis-sku-pares', key, mk], staleTime: STALE, enabled: enabled && cuentas.length > 0 && meses.length > 0,
     queryFn: () => fetchAllQ(
-      () => supabase.from('mv_sellout_cuenta_sku_mes').select('cuenta,anio,mes,sku,marca,categoria,importe,cantidad')
+      () => supabase.from('vs_sellout_cuenta_sku_mes').select('cuenta,anio,mes,sku,marca,categoria,importe,cantidad')
         .in('cuenta', cuentas).or(meses.map((m) => `and(anio.eq.${m.anio},mes.eq.${m.mes})`).join(',')),
       { pageSize: 5000, orderCol: 'sku', label: 'sku_mes_pares' },
     ),

@@ -49,9 +49,9 @@ export function useResumenData() {
     (async () => {
       const [ventasMes, topSkuMes, inventarioSemana, selloutMes, cuotasRes, ccRes, estadosCuenta] = await Promise.all([
         q(() => supabase.from('v_fact_cliente_mes').select('cliente_key, anio, mes, monto').gte('anio', anioActual - 2), { orderCol: 'cliente_key' }),
-        cachedQuery(supabase.from('mv_resumen_top_sku_mes').select('cliente_key, anio, mes, sku, piezas, posicion')).then((r) => r.data || []),
-        cachedQuery(supabase.from('mv_resumen_inventario_semana').select('cliente, anio, semana, piezas, valor')).then((r) => r.data || []),
-        cachedQuery(supabase.from('mv_resumen_sellout_mes').select('cliente, anio, mes, monto, estimado')).then((r) => r.data || []),
+        cachedQuery(supabase.from('vs_resumen_top_sku_mes').select('cliente_key, anio, mes, sku, piezas, posicion')).then((r) => r.data || []),
+        cachedQuery(supabase.from('vs_resumen_inventario_semana').select('cliente, anio, semana, piezas, valor')).then((r) => r.data || []),
+        cachedQuery(supabase.from('vs_resumen_sellout_mes').select('cliente, anio, mes, monto, estimado')).then((r) => r.data || []),
         supabase.from('cuotas_mensuales').select('cliente, mes, anio, cuota_min, cuota_ideal').in('cliente', CLIENTE_KEYS).gte('anio', anioActual - 2),
         supabase.from('clientes_credito_config').select('cliente, plazo_dias_credito, linea_credito_usd').in('cliente', CLIENTE_KEYS),
         q(() => supabase.from('estados_cuenta').select('id, cliente, fecha_corte, saldo_actual, saldo_vencido, dso, aging_mas90').in('cliente', CLIENTE_KEYS).gte('fecha_corte', desdeIso)),

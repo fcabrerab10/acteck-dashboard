@@ -16,9 +16,9 @@ export function useProducto360(sku, { enabled = true, hoy = new Date() } = {}) {
       const anio = hoy.getFullYear();
       const [roadmap, sellin, clientes, sellout, cuentas, invCuentas, invSku, almacenes, transito, precios, stockAnio] = await Promise.all([
         seg(cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca,categoria,familia').eq('sku', s).maybeSingle()).then((r) => r.data), 'roadmap'),
-        seg(fetchAll('mv_analisis_cliente_sku_mes', 'cliente,anio,mes,fact_neta,piezas_venta_neta', (q) => q.eq('articulo', s).gte('anio', anio - 2)), 'sell in'),
-        seg(fetchAll('mv_analisis_cliente_mes', 'cliente,cliente_nombre,canal', (q) => q.eq('anio', anio).eq('mes', hoy.getMonth() + 1)), 'clientes'),
-        seg(fetchAll('mv_sellout_cuenta_sku_mes', 'cuenta,anio,mes,cantidad,importe', (q) => q.eq('sku', s).gte('anio', anio - 2)), 'sell out'),
+        seg(fetchAll('v_analisis_cliente_sku_mes', 'cliente,anio,mes,fact_neta,piezas_venta_neta', (q) => q.eq('articulo', s).gte('anio', anio - 2)), 'sell in'),
+        seg(fetchAll('v_analisis_cliente_mes', 'cliente,cliente_nombre,canal', (q) => q.eq('anio', anio).eq('mes', hoy.getMonth() + 1)), 'clientes'),
+        seg(fetchAll('vs_sellout_cuenta_sku_mes', 'cuenta,anio,mes,cantidad,importe', (q) => q.eq('sku', s).gte('anio', anio - 2)), 'sell out'),
         seg(fetchAll('v_sellout_cuentas', 'cuenta,nombre,canal_sellout,erp_cliente,propio'), 'cuentas'),
         seg(fetchAll('v_sellout_inventario_cuenta_sku', 'cuenta,anio,semana,stock,valor', (q) => q.eq('sku', s).gte('anio', anio - 1)), 'inventario cuentas'),
         seg(cachedQuery(supabase.from('v_medidas_inventario_sku').select('inv_actual,inv_actual_piezas,inv_actual_disponible,costo_promedio,almacenes_con_stock').eq('articulo', s).maybeSingle()).then((r) => r.data), 'inventario'),
@@ -31,7 +31,7 @@ export function useProducto360(sku, { enabled = true, hoy = new Date() } = {}) {
       let nombres = new Map(clientes.map((c) => [c.cliente, c]));
       const faltan = [...new Set(sellin.map((r) => r.cliente))].filter((c) => !nombres.has(c));
       if (faltan.length) {
-        const extra = await seg(fetchAll('mv_analisis_cliente_mes', 'cliente,cliente_nombre,canal', (q) => q.in('cliente', faltan.slice(0, 200)).gte('anio', anio - 1)), 'clientes extra');
+        const extra = await seg(fetchAll('v_analisis_cliente_mes', 'cliente,cliente_nombre,canal', (q) => q.in('cliente', faltan.slice(0, 200)).gte('anio', anio - 1)), 'clientes extra');
         extra.forEach((c) => { if (!nombres.has(c.cliente)) nombres.set(c.cliente, c); });
       }
       // Inventario en cuentas: última semana con foto por cuenta.

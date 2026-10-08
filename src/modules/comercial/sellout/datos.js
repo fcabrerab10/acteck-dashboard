@@ -29,7 +29,7 @@ export function useCuentas() {
 /** Años con sell out (para el selector multi-año). */
 export function useAnios() {
   return useQuery(q(['sellout_global', 'anios'], async () => {
-    const { data, error } = await cachedQuery(supabase.from('mv_sellout_cuenta_dia').select('anio'));
+    const { data, error } = await cachedQuery(supabase.from('vs_sellout_cuenta_dia').select('anio'));
     if (error) throw error;
     return Array.from(new Set((data || []).map((r) => Number(r.anio)))).filter(Boolean).sort((a, b) => b - a);
   }, { staleTime: 30 * 60 * 1000 }));
@@ -38,8 +38,8 @@ export function useAnios() {
 /** Detalle diario por cuenta de los dos años (MTD / YTD "a mismo día"). */
 export function useDias(anio) {
   return useQuery(q(['sellout_global', 'dias', anio], () => fetchAllQ(
-    () => supabase.from('mv_sellout_cuenta_dia').select('cuenta,anio,mes,dia,importe,cantidad').in('anio', [anio - 1, anio]),
-    { pageSize: 1000, orderCol: 'cuenta', label: 'mv_sellout_cuenta_dia' },
+    () => supabase.from('vs_sellout_cuenta_dia').select('cuenta,anio,mes,dia,importe,cantidad').in('anio', [anio - 1, anio]),
+    { pageSize: 1000, orderCol: 'cuenta', label: 'vs_sellout_cuenta_dia' },
   ), { enabled: !!anio }));
 }
 
@@ -76,18 +76,18 @@ export function useCuotas(anio) {
 /** SKU × cuenta del mes elegido y del mismo mes del año anterior (composición por marca / categoría). */
 export function useSkuMes(anio, mes) {
   return useQuery(q(['sellout_global', 'sku_mes', anio, mes], () => fetchAllQ(
-    () => supabase.from('mv_sellout_cuenta_sku_mes').select('cuenta,anio,mes,sku,marca,categoria,familia,importe,cantidad')
+    () => supabase.from('vs_sellout_cuenta_sku_mes').select('cuenta,anio,mes,sku,marca,categoria,familia,importe,cantidad')
       .in('anio', [anio - 1, anio]).eq('mes', mes),
-    { pageSize: 1000, orderCol: 'cuenta', label: 'mv_sellout_cuenta_sku_mes' },
+    { pageSize: 1000, orderCol: 'cuenta', label: 'vs_sellout_cuenta_sku_mes' },
   ), { enabled: !!anio && !!mes }));
 }
 
 /** Sell out por estado (mapa) del mes elegido y del mismo mes del año anterior. */
 export function useEstadoMes(anio, mes) {
   return useQuery(q(['sellout_global', 'estado_mes', anio, mes], () => fetchAllQ(
-    () => supabase.from('mv_sellout_estado_mes').select('cuenta,anio,mes,estado,importe,cantidad,clientes_finales,vendedores,facturas')
+    () => supabase.from('vs_sellout_estado_mes').select('cuenta,anio,mes,estado,importe,cantidad,clientes_finales,vendedores,facturas')
       .in('anio', [anio - 1, anio]).eq('mes', mes),
-    { pageSize: 1000, orderCol: 'cuenta', label: 'mv_sellout_estado_mes' },
+    { pageSize: 1000, orderCol: 'cuenta', label: 'vs_sellout_estado_mes' },
   ), { enabled: !!anio && !!mes }));
 }
 
@@ -99,7 +99,7 @@ export function useEstadoMes(anio, mes) {
  */
 export function useEstadosHistoria(anio, enabled = true) {
   return useQuery(q(['sellout_global', 'estado_historia', anio], () => fetchAllQ(
-    () => supabase.from('mv_sellout_estado_mes').select('cuenta,anio,mes,estado,importe,cantidad,clientes_finales,vendedores,facturas')
+    () => supabase.from('vs_sellout_estado_mes').select('cuenta,anio,mes,estado,importe,cantidad,clientes_finales,vendedores,facturas')
       .gte('anio', anio - 2),
     { pageSize: 1000, orderCol: 'cuenta', label: 'mv_sellout_estado_mes_historia' },
   ), { enabled: enabled && !!anio }));
@@ -112,7 +112,7 @@ export function useEstadosHistoria(anio, enabled = true) {
 /** SKU × mes de UNA cuenta, los dos años (pestañas Resumen y SKUs). */
 export function useDrillSkus(cuenta, anio, enabled = true) {
   return useQuery(q(['sellout_global', 'drill_skus', cuenta, anio], () => fetchAllQ(
-    () => supabase.from('mv_sellout_cuenta_sku_mes').select('anio,mes,sku,marca,categoria,familia,importe,cantidad').eq('cuenta', cuenta).in('anio', [anio - 1, anio]),
+    () => supabase.from('vs_sellout_cuenta_sku_mes').select('anio,mes,sku,marca,categoria,familia,importe,cantidad').eq('cuenta', cuenta).in('anio', [anio - 1, anio]),
     { pageSize: 1000, orderCol: 'sku', label: 'drill_skus' },
   ), { enabled: enabled && !!cuenta && !!anio }));
 }
@@ -139,7 +139,7 @@ export function useDrillInventarioMes(cuenta, enabled = true) {
 /** Sucursales × mes de una cuenta. */
 export function useDrillSucursales(cuenta, anio, enabled = true) {
   return useQuery(q(['sellout_global', 'drill_suc', cuenta, anio], () => fetchAllQ(
-    () => supabase.from('mv_sellout_sucursal_mes').select('anio,mes,sucursal,importe,cantidad,vendedores,clientes,facturas,top_vendedor,estado').eq('cuenta', cuenta).in('anio', [anio - 1, anio]),
+    () => supabase.from('vs_sellout_sucursal_mes').select('anio,mes,sucursal,importe,cantidad,vendedores,clientes,facturas,top_vendedor,estado').eq('cuenta', cuenta).in('anio', [anio - 1, anio]),
     { pageSize: 1000, orderCol: 'sucursal', label: 'sucursal_mes' },
   ), { enabled: enabled && !!cuenta && !!anio }));
 }
@@ -147,7 +147,7 @@ export function useDrillSucursales(cuenta, anio, enabled = true) {
 /** Vendedores × mes de una cuenta. */
 export function useDrillVendedores(cuenta, anio, enabled = true) {
   return useQuery(q(['sellout_global', 'drill_vend', cuenta, anio], () => fetchAllQ(
-    () => supabase.from('mv_sellout_vendedor_mes').select('anio,mes,vendedor,importe,cantidad,clientes,skus,facturas,sucursal').eq('cuenta', cuenta).in('anio', [anio - 1, anio]),
+    () => supabase.from('vs_sellout_vendedor_mes').select('anio,mes,vendedor,importe,cantidad,clientes,skus,facturas,sucursal').eq('cuenta', cuenta).in('anio', [anio - 1, anio]),
     { pageSize: 1000, orderCol: 'vendedor', label: 'vendedor_mes' },
   ), { enabled: enabled && !!cuenta && !!anio }));
 }
@@ -157,7 +157,7 @@ export function useDrillClientesFinales(cuenta, anio, mes, enabled = true) {
   return useQuery(q(['sellout_global', 'drill_cf', cuenta, anio, mes], async () => {
     const prev = mes === 1 ? { anio: anio - 1, mes: 12 } : { anio, mes: mes - 1 };
     return fetchAllQ(
-      () => supabase.from('mv_sellout_cliente_final_mes').select('anio,mes,cliente_final,importe,cantidad,facturas,skus,estado')
+      () => supabase.from('vs_sellout_cliente_final_mes').select('anio,mes,cliente_final,importe,cantidad,facturas,skus,estado')
         .eq('cuenta', cuenta).or(`and(anio.eq.${anio},mes.eq.${mes}),and(anio.eq.${prev.anio},mes.eq.${prev.mes}),and(anio.eq.${anio - 1},mes.eq.${mes})`),
       { pageSize: 1000, orderCol: 'cliente_final', label: 'cliente_final_mes' },
     );
@@ -167,7 +167,7 @@ export function useDrillClientesFinales(cuenta, anio, mes, enabled = true) {
 /** Estados de UNA cuenta (pestaña Mapa del drill). */
 export function useDrillEstados(cuenta, anio, mes, enabled = true) {
   return useQuery(q(['sellout_global', 'drill_edo', cuenta, anio, mes], () => fetchAllQ(
-    () => supabase.from('mv_sellout_estado_mes').select('cuenta,anio,mes,estado,importe,cantidad,clientes_finales,vendedores,facturas')
+    () => supabase.from('vs_sellout_estado_mes').select('cuenta,anio,mes,estado,importe,cantidad,clientes_finales,vendedores,facturas')
       .eq('cuenta', cuenta).in('anio', [anio - 1, anio]).eq('mes', mes),
     { pageSize: 1000, orderCol: 'estado', label: 'estado_mes_cuenta' },
   ), { enabled: enabled && !!cuenta && !!anio && !!mes }));

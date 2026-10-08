@@ -145,7 +145,7 @@ export default function ComparadorPeriodos({ clienteKey = null, clienteNombre = 
     setSkuLoading(true);
     const years = yearsKey.split(',').map(Number);
     const q = erpCliente
-      ? () => { let b = supabase.from('mv_analisis_cliente_sku_mes').select('articulo,anio,mes,piezas_venta_neta,fact_neta').in('anio', years); return erpCliente.codigo ? b.eq('cliente', erpCliente.codigo) : b.eq('cliente_nombre', erpCliente.nombre); }
+      ? () => { let b = supabase.from('v_analisis_cliente_sku_mes').select('articulo,anio,mes,piezas_venta_neta,fact_neta').in('anio', years); return erpCliente.codigo ? b.eq('cliente', erpCliente.codigo) : b.eq('cliente_nombre', erpCliente.nombre); }
       : clienteKey
         ? () => supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).in('anio', years)
         : () => supabase.from('v_facturacion_global_sku_mes').select('sku,anio,mes,piezas,monto').in('anio', years);
