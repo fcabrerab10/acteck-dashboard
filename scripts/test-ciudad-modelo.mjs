@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -567,4 +567,13 @@ test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [] }, cedis: { dias: 30 }, camiones: [], distritos: [] });
   assert.deepEqual(v.tramos.map((t) => t.estado), ['gris', 'verde', 'verde', 'gris', 'gris', 'gris']); assert.equal(v.atasco, null);
   assert.deepEqual(cadenaSuministro(null), { tramos: [], atasco: null });
+});
+
+test('cintas de la cadena: mar, puerto y ciudades con grosor y tono', () => {
+  const m = { hoyIso: '2026-10-08', puerto: { barcos: [{ llegaEnDias: -5 }, { llegaEnDias: 3 }], tarimas: [] }, cedis: { dias: 30 },
+    camiones: [{ ciudad: 'MONTERREY', fecha: '2026-10-07' }, { ciudad: 'MONTERREY', fecha: '2026-10-07' }, { ciudad: 'PUEBLA', envio: true, fecha: '2026-09-30' }],
+    distritos: [{ ciudad: 'MONTERREY', tiendas: [{ vendio: true }] }, { ciudad: 'PUEBLA', tiendas: [{ vendio: true }] }, { ciudad: 'LEON', tiendas: [{ vendio: false }, { vendio: false }] }, { ciudad: 'MERIDA', tiendas: [{ reparto: true, vendio: true }] }] };
+  const c = cintasCadena(m);
+  assert.deepEqual(c.map((x) => [x.de, x.a, x.tono, x.peso]), [['mar', 'puerto', 'rojo', 2], ['puerto', 'cedis', 'rojo', 2], ['cedis', 'MONTERREY', 'verde', 4], ['cedis', 'PUEBLA', 'ambar', 3], ['cedis', 'LEON', 'rojo', 1]]);
+  assert.equal(cintasCadena(m, 1).length, 3); assert.deepEqual(cintasCadena(null), []);
 });

@@ -18,7 +18,7 @@ import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
-import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE, capaCiudades, CAPA_TONOS } from './modelo.js';
+import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE, capaCiudades, CAPA_TONOS, cintasCadena } from './modelo.js';
 
 export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, onAdentro, onSiguiendo, vistaInicial, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
@@ -120,6 +120,28 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
       capaGrupo.visible = true; return c;
     } catch (e) { console.warn('[ciudad] capa', e); if (capaGrupo) capaGrupo.visible = false; return null; } // falla sola
   }
+  // Cadena de punta a punta (3.90.59): cintas planas mar → puerto → CEDIS → ciudades (`cintasCadena()`), grosor por volumen y
+  // tono del tramo (rojo = donde se atora). Se arma la primera vez que se pide, fuera de las instancias; de lejos engorda con el zoom.
+  let cadenaGrupo = null;
+  function cadena(on) {
+    try {
+      if (!on) { if (cadenaGrupo) cadenaGrupo.visible = false; return false; }
+      if (!cadenaGrupo) {
+        cadenaGrupo = new THREE.Group(); cadenaGrupo.renderOrder = 6; raiz.add(cadenaGrupo);
+        const punto = { mar: { x: puertoPos.x - 52, z: puertoPos.z + 46 }, puerto: puertoPos, cedis: cedisPos };
+        const geo = new THREE.BoxGeometry(1, .06, 1);
+        for (const c of cintasCadena(modelo)) {
+          const a = punto[c.de], b = punto[c.a] || distritoPos.get(c.a); if (!a || !b) continue;
+          const k = `cadena-${c.tono}`; if (!mats.has(k)) mats.set(k, new THREE.MeshBasicMaterial({ color: CAPA_TONOS[c.tono] ?? CAPA_TONOS.gris, transparent: true, opacity: .6, depthWrite: false }));
+          const dx = b.x - a.x, dz = b.z - a.z, largo = Math.hypot(dx, dz); if (largo < 1) continue;
+          const m = new THREE.Mesh(geo, mats.get(k)); m.position.set((a.x + b.x) / 2, .45, (a.z + b.z) / 2); m.rotation.y = -Math.atan2(dz, dx);
+          m.userData.ancho = .5 + c.peso * .35; m.scale.set(largo, 1, m.userData.ancho); m.renderOrder = 6; cadenaGrupo.add(m);
+        }
+        animados.push(() => { if (!cadenaGrupo.visible) return; const k = Math.max(1, vista.zoom / 45); for (const m of cadenaGrupo.children) m.scale.z = m.userData.ancho * k; });
+      }
+      cadenaGrupo.visible = true; return true;
+    } catch (e) { console.warn('[ciudad] cadena', e); if (cadenaGrupo) cadenaGrupo.visible = false; return false; } // falla sola
+  }
   let destino = null; // ciudad a la que viajaste: con ella el botón ofrece «← Volver al mapa»
   const vistaDe = (ciudad) => vistaCiudad(distritoPos.get(ciudad), { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
   function irA(tag) { if (tag?.tipo === 'punto') { if (Number.isFinite(tag.x) && Number.isFinite(tag.z)) { vista.cxObj = tag.x; vista.czObj = tag.z; } return; } if (tag?.tipo === 'mapa') { const m = vistaMapa({ ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) }); if (m) { vista.cxObj = m.cx; vista.czObj = m.cz; vista.zoomObj = m.zoom; } return; } if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.tipo === 'banco' && bancoPos) p = bancoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) { const c = vistaDe(tag.ciudad); if (c) { destino = tag.ciudad; vista.cxObj = c.cx; vista.czObj = c.cz; vista.zoomObj = c.zoom; return; } p = distritoPos.get(tag.ciudad); } if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
@@ -163,7 +185,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);
   return {
-    resize, irA, entrar, entrarCedis, capa, seguir, get hayRacks() { return !!ctx.hayRacks; }, get hayOficina() { return !!ctx.oficinaAdentro; },
+    resize, irA, entrar, entrarCedis, capa, cadena, seguir, get hayRacks() { return !!ctx.hayRacks; }, get hayOficina() { return !!ctx.oficinaAdentro; },
     stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh && o.visible) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
     // Liberar memoria al salir (3.90.8): cada geometría, material y textura una sola vez (escena + cachés, aunque ya no estén
     // colgadas), buffers de instancias y mapas de sombra; se sueltan las listas para que la escena vieja no quede retenida.

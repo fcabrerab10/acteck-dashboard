@@ -38,6 +38,7 @@ export default function Ciudad({ onNavegar }) {
   const [verCadena, setVerCadena] = useState(false); // tira «Cadena» de punta a punta (3.90.58)
   const [capaInfo, setCapaInfo] = useState(null); // lo que devolvió escena.capa(): título, leyenda y texto por ciudad
   const capaRef = useRef(null); capaRef.current = capa;
+  const cadenaRef = useRef(false); cadenaRef.current = verCadena;
   const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
   // Última vista por usuario (localStorage, puede fallar en privado): la escena arranca ahí, también al cambiar tema o clima.
   const clave = claveVista(perfil?.user_id);
@@ -70,6 +71,7 @@ export default function Ciudad({ onNavegar }) {
           onNivel: setNivel, onAdentro: setAdentro, onSiguiendo: setSiguiendo, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
         });
         if (capaRef.current) setCapaInfo(escenaRef.current.capa(capaRef.current)); // al rehacer la escena (tema/clima) la capa sigue
+        if (cadenaRef.current) escenaRef.current.cadena?.(true); // y la cadena también (3.90.59)
         setListo(true);
       } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }
     }).catch((e) => { console.error('[ciudad] carga', e); setFallo(String(e?.message || e)); });
@@ -187,7 +189,7 @@ export default function Ciudad({ onNavegar }) {
       {verCadena && cadena?.tramos.length > 0 && <div style={{ ...card, padding: '7px 10px', display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', gap: 4, fontSize: 11, pointerEvents: 'auto', maxWidth: '100%' }} role="list" aria-label="Cadena de la mercancía">
         {cadena.tramos.map((t, i) => <React.Fragment key={t.clave}>
           {i > 0 && <span aria-hidden="true" style={{ alignSelf: 'center', color: hexCss(CAPA_TONOS[t.estado === 'rojo' ? 'rojo' : 'gris']), fontWeight: 700 }}>→</span>}
-          <div role="listitem" title={t.motivo || t.volumen} style={{ padding: '3px 7px', borderRadius: 8, border: `1.5px solid ${t.estado === 'rojo' || t.estado === 'ambar' ? hexCss(CAPA_TONOS[t.estado]) : 'transparent'}`, minWidth: 74 }}>
+          <div role="listitem" title={`${t.motivo || t.volumen} · toca para ir ahí`} onClick={() => escenaRef.current?.irA(t.clave === 'cedis' ? { tipo: 'base' } : t.clave === 'mar' || t.clave === 'puerto' ? { tipo: 'punto', x: modelo.puertoPos.x, z: modelo.puertoPos.z } : { tipo: 'mapa' })} style={{ cursor: 'pointer', padding: '3px 7px', borderRadius: 8, border: `1.5px solid ${t.estado === 'rojo' || t.estado === 'ambar' ? hexCss(CAPA_TONOS[t.estado]) : 'transparent'}`, minWidth: 74 }}>
             <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}><span aria-hidden="true">{t.icono}</span>{t.titulo}<i style={{ width: 7, height: 7, borderRadius: 4, background: hexCss(CAPA_TONOS[t.estado]) }} /></div>
             <div style={{ color: theme.textMuted }}>{t.volumen}</div>
             {t.motivo && <div style={{ color: hexCss(CAPA_TONOS[t.estado]), fontWeight: 600 }}>{t.motivo}</div>}
@@ -198,7 +200,7 @@ export default function Ciudad({ onNavegar }) {
         <div style={{ ...card, padding: 3, display: 'flex', gap: 2 }} role="group" aria-label="Capas de información">
           {[[null, 'Sin capa'], ['ventas', 'Ventas'], ['cuota', 'Cuota'], ['cartera', 'Cartera']].map(([c, l]) => <button key={l} type="button" onClick={() => ponerCapa(c)} aria-pressed={capa === c} title={c ? `Pintar las ciudades por ${l.toLowerCase()}` : 'Quitar la capa'} style={{ border: 0, borderRadius: 9, padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: capa === c ? theme.accent : 'transparent', color: capa === c ? '#fff' : theme.text }}>{l}</button>)}
         </div>
-        {cadena?.tramos.length > 0 && <button type="button" onClick={() => setVerCadena((v) => !v)} aria-pressed={verCadena} title="Recorrido de la mercancía de punta a punta y dónde se atora" style={{ ...card, padding: '6px 10px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: verCadena ? theme.accent : card.background, color: verCadena ? '#fff' : theme.text }}>Cadena{cadena.atasco && <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, marginLeft: 5, background: hexCss(CAPA_TONOS[cadena.atasco.estado]) }} />}</button>}
+        {cadena?.tramos.length > 0 && <button type="button" onClick={() => { const v = !verCadena; setVerCadena(v); escenaRef.current?.cadena?.(v); }} aria-pressed={verCadena} title="Recorrido de la mercancía de punta a punta y dónde se atora" style={{ ...card, padding: '6px 10px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: verCadena ? theme.accent : card.background, color: verCadena ? '#fff' : theme.text }}>Cadena{cadena.atasco && <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, marginLeft: 5, background: hexCss(CAPA_TONOS[cadena.atasco.estado]) }} />}</button>}
         {capa && capaInfo && <div style={{ ...card, padding: '5px 9px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px 9px', fontSize: 11 }}>
           <b style={{ fontWeight: 700 }}>{capaInfo.titulo}</b>
           {capaInfo.leyenda.map((l) => <span key={l.tono} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: theme.textMuted }}><i style={{ width: 9, height: 9, borderRadius: 5, background: hexCss(CAPA_TONOS[l.tono]) }} />{l.texto}</span>)}

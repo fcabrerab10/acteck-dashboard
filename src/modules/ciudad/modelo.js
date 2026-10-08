@@ -309,6 +309,22 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   ];
   return { tramos, atasco: tramos.find((t) => t.estado === 'rojo') || tramos.find((t) => t.estado === 'ambar') || null };
 }
+// Cintas de la cadena en la escena (3.90.59): mar → puerto → CEDIS y CEDIS → las `max` ciudades con más camiones o tiendas.
+// `peso` 1–4 (grosor) por volumen relativo; tono del tramo (ciudad: tiendas sin venta como en la tira, ámbar si le va un envío lento).
+export function cintasCadena(m, max = 8) {
+  const cad = cadenaSuministro(m); if (!cad.tramos.length) return [];
+  const est = Object.fromEntries(cad.tramos.map((t) => [t.clave, t.estado]));
+  const peso = (v, tope) => (tope > 0 ? 1 + Math.round(3 * Math.min(1, v / tope)) : 1);
+  const barcos = (m.puerto?.barcos || []).length;
+  const out = [{ de: 'mar', a: 'puerto', tono: est.puerto === 'rojo' ? 'rojo' : est.mar, peso: peso(barcos, 8) }, { de: 'puerto', a: 'cedis', tono: est.puerto, peso: peso(barcos + (m.puerto?.tarimas || []).length, 8) }];
+  const cam = new Map(); for (const c of m.camiones || []) { const o = cam.get(c.ciudad) || { n: 0, lento: false }; o.n += 1; if (c.envio && m.hoyIso && c.fecha && dias(c.fecha, m.hoyIso) > 5) o.lento = true; cam.set(c.ciudad, o); }
+  const ciudades = (m.distritos || []).map((d) => { const ts = (d.tiendas || []).filter((t) => !t.reparto); const r = ts.length ? ts.filter((t) => t.vendio).length / ts.length : 1; const c = cam.get(d.ciudad) || { n: 0, lento: false };
+    return { ciudad: d.ciudad, n: c.n, tiendas: ts.length, tono: ts.length && r < 0.4 ? 'rojo' : c.lento || (ts.length && r < 0.7) ? 'ambar' : c.n || ts.length ? 'verde' : 'gris' }; })
+    .filter((x) => x.n || x.tiendas).sort((a, b) => b.n - a.n || b.tiendas - a.tiendas).slice(0, max);
+  const tope = Math.max(1, ...ciudades.map((x) => x.n));
+  for (const x of ciudades) out.push({ de: 'cedis', a: x.ciudad, tono: x.tono, peso: peso(x.n, tope) });
+  return out;
+}
 
 // Rutas de vendedores (etapa 5, 3.90.53): el circuito del vendedor por las sedes de sus clientes principales — ciudades
 // únicas con carretera (`tieneRuta`), máximo `max`, en el orden de `destinos` (de más a menos facturación). tramoActual()
