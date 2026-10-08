@@ -101,7 +101,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.38) «Entrar» a la oficina (como el CEDIS): botón en su tarjeta que acerca la cámara y oculta el techo; sala de juntas con las reuniones de hoy (tocable) y un escritorio por persona con su nombre y pendiente principal (`oficina.personas[].actividad`), tocable.
   - [x] (3.90.39) Foto de cada persona (`avatar_url`) sobre su escritorio (textura cargada bajo demanda; si falla, la inicial).
 - [x] **Presencia en la oficina** (como Gather): cada persona aparece en reunión, de viaje o disponible según su agenda de hoy.
-- [ ] **Tienda visitable**: tocar una tienda → su sell out del mes vs mes anterior, top 5 SKUs, inventario en tienda si hay, y «Abrir en Sell Out».
+- [x] **Tienda visitable**: tocar una tienda → su sell out del mes vs mes anterior, top 5 SKUs, inventario en tienda si hay, y «Abrir en Sell Out».
 
 ### Etapa 4 · Burbujas de atención y barra superior (que avise como juego)
 - [ ] **Barra superior tipo recursos**: Ventas del mes vs cuota (barra de progreso), Inventario comercial, Cartera vencida, Embarques en tránsito. Mismos números que Inicio. Tocar cada recurso lleva a su edificio.
@@ -144,11 +144,13 @@ Principios que no se rompen en ninguna etapa:
 - Cualquier vista o tabla nueva en Supabase (el agente no corre migraciones).
 - `~/acteck/ciudad/.env.local` con `SUPABASE_ACCESS_TOKEN` para probar con datos reales en el harness.
 - Etapa 8: quién más puede entrar a la Ciudad.
+- Inventario en tienda (Tienda visitable): no hay vista de inventario por sucursal (sólo `v_sellout_inventario_cuenta_sku` por cuenta); si existe una, el agente la agrega a la tarjeta de la tienda.
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:15 · v3.90.41 · Tienda visitable: la tarjeta de la tienda pide al tocarla su top 5 SKUs del mes (o del anterior si aún no vende) con la misma consulta que Análisis (`v_sellout_general_cuenta` por sucursal; `topSkus()` probado) y el botón dice «Abrir en Sell Out». Inventario por tienda → Necesita a Fernando
 - 2026-10-07 23:12 · v3.90.40 · Presencia en la oficina: `presenciaPersonas()` (probado) marca a cada quien en reunión (en curso, por `asistentes`/`creado_por`), de viaje (tipo 'viaje' vigente hoy, consulta chica aparte) o disponible; de viaje no camina por la base y su silla queda vacía, en reunión espera junto a la sala; la tarjeta de la persona dice «Ahora». Harness `?presencia`
 - 2026-10-07 23:08 · v3.90.39 · Interior de la oficina (paso 3, cierra la etapa): sobre cada escritorio un círculo con la inicial (color de su rol) que, al entrar por primera vez, carga la foto (`avatar_url`); si no carga se queda la inicial
 - 2026-10-07 23:05 · v3.90.38 · Interior de la oficina (paso 2): botón «Entrar» en la tarjeta de la oficina quita cascarón y sala; escritorio por persona con nombre y pendiente principal (tocable) y mesa de la sala de juntas con las reuniones de hoy (`acomodoEscritorios()` y tarjeta «sala» probados); `entrar('cedis'|'oficina'|false)` en la escena; harness `?oficina`

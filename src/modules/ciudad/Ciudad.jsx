@@ -9,9 +9,9 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
-import { useCiudadData } from './datos';
+import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto } from './modelo';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
@@ -189,8 +189,9 @@ export default function Ciudad({ onNavegar }) {
           </div>
           <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2, lineHeight: 1.4 }}>{tj.sub}</div>
           {tj.numeros.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 10 }}>{tj.numeros.map(([l, v]) => <div key={l} style={{ background: oscuro ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)', borderRadius: 9, padding: '6px 8px' }}><div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div></div>)}</div>}
+          {s.tipo === 'tienda' && s.sucursal && <TopSkusTienda cuenta={s.cuenta} sucursal={s.sucursal} theme={theme} oscuro={oscuro} />}
           <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-            {tj.pagina && <button type="button" onClick={() => navegar(s)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Abrir en el dashboard</button>}
+            {tj.pagina && <button type="button" onClick={() => navegar(s)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{tj.pagina === 'sellOut' ? 'Abrir en Sell Out' : 'Abrir en el dashboard'}</button>}
             {s.tipo === 'cedis' && escenaRef.current?.hayRacks && !adentro && <button type="button" onClick={() => { escenaRef.current?.entrarCedis(true); setSel(null); }} title="Ver los racks por marca dentro del CEDIS" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Entrar</button>}
             {s.tipo === 'oficina' && escenaRef.current?.hayOficina && !adentro && <button type="button" onClick={() => { escenaRef.current?.entrar('oficina'); setSel(null); }} title="Ver los escritorios y la sala de juntas" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Entrar</button>}
             <button type="button" onClick={() => escenaRef.current?.irA(s)} style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ir ahí</button>
@@ -199,6 +200,20 @@ export default function Ciudad({ onNavegar }) {
         );
       })()}
       </>}
+    </div>
+  );
+}
+
+// Tienda visitable (3.90.41): top 5 SKUs de la sucursal tocada; se pide sólo al abrir su tarjeta. Si falla, no se muestra.
+function TopSkusTienda({ cuenta, sucursal, theme, oscuro }) {
+  const { data, isLoading, error } = useTopSkusTienda(cuenta, sucursal);
+  if (error) return null;
+  return (
+    <div style={{ marginTop: 10, background: oscuro ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)', borderRadius: 9, padding: '6px 8px' }}>
+      <div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>Top SKUs · {data?.periodo || 'este mes'}</div>
+      {isLoading ? <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>Cargando…</div>
+        : !data?.lista?.length ? <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>Sin venta por SKU</div>
+        : data.lista.map((r) => <div key={r.sku} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</span><span style={{ color: theme.textMuted, flex: 'none' }}>{pesosCorto(r.importe)} · {Math.round(r.cantidad).toLocaleString('es-MX')} pz</span></div>)}
     </div>
   );
 }

@@ -299,6 +299,15 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
   return personas;
 }
 
+// Tienda visitable (3.90.41): filas `{ sku, importe, cantidad }` de sell out de una sucursal → top N SKUs por importe
+// (SKU en mayúsculas, sumado). Mismo cálculo que Análisis en el celular (useSkusDimension).
+export function topSkus(filas = [], n = 5) {
+  const m = new Map();
+  for (const r of filas || []) { const k = String(r?.sku || '').trim().toUpperCase(); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += Number(r.importe) || 0; o.cantidad += Number(r.cantidad) || 0; m.set(k, o); }
+  return [...m.values()].filter((o) => o.importe > 0 || o.cantidad > 0).sort((a, b) => b.importe - a.importe || b.cantidad - a.cantidad).slice(0, n);
+}
+export const pesosCorto = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
   const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
   const por = new Map();

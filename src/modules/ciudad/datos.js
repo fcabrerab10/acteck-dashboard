@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
-import { construirModelo, ponerPosEnPuerto } from './modelo';
+import { construirModelo, ponerPosEnPuerto, topSkus } from './modelo';
 import { venceEn, estaVencido } from '../comercial/pagosv3/estados'; // banco: mismas reglas de vencimiento que la bandeja de Pagos
 
 const STALE = 5 * 60 * 1000;
@@ -55,6 +55,21 @@ export function useCiudadData(enabled = true) {
       const ids = [...(modelo.puerto?.barcos || []), ...(modelo.puerto?.tarimas || [])].map((b) => b.id).filter(Boolean);
       if (ids.length) ponerPosEnPuerto(modelo.puerto, await seg(fetchAll('embarques_compras', 'contenedor,po', (q) => q.in('contenedor', ids)), 'POs por contenedor'));
       return modelo;
+    },
+  });
+}
+
+// Tienda visitable (3.90.41): top 5 SKUs de UNA sucursal, sólo cuando se toca la tienda (misma consulta que Análisis en el celular).
+// Si en el mes aún no hay venta, toma el mes anterior y lo dice.
+export function useTopSkusTienda(cuenta, sucursal, enabled = true) {
+  const hoy = new Date(); const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
+  return useQuery({
+    queryKey: ['ciudad', 'tienda-skus', cuenta, sucursal, anio, mes], staleTime: STALE, enabled: enabled && !!cuenta && !!sucursal,
+    queryFn: async () => {
+      const pedir = async (a, m) => { const { data, error } = await supabase.from('v_sellout_general_cuenta').select('sku,importe,cantidad').eq('cuenta', cuenta).eq('anio', a).eq('mes', m).eq('sucursal', sucursal).limit(5000); if (error) throw error; return topSkus(data, 5); };
+      const lista = await pedir(anio, mes);
+      if (lista.length) return { lista, periodo: 'este mes' };
+      return { lista: await pedir(mes === 1 ? anio - 1 : anio, mes === 1 ? 12 : mes - 1), periodo: 'mes anterior' };
     },
   });
 }

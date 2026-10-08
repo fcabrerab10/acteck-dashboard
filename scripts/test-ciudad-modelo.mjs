@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -382,4 +382,12 @@ test('presencia en la oficina: en reunión, de viaje o disponible', () => {
   const t = tarjetaDe({ tipo: 'persona', persona: { pendientes: 1, hechas: 0, presencia: { estado: 'reunion', titulo: 'Digitalife' } } }, {});
   assert.deepEqual(t.numeros[0], ['Ahora', 'En reunión · Digitalife']);
   const m = construirModelo(d, hoy); assert.ok(m.oficina.personas.every((p) => p.presencia));
+});
+
+test('tienda visitable: top 5 SKUs de la sucursal', () => {
+  const f = [{ sku: 'ac-1', importe: 100, cantidad: 2 }, { sku: 'AC-1 ', importe: 50, cantidad: 1 }, { sku: 'B', importe: 300, cantidad: 1 }, { sku: 'C', importe: 10 }, { sku: 'D', importe: 5 }, { sku: 'E', importe: 4 }, { sku: 'F', importe: 3 }, { sku: '', importe: 999 }, { sku: 'Z', importe: 0, cantidad: 0 }, null];
+  const t = topSkus(f);
+  assert.deepEqual(t.map((r) => r.sku), ['B', 'AC-1', 'C', 'D', 'E']); assert.deepEqual(t[1], { sku: 'AC-1', importe: 150, cantidad: 3 });
+  assert.deepEqual(topSkus(null), []); assert.equal(topSkus(f, 2).length, 2);
+  assert.equal(pesosCorto(1.25e6), '$1.3 M'); assert.equal(pesosCorto(15400), '$15 K'); assert.equal(pesosCorto(null), '$0');
 });
