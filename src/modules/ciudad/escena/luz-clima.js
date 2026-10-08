@@ -20,9 +20,10 @@ export function fondo({ scene, P, noche, nubosidad }) {
   scene.background = new THREE.Color(P.cielo).lerp(new THREE.Color(noche ? 0x0b0d12 : 0xC9D2DA), nubosidad * .7);
 }
 
-// Nubes (más con más nubosidad) y lluvia si Open-Meteo dice que llueve.
+// Nubes (más con más nubosidad) y lluvia si Open-Meteo dice que llueve. Las nubes son capa 'mapa' (3.90.33): sólo se ven de lejos;
+// de cerca tapaban el CEDIS y la base.
 export function cielo({ raiz, P, M, nubosidad, clima, animados }) {
   const nNubes = Math.round(2 + nubosidad * 14);
-  for (let i = 0; i < nNubes; i++) { const g = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(2.2 + (k % 2) * 1.4, 8, 6), M(P.nube, { roughness: 1 })); s.position.set(k * 2.4 - 3, (k % 2) * .8, (k % 3) * .6); g.add(s); } g.userData.nube = true; g.scale.setScalar(1 + (i % 3) * .35); g.position.set(-200 + i * (400 / nNubes), 62 + (i % 3) * 6, -90 + (i % 5) * 36); raiz.add(g); animados.push((t) => { g.position.x += .01; if (g.position.x > 220) g.position.x = -220; }); }
+  for (let i = 0; i < nNubes; i++) { const g = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(2.2 + (k % 2) * 1.4, 8, 6), M(P.nube, { roughness: 1 })); s.position.set(k * 2.4 - 3, (k % 2) * .8, (k % 3) * .6); g.add(s); } g.userData.detalle = 'mapa'; g.scale.setScalar(1 + (i % 3) * .35); g.position.set(-200 + i * (400 / nNubes), 62 + (i % 3) * 6, -90 + (i % 5) * 36); raiz.add(g); animados.push((t) => { g.position.x += .01; if (g.position.x > 220) g.position.x = -220; }); }
   if (clima?.lluvia) { const n = 900; const geo = new THREE.BufferGeometry(); const pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { pos[i * 3] = -120 + Math.random() * 240; pos[i * 3 + 1] = Math.random() * 50; pos[i * 3 + 2] = -120 + Math.random() * 240; } geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); const lluvia = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x9fbbe0, size: .35, transparent: true, opacity: .7 })); raiz.add(lluvia); animados.push(() => { const p = geo.attributes.position; for (let i = 0; i < n; i++) { let y = p.getY(i) - .9; if (y < 0) y = 50; p.setY(i, y); } p.needsUpdate = true; }); }
 }

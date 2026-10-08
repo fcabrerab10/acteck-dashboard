@@ -91,7 +91,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.30) Datos: inventario por marca con las mismas fuentes de Inventario (`v_inventario_almacen_medida` con `en_inv_actual = true` + marca de `roadmap_sku`) → `racksPorMarca()` puro en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «otras»), probado.
   - [x] (3.90.31) «Entrar» al CEDIS: botón en su tarjeta que acerca la cámara y oculta el techo; un rack por marca con altura según su inventario y etiqueta; tocable con su tarjeta.
   - [x] (3.90.32) Días de inventario por marca (demanda de los 3 meses cerrados, `v_sellin_global_sku_anio`, como Inventario) y montacargas que sólo se mueven si hubo salidas hoy.
-- [ ] **Nubes sobre la base**: en la Vista Base las nubes bajas (y 62–74) a veces tapan el CEDIS u otros edificios; subirlas, hacerlas translúcidas o apartarlas del campus (vista agente 2026-10-07).
+- [x] **Nubes sobre la base**: en la Vista Base las nubes bajas (y 62–74) a veces tapan el CEDIS u otros edificios; subirlas, hacerlas translúcidas o apartarlas del campus (vista agente 2026-10-07).
 - [ ] **Interior del puerto**: cada barco/contenedor tocable con PO, proveedor, ETA y piezas (`v_embarques_contenedor`).
 - [ ] **Interior de la oficina**: salas con las reuniones de hoy (agenda), escritorios por persona con su foto/nombre y su pendiente principal.
 - [ ] **Presencia en la oficina** (como Gather): cada persona aparece en reunión, de viaje o disponible según su agenda de hoy.
@@ -143,6 +143,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 22:46 · v3.90.33 · Nubes como capa 'mapa': sólo se ven de lejos (zoom > 45); en la Vista Base y dentro del CEDIS ya no tapan los edificios
 - 2026-10-07 22:44 · v3.90.32 · Interior del CEDIS (paso 3): días de inventario por marca (piezas / demanda de los 3 meses cerrados de `v_sellin_global_sku_anio` × 90, `demanda3Meses()` probado) en la etiqueta y tarjeta del rack con estado verde/ámbar/rojo (90/120 d como el CEDIS); el montacargas sólo se mueve si hubo facturas hoy (`cedis.salidasHoy`, hora local)
 - 2026-10-07 22:40 · v3.90.31 · Interior del CEDIS (paso 2): botón «Entrar» en la tarjeta del CEDIS oculta el cascarón (y las nubes), acerca la cámara y muestra un rack por marca (niveles según su inventario, `acomodoRacks()` probado) con etiqueta y tarjeta propia (inventario, piezas, SKUs, % del CEDIS); «← Salir del CEDIS» o alejarse lo cierra. Raycast ahora respeta la visibilidad de los padres
 - 2026-10-07 22:34 · v3.90.30 · Interior del CEDIS (paso 1, datos): `racksPorMarca()` en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «OTRAS», probado) con `v_inventario_almacen_medida` [Inv Actual] + marca de `roadmap_sku`; queda en `modelo.cedis.racksMarca` (capa que falla sola)
