@@ -363,7 +363,7 @@ export function puerto(ctx) {
 
 // Distritos: una manzana por ciudad con sus tiendas, clientes finales, vendedores, peatones, etiqueta y carretera desde el CEDIS.
 export function distritos(ctx, cedisPos) {
-  const { P, M, G, box, add, oscuro, modelo, esc, raiz, interact, animados } = ctx;
+  const { P, M, G, box, add, oscuro, noche, modelo, esc, raiz, interact, animados } = ctx;
   const distritoPos = new Map(); const rutas = new Map();
   const medidas = (n) => { const cols = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(Math.max(1, n) * 1.5)))); const filas = Math.max(1, Math.ceil(n / cols)); return { cols, ancho: cols * 2.7 + 1.6, largo: filas * 2.9 + 1.6 }; };
   // distritos reales que caen sobre el campus o el distrito GDL (3.90.12): capa `mapa`, sólo se ven de lejos
@@ -387,7 +387,10 @@ export function distritos(ctx, cedisPos) {
       const tg = new THREE.Group(); tg.position.set(x, .3, z);
       (ctx.tiendaPos ||= new Map()).set(`${t.cuenta}|${t.sucursal}`, { x: base.x + x, z: base.z + z }); // pensamientos (3.90.52)
       const tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
-      const cuerpo = box(2, 1.9, 2, P.tienda); cuerpo.position.y = .95; tg.add(cuerpo);
+      const cuerpo = new THREE.Mesh(geo(ctx, 'tiendaBisel', () => cajaBiselada(2, 1.9, 2, .12)), M(P.tienda)); cuerpo.castShadow = cuerpo.receiveShadow = true; cuerpo.position.y = .95; tg.add(cuerpo); // kit low-poly (3.90.68): esquinas biseladas
+      // ventanas laterales: de noche se prenden (todas si la tienda vendió, una sí y una no si no); de día, vidrio oscuro
+      const prendida = (k) => noche && (t.vendio || (i + k) % 2 === 0);
+      for (const [k, sx, sz] of [[0, -1, -.45], [1, -1, .45], [2, 1, -.45], [3, 1, .45]]) { const on = prendida(k); const vl = new THREE.Mesh(G(.08, .5, .42), M(on ? P.ventanaOn : P.ventana, { emissive: on ? P.ventanaOn : 0x000000, emissiveIntensity: on ? 1 : 0, roughness: .4 })); vl.position.set(sx * 1.02, 1.15, sz); vl.userData.detalle = 'fino'; tg.add(vl); instanciar(ctx, vl, tag); }
       const techo = box(2.3, .3, 2.3, P.tiendaTecho); techo.position.y = 2.05; tg.add(techo);
       const toldo = box(2.2, .16, .8, col); toldo.position.set(0, 1.5, 1.35); tg.add(toldo);
       const letrero = box(1.5, .34, .12, t.vendio ? col : P.ventana, { emissive: t.vendio ? col : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.6 : .3) : 0 }); letrero.position.set(0, 1.78, 1.06); tg.add(letrero);
@@ -425,4 +428,13 @@ export function distritos(ctx, cedisPos) {
     else rutas.set(d.ciudad, carretera(ctx, { x: cedisPos.x, z: cedisPos.z + 8 }, { x: base.x + ancho / 2 + 3, z: base.z }, 1.2));
   });
   return { distritoPos, rutas };
+}
+
+// Kit low-poly (3.90.68): caja con las aristas verticales y la orilla de arriba/abajo biseladas (un solo bisel plano,
+// se ve facetada con flatShading). Centrada como BoxGeometry, así reemplaza a box() sin mover nada.
+export function cajaBiselada(w, h, d, b) {
+  const s = new THREE.Shape(); const x = w / 2 - b, z = d / 2 - b;
+  s.moveTo(-x, -z); s.lineTo(x, -z); s.lineTo(x, z); s.lineTo(-x, z); s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: h - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 1, curveSegments: 1 });
+  g.rotateX(-Math.PI / 2); g.center(); g.computeVertexNormals(); return g;
 }
