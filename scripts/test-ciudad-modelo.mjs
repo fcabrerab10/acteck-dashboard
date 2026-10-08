@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -400,4 +400,17 @@ test('barra superior de recursos con los números de Inicio', () => {
   assert.equal(recursosBarra({ cur: { fact_neta: 1 }, cuotaPeriodo: 0 })[0].pct, null, 'sin cuota');
   assert.equal(recursosBarra({ cartera: { vencido: 0 } })[0].tono, 'verde');
   assert.deepEqual(recursosBarra(null), []);
+});
+
+test('burbujas de atención sobre edificios', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  const m = { banco: { carteraVencida: 0, pagosVencidos: 0 }, puerto: { barcos: [{ llegaEnDias: 2 }, { llegaEnDias: 9 }, { llegaEnDias: -1, arribo: '2026-10-04' }] }, oficina: { agenda: [{ titulo: 'Pcel', estado: 'próxima', ini: 11 * 60 + 10 }, { titulo: 'Tarde', estado: 'próxima', ini: 16 * 60 }] } };
+  let b = burbujasAtencion(m, h);
+  assert.deepEqual(b.map((x) => [x.lugar, x.nivel, x.texto]), [['puerto', 'ambar', '1 contenedor llega en ≤ 3 días'], ['oficina', 'ambar', 'Pcel en 10 min']]);
+  assert.deepEqual(b[0].tag, { tipo: 'puerto' });
+  b = burbujasAtencion({ ...m, banco: { carteraVencida: 1.5e6 }, puerto: { barcos: [{ llegaEnDias: -2 }, { llegaEnDias: 1 }] } }, h);
+  assert.deepEqual(b.map((x) => [x.lugar, x.nivel, x.texto]), [['banco', 'rojo', 'Cartera vencida $1.5 M'], ['puerto', 'rojo', '1 contenedor con ETA vencida'], ['oficina', 'ambar', 'Pcel en 10 min']]);
+  assert.equal(burbujasAtencion({ banco: { pagosVencidos: 2 } }, h)[0].texto, '2 pagos vencidos');
+  assert.deepEqual(burbujasAtencion(null), []); assert.deepEqual(burbujasAtencion({}, h), []);
+  assert.ok(Array.isArray(burbujasAtencion(construirModelo(d, hoy), hoy)));
 });

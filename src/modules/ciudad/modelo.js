@@ -320,6 +320,26 @@ export function recursosBarra(r) {
   return out;
 }
 
+// Burbujas de atención (etapa 4, paso 1, 3.90.43): qué edificio pide atención y por qué, con reglas sobre el modelo ya armado.
+// Cartera o pagos vencidos → banco; contenedor con ETA vencida o que llega en ≤ 3 días → puerto; reunión que empieza en
+// ≤ 15 min → oficina. Rojo primero. Cada una trae el `tag` para abrir la tarjeta del edificio.
+export function burbujasAtencion(m, hoy = new Date()) {
+  if (!m) return [];
+  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  const out = []; const b = m.banco;
+  if (b && Number(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
+  else if (b && Number(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `${b.pagosVencidos} pago${b.pagosVencidos === 1 ? '' : 's'} vencido${b.pagosVencidos === 1 ? '' : 's'}` });
+  const barcos = m.puerto?.barcos || [];
+  const tarde = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias < 0).length;
+  const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;
+  if (tarde) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'rojo', texto: `${tarde} contenedor${tarde === 1 ? '' : 'es'} con ETA vencida` });
+  else if (pronto) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'ambar', texto: `${pronto} contenedor${pronto === 1 ? ' llega' : 'es llegan'} en ≤ 3 días` });
+  const ahora = hoy.getHours() * 60 + hoy.getMinutes();
+  const prox = (m.oficina?.agenda || []).find((r) => r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
+  if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${prox.titulo} en ${prox.ini - ahora} min` });
+  return out.map((x) => ({ ...x, tag: { tipo: x.lugar } })).sort((a, c) => (a.nivel === 'rojo' ? 0 : 1) - (c.nivel === 'rojo' ? 0 : 1));
+}
+
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
   const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
   const por = new Map();
