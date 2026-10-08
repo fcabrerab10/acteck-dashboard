@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { fmtK, capital } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
-import { circuitoVendedor, tramoActual, rumboBarcos } from '../modelo.js';
+import { circuitoVendedor, tramoActual, rumboBarcos, camionesTemporada } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
@@ -37,13 +37,16 @@ export function barcos(ctx, puertoPos) {
 // Camiones (facturas y envíos) y vendedores del ERP (coches) por las carreteras de cada ciudad.
 export function camiones(ctx, rutas) {
   const { P, M, box, add, oscuro, modelo, animados } = ctx;
+  // 3.90.67: facturas que salieron en Buen Fin / semana del cierre → caja roja de promoción (fecha de la barra de tiempo o hoy).
+  let temporada = new Map(); try { temporada = camionesTemporada(modelo, modelo.momento?.fecha ? new Date(modelo.momento.fecha) : new Date()); } catch (e) { console.warn('[ciudad] camiones de temporada', e); }
   modelo.camiones.forEach((c, i) => {
+    const promo = temporada.get(c.folio);
     const curva = rutas.get(c.ciudad); if (!curva) return;
-    const g = new THREE.Group(); const caja = box(2.6, 1.4, 1.2, c.envio ? 0xDCE6F2 : P.camion); caja.position.set(-.4, .95, 0); g.add(caja); const cab = box(1, 1.1, 1.2, c.envio ? ACC.azul : P.cabina); cab.position.set(1.5, .8, 0); g.add(cab);
+    const g = new THREE.Group(); const caja = box(2.6, 1.4, 1.2, c.envio ? 0xDCE6F2 : promo ? 0xFF453A : P.camion); caja.position.set(-.4, .95, 0); g.add(caja); const cab = box(1, 1.1, 1.2, c.envio ? ACC.azul : P.cabina); cab.position.set(1.5, .8, 0); g.add(cab);
     [[-1.1, .5], [-1.1, -.5], [1.4, .5], [1.4, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCamion', () => new THREE.CylinderGeometry(.28, .28, .22, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); g.add(r); });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.4: el tag lo pone add() y se lee al plantar
     if (oscuro) { const f = new THREE.PointLight(0xFFF2C0, .9, 7); f.position.set(2.2, .8, 0); g.add(f); }
-    add(g, { tipo: 'camion', folio: c.folio, titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}`, sub: c.envio ? `${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''} · salió ${c.fecha} · va a ${capital(c.ciudad)}` : `${c.cliente} · $${fmtK(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${capital(c.ciudad)}`, pagina: 'ordenesCompra' });
+    add(g, { tipo: 'camion', folio: c.folio, titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}${promo ? ` · ${promo.texto}` : ''}`, sub: c.envio ? `${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''} · salió ${c.fecha} · va a ${capital(c.ciudad)}` : `${c.cliente} · $${fmtK(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${capital(c.ciudad)}`, pagina: 'ordenesCompra' });
     animados.push((t) => { const p = (c.progreso + t * .025 + i * .07) % 1; const pt = curva.getPointAt(p); const q = curva.getPointAt(Math.min(1, p + .01)); g.position.set(pt.x, .1, pt.z); g.rotation.y = -Math.atan2(q.z - pt.z, q.x - pt.x); });
   });
 }

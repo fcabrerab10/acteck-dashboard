@@ -787,13 +787,23 @@ export function eventosCalendario(hoy = new Date()) {
   const d0 = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()), y = d0.getFullYear(), mo = d0.getMonth();
   const entre = (a, b) => Math.round((b - a) / 86400000), out = [];
   const ultimo = new Date(y, mo + 1, 0), faltan = entre(d0, ultimo);
-  if (faltan <= 6) out.push({ id: 'cierre', icono: '⏳', dias: faltan, nivel: faltan <= 2 ? 'ambar' : null, texto: faltan === 0 ? 'Hoy cierra el mes' : `Cierre de mes en ${faltan} día${faltan === 1 ? '' : 's'}` });
+  if (faltan <= 6) out.push({ id: 'cierre', icono: '⏳', dias: faltan, desde: isoLocal(new Date(y, mo, ultimo.getDate() - 6)), hasta: isoLocal(ultimo), nivel: faltan <= 2 ? 'ambar' : null, texto: faltan === 0 ? 'Hoy cierra el mes' : `Cierre de mes en ${faltan} día${faltan === 1 ? '' : 's'}` });
   const nov1 = new Date(y, 10, 1), lunes3 = new Date(y, 10, 1 + ((8 - nov1.getDay()) % 7) + 14), bfIni = new Date(y, 10, lunes3.getDate() - 3);
   const aBf = entre(d0, bfIni), finBf = entre(d0, lunes3);
-  if (aBf <= 14 && finBf >= 0) out.push({ id: 'buenfin', icono: '🏷️', dias: Math.max(0, aBf), nivel: aBf <= 0 ? 'ambar' : null, texto: aBf <= 0 ? `Buen Fin · hasta el lunes ${lunes3.getDate()}` : `Buen Fin en ${aBf} día${aBf === 1 ? '' : 's'} (${bfIni.getDate()}–${lunes3.getDate()} nov)` });
+  if (aBf <= 14 && finBf >= 0) out.push({ id: 'buenfin', icono: '🏷️', dias: Math.max(0, aBf), desde: isoLocal(bfIni), hasta: isoLocal(lunes3), nivel: aBf <= 0 ? 'ambar' : null, texto: aBf <= 0 ? `Buen Fin · hasta el lunes ${lunes3.getDate()}` : `Buen Fin en ${aBf} día${aBf === 1 ? '' : 's'} (${bfIni.getDate()}–${lunes3.getDate()} nov)` });
   if ((mo === 6 && d0.getDate() >= 15) || mo === 7) out.push({ id: 'clases', icono: '🎒', dias: 0, nivel: null, texto: 'Temporada de regreso a clases' });
   if (mo === 11 && d0.getDate() <= 25) { const n = 25 - d0.getDate(); out.push({ id: 'navidad', icono: '🎄', dias: n, nivel: null, texto: n === 0 ? '¡Feliz Navidad!' : `Temporada navideña · faltan ${n} días` }); }
   return out.sort((a, b) => a.dias - b.dias);
+}
+// Paso 3 (3.90.67): camiones de facturas que salieron durante la temporada en curso (Buen Fin ya empezado, o la semana del
+// cierre de mes) → Map folio → { id, texto } para pintarlos de promoción. Sólo facturas reales de `m.camiones`, sin inventar volumen.
+export function camionesTemporada(m, hoy = new Date()) {
+  const out = new Map(); const evs = eventosCalendario(hoy).filter((e) => e.desde && (e.id === 'cierre' || e.dias === 0));
+  for (const c of m?.camiones || []) {
+    if (c?.envio || !c?.fecha) continue; const f = String(c.fecha).slice(0, 10);
+    const e = evs.find((x) => f >= x.desde && f <= x.hasta); if (e) out.set(c.folio, { id: e.id, texto: e.id === 'buenfin' ? 'Buen Fin' : 'Cierre de mes' });
+  }
+  return out;
 }
 
 /**
