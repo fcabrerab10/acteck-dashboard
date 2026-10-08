@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -421,4 +421,18 @@ test('burbuja del CEDIS por pedidos de cliente detenidos', () => {
   assert.equal(burbujasAtencion({ ocDetenidas: 1 }, h)[0].texto, '1 pedido de cliente detenido');
   assert.equal(construirModelo({ ...d, alertasOc: [{ tipo: 'oc_detenida' }, { tipo: 'oc_detenida' }] }, hoy).ocDetenidas, 2);
   assert.equal(construirModelo(d, hoy).ocDetenidas, 0);
+});
+
+test('misiones del día («Hoy en Acteck»)', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  const m = { banco: { carteraVencida: 2e6 }, ocDetenidas: 1, puerto: { barcos: [{ llegaEnDias: 1 }], tarimas: [{ id: 'MSKU1', piezas: 1200 }] },
+    oficina: { agenda: [{ titulo: 'Junta', hora: '09:00', ini: 9 * 60, estado: 'hecha' }, { titulo: 'Pcel', hora: '11:10', ini: 11 * 60 + 10, estado: 'próxima' }, { titulo: 'Tarde', hora: '16:00', ini: 16 * 60, estado: 'próxima' }] } };
+  const ms = misionesDelDia(m, h);
+  assert.deepEqual(ms.map((x) => x.texto), ['Cartera vencida $2.0 M', '1 pedido de cliente detenido', '1 contenedor llega en ≤ 3 días', '11:10 · Pcel · en 10 min', '16:00 · Tarde', 'Descargar MSKU1 · 1,200 pz', '09:00 · Junta']);
+  assert.deepEqual(ms[0].ir, { tipo: 'banco' }); assert.equal(ms[5].tarjeta.tipo, 'barco'); assert.equal(ms[5].ir.tipo, 'cedis');
+  assert.equal(ms[6].hecha, true); assert.equal(ms[0].hecha, false); assert.equal(ms.find((x) => x.texto.startsWith('11:10')).nivel, 'ambar');
+  assert.ok(!ms.some((x) => 'orden' in x)); assert.equal(new Set(ms.map((x) => x.id)).size, ms.length);
+  assert.equal(misionesDelDia(m, h, 2).length, 2);
+  assert.deepEqual(misionesDelDia(null), []); assert.deepEqual(misionesDelDia({}, h), []);
+  assert.ok(Array.isArray(misionesDelDia(construirModelo(d, hoy), hoy)));
 });

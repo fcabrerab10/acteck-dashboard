@@ -109,7 +109,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.43) Reglas: `burbujasAtencion()` puro en `modelo.js` (cartera/pagos vencidos → banco, ETA vencida o llegada en ≤ 3 días → puerto, reunión en ≤ 15 min → oficina), probado.
   - [x] (3.90.44) Dibujar las burbujas (sprite con icono sobre cada edificio, rojo/ámbar, que flota) y que tocarlas abra la tarjeta del edificio.
   - [x] (3.90.45) OC de cliente atrasada: alerta `oc_detenida` (la de la campana) → globo rojo sobre el CEDIS. Inventario bajo de SKU A → movido a «Necesita a Fernando».
-- [ ] **«Hoy en Acteck»** como lista de misiones del día (las mismas alertas y pendientes del dashboard), cada una con «Ir» que vuela al lugar.
+- [x] **«Hoy en Acteck»** como lista de misiones del día (las mismas alertas y pendientes del dashboard), cada una con «Ir» que vuela al lugar.
+  - [x] (3.90.46) `misionesDelDia()` puro (alertas de las burbujas + reuniones de hoy + contenedores descargando, hechas al final con ✓), probado; panel abajo a la derecha con «Ir» que vuela y abre la tarjeta.
 - [ ] **Capas de información** (como SimCity): botones «Ventas · Inventario · Cartera · Cuota» que pintan ciudades, manzanas y edificios con una escala de color de ese dato (leyenda visible, «Sin capa» para volver). Mismos números que su pestaña.
 - [ ] **Bitácora en vivo** (como el Chirper de Cities: Skylines): tira de eventos recientes de la empresa — facturas grandes, contenedores que llegan, OCs surtidas, pagos registrados, reuniones que empiezan — cada uno con «Ver» que vuela al lugar. Sólo de tablas que ya existen (`sync_events`, facturas, embarques, pagos, agenda).
 - [ ] **Pensamientos** (como RollerCoaster Tycoon): burbujas cortas sobre tiendas y clientes que resumen su situación en lenguaje natural («Me falta inventario de AC-944571», «30 días sin comprar», «Voy arriba de mi cuota»), generadas con reglas del modelo, máximo unas pocas visibles a la vez.
@@ -154,6 +155,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:29 · v3.90.46 · «Hoy en Acteck»: lista de misiones del día (`misionesDelDia()`: cartera/pagos vencidos, contenedores con ETA vencida o por llegar, pedidos detenidos, reuniones de hoy y contenedores por descargar; rojo → ámbar → por hora, hechas tachadas) en el panel de abajo a la derecha, cada una con «Ir» que vuela al edificio y abre su tarjeta.
 - 2026-10-07 23:26 · v3.90.45 · Burbujas de atención (paso 3): pedidos de cliente detenidos (alerta `oc_detenida`, consulta chica) → globo rojo sobre el CEDIS que abre su tarjeta; inventario bajo SKU A queda para Fernando
 - 2026-10-07 23:23 · v3.90.44 · Burbujas de atención (paso 2): globo rojo/ámbar con icono flotando sobre banco, puerto u oficina cuando `burbujasAtencion()` lo pide; tocarlo abre la tarjeta del edificio con el motivo. Harness `?burbujas`
 - 2026-10-07 23:21 · v3.90.43 · Burbujas de atención (paso 1): `burbujasAtencion()` decide qué edificio pide atención (banco, puerto, oficina) y por qué; probado, aún sin dibujar

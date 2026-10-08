@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -76,6 +76,7 @@ export default function Ciudad({ onNavegar }) {
     if (tag.tipo === 'tienda' || tag.tipo === 'vendedor') detail.extra = { cuenta: tag.cuenta };
     if (onNavegar) onNavegar(null, tag.pagina, detail.extra); else window.dispatchEvent(new CustomEvent('acteck:navegar', { detail }));
   };
+  const misiones = useMemo(() => { try { return misionesDelDia(modelo); } catch (e) { console.warn('[ciudad] misiones', e); return []; } }, [modelo]); // falla sola
   const top = useMemo(() => ciudadesTop(modelo, 5), [modelo]); // acceso rápido: las 5 ciudades con más actividad
   const plano = useMemo(() => planoMini(modelo?.distritos), [modelo]); // minimapa: México chico con un punto por ciudad
   const marco = plano.marco(vistaCam);
@@ -141,12 +142,21 @@ export default function Ciudad({ onNavegar }) {
       <div style={{ position: 'absolute', right: 14, top: 68, zIndex: 3, ...card, padding: '8px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', maxWidth: 420, fontSize: 11 }}>
         {[...new Set(modelo.distritos.flatMap((d) => d.tiendas.map((t) => `${t.cuenta}|${t.nombreCuenta}`)))].map((k) => { const [c, n] = k.split('|'); return <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 3, background: hexCss(COLOR_CUENTA[c] || 0x8E8E93), display: 'inline-block' }} />{n}</span>; })}
       </div>
-      {/* Hoy en la ciudad: lo que está pasando ahora mismo */}
-      <div style={{ position: 'absolute', right: 14, bottom: 14, width: 270, zIndex: 3, ...card, padding: '10px 12px', fontSize: 12, lineHeight: 1.45, maxHeight: '42%', overflowY: 'auto' }}>
-        <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>Hoy en la ciudad</div>
-        {modelo.oficina.reunionEnCurso && <div>🟡 En la sala: <b>{modelo.oficina.reunionEnCurso.titulo}</b></div>}
+      {/* «Hoy en Acteck» (3.90.46): misiones del día con «Ir» (misionesDelDia) y abajo lo que está pasando en la ciudad */}
+      <div style={{ position: 'absolute', right: 14, bottom: 14, width: 270, zIndex: 3, ...card, padding: '10px 12px', fontSize: 12, lineHeight: 1.45, maxHeight: '48%', overflowY: 'auto' }}>
+        {misiones.length > 0 && <>
+          <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>Hoy en Acteck · {misiones.filter((x) => !x.hecha).length} pendiente{misiones.filter((x) => !x.hecha).length === 1 ? '' : 's'}</div>
+          {misiones.map((mi) => (
+            <div key={mi.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', opacity: mi.hecha ? 0.55 : 1 }}>
+              {mi.nivel ? <i style={{ width: 7, height: 7, borderRadius: 4, flex: 'none', background: mi.nivel === 'rojo' ? theme.red : (theme.orange || '#FF9F0A') }} /> : <i style={{ width: 7, flex: 'none' }} />}
+              <span style={{ flex: 1, minWidth: 0, textDecoration: mi.hecha ? 'line-through' : 'none' }}>{mi.hecha ? '✓' : mi.icono} {mi.texto}</span>
+              <button type="button" onClick={() => { escenaRef.current?.irA(mi.ir); setSel({ tag: mi.tarjeta, pos: null }); }} title="Volar al lugar y abrir su tarjeta" style={{ flex: 'none', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.accent, borderRadius: 8, padding: '1px 8px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText }}>Ir</button>
+            </div>
+          ))}
+          <div style={{ height: 1, background: theme.border, margin: '6px 0' }} />
+        </>}
+        <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>En la ciudad</div>
         {modelo.oficina.personas.filter((p) => p.actividad).map((p) => <div key={p.id}>👤 <b>{p.nombre.split(' ')[0]}</b>: {p.actividad}</div>)}
-        {modelo.puerto.tarimas.slice(0, 3).map((t) => <div key={t.id}>📦 Descargando <b>{t.id}</b> · {t.piezas.toLocaleString('es-MX')} pz</div>)}
         {modelo.puerto.barcos.slice(0, 3).map((b) => <div key={b.id}>🚢 <b>{b.id}</b> llega {b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias <= 0 ? 'hoy' : `en ${b.llegaEnDias} d`}</div>)}
         {modelo.camiones.slice(0, 4).map((c) => <div key={c.folio}>🚚 <b>{c.folio}</b> → {c.cliente} · {fmtM(c.monto)}</div>)}
         {modelo.kpis.cartera.filter((c) => c.vencido > 0).map((c) => <div key={c.cuenta}>🚩 <b>{capital(c.cuenta)}</b>: cartera vencida {fmtM(c.vencido)} · DSO {c.dso} d</div>)}

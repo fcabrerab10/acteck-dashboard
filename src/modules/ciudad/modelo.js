@@ -237,6 +237,24 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().t
   return { abiertas: ps.filter((p) => !p.cerrado_at).length, lineas: lineas.length, confirmadas: lineas.filter((l) => l.confirmado).length, compradas: lineas.filter((l) => l.comprado_at).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, a) => s + N(a.piezas_a_reservar), 0), atrasados: atrasados.length };
 }
 
+// «Hoy en Acteck» (etapa 4, 3.90.46): misiones del día para la lista con «Ir». Junta las alertas de las burbujas (banco,
+// puerto, CEDIS), las reuniones de hoy (en curso / próximas; las hechas quedan al final con ✓) y los contenedores que se
+// están descargando. Cada misión trae `ir` (a dónde vuela la cámara) y `tarjeta` (qué tarjeta abre). Rojo, ámbar, luego por hora.
+export function misionesDelDia(m, hoy = new Date(), max = 8) {
+  if (!m) return [];
+  const out = [];
+  for (const b of burbujasAtencion(m, hoy)) if (b.lugar !== 'oficina') out.push({ id: `alerta-${b.lugar}`, icono: b.icono, nivel: b.nivel, texto: b.texto, ir: b.tag, tarjeta: b.tag, orden: 0 });
+  const ahora = hoy.getHours() * 60 + hoy.getMinutes();
+  for (const r of m.oficina?.agenda || []) {
+    const hecha = r.estado === 'hecha', falta = r.ini - ahora;
+    out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
+      texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta <= 15 ? ` · en ${falta} min` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: r.ini });
+  }
+  for (const t of m.puerto?.tarimas || []) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${(Number(t.piezas) || 0).toLocaleString('es-MX')} pz`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
+  const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
+  return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
+}
+
 /** Racks del CEDIS por marca (etapa 3 · interior del CEDIS): filas de `v_inventario_almacen_medida` con `en_inv_actual = true`
  *  (SKU × almacén, como Inventario) + marca de `roadmap_sku` (`marcas`: Map u objeto sku → marca). Suma valor (`costoinventario`)
  *  y piezas por marca, cuenta SKUs distintos con existencia; top `n` por valor y el resto junto en «OTRAS». Sin marca → «SIN MARCA». */
