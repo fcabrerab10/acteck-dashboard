@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -129,6 +129,27 @@ export function burbujas(ctx, posiciones) {
 // Pensamientos (etapa 4, paso 2, 3.90.52): nube blanca con la frase de `pensamientos()` sobre la tienda (borde del tono,
 // burbujitas de «pensar» hacia abajo), flotando. Pocas a la vez; tocarla abre la tarjeta de la tienda.
 const TONO_PENSAR = { rojo: '#FF453A', ambar: '#FF9F0A', verde: '#30D158' };
+// Celebraciones (etapa 6, 3.90.62): fuegos artificiales sobre la base si la cuota del mes ya se cruzó y confeti cayendo sobre
+// las tiendas que volvieron a vender (`celebraciones()`); puntos baratos (un Points por efecto), sin tag, discretos.
+export function celebrar(ctx, basePos) {
+  const { raiz, modelo, animados } = ctx; const c = celebraciones(modelo, 5);
+  const puntos = (n, f, colores, tam) => { const pos = new Float32Array(n * 3), col = new Float32Array(n * 3); const tmp = new THREE.Color();
+    for (let i = 0; i < n; i++) { const [x, y, z] = f(i); pos.set([x, y, z], i * 3); tmp.set(colores[i % colores.length]); col.set([tmp.r, tmp.g, tmp.b], i * 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return new THREE.Points(g, new THREE.PointsMaterial({ size: tam, vertexColors: true, transparent: true, depthWrite: false })); };
+  if (c.cuota && basePos) for (let k = 0; k < 3; k++) { // tres cohetes desfasados: estallan, se abren y se apagan
+    const p = puntos(40, () => { const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = Math.sqrt(1 - u * u); return [r * Math.cos(a), u, r * Math.sin(a)]; }, [[0xFF453A, 0xFFD60A], [0x30D158, 0x0A84FF], [0xBF5AF2, 0xFF9F0A]][k], 1.1);
+    const cx = basePos.x + (k - 1) * 7, cz = basePos.z - 4 + (k % 2) * 5; p.renderOrder = 7; raiz.add(p);
+    animados.push((t) => { const f = (t / 2.6 + k / 3) % 1; p.position.set(cx, 16 + k * 2 - f * 2, cz); p.scale.setScalar(.3 + f * 4.5); p.material.opacity = f < .15 ? f / .15 : 1 - (f - .15) / .85; });
+  }
+  c.tiendas.forEach((t, i) => { // confeti en bucle sobre la tienda que volvió a vender
+    const pos = ctx.tiendaPos?.get(`${t.cuenta}|${t.sucursal}`); if (!pos) return;
+    const p = puntos(36, () => [(Math.random() - .5) * 2.6, Math.random() * 3, (Math.random() - .5) * 2.6], [0xFF453A, 0xFFD60A, 0x30D158, 0x0A84FF, 0xBF5AF2], .45);
+    p.userData.detalle = 'fino'; raiz.add(p);
+    animados.push((tt) => { const f = (tt / 3 + i * .37) % 1; p.position.set(pos.x, 3 + (1 - f) * 2.5, pos.z); p.rotation.y = tt * .8 + i; p.material.opacity = f > .8 ? (1 - f) / .2 : 1; });
+  });
+}
+
 export function pensar(ctx) {
   const { add, modelo, animados } = ctx;
   pensamientos(modelo, 5).forEach((p, i) => {

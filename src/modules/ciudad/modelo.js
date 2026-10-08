@@ -403,6 +403,17 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ir: null, ...x }));
 }
 
+// Celebraciones (etapa 6, 3.90.62): `cuota` = { pct } si el total de las cuentas con cuota (`m.cuotas`) ya cruzó el 100 % del mes
+// (fuegos artificiales sobre la base); `tiendas` = las que vendieron este mes sin haber vendido el mes anterior (≈ 30 días o más
+// sin venta y volvieron; confeti), sin las de reparto, de mayor a menor venta, máximo `max`.
+export function celebraciones(m, max = 5) {
+  const q = m?.cuotas instanceof Map ? [...m.cuotas.values()] : [];
+  const venta = q.reduce((s, x) => s + (Number(x.venta) || 0), 0), cuo = q.reduce((s, x) => s + (Number(x.cuota) || 0), 0);
+  const tiendas = (m?.distritos || []).flatMap((d) => (d.tiendas || []).filter((t) => !t.reparto && t.vendioMes && !(Number(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: Number(t.importe) || 0 })))
+    .sort((a, b) => b.importe - a.importe).slice(0, max);
+  return { cuota: cuo > 0 && venta >= cuo ? { pct: Math.round(venta / cuo * 100) } : null, tiendas };
+}
+
 // Cuota vs ritmo de un grupo de cuentas (3.90.60; la usan la capa «Cuota» y las tarjetas de ciudad y tienda): venta ÷ cuota
 // del mes de las cuentas con cuota (sumadas, el % se saca al final) contra el ritmo esperado al día de hoy. null = ninguna tiene cuota.
 export function cuotaRitmo(m, cuentas = []) {
