@@ -191,6 +191,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:22 · v3.90.80 · Nota «Acteck Ciudad» de CLAUDE.md al día (kit low-poly, rebote/saludo, sonido, versión ligera, recorrido).
 - 2026-10-08 01:20 · v3.90.79 · Botones grandes en iPad/celular (cierra «Gestos táctiles completos»).
 - 2026-10-08 01:18 · v3.90.78 · Versión ligera automática en iPad/celular: sin sombras, menos resolución y menos paseantes.
 - 2026-10-08 01:15 · v3.90.77 · Gestos táctiles: dos dedos giran y acercan, toque largo muestra la info, el toque corto elige lo que está bajo el dedo.
