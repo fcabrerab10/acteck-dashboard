@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -343,4 +343,14 @@ test('números de PO de cada contenedor en la tarjeta', () => {
   assert.equal(tarjetaDe({ tipo: 'barco', id: 'B2' }, m).numeros[3][1], '2', 'sin lista queda el conteo');
   assert.equal(tarjetaDe({ tipo: 'barco', id: 'T9' }, m).numeros[3][1], '77');
   assert.equal(ponerPosEnPuerto(null, []), null); assert.doesNotThrow(() => ponerPosEnPuerto({}, null));
+});
+
+test('reuniones del día en la oficina', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  const ag = reunionesDelDia([{ titulo: 'Tarde', fecha: '2026-10-05T16:00:00' }, { titulo: 'Temprano', fecha: '2026-10-05T09:00:00', duracion_min: 30 }, { titulo: 'Ahora', fecha: '2026-10-05T10:30:00', duracion_min: 60, cliente_key: 'digitalife' }, { fecha: 'mal' }, null], h);
+  assert.deepEqual(ag.map((r) => [r.titulo, r.hora, r.estado]), [['Temprano', '09:00', 'hecha'], ['Ahora', '10:30', 'en curso'], ['Tarde', '16:00', 'próxima']]);
+  assert.equal(ag[1].cliente_key, 'digitalife'); assert.deepEqual(reunionesDelDia(null, h), []);
+  const m = construirModelo(d, hoy); assert.equal(m.oficina.agenda.length, m.oficina.reuniones);
+  const of = (agenda) => tarjetaDe({ tipo: 'oficina' }, { oficina: { personas: [], genericos: 0, reuniones: agenda.length, agenda } }).numeros[1][1];
+  assert.equal(of(ag), '3 · en curso'); assert.equal(of(ag.filter((r) => r.estado !== 'en curso')), '2 · próxima 16:00'); assert.equal(of([ag[0]]), '1'); assert.equal(of([]), '0');
 });

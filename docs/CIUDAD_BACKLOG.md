@@ -97,6 +97,9 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.35) Números de PO de cada contenedor (lista de `embarques_compras` por contenedor, sólo de los barcos dibujados) en la tarjeta.
   - [x] (3.90.36) Contenedores descargando en el puerto/CEDIS (`puerto.tarimas`) tocables uno por uno con la misma tarjeta.
 - [ ] **Interior de la oficina**: salas con las reuniones de hoy (agenda), escritorios por persona con su foto/nombre y su pendiente principal.
+  - [x] (3.90.37) Datos: reuniones de hoy en orden con hora y estado (hecha / en curso / próxima) → `reunionesDelDia()` puro en `modelo.js` (`oficina.agenda`), probado; la tarjeta de la oficina dice «N · próxima HH:MM» o «en curso».
+  - [ ] «Entrar» a la oficina (como el CEDIS): botón en su tarjeta que acerca la cámara y oculta el techo; sala de juntas con las reuniones de hoy (tocable) y un escritorio por persona con su nombre y pendiente principal (`oficina.personas[].actividad`), tocable.
+  - [ ] Foto de cada persona (`avatar_url`) sobre su escritorio (textura cargada bajo demanda; si falla, la inicial).
 - [ ] **Presencia en la oficina** (como Gather): cada persona aparece en reunión, de viaje o disponible según su agenda de hoy.
 - [ ] **Tienda visitable**: tocar una tienda → su sell out del mes vs mes anterior, top 5 SKUs, inventario en tienda si hay, y «Abrir en Sell Out».
 
@@ -146,6 +149,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 22:59 · v3.90.37 · Interior de la oficina (paso 1): reuniones de hoy con hora y estado en el modelo (`reunionesDelDia()` probado) y la tarjeta de la oficina muestra la próxima reunión o «en curso»
 - 2026-10-07 22:57 · v3.90.36 · Interior del puerto (paso 3, cierra la etapa): cada tarima/contenedor descargando en el CEDIS es tocable y abre la tarjeta de su contenedor (proveedor, arribo, piezas, POs)
 - 2026-10-07 22:55 · v3.90.35 · Interior del puerto (paso 2): la tarjeta del contenedor lista sus números de PO (`embarques_compras` sólo de los contenedores dibujados; 3 + «+N»; si falla queda el conteo). `ponerPosEnPuerto()`/`listaCorta()` probados
 - 2026-10-07 22:49 · v3.90.34 · Interior del puerto (paso 1): tarjeta propia del barco/contenedor con proveedor, ETA con días (o «N d tarde»), piezas y POs; estado verde/ámbar/rojo

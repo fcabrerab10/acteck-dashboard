@@ -263,6 +263,17 @@ export function listaCorta(lista, n = 3) {
   return lista.slice(0, n).join(', ') + (lista.length > n ? ` +${lista.length - n}` : '');
 }
 
+// Interior de la oficina (paso 1, 3.90.37): reuniones de hoy (`agenda_reuniones`, sin viajes) en orden, con hora local y si ya
+// pasó, está en curso o viene. Duración por omisión 60 min. Fechas inválidas se omiten.
+export function reunionesDelDia(reuniones = [], hoy = new Date()) {
+  const ahora = hoy.getHours() * 60 + hoy.getMinutes();
+  return (reuniones || []).map((r) => {
+    const t = new Date(r?.fecha); if (Number.isNaN(t.getTime())) return null;
+    const ini = t.getHours() * 60 + t.getMinutes(), fin = ini + (Number(r.duracion_min) || 60);
+    return { titulo: r.titulo || 'Reunión', cliente_key: r.cliente_key || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
+  }).filter(Boolean).sort((a, b) => a.ini - b.ini);
+}
+
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
   const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
   const por = new Map();
@@ -314,7 +325,7 @@ export function tarjetaDe(tag, modelo) {
   const m = modelo || {};
   if (tag.tipo === 'oficina' && m.oficina) {
     const o = m.oficina, pend = (o.personas || []).reduce((s, p) => s + (p.pendientes || 0), 0), hechas = (o.personas || []).reduce((s, p) => s + (p.hechas || 0), 0);
-    t.numeros = [['Personas', num((o.personas || []).length + (o.genericos || 0))], ['Reuniones hoy', num(o.reuniones)], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
+    t.numeros = [['Personas', num((o.personas || []).length + (o.genericos || 0))], ['Reuniones hoy', (() => { const p = (o.agenda || []).find((r) => r.estado !== 'hecha'); return p ? `${num(o.reuniones)} · ${p.estado === 'en curso' ? 'en curso' : `próxima ${p.hora}`}` : num(o.reuniones); })()], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
     t.estado = o.reunionEnCurso ? 'ambar' : 'verde';
   } else if ((tag.tipo === 'cedis' || tag.tipo === 'montacargas') && m.cedis) {
     const c = m.cedis, d = Number(c.dias) || 0;
@@ -439,7 +450,7 @@ export function construirModelo(d, hoy = new Date()) {
   const reuniones = (d.reunionesHoy || []).filter((r) => r.tipo !== 'viaje');
   const ahoraMin = hoy.getHours() * 60 + hoy.getMinutes();
   const reunionEnCurso = reuniones.find((r) => { const t = new Date(r.fecha); const ini = t.getHours() * 60 + t.getMinutes(); return ini <= ahoraMin && ahoraMin < ini + (N(r.duracion_min) || 60); }) || null;
-  const oficina = { personas, genericos: 3, reuniones: reuniones.length, reunionEnCurso: reunionEnCurso ? { titulo: reunionEnCurso.titulo, cliente_key: reunionEnCurso.cliente_key } : null };
+  const oficina = { personas, genericos: 3, reuniones: reuniones.length, reunionEnCurso: reunionEnCurso ? { titulo: reunionEnCurso.titulo, cliente_key: reunionEnCurso.cliente_key } : null, agenda: reunionesDelDia(reuniones, hoy) };
 
   // ── CEDIS ──
   const inv = (d.inventario || [])[0] || {};
