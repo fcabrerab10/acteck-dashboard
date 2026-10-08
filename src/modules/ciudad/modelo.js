@@ -255,6 +255,21 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
 
+// Cuentas sin sucursal repartidas por estado (etapa 5, 3.90.56): con su sell out a clientes finales por estado
+// (`mv_sellout_cliente_final_mes`: cuenta, anio, mes, estado, importe) → una tienda «Clientes en <ciudad>» por ciudad
+// representativa del estado (`CIUDAD_POR_ESTADO`), sin la `sede` (ahí ya está su Matriz), top `max` por actividad.
+export function repartoPorEstado(cuenta, filas = [], { anio, mes, anioPrev, mesPrev, sede = null, max = 6 } = {}) {
+  const por = new Map();
+  for (const r of filas || []) {
+    if (r?.cuenta !== cuenta) continue; const est = norm(r.estado);
+    const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad || ciudad === sede) continue;
+    const a = Number(r.anio), ms = Number(r.mes), imp = Number(r.importe) || 0; const o = por.get(ciudad) || { ciudad, importe: 0, previo: 0 };
+    if (a === anio && ms === mes) o.importe += imp; else if (a === anioPrev && ms === mesPrev) o.previo += imp; else continue;
+    por.set(ciudad, o);
+  }
+  return [...por.values()].filter((o) => o.importe > 0 || o.previo > 0).sort((a, c) => (c.importe + c.previo) - (a.importe + a.previo) || (a.ciudad < c.ciudad ? -1 : 1)).slice(0, max);
+}
+
 // Barcos por ETA real (etapa 5, 3.90.55): dónde va cada barco sin arribo al CEDIS. ETA vencida o de hoy → en el puerto:
 // el más atrasado atraca y descarga (`muelle` 0), los demás esperan en fila (`muelle` 1, 2…); llega en ≤ 7 días → se
 // acerca (`avance` = 1 − días/8); más lejos o sin ETA → mar abierto (`avance` ≤ .6, con el progreso de sus fechas).
@@ -296,6 +311,7 @@ export function pensamientos(m, max = 5) {
   for (const d of m.distritos || []) {
     let mejor = null;
     for (const t of d.tiendas || []) {
+      if (t.reparto) continue; // «Clientes en …» (3.90.56) no es una tienda que piense
       const act = Number(t.importe) || 0, prev = Number(t.previo) || 0, cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cu = q.get(t.cuenta);
       const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: `${t.nombreCuenta || t.cuenta} · ${t.sucursal}` };
       let p = null;
@@ -756,6 +772,8 @@ export function construirModelo(d, hoy = new Date()) {
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
     tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: c.nombre, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
+    const sede = SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA'; // 3.90.56: y una tienda por estado donde vende a clientes finales
+    for (const r of repartoPorEstado(c.cuenta, d.clientesFinales, { anio, mes, anioPrev, mesPrev, sede })) tienda(r.ciudad, { cuenta: c.cuenta, nombreCuenta: c.nombre, sucursal: `Clientes en ${r.ciudad.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase())}`, importe: r.importe, previo: r.previo, vendio: r.importe > 0 || (hoy.getDate() <= 10 && r.previo > 0), vendioMes: r.importe > 0, virtual: false, reparto: true, vendedores: 0 });
   }
   // vendedores de los mayoristas → en la ciudad de su sucursal (o la sede de la cuenta)
   const vm = new Map();
@@ -815,7 +833,7 @@ export function construirModelo(d, hoy = new Date()) {
   });
 
   const clientesFinales = distritos.reduce((s, x) => s + (x.clientesFinales?.n || 0), 0);
-  const kpis = { clientesFinales, cartera: [...carteraPor.entries()].map(([k, c]) => ({ cuenta: k, ...c })), tiendas: distritos.reduce((s, x) => s + x.tiendas.length, 0), tiendasVendieron: distritos.reduce((s, x) => s + x.tiendas.filter((t) => t.vendio).length, 0), ciudades: distritos.length, barcos: puerto.barcos.length, camiones: camiones.length, vendedores: vendedoresRuta.length, enLinea: virtuales.length };
+  const kpis = { clientesFinales, cartera: [...carteraPor.entries()].map(([k, c]) => ({ cuenta: k, ...c })), tiendas: distritos.reduce((s, x) => s + x.tiendas.filter((t) => !t.reparto).length, 0), tiendasVendieron: distritos.reduce((s, x) => s + x.tiendas.filter((t) => t.vendio && !t.reparto).length, 0), ciudades: distritos.length, barcos: puerto.barcos.length, camiones: camiones.length, vendedores: vendedoresRuta.length, enLinea: virtuales.length };
   const banco = resumenBanco(kpis.cartera, d.pagos, hoyIso, d.reglasPagos); const torre = resumenTorre(d.forecast, d.avisosForecast, hoyIso);
   return { hoyIso, anio, mes, oficina, cedis, puerto, ocDetenidas: (d.alertasOc || []).length, banco, torre, distritos, camiones, vendedoresRuta, kpis, origen: posDe(ORIGEN), puertoPos: posDe(CIUDADES.MANZANILLO) };
 }
