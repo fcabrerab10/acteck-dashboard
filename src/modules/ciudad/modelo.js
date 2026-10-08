@@ -255,6 +255,32 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
 
+// Bitácora en vivo (etapa 4, paso 1, 3.90.50): eventos recientes con lo que ya trae el modelo — facturas que salieron
+// (camiones), envíos surtidos del Tracking, contenedores que llegaron al CEDIS y reuniones de hoy que ya empezaron. Lo más
+// nuevo primero; cada uno con `cuando` (hoy / ayer / hace N d, o la hora) e `ir` para volar al lugar.
+export function bitacoraEventos(m, hoy = new Date(), max = 12) {
+  if (!m) return [];
+  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  const hoyIso = m.hoyIso || `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+  const diasAtras = (f) => Math.round((new Date(`${hoyIso}T12:00:00`) - new Date(`${String(f).slice(0, 10)}T12:00:00`)) / 86400000);
+  const cuando = (f) => { const n = diasAtras(f); return n <= 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} d`; };
+  const out = [];
+  for (const c of m.camiones || []) {
+    if (!c?.fecha) continue; const f = String(c.fecha).slice(0, 10); if (f > hoyIso) continue;
+    out.push(c.envio
+      ? { id: `envio-${c.folio}`, icono: '🚚', texto: `Salió ${c.folio} a ${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''}`, clave: `${f} 00:01`, cuando: cuando(f), ir: { tipo: 'ciudad', ciudad: c.ciudad } }
+      : { id: `factura-${c.folio}`, icono: '🧾', texto: `Factura ${c.folio} · ${c.cliente} · ${pesos(c.monto)}`, clave: `${f} 00:01`, cuando: cuando(f), grande: Number(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
+  }
+  for (const b of [...(m.puerto?.tarimas || []), ...(m.puerto?.barcos || [])]) {
+    if (!b?.arribo) continue; const f = String(b.arribo).slice(0, 10); if (f > hoyIso) continue;
+    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${(Number(b.piezas) || 0).toLocaleString('es-MX')} pz`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
+  }
+  const ahora = hoy.getHours() * 60 + hoy.getMinutes();
+  for (const r of m.oficina?.agenda || []) if (r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${r.titulo}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
+  const vistos = new Set();
+  return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ...x }));
+}
+
 // Cuota por cuenta (capa «Cuota», 3.90.49): filas de `v_cuota_erp_mes` del mes (cliente_erp, cuenta_sellout, cuota_venta) y
 // de `mv_analisis_cliente_mes` del mes (cliente = código ERP, fact_neta), las mismas de Análisis → Map(cuenta → { venta, cuota }).
 // La venta se suma sólo de los clientes ERP con cuota (su cuenta sale de la fila de cuota); el % se saca al agregar, nunca se suma.

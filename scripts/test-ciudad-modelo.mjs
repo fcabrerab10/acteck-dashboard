@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -470,4 +470,19 @@ test('capa de cuota por ciudad', () => {
   assert.equal(c.porCiudad.get('GDL').texto, '60 % de la cuota del mes (1 cuenta) · ritmo 48 %');
   assert.equal(capaCiudades({ distritos: m.distritos }, 'cuota').porCiudad.get('GDL').tono, 'gris'); // sin datos de cuota: falla sola
   assert.equal(cuotasPorCuenta(null, null).size, 0);
+});
+
+test('bitácora en vivo: eventos recientes', () => {
+  const h = new Date('2026-10-07T11:00:00');
+  const m = { hoyIso: '2026-10-07',
+    camiones: [{ folio: 'F1', cliente: 'Digitalife', ciudad: 'GDL', monto: 750000, fecha: '2026-10-05' }, { folio: 'guía 9', cliente: 'PCEL', ciudad: 'MTY', fecha: '2026-10-07', envio: true, paqueteria: 'DHL' }, { folio: 'F2', cliente: 'X', ciudad: 'GDL', monto: 1, fecha: '2026-10-09' }],
+    puerto: { tarimas: [{ id: 'MSKU1', piezas: 1200, arribo: '2026-10-06' }], barcos: [{ id: 'B2', arribo: null }, { id: 'MSKU1', piezas: 1200, arribo: '2026-10-06' }] },
+    oficina: { agenda: [{ titulo: 'Junta', hora: '09:00', ini: 540, estado: 'hecha' }, { titulo: 'Pcel', hora: '10:30', ini: 630, estado: 'en curso' }, { titulo: 'Tarde', hora: '16:00', ini: 960, estado: 'próxima' }] } };
+  const b = bitacoraEventos(m, h);
+  assert.deepEqual(b.map((x) => [x.cuando, x.texto]), [['10:30', 'Empezó Pcel'], ['09:00', 'Fue Junta'], ['hoy', 'Salió guía 9 a PCEL · DHL'], ['ayer', 'Llegó MSKU1 al CEDIS · 1,200 pz'], ['hace 2 d', 'Factura F1 · Digitalife · $750 K']]);
+  assert.equal(b[4].grande, true); assert.equal(b[2].grande, false); assert.deepEqual(b[2].ir, { tipo: 'ciudad', ciudad: 'MTY' });
+  assert.equal(b[3].tarjeta.tipo, 'barco'); assert.equal(b[2].tarjeta, null); assert.ok(!b.some((x) => 'clave' in x));
+  assert.equal(bitacoraEventos(m, h, 2).length, 2);
+  assert.deepEqual(bitacoraEventos(null), []); assert.deepEqual(bitacoraEventos({}, h), []);
+  assert.ok(Array.isArray(bitacoraEventos(construirModelo(d, hoy), hoy)));
 });

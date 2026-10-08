@@ -116,6 +116,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.48) Dibujar: botones «Sin capa · Ventas · Cartera» en `Ciudad.jsx` con leyenda; `escena.capa(nombre)` tiñe pin y piso de cada manzana con el tono (y la etiqueta/hover dice el texto de la capa).
   - [x] (3.90.49) Capa «Cuota»: `v_cuota_erp_mes` (cuota del mes con su `cuenta_sellout`) + `mv_analisis_cliente_mes` (venta del mes), como Análisis → `cuotasPorCuenta()`; tono por avance vs ritmo del mes. Capa «Inventario» → movida a «Necesita a Fernando» (no hay inventario por ciudad/sucursal).
 - [ ] **Bitácora en vivo** (como el Chirper de Cities: Skylines): tira de eventos recientes de la empresa — facturas grandes, contenedores que llegan, OCs surtidas, pagos registrados, reuniones que empiezan — cada uno con «Ver» que vuela al lugar. Sólo de tablas que ya existen (`sync_events`, facturas, embarques, pagos, agenda).
+  - [x] (3.90.50) `bitacoraEventos()` puro con lo que ya trae el modelo (facturas → camiones, envíos surtidos del Tracking, contenedores que llegaron al CEDIS, reuniones de hoy que ya empezaron), probado; sección «Bitácora» en el panel con «Ver» que vuela al lugar (y abre la tarjeta del contenedor o de la sala).
+  - [ ] Pagos registrados (`pagos` con estado pagado y su fecha, consulta chica) y última sincronización del puente (`sync_events`, si el dashboard ya la lee) como eventos de la bitácora.
 - [ ] **Pensamientos** (como RollerCoaster Tycoon): burbujas cortas sobre tiendas y clientes que resumen su situación en lenguaje natural («Me falta inventario de AC-944571», «30 días sin comprar», «Voy arriba de mi cuota»), generadas con reglas del modelo, máximo unas pocas visibles a la vez.
 
 ### Etapa 5 · Gente y vehículos con sentido
@@ -159,6 +161,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:41 · v3.90.50 · Bitácora en vivo (paso 1): `bitacoraEventos()` — facturas que salieron (en negritas ≥ $500 K), envíos surtidos, contenedores que llegaron al CEDIS y reuniones de hoy, lo más nuevo primero con «hoy / ayer / hace N d» u hora; sección «Bitácora» en el panel derecho con «Ver» (reemplaza las líneas de camiones).
 - 2026-10-07 23:38 · v3.90.49 · Capas de información (paso 3): botón «Cuota» — avance del mes de las cuentas con tiendas en cada ciudad (venta ÷ cuota sumadas, `v_cuota_erp_mes` + `mv_analisis_cliente_mes` como Análisis) contra el ritmo del mes: verde al ritmo, ámbar hasta 20 % abajo, rojo peor, gris sin cuota. Capa Inventario → «Necesita a Fernando».
 - 2026-10-07 23:36 · v3.90.48 · Capas de información (paso 2): botones «Sin capa · Ventas · Cartera» abajo a la izquierda con leyenda; `escena.capa(nombre)` pone un disco translúcido del tono bajo cada ciudad (crece con el zoom para leerse en el mapa) y el hover de la ciudad dice el dato de la capa. Harness: `?capa=ventas` / `?capa=cartera&mapa`.
 - 2026-10-07 23:32 · v3.90.47 · Capas de información (paso 1): `capaCiudades()` puro — tono por ciudad para Ventas (sell out del mes vs anterior: verde ≥ 0, ámbar hasta −20 %, rojo peor, gris sin venta) y Cartera (cuentas con vencido entre sus tiendas), con leyenda; probado. Aún sin dibujar.
