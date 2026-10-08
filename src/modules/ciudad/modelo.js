@@ -284,6 +284,32 @@ export function rumboBarcos(barcos = []) {
   });
 }
 
+// Cadena de punta a punta (etapa 5, 3.90.58, como Anno 1800 / Factorio): mar → puerto → CEDIS → camiones → tiendas →
+// clientes finales, con el volumen de cada tramo y su tono; `atasco` = el primer tramo en rojo (o ámbar si no hay rojo).
+// Sólo usa lo que ya trae el modelo (mismos umbrales que las tarjetas: CEDIS 90/120 días, envío > 5 días en ámbar).
+export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
+  if (!m) return { tramos: [], atasco: null };
+  const n = (v) => Number(v) || 0; const pz = (v) => `${Math.round(n(v)).toLocaleString('es-MX')} pzs`;
+  const barcos = m.puerto?.barcos || [];
+  const mar = barcos.filter((b) => !(b.llegaEnDias != null && b.llegaEnDias <= 0)), enPuerto = barcos.filter((b) => b.llegaEnDias != null && b.llegaEnDias <= 0);
+  const tarde = enPuerto.filter((b) => b.llegaEnDias < -3).length;
+  const c = m.cedis || {}, d = n(c.dias);
+  const cam = m.camiones || [];
+  const lentos = cam.filter((x) => x.envio && hoyIso && x.fecha && dias(x.fecha, hoyIso) > 5).length;
+  const tiendas = (m.distritos || []).flatMap((x) => x.tiendas || []).filter((t) => !t.reparto);
+  const activas = tiendas.filter((t) => t.vendio).length, ratio = tiendas.length ? activas / tiendas.length : 1;
+  const cf = (m.distritos || []).reduce((s, x) => ({ n: s.n + n(x.clientesFinales?.n), imp: s.imp + n(x.clientesFinales?.importe) }), { n: 0, imp: 0 });
+  const tramos = [
+    { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${mar.length} barcos · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
+    { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length} con ETA vencida · ${(m.puerto?.tarimas || []).length} recién llegados`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${tarde} barco${tarde === 1 ? '' : 's'} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
+    { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${Math.round(d)} días`, estado: d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde', motivo: d > 90 ? `${Math.round(d)} días de inventario` : null },
+    { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${lentos} envío${lentos === 1 ? '' : 's'} con más de 5 días en camino` : null },
+    { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas} de ${tiendas.length} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${tiendas.length - activas} tiendas sin venta este mes` : null },
+    { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${cf.n.toLocaleString('es-MX')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
+  ];
+  return { tramos, atasco: tramos.find((t) => t.estado === 'rojo') || tramos.find((t) => t.estado === 'ambar') || null };
+}
+
 // Rutas de vendedores (etapa 5, 3.90.53): el circuito del vendedor por las sedes de sus clientes principales — ciudades
 // únicas con carretera (`tieneRuta`), máximo `max`, en el orden de `destinos` (de más a menos facturación). tramoActual()
 // reparte un ciclo (0–1) en tramos iguales: CEDIS → 1.ª sede → … → última sede → CEDIS (n paradas = n + 1 tramos).

@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -35,6 +35,7 @@ export default function Ciudad({ onNavegar }) {
   const [adentro, setAdentro] = useState(false); // false | 'cedis' (racks por marca) | 'oficina' (escritorios y sala, 3.90.38)
   const [siguiendo, setSiguiendo] = useState(null); // tag que sigue la cámara (3.90.57)
   const [capa, setCapa] = useState(null); // capas de información (3.90.48): null | 'ventas' | 'cuota' | 'cartera'
+  const [verCadena, setVerCadena] = useState(false); // tira «Cadena» de punta a punta (3.90.58)
   const [capaInfo, setCapaInfo] = useState(null); // lo que devolvió escena.capa(): título, leyenda y texto por ciudad
   const capaRef = useRef(null); capaRef.current = capa;
   const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
@@ -84,6 +85,7 @@ export default function Ciudad({ onNavegar }) {
   const ponerCapa = (c) => { setCapa(c); setCapaInfo(escenaRef.current?.capa(c) || null); };
   const bitacora = useMemo(() => { try { return bitacoraEventos(modelo); } catch (e) { console.warn('[ciudad] bitácora', e); return []; } }, [modelo]); // falla sola
   const misiones = useMemo(() => { try { return misionesDelDia(modelo); } catch (e) { console.warn('[ciudad] misiones', e); return []; } }, [modelo]); // falla sola
+  const cadena = useMemo(() => { try { return cadenaSuministro(modelo); } catch (e) { console.warn('[ciudad] cadena', e); return null; } }, [modelo]); // falla sola
   const top = useMemo(() => ciudadesTop(modelo, 5), [modelo]); // acceso rápido: las 5 ciudades con más actividad
   const plano = useMemo(() => planoMini(modelo?.distritos), [modelo]); // minimapa: México chico con un punto por ciudad
   const marco = plano.marco(vistaCam);
@@ -182,10 +184,21 @@ export default function Ciudad({ onNavegar }) {
       </div>
       {/* Minimapa + KPIs (columna abajo a la izquierda para que no se encimen) */}
       <div style={{ position: 'absolute', left: 14, bottom: 14, right: 298, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, zIndex: 3, pointerEvents: 'none' }}>
+      {verCadena && cadena?.tramos.length > 0 && <div style={{ ...card, padding: '7px 10px', display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', gap: 4, fontSize: 11, pointerEvents: 'auto', maxWidth: '100%' }} role="list" aria-label="Cadena de la mercancía">
+        {cadena.tramos.map((t, i) => <React.Fragment key={t.clave}>
+          {i > 0 && <span aria-hidden="true" style={{ alignSelf: 'center', color: hexCss(CAPA_TONOS[t.estado === 'rojo' ? 'rojo' : 'gris']), fontWeight: 700 }}>→</span>}
+          <div role="listitem" title={t.motivo || t.volumen} style={{ padding: '3px 7px', borderRadius: 8, border: `1.5px solid ${t.estado === 'rojo' || t.estado === 'ambar' ? hexCss(CAPA_TONOS[t.estado]) : 'transparent'}`, minWidth: 74 }}>
+            <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}><span aria-hidden="true">{t.icono}</span>{t.titulo}<i style={{ width: 7, height: 7, borderRadius: 4, background: hexCss(CAPA_TONOS[t.estado]) }} /></div>
+            <div style={{ color: theme.textMuted }}>{t.volumen}</div>
+            {t.motivo && <div style={{ color: hexCss(CAPA_TONOS[t.estado]), fontWeight: 600 }}>{t.motivo}</div>}
+          </div>
+        </React.Fragment>)}
+      </div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', pointerEvents: 'auto' }}>
         <div style={{ ...card, padding: 3, display: 'flex', gap: 2 }} role="group" aria-label="Capas de información">
           {[[null, 'Sin capa'], ['ventas', 'Ventas'], ['cuota', 'Cuota'], ['cartera', 'Cartera']].map(([c, l]) => <button key={l} type="button" onClick={() => ponerCapa(c)} aria-pressed={capa === c} title={c ? `Pintar las ciudades por ${l.toLowerCase()}` : 'Quitar la capa'} style={{ border: 0, borderRadius: 9, padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: capa === c ? theme.accent : 'transparent', color: capa === c ? '#fff' : theme.text }}>{l}</button>)}
         </div>
+        {cadena?.tramos.length > 0 && <button type="button" onClick={() => setVerCadena((v) => !v)} aria-pressed={verCadena} title="Recorrido de la mercancía de punta a punta y dónde se atora" style={{ ...card, padding: '6px 10px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: verCadena ? theme.accent : card.background, color: verCadena ? '#fff' : theme.text }}>Cadena{cadena.atasco && <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, marginLeft: 5, background: hexCss(CAPA_TONOS[cadena.atasco.estado]) }} />}</button>}
         {capa && capaInfo && <div style={{ ...card, padding: '5px 9px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px 9px', fontSize: 11 }}>
           <b style={{ fontWeight: 700 }}>{capaInfo.titulo}</b>
           {capaInfo.leyenda.map((l) => <span key={l.tono} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: theme.textMuted }}><i style={{ width: 9, height: 9, borderRadius: 5, background: hexCss(CAPA_TONOS[l.tono]) }} />{l.texto}</span>)}

@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -554,4 +554,17 @@ test('cuentas sin sucursal repartidas por estado', () => {
   const r = repartoPorEstado('x', f, opt);
   assert.deepEqual(r.map((o) => [o.ciudad, o.importe, o.previo]), [[CIUDAD_POR_ESTADO['NUEVO LEON'], 100, 50], [CIUDAD_POR_ESTADO.YUCATAN, 0, 30]]);
   assert.equal(repartoPorEstado('x', f, { ...opt, max: 1 }).length, 1); assert.deepEqual(repartoPorEstado('z', f, opt), []); assert.deepEqual(repartoPorEstado('x', null, opt), []);
+});
+
+test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
+  const m = { hoyIso: '2026-10-08', puerto: { barcos: [{ llegaEnDias: 6, piezas: 1000 }, { llegaEnDias: null, piezas: 500 }, { llegaEnDias: -5, piezas: 80 }, { llegaEnDias: 0, piezas: 20 }], tarimas: [{}] },
+    cedis: { piezas: 50000, dias: 95 }, camiones: [{ piezas: 300, fecha: '2026-10-07' }, { envio: true, fecha: '2026-10-01', piezas: 0 }],
+    distritos: [{ tiendas: [{ vendio: true }, { vendio: false }, { vendio: true, reparto: true }], clientesFinales: { n: 120, importe: 2.5e6 } }, { tiendas: [{ vendio: true }] }] };
+  const r = cadenaSuministro(m);
+  assert.deepEqual(r.tramos.map((t) => [t.clave, t.estado]), [['mar', 'verde'], ['puerto', 'rojo'], ['cedis', 'ambar'], ['camion', 'ambar'], ['tienda', 'ambar'], ['cliente', 'verde']]);
+  assert.equal(r.tramos[0].volumen, '2 barcos · 1,500 pzs'); assert.equal(r.tramos[1].motivo, '1 barco con más de 3 días de atraso');
+  assert.equal(r.tramos[4].volumen, '2 de 3 vendieron'); assert.equal(r.tramos[5].volumen, '120 · $2.5 M'); assert.equal(r.atasco.clave, 'puerto');
+  const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [] }, cedis: { dias: 30 }, camiones: [], distritos: [] });
+  assert.deepEqual(v.tramos.map((t) => t.estado), ['gris', 'verde', 'verde', 'gris', 'gris', 'gris']); assert.equal(v.atasco, null);
+  assert.deepEqual(cadenaSuministro(null), { tramos: [], atasco: null });
 });
