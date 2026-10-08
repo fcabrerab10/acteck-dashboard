@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -322,7 +322,7 @@ export function campusCalles(ctx, cedisPos) {
     const cam = modelo.camiones[i]; const z = cedisPos.z + pt.andenes[i]; const x0 = cedisPos.x + 11;
     const tr = new THREE.Group(); const caja = box(6, 2.4, 2.2, 0xF2F2F2); caja.position.set(x0 + 3.2, 1.6, z); tr.add(caja); instanciar(ctx, caja);
     const cabina = box(1.8, 2, 2.1, ACC.azul); cabina.position.set(x0 + 7.3, 1.2, z); tr.add(cabina); instanciar(ctx, cabina); // tráileres formados: caja y cabina instanciadas, cada una con el tag de su envío
-    add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${cam.cliente} · ${cam.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(cam.ciudad)}${cam.piezas ? ` · ${cam.piezas.toLocaleString('es-MX')} pz` : ''}`, pagina: 'sellIn' });
+    add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${cam.cliente} · ${nombreCiudad(cam.ciudad)}${cam.piezas ? ` · ${cam.piezas.toLocaleString('es-MX')} pz` : ''}`, pagina: 'sellIn' });
   }
   add(pg, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `${pt.andenes.length} andenes · ${formados} tráiler${formados === 1 ? '' : 'es'} cargando · ${(modelo.camiones || []).length} envíos recientes`, pagina: 'sellIn' });
   // detalle del campus (3.90.11): estacionamiento con un coche por persona del equipo, barda, jardín y faroles
@@ -379,7 +379,7 @@ export function distritos(ctx, cedisPos) {
     distritoPos.set(d.ciudad, { x: base.x, z: base.z, ancho, largo }); // con medidas: la Vista Ciudad las encuadra
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const piso = box(1, .3, 1, P.banqueta); piso.scale.set(ancho, 1, largo); piso.position.y = .15; g.add(piso); // caja unitaria escalada: todos los pisos van en un InstancedMesh
-    piso.userData.tag = { tipo: 'ciudad', titulo: d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; instanciar(ctx, piso); // tocable por su tag en userData.tags (3.90.18)
+    piso.userData.tag = { tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; instanciar(ctx, piso); // tocable por su tag en userData.tags (3.90.18)
     const calleH = new THREE.Mesh(new THREE.PlaneGeometry(ancho + 2, 1.4), M(P.calle, { roughness: 1 })); calleH.rotation.x = -Math.PI / 2; calleH.position.set(0, .32, largo / 2 + .9); g.add(calleH); calleH.userData.detalle = 'cerca';
     d.tiendas.forEach((t, i) => {
       const c = i % cols, f = Math.floor(i / cols);
@@ -408,7 +408,7 @@ export function distritos(ctx, cedisPos) {
       g.add(tg);
       tg.traverse((o) => { if (o.isMesh && !o.userData.tag) { o.userData.tag = tag; interact.push(o); } }); // sólo palo y bandera siguen sueltos
     });
-    const tagCasa = d.casas ? { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad } : null;
+    const tagCasa = d.casas ? { tipo: 'clientesFinales', titulo: `Clientes finales · ${nombreCiudad(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad } : null;
     for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const dosAguas = i % 2 === 1; const techo = new THREE.Mesh(dosAguas ? geo(ctx, 'dosAguas', () => techoDosAguas(.72, 1.3)) : (ctx.conoCasa ||= new THREE.ConeGeometry(.95, .7, 4)), M(P.tiendaTecho)); if (dosAguas) techo.position.y = .9; else { techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; } techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); for (const pz of [cuerpo, techo, v]) { pz.userData.detalle = 'cerca'; instanciar(ctx, pz, tagCasa); } } // de muy lejos las casitas no se distinguen
     // Banderín de cuota vs ritmo (3.90.61): verde-ámbar-rojo en la esquina de la manzana, de cerca y sin prender la capa; se toca = tarjeta de la ciudad.
     try { const cq = cuotaRitmo(modelo, d.tiendas.filter((t) => !t.reparto).map((t) => t.cuenta)); if (cq) { const tono = CAPA_TONOS[cq.tono];
@@ -424,7 +424,7 @@ export function distritos(ctx, cedisPos) {
     raiz.add(aMapa(g));
     if (n >= 3) { const cuantos = paseantesDistrito(n, ctx.ligera); for (let i = 0; i < cuantos; i++) { const per = persona(ctx, [0x9AA0AB, 0xC9B79C, 0x7A8AA6, 0xB58A7A][i % 4], .8); const o = { x: base.x - ancho / 2 + 1 + i * 2.4, z: base.z + largo / 2 + 1.1 }; per.position.set(o.x, .3, o.z); raiz.add(aMapa(per)); const ruta = [[0, 0], [ancho - 2, 0], [ancho - 2, .9], [0, .9]]; animados.push((t) => caminar(per, ruta, t * .12 + i * 1.7 + n, o)); } }
     // etiqueta de ciudad (sprite de texto)
-    const et = etiqueta(ctx, d.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : capital(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); et.userData.minZoom = n >= 4 ? 999 : 40; et.userData.prioridad = (d.vendio ? 2 : 1) + Math.min(n, 99) / 100; if (enMapa) { et.userData.minZoom = 999; et.userData.desdeZoom = DETALLE.mapa; } raiz.add(et);
+    const et = etiqueta(ctx, nombreCiudad(d.ciudad), d.vendio ? '#1D1D1F' : '#8E8E93'); et.position.set(base.x, 3.6, base.z - largo / 2 - .8); et.userData.minZoom = n >= 4 ? 999 : 40; et.userData.prioridad = (d.vendio ? 2 : 1) + Math.min(n, 99) / 100; if (enMapa) { et.userData.minZoom = 999; et.userData.desdeZoom = DETALLE.mapa; } raiz.add(et);
     // Vista Mapa: de muy lejos la etiqueta se cambia por el pin de la ciudad (tiendas activas y camiones llegando).
     et.userData.minZoom = Math.min(et.userData.minZoom, DETALLE.pin); const pin = pinCiudad(d, ctx.modelo.camiones);
     const etPin = etiqueta(ctx, pin.texto, pin.activas ? '#1D1D1F' : '#8E8E93'); etPin.position.copy(et.position); etPin.userData.desdeZoom = DETALLE.pin; etPin.userData.prioridad = et.userData.prioridad + pin.llegando / 1000; raiz.add(etPin);

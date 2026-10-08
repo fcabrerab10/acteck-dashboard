@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -163,7 +163,7 @@ test('pin de ciudad en la Vista Mapa: tiendas activas físicas y camiones llegan
   const dist = { ciudad: 'CIUDAD DE MEXICO', tiendas: [{ vendio: true }, { vendio: true, virtual: true }, { vendio: false }, { vendio: true }] };
   const p = pinCiudad(dist, [{ ciudad: 'CIUDAD DE MEXICO' }, { ciudad: 'MONTERREY' }, null, { ciudad: 'CIUDAD DE MEXICO' }]);
   assert.deepEqual([p.activas, p.llegando], [2, 2]); assert.equal(p.texto, 'CDMX · 🏬 2 · 🚚 2');
-  assert.equal(pinCiudad({ ciudad: 'SAN LUIS POTOSI', tiendas: [] }).texto, 'San Luis Potosi · 🏬 0', 'sin camiones no se muestra el camión');
+  assert.equal(pinCiudad({ ciudad: 'SAN LUIS POTOSI', tiendas: [] }).texto, 'San Luis Potosí · 🏬 0', 'sin camiones no se muestra el camión');
   assert.equal(pinCiudad(null, null).activas, 0, 'datos vacíos no rompen');
   const m = construirModelo(d, hoy); for (const x of m.distritos) assert.ok(pinCiudad(x, m.camiones).texto.length > 0);
   assert.equal(m.distritos.reduce((s, x) => s + pinCiudad(x, m.camiones).llegando, 0), m.camiones.filter((c) => m.distritos.some((x) => x.ciudad === c.ciudad)).length, 'cada camión cuenta en una sola ciudad');
@@ -729,4 +729,13 @@ test('pulido: proyección y catálogos coherentes', () => {
   assert.equal(hexCss(0x0A84FF), '#0a84ff'); assert.equal(hexCss(0xFF), '#0000ff'); assert.equal(hexCss(0), '#000000');
   assert.equal(norm('  Mérida, Yucatán '), 'MERIDA, YUCATAN'); assert.equal(norm(null), ''); assert.equal(norm('Ñuño'), 'NUNO');
   assert.equal(RECORRIDO_CLAVE, 'acteck-ciudad-recorrido');
+});
+
+test('nombreCiudad: acentos, conectores y CDMX', () => {
+  assert.equal(nombreCiudad('SAN LUIS POTOSI'), 'San Luis Potosí');
+  assert.equal(nombreCiudad('CIUDAD DE MEXICO'), 'CDMX'); assert.equal(nombreCiudad('Ciudad de México'), 'CDMX');
+  assert.equal(nombreCiudad('CIUDAD JUAREZ'), 'Ciudad Juárez'); assert.equal(nombreCiudad('TUXTLA GUTIERREZ'), 'Tuxtla Gutiérrez');
+  assert.equal(nombreCiudad('LAGOS DE MORENO'), 'Lagos de Moreno'); assert.equal(nombreCiudad('LA PAZ'), 'La Paz', 'el primer conector sí va con mayúscula');
+  assert.equal(nombreCiudad('  merida '), 'Mérida'); assert.equal(nombreCiudad(null), ''); assert.equal(nombreCiudad(''), '');
+  for (const k of Object.keys(CIUDADES)) { const n = nombreCiudad(k); assert.ok(n.length > 0 && n.length <= 20, k); assert.equal(norm(n === 'CDMX' ? 'CIUDAD DE MEXICO' : n), k, `${k} ida y vuelta`); }
 });

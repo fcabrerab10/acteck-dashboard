@@ -12,7 +12,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
 import { crearAmbiente } from './sonido';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto } from './modelo';
+import { COLOR_CUENTA, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -129,7 +129,7 @@ export default function Ciudad({ onNavegar }) {
     if (!modelo || !busca.trim()) return [];
     const q = busca.trim().toUpperCase();
     const out = [];
-    for (const d of modelo.distritos) { if (d.ciudad.includes(q)) out.push({ tipo: 'ciudad', titulo: capital(d.ciudad), sub: `${d.tiendas.length} tiendas`, ciudad: d.ciudad }); for (const t of d.tiendas) if (`${t.nombreCuenta} ${t.sucursal}`.toUpperCase().includes(q)) out.push({ tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: capital(d.ciudad), ciudad: d.ciudad, cuenta: t.cuenta }); for (const v of d.vendedores) if (v.nombreCompleto.toUpperCase().includes(q)) out.push({ tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${capital(d.ciudad)}`, ciudad: d.ciudad }); }
+    for (const d of modelo.distritos) { if (d.ciudad.includes(q)) out.push({ tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: `${d.tiendas.length} tiendas`, ciudad: d.ciudad }); for (const t of d.tiendas) if (`${t.nombreCuenta} ${t.sucursal}`.toUpperCase().includes(q)) out.push({ tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: capital(d.ciudad), ciudad: d.ciudad, cuenta: t.cuenta }); for (const v of d.vendedores) if (v.nombreCompleto.toUpperCase().includes(q)) out.push({ tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${capital(d.ciudad)}`, ciudad: d.ciudad }); }
     if ('ACTECK OFICINA CEDIS'.includes(q)) out.push({ tipo: 'cedis', titulo: 'Acteck · CEDIS', sub: 'Guadalajara' });
     if ('MANZANILLO PUERTO'.includes(q)) out.push({ tipo: 'puerto', titulo: 'Puerto de Manzanillo', sub: 'contenedores' });
     return out.slice(0, 8);
@@ -222,7 +222,7 @@ export default function Ciudad({ onNavegar }) {
         {modelo.oficina.personas.filter((p) => p.actividad).map((p) => <div key={p.id}>👤 <b>{p.nombre.split(' ')[0]}</b>: {p.actividad}</div>)}
         {modelo.puerto.barcos.slice(0, 3).map((b) => <div key={b.id}>🚢 <b>{b.id}</b> llega {b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias <= 0 ? 'hoy' : `en ${b.llegaEnDias} d`}</div>)}
         {modelo.kpis.cartera.filter((c) => c.vencido > 0).map((c) => <div key={c.cuenta}>🚩 <b>{capital(c.cuenta)}</b>: cartera vencida {fmtM(c.vencido)} · DSO {c.dso} d</div>)}
-        {modelo.distritos.slice(0, 3).map((d) => <div key={d.ciudad}>🏬 {capital(d.ciudad)}: {d.tiendas.filter((t) => t.vendio).length} de {d.tiendas.length} tiendas activas</div>)}
+        {modelo.distritos.slice(0, 3).map((d) => <div key={d.ciudad}>🏬 {nombreCiudad(d.ciudad)}: {d.tiendas.filter((t) => t.vendio).length} de {d.tiendas.length} tiendas activas</div>)}
         {!modelo.camiones.length && !modelo.puerto.barcos.length && <div style={{ color: theme.textMuted }}>Sin movimiento registrado hoy.</div>}
       </div>
       {/* Minimapa + KPIs (columna abajo a la izquierda para que no se encimen) */}
@@ -253,7 +253,7 @@ export default function Ciudad({ onNavegar }) {
       <div style={{ ...card, padding: 4, pointerEvents: 'auto' }} title="Minimapa: toca una ciudad para viajar ahí o cualquier punto para mover la cámara">
         <svg width={plano.ancho} height={plano.alto} viewBox={`0 0 ${plano.ancho} ${plano.alto}`} onClick={tocarPlano} style={{ display: 'block', cursor: 'pointer' }} role="img" aria-label="Minimapa de México">
           <polygon points={plano.contorno} fill={oscuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)'} stroke={theme.border} strokeWidth={1} strokeLinejoin="round" />
-          {plano.puntos.map((p) => { const esTop = top.some((c) => c.ciudad === p.ciudad); return <circle key={p.ciudad} cx={p.u} cy={p.v} r={esTop ? 2.6 : 1.7} fill={esTop ? theme.accent : theme.textMuted}><title>{capital(p.ciudad)}</title></circle>; })}
+          {plano.puntos.map((p) => { const esTop = top.some((c) => c.ciudad === p.ciudad); return <circle key={p.ciudad} cx={p.u} cy={p.v} r={esTop ? 2.6 : 1.7} fill={esTop ? theme.accent : theme.textMuted}><title>{nombreCiudad(p.ciudad)}</title></circle>; })}
           {marco && <circle cx={marco.u} cy={marco.v} r={marco.r} fill="none" stroke={theme.red} strokeWidth={1.5} pointerEvents="none" />}
           {marco && <circle cx={marco.u} cy={marco.v} r={1.5} fill={theme.red} pointerEvents="none" />}
         </svg>

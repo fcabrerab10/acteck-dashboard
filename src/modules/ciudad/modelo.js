@@ -161,8 +161,16 @@ export const posDe = (c) => { const p = aPx(c.lon, c.lat); return pxAEscena(p.X,
 // Tapachula, Los Cabos) encuadradas según el giro y el lienzo, para ver el país completo con todas sus ciudades.
 export const EXTREMOS_MEXICO = [[32.53, -117.12], [32.72, -114.72], [31.75, -106.48], [28.7, -100.52], [25.87, -97.5], [21.16, -86.85], [14.9, -92.26], [22.89, -109.91]].map(([lat, lon]) => ({ lat, lon }));
 // Pin de cada ciudad en la Vista Mapa: tiendas activas (físicas; las virtuales no son un lugar) y camiones que van hacia ella.
+// Nombre legible de una ciudad (pulido de etiquetas): las claves vienen sin acentos y en mayúsculas («SAN LUIS POTOSI»);
+// se devuelven con acentos y conectores en minúscula («San Luis Potosí», «Lagos de Moreno»); CDMX abreviada.
+const ACENTOS = { MERIDA: 'Mérida', JUAREZ: 'Juárez', CULIACAN: 'Culiacán', MAZATLAN: 'Mazatlán', TORREON: 'Torreón', POTOSI: 'Potosí', LEON: 'León', QUERETARO: 'Querétaro', GUTIERREZ: 'Gutiérrez', CANCUN: 'Cancún', MEXICO: 'México', OBREGON: 'Obregón', TEHUACAN: 'Tehuacán', CORDOBA: 'Córdoba', SAHAGUN: 'Sahagún', ATIZAPAN: 'Atizapán', TONALA: 'Tonalá', MINATITLAN: 'Minatitlán', LAZARO: 'Lázaro', CARDENAS: 'Cárdenas' };
+const CONECTORES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'EL']);
+export function nombreCiudad(ciudad) {
+  const k = norm(ciudad); if (!k) return ''; if (k === 'CIUDAD DE MEXICO') return 'CDMX';
+  return k.split(/\s+/).map((w, i) => ACENTOS[w] || (i > 0 && CONECTORES.has(w) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase())).join(' ');
+}
 export function pinCiudad(distrito, camiones = []) {
-  const nombre = distrito?.ciudad === 'CIUDAD DE MEXICO' ? 'CDMX' : String(distrito?.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
+  const nombre = nombreCiudad(distrito?.ciudad);
   const activas = (distrito?.tiendas || []).filter((t) => t.vendio && !t.virtual).length;
   const llegando = (camiones || []).filter((c) => c && c.ciudad === distrito?.ciudad).length;
   return { activas, llegando, texto: [nombre, `🏬 ${activas}`, llegando ? `🚚 ${llegando}` : null].filter(Boolean).join(' · ') };
