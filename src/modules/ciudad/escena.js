@@ -21,14 +21,15 @@ import { crearRebote, crearSaludo } from './escena/rebote.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE, capaCiudades, CAPA_TONOS, cintasCadena } from './modelo.js';
 
-export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, onAdentro, onSiguiendo, vistaInicial, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, onAdentro, onSiguiendo, vistaInicial, oscuro = false, clima = null, ligera = false } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   const P = noche ? PAL.noche : PAL.dia;
   const nubosidad = clima ? clima.nubes : .3;
   const R = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  R.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap;
+  // ligera (3.90.78, táctil / `pointer: coarse`): sin sombras, menos resolución y menos paseantes
+  R.setPixelRatio(Math.min(ligera ? 1.5 : 2, window.devicePixelRatio || 1));
+  R.shadowMap.enabled = !ligera; R.shadowMap.type = THREE.PCFSoftShadowMap;
   R.outputColorSpace = THREE.SRGBColorSpace; R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.05;
   const scene = new THREE.Scene();
   const camara = crearCamara(canvas, R); const { cam, vista, resize } = camara;
@@ -44,7 +45,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   const geos = new Map(); // cajas compartidas por medidas (antes cada caja creaba su BoxGeometry)
   const G = (w, h, d) => { const k = `${w}|${h}|${d}`; if (!geos.has(k)) geos.set(k, new THREE.BoxGeometry(w, h, d)); return geos.get(k); };
   const box = (w, h, d, color, extra) => { const m = new THREE.Mesh(G(w, h, d), M(color, extra)); m.castShadow = true; m.receiveShadow = true; m.position.y = h / 2; return m; };
-  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, M, G, box, add, interact, animados, sprites, arboles: [], instancias: [] };
+  const ctx = { scene, raiz, P, oscuro: noche, noche, nubosidad, clima, modelo, esc: { x: modelo.origen.x, z: modelo.origen.z }, ligera, M, G, box, add, interact, animados, sprites, arboles: [], instancias: [] };
   ctx.campus = campus(ctx.esc); // trazo de la base: oficina, CEDIS, patio, calles y distrito GDL
 
   luces(ctx);

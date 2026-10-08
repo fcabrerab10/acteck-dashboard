@@ -817,6 +817,9 @@ export function rebote(t, dur = .5) {
   return { y, xz: 1 - (y - 1) * .5, fin: false };
 }
 
+// Paseantes de una manzana (3.90.78): 1 por cada 3 tiendas, máx. 4; en la versión ligera (táctil, `pointer: coarse`) máx. 1.
+export const paseantesDistrito = (n, ligera = false) => (n >= 3 ? Math.min(ligera ? 1 : 4, Math.ceil(n / 3)) : 0);
+
 // Gesto de dos dedos (3.90.77, Etapa 8): de la pareja inicial `a` a la actual `b` ([{x,y},{x,y}] en px) → `escala` para el
 // zoom (separar los dedos = acercar, < 1) y `giro` en radianes (-π..π) para girar la cámara.
 export function gestoDosDedos(a, b) {

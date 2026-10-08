@@ -87,7 +87,7 @@ export default function Ciudad({ onNavegar }) {
       if (!vivo) return;
       try {
         escenaRef.current = crearEscena(canvasRef.current, modelo, {
-          oscuro, clima, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
+          oscuro, clima, ligera: !!window.matchMedia?.('(pointer: coarse)').matches, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
           onHover: (tag, pos) => { hoverPos.current = tag ? pos : null; setHover(tag ? { tag, pos } : null); },
           onClick: (tag) => setSel(tag ? { tag, pos: hoverPos.current } : null),
           onSeleccion: (pos) => setSel((s) => (s ? { ...s, pos } : s)), // la tarjeta sigue al edificio; fuera de cuadro se acomoda arriba a la derecha
