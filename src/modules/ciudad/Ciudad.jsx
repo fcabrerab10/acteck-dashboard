@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -22,7 +22,21 @@ export default function Ciudad({ onNavegar }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const esSuper = !!perfil?.es_super_admin;
-  const { data: modelo, isLoading, error } = useCiudadData(esSuper);
+  const { data: modeloHoy, isLoading, error } = useCiudadData(esSuper);
+  // Barra de tiempo: Hoy / Ayer / Hace 7 días / Inicio de mes. Otro momento = la ciudad rearmada con los datos crudos a esa
+  // fecha (`datosEnFecha`); si falla, se queda en hoy. Cuotas sólo si es el mismo mes (son del mes en curso).
+  const [momento, setMomento] = useState('hoy');
+  const momentos = useMemo(() => momentosTiempo(), [modeloHoy]);
+  const modelo = useMemo(() => {
+    const mo = momentos.find((x) => x.id === momento);
+    if (!modeloHoy?.crudos || !mo || mo.id === 'hoy') return modeloHoy;
+    try {
+      const m = construirModelo(datosEnFecha(modeloHoy.crudos, mo.fecha), mo.fecha);
+      m.pagosHechos = modeloHoy.pagosHechos; m.ultimaSync = modeloHoy.ultimaSync; m.momento = mo;
+      if (mo.fecha.getMonth() === new Date().getMonth()) m.cuotas = modeloHoy.cuotas;
+      return m;
+    } catch (e) { console.warn('[ciudad] barra de tiempo', e); return modeloHoy; }
+  }, [modeloHoy, momentos, momento]);
   const canvasRef = useRef(null);
   const escenaRef = useRef(null);
   const [hover, setHover] = useState(null);
@@ -201,6 +215,9 @@ export default function Ciudad({ onNavegar }) {
           {[[null, 'Sin capa'], ['ventas', 'Ventas'], ['cuota', 'Cuota'], ['cartera', 'Cartera']].map(([c, l]) => <button key={l} type="button" onClick={() => ponerCapa(c)} aria-pressed={capa === c} title={c ? `Pintar las ciudades por ${l.toLowerCase()}` : 'Quitar la capa'} style={{ border: 0, borderRadius: 9, padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: capa === c ? theme.accent : 'transparent', color: capa === c ? '#fff' : theme.text }}>{l}</button>)}
         </div>
         {cadena?.tramos.length > 0 && <button type="button" onClick={() => { const v = !verCadena; setVerCadena(v); escenaRef.current?.cadena?.(v); }} aria-pressed={verCadena} title="Recorrido de la mercancía de punta a punta y dónde se atora" style={{ ...card, padding: '6px 10px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: verCadena ? theme.accent : card.background, color: verCadena ? '#fff' : theme.text }}>Cadena{cadena.atasco && <i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, marginLeft: 5, background: hexCss(CAPA_TONOS[cadena.atasco.estado]) }} />}</button>}
+        {momentos.length > 1 && modeloHoy?.crudos && <div style={{ ...card, padding: 3, display: 'flex', gap: 2 }} role="group" aria-label="Barra de tiempo">
+          {momentos.map((mo) => <button key={mo.id} type="button" onClick={() => setMomento(mo.id)} aria-pressed={momento === mo.id} title={mo.id === 'hoy' ? 'La ciudad de ahora' : `La ciudad como estaba el ${mo.iso} (aproximado: inventario, cartera y pagos son de hoy; ventas del mes completas)`} style={{ border: 0, borderRadius: 9, padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: momento === mo.id ? theme.accent : 'transparent', color: momento === mo.id ? '#fff' : theme.text }}>{mo.texto}</button>)}
+        </div>}
         {capa && capaInfo && <div style={{ ...card, padding: '5px 9px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px 9px', fontSize: 11 }}>
           <b style={{ fontWeight: 700 }}>{capaInfo.titulo}</b>
           {capaInfo.leyenda.map((l) => <span key={l.tono} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: theme.textMuted }}><i style={{ width: 9, height: 9, borderRadius: 5, background: hexCss(CAPA_TONOS[l.tono]) }} />{l.texto}</span>)}
@@ -220,6 +237,12 @@ export default function Ciudad({ onNavegar }) {
         ))}
       </div>
       </div>
+      {modelo?.momento && (
+        <div role="status" style={{ position: 'absolute', left: '50%', top: siguiendo ? 108 : 56, transform: 'translateX(-50%)', zIndex: 4, ...card, padding: '6px 8px 6px 12px', display: 'flex', alignItems: 'center', gap: 10, maxWidth: 'min(520px, calc(100% - 28px))', fontSize: 12 }}>
+          <span><b>Viendo {modelo.momento.texto.toLowerCase()}</b> · {modelo.momento.iso} <span style={{ color: theme.textMuted }}>· aproximado: inventario, cartera y pagos de hoy</span></span>
+          <button type="button" onClick={() => setMomento('hoy')} style={{ flex: 'none', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.text, borderRadius: 8, padding: '3px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText }}>Volver a hoy</button>
+        </div>
+      )}
       {siguiendo && (
         <div style={{ position: 'absolute', left: '50%', top: 56, transform: 'translateX(-50%)', zIndex: 4, ...card, padding: '6px 8px 6px 12px', display: 'flex', alignItems: 'center', gap: 10, maxWidth: 'min(520px, calc(100% - 28px))', boxShadow: '0 8px 24px rgba(0,0,0,.14)' }}>
           <div style={{ minWidth: 0 }}>

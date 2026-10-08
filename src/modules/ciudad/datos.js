@@ -58,7 +58,9 @@ export function useCiudadData(enabled = true) {
         seg(supabase.from('pagos').select('id,cliente,concepto,monto,pagado_at').eq('estado', 'pagado').gte('pagado_at', iso(new Date(hoy.getTime() - 3 * 86400000))).order('pagado_at', { ascending: false }).limit(20).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'pagos registrados'),
         seg(supabase.from('sync_events').select('status, created_at').order('created_at', { ascending: false }).limit(1).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'última sincronización'),
       ]);
-      const modelo = construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
+      const crudos = { perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) };
+      const modelo = construirModelo(crudos, hoy);
+      modelo.crudos = crudos; // barra de tiempo: la ciudad se rearma con datosEnFecha(crudos, fecha)
       modelo.pagosHechos = pagosHechos; modelo.ultimaSync = syncUlt[0] || null; // bitácora: si fallan, quedan vacíos
       try { modelo.cuotas = cuotasPorCuenta(cuotaMes, ventaMes); } catch (e) { console.warn('[ciudad] cuotas', e); } // capa «Cuota»: falla sola
       // Números de PO de los contenedores dibujados (tarjeta del barco). Consulta chica; si falla, la tarjeta muestra sólo el conteo.
