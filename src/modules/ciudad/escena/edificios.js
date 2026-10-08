@@ -397,6 +397,10 @@ export function distritos(ctx, cedisPos) {
       const vit = new THREE.Mesh(G(1.1, .75, .1), M(t.vendio ? P.ventanaOn : P.ventana, { emissive: t.vendio ? P.ventanaOn : 0x000000, emissiveIntensity: t.vendio ? (oscuro ? 1.2 : .1) : 0, roughness: .4 })); vit.position.set(-.3, .75, 1.05); tg.add(vit);
       const puerta = new THREE.Mesh(G(.5, 1.1, .1), M(0x5A4636)); puerta.position.set(.6, .55, 1.05); tg.add(puerta);
       for (const pz of [letrero, vit, puerta]) pz.userData.detalle = 'fino'; // de lejos la tienda es volumen + toldo de color
+      // azotea (3.90.69): tinaco negro en unas, antena en otras (por índice, estable entre recargas); de cerca
+      if (i % 3 !== 1) { const tin = new THREE.Mesh(geo(ctx, 'tinaco', () => new THREE.CylinderGeometry(.24, .24, .42, 8)), M(0x2B2D33, { roughness: .6 })); tin.castShadow = true; tin.position.set(i % 2 ? .55 : -.55, 2.41, -.5); tin.userData.detalle = 'fino'; tg.add(tin); instanciar(ctx, tin, tag); }
+      else { const ant = box(.05, .7, .05, 0x8A8F99); ant.position.set(.6, 2.55, -.6); const plato = new THREE.Mesh(geo(ctx, 'plato', () => new THREE.CylinderGeometry(.2, .05, .08, 8)), M(0xD8D8DC)); plato.rotation.x = Math.PI / 3; plato.position.set(-.5, 2.35, -.5); for (const pz of [ant, plato]) { pz.userData.detalle = 'fino'; tg.add(pz); instanciar(ctx, pz, tag); } }
+      const pretil = box(2.3, .14, .1, P.tiendaTecho); pretil.position.set(0, 2.27, 1.1); pretil.userData.detalle = 'fino'; tg.add(pretil); instanciar(ctx, pretil, tag); // pretil al frente
       for (const pz of [cuerpo, techo, toldo, letrero, vit, puerta]) instanciar(ctx, pz, tag); // un InstancedMesh por pieza+color (3.90.3)
       if (oscuro && t.vendio) { const l = new THREE.PointLight(col, .8, 6); l.position.set(0, 2.2, 1.8); tg.add(l); }
       if (t.cartera && t.cartera.vencido > 0) { const palo = box(.1, 3.2, .1, 0x6b6e76); palo.position.set(-1.1, 1.6, -1.1); tg.add(palo); const bandera = box(.9, .55, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .3 }); bandera.position.set(-.65, 2.9, -1.1); tg.add(bandera); animados.push((tt) => { bandera.rotation.y = Math.sin(tt * 3) * .25; }); }
@@ -404,7 +408,7 @@ export function distritos(ctx, cedisPos) {
       tg.traverse((o) => { if (o.isMesh && !o.userData.tag) { o.userData.tag = tag; interact.push(o); } }); // sólo palo y bandera siguen sueltos
     });
     const tagCasa = d.casas ? { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad } : null;
-    for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const techo = new THREE.Mesh(ctx.conoCasa ||= new THREE.ConeGeometry(.95, .7, 4), M(P.tiendaTecho)); techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); for (const pz of [cuerpo, techo, v]) { pz.userData.detalle = 'cerca'; instanciar(ctx, pz, tagCasa); } } // de muy lejos las casitas no se distinguen
+    for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const dosAguas = i % 2 === 1; const techo = new THREE.Mesh(dosAguas ? geo(ctx, 'dosAguas', () => techoDosAguas(.72, 1.3)) : (ctx.conoCasa ||= new THREE.ConeGeometry(.95, .7, 4)), M(P.tiendaTecho)); if (dosAguas) techo.position.y = .9; else { techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; } techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); for (const pz of [cuerpo, techo, v]) { pz.userData.detalle = 'cerca'; instanciar(ctx, pz, tagCasa); } } // de muy lejos las casitas no se distinguen
     // Banderín de cuota vs ritmo (3.90.61): verde-ámbar-rojo en la esquina de la manzana, de cerca y sin prender la capa; se toca = tarjeta de la ciudad.
     try { const cq = cuotaRitmo(modelo, d.tiendas.filter((t) => !t.reparto).map((t) => t.cuenta)); if (cq) { const tono = CAPA_TONOS[cq.tono];
       const asta = box(.1, 3.4, .1, 0x6b6e76); asta.position.set(-ancho / 2 - .5, 1.7, -largo / 2 + .8); const ban = box(1, .6, .06, tono, { emissive: tono, emissiveIntensity: oscuro ? 1 : .25 }); ban.position.set(-ancho / 2 - .5 + .55, 3.05, -largo / 2 + .8);
@@ -437,4 +441,9 @@ export function cajaBiselada(w, h, d, b) {
   s.moveTo(-x, -z); s.lineTo(x, -z); s.lineTo(x, z); s.lineTo(-x, z); s.closePath();
   const g = new THREE.ExtrudeGeometry(s, { depth: h - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 1, curveSegments: 1 });
   g.rotateX(-Math.PI / 2); g.center(); g.computeVertexNormals(); return g;
+}
+
+// Techo de dos aguas (3.90.69): prisma triangular con la cumbrera a lo largo de z y la base en y = 0.
+export function techoDosAguas(r, largo) {
+  const g = new THREE.CylinderGeometry(r, r, largo, 3); g.rotateX(-Math.PI / 2); g.scale(1, .75, 1); g.translate(0, r * .5 * .75, 0); g.computeVertexNormals(); return g;
 }

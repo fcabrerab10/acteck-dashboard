@@ -153,7 +153,7 @@ Principios que no se rompen en ninguna etapa:
 ### Etapa 7 · Arte y sensación de juego
 - [ ] Kit de piezas low-poly propio (edificios con bordes biselados, techos, ventanas iluminadas de noche, árboles variados) en lugar de cajas lisas; paleta cálida consistente con el sistema de diseño del dashboard (`docs/DESIGN_SYSTEM.md`).
   - [x] (3.90.68) Tiendas: cuerpo con esquinas y orillas biseladas (`cajaBiselada()` en `escena/edificios.js`, geometría compartida e instanciada) y 2 ventanas por costado que se prenden de noche (todas si la tienda vendió, una sí y una no si no).
-  - [ ] Techos: cornisa/pretil en tiendas y casitas, techo de dos aguas en algunas; tinacos y antenas sueltos (instanciados).
+  - [x] (3.90.69) Techos: pretil al frente de cada tienda, tinaco negro en 2 de cada 3 y antena + platito en el resto; casitas de clientes finales alternan techo de cuatro aguas y de dos aguas (`techoDosAguas()`). Todo instanciado y en capa fina.
   - [ ] Oficina y CEDIS con el mismo bisel; ventanas de la oficina prendidas de noche según presencia.
   - [ ] Árboles variados (redondos, palmeras, arbustos) mezclados por semilla de posición; paleta cálida revisada contra `docs/DESIGN_SYSTEM.md`.
 - [ ] Animaciones de respuesta: el edificio «rebota» al tocarlo, burbujas que flotan, transiciones suaves de cámara con easing, gente que saluda al pasar el cursor.
@@ -182,6 +182,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 00:55 · v3.90.69 · Kit low-poly, paso 2: azoteas con tinacos, antenas y pretil; casitas con techo de dos aguas alternado.
 - 2026-10-08 00:51 · v3.90.68 · Kit low-poly, paso 1: tiendas con cuerpo biselado (facetado) y ventanas laterales que se iluminan de noche.
 - 2026-10-08 00:46 · v3.90.67 · Calendario comercial, paso 3: camiones de facturas de Buen Fin o de la semana del cierre van con caja roja de promoción y lo dicen en su título.
 - 2026-10-08 00:43 · v3.90.66 · Calendario comercial, paso 2: letrero del cierre de mes sobre la oficina, banderines de Buen Fin por ciudad y foquitos navideños en la escena (harness `?fecha=`).
