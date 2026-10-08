@@ -177,6 +177,7 @@ Principios que no se rompen en ninguna etapa:
 - [ ] Pulido: rendimiento, legibilidad de etiquetas, pruebas nuevas en `scripts/test-ciudad-modelo.mjs`, comparar números de cada tarjeta contra su pestaña del dashboard.
   - [x] (3.90.81) Pruebas de coherencia: proyección (GDL en el origen, rumbos de Monterrey/Mérida/Tijuana), coordenadas del catálogo dentro de México, cada cuenta con color y sede existente, `CIUDAD_POR_ESTADO` válido, `hexCss` y `norm`.
   - [x] (3.90.82) Legibilidad de nombres: `nombreCiudad()` puro y probado (acentos «San Luis Potosí», «Ciudad Juárez», conectores en minúscula «Lagos de Moreno», CDMX) en etiquetas, pines, tarjetas de ciudad/camión/vendedor, buscador y minimapa.
+  - [x] (3.90.83) Cifras cortas: `cifraCorta()` pura y probada (999 600 ya no sale «1000 K» sino «1.0 M», negativos con signo) en etiquetas, tarjetas y `pesosCorto`; la cartera vencida del panel usa `pesosCorto` (antes «$0.0 M» para montos chicos).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -193,6 +194,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 02:17 · v3.90.83 · Pulido: cifras cortas sin «1000 K» ni «$0.0 M» (borde K→M, negativos) en etiquetas, tarjetas y cartera vencida.
 - 2026-10-08 01:57 · v3.90.82 · Pulido: nombres de ciudad con acentos y conectores en minúscula (San Luis Potosí, Ciudad Juárez, Lagos de Moreno) en etiquetas, pines y tarjetas.
 - 2026-10-08 01:23 · v3.90.81 · Pulido: pruebas de coherencia de la proyección y de los catálogos de ciudades/cuentas.
 - 2026-10-08 01:22 · v3.90.80 · Nota «Acteck Ciudad» de CLAUDE.md al día (kit low-poly, rebote/saludo, sonido, versión ligera, recorrido).

@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -738,4 +738,11 @@ test('nombreCiudad: acentos, conectores y CDMX', () => {
   assert.equal(nombreCiudad('LAGOS DE MORENO'), 'Lagos de Moreno'); assert.equal(nombreCiudad('LA PAZ'), 'La Paz', 'el primer conector sí va con mayúscula');
   assert.equal(nombreCiudad('  merida '), 'Mérida'); assert.equal(nombreCiudad(null), ''); assert.equal(nombreCiudad(''), '');
   for (const k of Object.keys(CIUDADES)) { const n = nombreCiudad(k); assert.ok(n.length > 0 && n.length <= 20, k); assert.equal(norm(n === 'CDMX' ? 'CIUDAD DE MEXICO' : n), k, `${k} ida y vuelta`); }
+});
+
+test('cifraCorta / pesosCorto: redondeo en el borde K→M y negativos', () => {
+  assert.equal(cifraCorta(999600), '1.0 M'); assert.equal(cifraCorta(999400), '999 K'); assert.equal(cifraCorta(999.6), '1 K');
+  assert.equal(cifraCorta(1.25e6), '1.3 M'); assert.equal(cifraCorta(15400), '15 K'); assert.equal(cifraCorta(42.4), '42');
+  assert.equal(cifraCorta(-15400), '-15 K'); assert.equal(cifraCorta(-0.2), '0'); assert.equal(cifraCorta(NaN), '0'); assert.equal(cifraCorta(undefined), '0');
+  assert.equal(pesosCorto(999600), '$1.0 M'); assert.equal(pesosCorto(-2500), '-$3 K'); assert.equal(pesosCorto(15000), '$15 K');
 });

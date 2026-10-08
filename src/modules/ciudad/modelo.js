@@ -549,7 +549,15 @@ export function topSkus(filas = [], n = 5) {
   for (const r of filas || []) { const k = String(r?.sku || '').trim().toUpperCase(); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += Number(r.importe) || 0; o.cantidad += Number(r.cantidad) || 0; m.set(k, o); }
   return [...m.values()].filter((o) => o.importe > 0 || o.cantidad > 0).sort((a, b) => b.importe - a.importe || b.cantidad - a.cantidad).slice(0, n);
 }
-export const pesosCorto = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+// Cifra corta (3.90.83): 999 600 ya no sale «1000 K» sino «1.0 M», 999.6 → «1 K», negativos con signo y basura → 0.
+export function cifraCorta(v) {
+  const n = Number(v); if (!Number.isFinite(n)) return '0';
+  const a = Math.abs(n); const s = n < 0 && Math.round(a) > 0 ? '-' : '';
+  if (a >= 999500) return `${s}${(a / 1e6).toFixed(1)} M`;
+  if (a >= 999.5) return `${s}${Math.round(a / 1e3)} K`;
+  return `${s}${Math.round(a)}`;
+}
+export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' ? `-$${c.slice(1)}` : `$${c}`; };
 
 // Barra superior tipo recursos (3.90.42): toma la salida de `calcular()` de Inicio (mismos números) y arma los 4 recursos,
 // cada uno con el edificio al que lleva al tocarlo. Lo que no venga se omite.
