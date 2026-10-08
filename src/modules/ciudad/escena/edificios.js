@@ -40,6 +40,27 @@ export function oficina(ctx) {
   return ofiPos;
 }
 
+// Banco/tesorería (3.90.28): edificio de columnas al norte del estacionamiento; bandera roja si hay pagos vencidos o cartera vencida.
+export function banco(ctx) {
+  const { P, G, M, box, add, oscuro, modelo, esc } = ctx;
+  const b = ctx.campus?.banco || { x: esc.x - 9, z: esc.z - 18.5, ancho: 11, largo: 7 }; const r = modelo.banco || {};
+  const g = new THREE.Group(); g.position.set(b.x, 0, b.z);
+  g.add(box(b.ancho, .5, b.largo, P.banqueta));
+  const escalon = box(7.4, .35, 1.2, P.oficinaTecho); escalon.position.set(0, .68, 2.3); g.add(escalon);
+  const cuerpo = box(6.4, 3.6, 3.6, P.oficina); cuerpo.position.set(0, 2.3, -.4); g.add(cuerpo);
+  const col = M(P.oficina, { roughness: .6 });
+  for (let i = 0; i < 5; i++) { const c = new THREE.Mesh(G(.45, 3.2, .45), col); c.position.set(-2.8 + i * 1.4, 2.45, 1.75); c.userData.detalle = 'fino'; g.add(c); instanciar(ctx, c); }
+  const friso = box(7, .5, 4.9, P.oficinaTecho); friso.position.set(0, 4.3, .2); g.add(friso);
+  const remate = box(4.6, .55, 3.4, P.oficinaTecho); remate.position.set(0, 4.82, .2); g.add(remate); // frontón escalonado
+  const alerta = r.pagosVencidos > 0 || r.carteraVencida > 0;
+  const letrero = box(3.4, .7, .25, alerta ? ACC.rojo : ACC.verde, { emissive: alerta ? ACC.rojo : ACC.verde, emissiveIntensity: oscuro ? 1.5 : .3 }); letrero.position.set(0, 3.55, 1.95); g.add(letrero);
+  if (alerta) { const asta = box(.12, 2.4, .12, 0x8E8E93); asta.position.set(2.6, 6.2, -.8); g.add(asta); const bandera = box(1.2, .7, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .2 }); bandera.position.set(3.2, 7, -.8); g.add(bandera); }
+  for (const [x, z] of [[-4.6, 2.4], [4.6, 2.4]]) arbol(ctx, g, x, z, .9);
+  const pesos = (v) => `$${fmtK(v)}`;
+  add(g, { tipo: 'banco', titulo: 'Banco · Tesorería', sub: `cartera vencida ${pesos(r.carteraVencida || 0)} · ${r.pagosSemana || 0} pago${r.pagosSemana === 1 ? '' : 's'} esta semana${r.pagosVencidos ? ` · ${r.pagosVencidos} vencido${r.pagosVencidos === 1 ? '' : 's'}` : ''}`, pagina: 'pagos' });
+  return { x: b.x, z: b.z };
+}
+
 // CEDIS: nave, racks, tarimas descargando y montacargas.
 export function cedis(ctx) {
   const { P, M, G, box, add, oscuro, modelo, esc, animados } = ctx;

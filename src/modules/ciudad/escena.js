@@ -13,7 +13,7 @@ import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
 import { terreno, carretera, plantarArboles, plantarCarreteras } from './escena/terreno.js';
 import { plantarInstancias, actualizarInstancias } from './escena/instancias.js';
-import { oficina, cedis, puerto, distritos, campusCalles } from './escena/edificios.js';
+import { oficina, cedis, puerto, distritos, campusCalles, banco } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
@@ -55,6 +55,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   const ofiPos = oficina(ctx);
   const cedisPos = cedis(ctx);
   campusCalles(ctx, cedisPos); // calles, banquetas y patio de maniobras con andenes
+  let bancoPos = null; try { bancoPos = banco(ctx); } catch (e) { console.warn('[ciudad] banco', e); } // capa nueva: si falla, la ciudad sigue
   const puertoPos = puerto(ctx);
   barcos(ctx, puertoPos);
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
@@ -72,8 +73,8 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   // Viajar: desde lejos (mapa), tocar una ciudad acerca la cámara a ella; de cerca el clic sólo abre su panel.
   const inter = crearInteraccion(canvas, camara, { onClick: (tag) => { if (tag?.tipo === 'ciudad' && tag.ciudad && vista.zoom > DETALLE.mapa) irA(tag); onClick?.(tag); } });
 
-  // Vista Base (inicial): oficina, CEDIS y puerto encuadrados de cerca según el tamaño del lienzo y el giro actual.
-  const puntosBase = [{ ...ofiPos, r: 8 }, { ...cedisPos, r: 8 }, { ...puertoPos, r: 9 }];
+  // Vista Base (inicial): oficina, CEDIS, banco y puerto encuadrados de cerca según el tamaño del lienzo y el giro actual.
+  const puntosBase = [{ ...ofiPos, r: 8 }, { ...cedisPos, r: 8 }, { ...puertoPos, r: 9 }, ...(bancoPos ? [{ ...bancoPos, r: 5 }] : [])];
   const vistaBase = () => encuadre(puntosBase, { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
   const b0 = vistaInicial && Number.isFinite(vistaInicial.cx) && Number.isFinite(vistaInicial.cz) && Number.isFinite(vistaInicial.zoom) ? vistaInicial : vistaBase(); if (b0) { vista.cx = vista.cxObj = b0.cx; vista.cz = vista.czObj = b0.cz; vista.zoom = vista.zoomObj = b0.zoom; resize(); camara.colocarCam(); }
 

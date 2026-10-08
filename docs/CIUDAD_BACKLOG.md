@@ -84,6 +84,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] Plantilla única y tarjeta flotante (3.90.26): `tarjetaDe(tag, modelo)` en `modelo.js` (probada) da nombre, estado y hasta 4 números para oficina, CEDIS/montacargas, puerto, ciudad, tienda, persona y contenedor; `Ciudad.jsx` la dibuja junto a donde se tocó (si la cámara se mueve se acomoda arriba a la derecha). Umbrales de estado elegidos por el agente: CEDIS > 90 d ámbar / > 120 d rojo; ciudad ≥ 60 % tiendas activas verde / ≥ 30 % ámbar; tienda con cartera vencida o sin venta = rojo. Fernando puede ajustarlos.
   - [x] (3.90.27) Que la tarjeta siga al edificio mientras la cámara se mueve (la escena avisa la posición en pantalla del tag seleccionado, p. ej. `onSeleccion(pos)` cada ~15 cuadros) en vez de acomodarse en la esquina.
 - [ ] Banco/tesorería nuevo en la base (Pagos y cobranza: cartera vencida, pagos de la semana) y torre de pronóstico (Forecast: precisión, avisos), con datos de las vistas que ya usan esas pestañas.
+  - [x] Banco/tesorería (3.90.28): edificio de columnas al norte del estacionamiento (`campus().banco`), tocable con tarjeta: cartera vencida (`v_vision_cartera_consolidada`, ya cargada) y pagos de Pagos V3 que vencen en 7 días o ya vencieron (`pagos` abiertos, reglas `venceEn`/`estaVencido` que `datos.js` inyecta a `resumenBanco()`); letrero verde/rojo y bandera roja si hay vencidos. «Abrir en el dashboard» → Pagos.
+  - [ ] Torre de pronóstico (Forecast): precisión y avisos (`forecast_avisos`, `forecast_propuestas` como en `movil/pestanas/forecast/datos.js`), con su tarjeta.
 - [ ] **Interior del CEDIS**: al entrar, racks por familia/marca con su nivel de inventario y días de inventario (`v_medidas_inventario_*`), montacargas moviéndose si hubo salidas hoy.
 - [ ] **Interior del puerto**: cada barco/contenedor tocable con PO, proveedor, ETA y piezas (`v_embarques_contenedor`).
 - [ ] **Interior de la oficina**: salas con las reuniones de hoy (agenda), escritorios por persona con su foto/nombre y su pendiente principal.
@@ -135,6 +137,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 22:26 · v3.90.28 · Banco/tesorería en la base: cartera vencida + pagos de la semana/vencidos (mismas reglas de Pagos V3), tarjeta con estado, bandera roja si hay vencidos; entra al encuadre de la Vista Base
 - 2026-10-07 22:20 · v3.90.27 · Tarjeta del edificio (paso 2): la escena avisa con `onSeleccion(pos)` dónde está en pantalla lo tocado (`posPantalla()` en `interaccion.js`, cada 3 cuadros y sólo si cambió) y la tarjeta lo sigue al mover la cámara o si es un vehículo; fuera de cuadro se acomoda arriba a la derecha
 - 2026-10-07 22:17 · v3.90.26 · Tarjeta del edificio (paso 1): plantilla única `tarjetaDe()` con estado verde/ámbar/rojo y 4 números del modelo; tarjeta flotante junto a lo tocado en lugar del panel lateral
 - 2026-10-07 16:00 · v3.90.25 · Última vista por usuario: `Ciudad.jsx` guarda centro y zoom de la cámara en `localStorage` (`acteck.ciudad.vista.<user_id>`, con try/catch) y la escena arranca ahí (`vistaInicial` de `crearEscena`), también al cambiar tema o clima; `leerVista()` probado descarta textos rotos o fuera de México. El nivel (base/ciudad/lejos) se recalcula solo.

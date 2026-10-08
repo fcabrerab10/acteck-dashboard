@@ -6,6 +6,7 @@
 // y los vendedores (equipo comercial del ERP) hacia los clientes que atienden.
 // Regla de Fernando: NADA escala por el tamaño del cliente; lo que se ve es actividad (luces, movimiento).
 
+
 const N = (v) => Number(v) || 0;
 export const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
@@ -121,6 +122,7 @@ export function campus(esc = { x: 0, z: 0 }) {
     // detalle (3.90.11): estacionamiento al norte de la oficina pegado a la calle interior, barda al norte y oriente del
     // CEDIS + patio, jardín al poniente de la oficina y faroles sobre la banqueta sur de la avenida (sin el cruce interior)
     estacionamiento: { x: x - 9, z: z - 10, ancho: 12, largo: 7, cajones: 10 }, // x −15…−3, z −13.5…−6.5
+    banco: { x: x - 9, z: z - 18.5, ancho: 11, largo: 7 }, // tesorería (3.90.28): al norte del estacionamiento · x −14.5…−3.5, z −22…−15
     bardas: [{ a: { x: x - .4, z: z - 10.7 }, b: { x: x + 32.7, z: z - 10.7 } }, { a: { x: x + 32.7, z: z - 10.7 }, b: { x: x + 32.7, z: avenidaZ - 1.8 } }],
     jardin: { x: x - 18.3, z: z + 1.5, ancho: 3.2, largo: 14 }, // x −19.9…−16.7
     faroles: Array.from({ length: 9 }, (_, i) => ({ x: x - 16 + i * 6, z: avenidaZ + 1.5 })).filter((f) => Math.abs(f.x - (x - 1)) > 1.5),
@@ -128,7 +130,7 @@ export function campus(esc = { x: 0, z: 0 }) {
     distritoGDL: (ancho = 0, largo = 0) => ({ x: x + 5 + (Number(ancho) || 0) / 2, z: avenidaZ + 2 + (Number(largo) || 0) / 2 }),
     // terreno del campus (oficina, estacionamiento, jardín, CEDIS, patio, bardas y la banqueta de los faroles) para saber qué
     // distritos reales le caen encima (3.90.12)
-    caja: { x0: x - 20, x1: x + 33, z0: z - 14, z1: avenidaZ + 2 },
+    caja: { x0: x - 20, x1: x + 33, z0: z - 23, z1: avenidaZ + 2 }, // z0 −23: incluye el banco
   };
 }
 
@@ -214,6 +216,16 @@ export function leerVista(texto) {
   if (v.cx < Math.min(...pts.map((p) => p.x)) - m || v.cx > Math.max(...pts.map((p) => p.x)) + m || v.cz < Math.min(...pts.map((p) => p.z)) - m || v.cz > Math.max(...pts.map((p) => p.z)) + m) return null;
   return { cx: v.cx, cz: v.cz, zoom: zoomEnRango(v.zoom) };
 }
+/** Banco/tesorería (3.90.28): cartera vencida de los propios (`v_vision_cartera_consolidada`, la misma de la Matriz) y pagos
+ *  abiertos de Pagos V3 que vencen en 7 días o ya vencieron, con las MISMAS reglas de la bandeja (`venceEn`/`estaVencido` de
+ *  `comercial/pagosv3/estados.js`, que `datos.js` pasa en `reglas` para que este archivo siga sin imports); sin reglas, no cuenta pagos. */
+export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISOString().slice(0, 10), reglas = null) {
+  const conVencido = (cartera || []).filter((c) => N(c.vencido) > 0);
+  const abiertos = reglas?.venceEn && reglas?.estaVencido ? (pagos || []).filter((p) => p && p.estado !== 'rechazado') : [];
+  const semana = abiertos.filter((p) => reglas.venceEn(p, 7, hoyIso)), vencidos = abiertos.filter((p) => reglas.estaVencido(p, hoyIso));
+  return { carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
+}
+
 /** Tarjeta del edificio (una sola plantilla, estilo Hay Day): de un tag tocado → { titulo, sub, estado: 'verde'|'ambar'|'rojo'|null,
  *  numeros: [[etiqueta, valor]] (máx. 4), pagina }. Los números salen del mismo modelo (mismas vistas que el dashboard). */
 export function tarjetaDe(tag, modelo) {
@@ -234,6 +246,10 @@ export function tarjetaDe(tag, modelo) {
     const p = m.puerto, b = p.barcos || [], pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
     t.numeros = [['Navegando', num(b.length)], ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num((p.tarimas || []).length)]];
     t.estado = b.some((x) => x.llegaEnDias == null) ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'banco' && m.banco) {
+    const b = m.banco;
+    t.numeros = [['Cartera vencida', pesos(b.carteraVencida)], ['Cuentas con vencido', num(b.cuentasVencidas)], ['Pagos 7 días', `${num(b.pagosSemana)} · ${pesos(b.montoSemana)}`], ['Pagos vencidos', `${num(b.pagosVencidos)} · ${pesos(b.montoVencido)}`]];
+    t.estado = b.pagosVencidos > 0 || b.carteraVencida > 0 ? 'rojo' : b.pagosSemana > 0 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'ciudad') {
     const d = (m.distritos || []).find((x) => x.ciudad === tag.ciudad) || tag.distrito;
     if (d) {
@@ -440,5 +456,6 @@ export function construirModelo(d, hoy = new Date()) {
 
   const clientesFinales = distritos.reduce((s, x) => s + (x.clientesFinales?.n || 0), 0);
   const kpis = { clientesFinales, cartera: [...carteraPor.entries()].map(([k, c]) => ({ cuenta: k, ...c })), tiendas: distritos.reduce((s, x) => s + x.tiendas.length, 0), tiendasVendieron: distritos.reduce((s, x) => s + x.tiendas.filter((t) => t.vendio).length, 0), ciudades: distritos.length, barcos: puerto.barcos.length, camiones: camiones.length, vendedores: vendedoresRuta.length, enLinea: virtuales.length };
-  return { hoyIso, anio, mes, oficina, cedis, puerto, distritos, camiones, vendedoresRuta, kpis, origen: posDe(ORIGEN), puertoPos: posDe(CIUDADES.MANZANILLO) };
+  const banco = resumenBanco(kpis.cartera, d.pagos, hoyIso, d.reglasPagos);
+  return { hoyIso, anio, mes, oficina, cedis, puerto, banco, distritos, camiones, vendedoresRuta, kpis, origen: posDe(ORIGEN), puertoPos: posDe(CIUDADES.MANZANILLO) };
 }
