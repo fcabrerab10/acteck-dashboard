@@ -11,7 +11,9 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra } from './modelo';
+import { useInicioData } from '../general/inicio/useInicioData';
+import { calcular } from '../general/inicio/calc';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
@@ -134,9 +136,9 @@ export default function Ciudad({ onNavegar }) {
           {top.map((c) => <button key={c.ciudad} type="button" onClick={() => escenaRef.current?.irA({ tipo: 'ciudad', ciudad: c.ciudad })} title={`Ir a ${c.nombre}: ${c.activas} tienda${c.activas === 1 ? '' : 's'} activa${c.activas === 1 ? '' : 's'}${c.llegando ? ` · ${c.llegando} camión${c.llegando === 1 ? '' : 'es'} llegando` : ''}`} style={{ ...card, padding: '4px 9px', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: theme.text }}>{c.nombre} <span style={{ color: theme.textMuted, fontWeight: 500 }}>{c.actividad}</span></button>)}
         </div>
       )}
-      <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas</div>
+      <BarraRecursos card={card} theme={theme} irA={(t) => escenaRef.current?.irA(t)} ayuda="Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas" />
       {/* Leyenda: color por cliente */}
-      <div style={{ position: 'absolute', right: 14, top: 52, zIndex: 3, ...card, padding: '8px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', maxWidth: 420, fontSize: 11 }}>
+      <div style={{ position: 'absolute', right: 14, top: 68, zIndex: 3, ...card, padding: '8px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', maxWidth: 420, fontSize: 11 }}>
         {[...new Set(modelo.distritos.flatMap((d) => d.tiendas.map((t) => `${t.cuenta}|${t.nombreCuenta}`)))].map((k) => { const [c, n] = k.split('|'); return <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 3, background: hexCss(COLOR_CUENTA[c] || 0x8E8E93), display: 'inline-block' }} />{n}</span>; })}
       </div>
       {/* Hoy en la ciudad: lo que está pasando ahora mismo */}
@@ -179,7 +181,7 @@ export default function Ciudad({ onNavegar }) {
         const tj = tarjetaDe(sel.tag, modelo); const s = sel.tag;
         const ESTADO = { verde: [theme.green, 'Bien'], ambar: [theme.orange || '#FF9F0A', 'Atención'], rojo: [theme.red, 'Urgente'] };
         const W = 280, vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-        const flota = sel.pos ? { position: 'fixed', left: Math.max(W / 2 + 8, Math.min(vw - W / 2 - 8, sel.pos.x)), top: sel.pos.y < 300 ? sel.pos.y + 18 : sel.pos.y - 12, transform: `translate(-50%, ${sel.pos.y < 300 ? '0' : '-100%'})`, zIndex: 60 } : { position: 'absolute', right: 14, top: 56, zIndex: 4 };
+        const flota = sel.pos ? { position: 'fixed', left: Math.max(W / 2 + 8, Math.min(vw - W / 2 - 8, sel.pos.x)), top: sel.pos.y < 300 ? sel.pos.y + 18 : sel.pos.y - 12, transform: `translate(-50%, ${sel.pos.y < 300 ? '0' : '-100%'})`, zIndex: 60 } : { position: 'absolute', right: 14, top: 72, zIndex: 4 };
         return (
         <div style={{ ...flota, width: W, ...card, padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,.18)' }}>
           <button type="button" onClick={() => setSel(null)} aria-label="Cerrar" style={{ position: 'absolute', right: 10, top: 10, border: 0, background: theme.border, color: theme.text, width: 24, height: 24, borderRadius: 12, cursor: 'pointer' }}>×</button>
@@ -214,6 +216,33 @@ function TopSkusTienda({ cuenta, sucursal, theme, oscuro }) {
       {isLoading ? <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>Cargando…</div>
         : !data?.lista?.length ? <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>Sin venta por SKU</div>
         : data.lista.map((r) => <div key={r.sku} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</span><span style={{ color: theme.textMuted, flex: 'none' }}>{pesosCorto(r.importe)} · {Math.round(r.cantidad).toLocaleString('es-MX')} pz</span></div>)}
+    </div>
+  );
+}
+
+// Barra superior tipo recursos (3.90.42): ventas del mes vs cuota, inventario, cartera vencida y en tránsito con los MISMOS
+// números que Inicio (useInicioData + calcular). Tocar un recurso vuela a su edificio. Si Inicio falla, la barra no aparece
+// y queda la ayuda de siempre.
+function BarraRecursos({ card, theme, irA, ayuda }) {
+  const hoy = useMemo(() => new Date(), []);
+  const { data } = useInicioData(hoy.getFullYear());
+  const recursos = useMemo(() => {
+    if (!data) return [];
+    try { return recursosBarra(calcular(data, [], { anio: hoy.getFullYear(), mesActual: hoy.getMonth() + 1, hoy, modo: 'mes', sensible: true, enCurso: true })); } catch (e) { console.warn('[ciudad] barra de recursos', e); return []; }
+  }, [data, hoy]);
+  if (!recursos.length) return <div style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, ...card, padding: '7px 12px', fontSize: 11.5, color: theme.textMuted }}>{ayuda}</div>;
+  const TONO = { verde: theme.green, ambar: theme.orange || '#FF9F0A', rojo: theme.red };
+  return (
+    <div title={ayuda} style={{ position: 'absolute', right: 14, top: 12, zIndex: 3, display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, maxWidth: 'calc(50% - 28px)' }}>
+      {recursos.map((r) => (
+        <button key={r.clave} type="button" onClick={() => irA(r.ir)} title={`${r.etiqueta} · ir al edificio`} style={{ ...card, padding: '5px 10px', cursor: 'pointer', textAlign: 'left', color: theme.text, minWidth: 92 }}>
+          <div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, whiteSpace: 'nowrap' }}>{r.icono} {r.etiqueta}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: r.clave === 'cartera' && r.tono === 'rojo' ? TONO.rojo : theme.text }}>
+            {fmtM(r.valor)}{r.pct != null && <span style={{ fontSize: 11, fontWeight: 600, color: TONO[r.tono] || theme.textMuted }}> · {r.pct}%</span>}{r.extra && <span style={{ fontSize: 11, fontWeight: 500, color: theme.textMuted }}> · {r.extra}</span>}
+          </div>
+          {r.pct != null && <div style={{ height: 3, borderRadius: 2, background: theme.border, marginTop: 3, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: TONO[r.tono] || theme.accent }} /></div>}
+        </button>
+      ))}
     </div>
   );
 }

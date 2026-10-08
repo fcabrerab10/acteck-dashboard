@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -390,4 +390,14 @@ test('tienda visitable: top 5 SKUs de la sucursal', () => {
   assert.deepEqual(t.map((r) => r.sku), ['B', 'AC-1', 'C', 'D', 'E']); assert.deepEqual(t[1], { sku: 'AC-1', importe: 150, cantidad: 3 });
   assert.deepEqual(topSkus(null), []); assert.equal(topSkus(f, 2).length, 2);
   assert.equal(pesosCorto(1.25e6), '$1.3 M'); assert.equal(pesosCorto(15400), '$15 K'); assert.equal(pesosCorto(null), '$0');
+});
+
+test('barra superior de recursos con los números de Inicio', () => {
+  const r = { cur: { fact_neta: 8.5e6 }, cuotaPeriodo: 10e6, inv: { valor: 40e6, cobertura: 95 }, cartera: { vencido: 1.2e6 }, enCamino: { valor: 3e6, pos: 7 } };
+  const b = recursosBarra(r);
+  assert.deepEqual(b.map((x) => [x.clave, x.ir.tipo]), [['ventas', 'oficina'], ['inventario', 'cedis'], ['cartera', 'banco'], ['embarques', 'puerto']]);
+  assert.equal(b[0].pct, 85); assert.equal(b[0].tono, 'ambar'); assert.equal(b[1].extra, '95 d'); assert.equal(b[2].tono, 'rojo'); assert.equal(b[3].extra, '7 POs');
+  assert.equal(recursosBarra({ cur: { fact_neta: 1 }, cuotaPeriodo: 0 })[0].pct, null, 'sin cuota');
+  assert.equal(recursosBarra({ cartera: { vencido: 0 } })[0].tono, 'verde');
+  assert.deepEqual(recursosBarra(null), []);
 });

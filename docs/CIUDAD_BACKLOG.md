@@ -104,7 +104,7 @@ Principios que no se rompen en ninguna etapa:
 - [x] **Tienda visitable**: tocar una tienda → su sell out del mes vs mes anterior, top 5 SKUs, inventario en tienda si hay, y «Abrir en Sell Out».
 
 ### Etapa 4 · Burbujas de atención y barra superior (que avise como juego)
-- [ ] **Barra superior tipo recursos**: Ventas del mes vs cuota (barra de progreso), Inventario comercial, Cartera vencida, Embarques en tránsito. Mismos números que Inicio. Tocar cada recurso lleva a su edificio.
+- [x] **Barra superior tipo recursos**: Ventas del mes vs cuota (barra de progreso), Inventario comercial, Cartera vencida, Embarques en tránsito. Mismos números que Inicio. Tocar cada recurso lleva a su edificio.
 - [ ] **Burbujas sobre edificios** cuando algo pide atención (cartera vencida, inventario bajo de un SKU A, barco llegando en ≤ 3 días, OC de cliente atrasada, reunión en 15 min). Tocar la burbuja abre la tarjeta del edificio con ese tema.
 - [ ] **«Hoy en Acteck»** como lista de misiones del día (las mismas alertas y pendientes del dashboard), cada una con «Ir» que vuela al lugar.
 - [ ] **Capas de información** (como SimCity): botones «Ventas · Inventario · Cartera · Cuota» que pintan ciudades, manzanas y edificios con una escala de color de ese dato (leyenda visible, «Sin capa» para volver). Mismos números que su pestaña.
@@ -150,6 +150,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:18 · v3.90.42 · Barra superior de recursos (arriba a la derecha, en lugar de la ayuda, que pasa a tooltip): ventas del mes vs cuota con barrita, inventario con cobertura, cartera vencida y en tránsito con POs, con los mismos números que Inicio (`useInicioData` + `calcular`; `recursosBarra()` probado); tocar uno vuela a oficina/CEDIS/banco/puerto. Sin verificación visual (el harness no dibuja la UI de React)
 - 2026-10-07 23:15 · v3.90.41 · Tienda visitable: la tarjeta de la tienda pide al tocarla su top 5 SKUs del mes (o del anterior si aún no vende) con la misma consulta que Análisis (`v_sellout_general_cuenta` por sucursal; `topSkus()` probado) y el botón dice «Abrir en Sell Out». Inventario por tienda → Necesita a Fernando
 - 2026-10-07 23:12 · v3.90.40 · Presencia en la oficina: `presenciaPersonas()` (probado) marca a cada quien en reunión (en curso, por `asistentes`/`creado_por`), de viaje (tipo 'viaje' vigente hoy, consulta chica aparte) o disponible; de viaje no camina por la base y su silla queda vacía, en reunión espera junto a la sala; la tarjeta de la persona dice «Ahora». Harness `?presencia`
 - 2026-10-07 23:08 · v3.90.39 · Interior de la oficina (paso 3, cierra la etapa): sobre cada escritorio un círculo con la inicial (color de su rol) que, al entrar por primera vez, carga la foto (`avatar_url`); si no carga se queda la inicial
