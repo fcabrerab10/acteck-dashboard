@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -330,4 +330,17 @@ test('tarjeta del contenedor en el mar: proveedor, ETA, piezas y POs', () => {
   const tz = tarjetaDe({ tipo: 'barco', id: 'Z' }, tarde); assert.equal(tz.estado, 'rojo'); assert.match(tz.numeros[1][1], /4 d tarde$/); assert.equal(tz.numeros[0][1], '—'); assert.equal(tz.numeros[3][1], '—');
   assert.equal(tarjetaDe({ tipo: 'barco', id: 'Z' }, { puerto: { barcos: [{ id: 'Z', llegaEnDias: null }] } }).estado, 'ambar', 'sin ETA');
   assert.deepEqual(tarjetaDe({ tipo: 'barco', id: 'NO' }, m).numeros, [], 'contenedor que ya no está no rompe');
+});
+
+test('números de PO de cada contenedor en la tarjeta', () => {
+  const puerto = { barcos: [{ id: 'A1', supplier: 'X', piezas: 10, llegaEnDias: 3, eta: '2026-10-10', pos: 4 }, { id: 'B2', piezas: 1, llegaEnDias: 1, pos: 2 }], tarimas: [{ id: 'T9', piezas: 2, llegaEnDias: 0, arribo: '2026-10-07' }] };
+  ponerPosEnPuerto(puerto, [{ contenedor: 'A1', po: 'PO-10' }, { contenedor: 'A1 ', po: 'PO-9' }, { contenedor: 'A1', po: 'PO-10' }, { contenedor: 'A1', po: 'PO-2' }, { contenedor: 'A1', po: 'PO-11' }, { contenedor: 'T9', po: 77 }, { contenedor: 'ZZ', po: 'X' }, { contenedor: null, po: 'Y' }, { contenedor: 'B2', po: '' }]);
+  assert.deepEqual(puerto.barcos[0].listaPos, ['PO-2', 'PO-9', 'PO-10', 'PO-11'], 'únicas y en orden numérico');
+  assert.equal(puerto.barcos[1].listaPos, undefined); assert.deepEqual(puerto.tarimas[0].listaPos, ['77']);
+  assert.equal(listaCorta(puerto.barcos[0].listaPos), 'PO-2, PO-9, PO-10 +1'); assert.equal(listaCorta([]), ''); assert.equal(listaCorta(null), '');
+  const m = { puerto };
+  assert.equal(tarjetaDe({ tipo: 'barco', id: 'A1' }, m).numeros[3][1], 'PO-2, PO-9, PO-10 +1');
+  assert.equal(tarjetaDe({ tipo: 'barco', id: 'B2' }, m).numeros[3][1], '2', 'sin lista queda el conteo');
+  assert.equal(tarjetaDe({ tipo: 'barco', id: 'T9' }, m).numeros[3][1], '77');
+  assert.equal(ponerPosEnPuerto(null, []), null); assert.doesNotThrow(() => ponerPosEnPuerto({}, null));
 });

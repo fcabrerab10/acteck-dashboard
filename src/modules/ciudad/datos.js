@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
-import { construirModelo } from './modelo';
+import { construirModelo, ponerPosEnPuerto } from './modelo';
 import { venceEn, estaVencido } from '../comercial/pagosv3/estados'; // banco: mismas reglas de vencimiento que la bandeja de Pagos
 
 const STALE = 5 * 60 * 1000;
@@ -48,7 +48,11 @@ export function useCiudadData(enabled = true) {
         // Días de inventario por marca: demanda de los 3 meses cerrados del pivote de sell in (como Inventario en el celular).
         seg(fetchAll('v_sellin_global_sku_anio', 'sku,anio,piezas', (q) => q.in('anio', [...new Set([1, 2, 3].map((i) => new Date(anio, hoy.getMonth() - i, 1).getFullYear()))])), 'demanda por SKU'),
       ]);
-      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
+      const modelo = construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
+      // Números de PO de los contenedores dibujados (tarjeta del barco). Consulta chica; si falla, la tarjeta muestra sólo el conteo.
+      const ids = [...(modelo.puerto?.barcos || []), ...(modelo.puerto?.tarimas || [])].map((b) => b.id).filter(Boolean);
+      if (ids.length) ponerPosEnPuerto(modelo.puerto, await seg(fetchAll('embarques_compras', 'contenedor,po', (q) => q.in('contenedor', ids)), 'POs por contenedor'));
+      return modelo;
     },
   });
 }

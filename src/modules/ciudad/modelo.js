@@ -240,6 +240,29 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().t
 /** Racks del CEDIS por marca (etapa 3 · interior del CEDIS): filas de `v_inventario_almacen_medida` con `en_inv_actual = true`
  *  (SKU × almacén, como Inventario) + marca de `roadmap_sku` (`marcas`: Map u objeto sku → marca). Suma valor (`costoinventario`)
  *  y piezas por marca, cuenta SKUs distintos con existencia; top `n` por valor y el resto junto en «OTRAS». Sin marca → «SIN MARCA». */
+// Números de PO por contenedor (3.90.35): filas `{ contenedor, po }` de `embarques_compras` (sólo de los contenedores dibujados)
+// → pone `listaPos` (únicas, ordenadas) en cada barco/tarima del puerto. Sin filas no cambia nada (la tarjeta muestra el conteo).
+export function ponerPosEnPuerto(puerto, filas = []) {
+  if (!puerto) return puerto;
+  const por = new Map();
+  for (const f of filas || []) {
+    const c = String(f?.contenedor || '').trim(), po = String(f?.po ?? '').trim();
+    if (!c || !po) continue;
+    if (!por.has(c)) por.set(c, new Set());
+    por.get(c).add(po);
+  }
+  for (const b of [...(puerto.barcos || []), ...(puerto.tarimas || [])]) {
+    const s = por.get(String(b.id || '').trim());
+    if (s) b.listaPos = [...s].sort((a, z) => a.localeCompare(z, 'es', { numeric: true }));
+  }
+  return puerto;
+}
+// Lista de POs para la tarjeta: las primeras 3 y «+N» (la tarjeta es angosta).
+export function listaCorta(lista, n = 3) {
+  if (!lista?.length) return '';
+  return lista.slice(0, n).join(', ') + (lista.length > n ? ` +${lista.length - n}` : '');
+}
+
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
   const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
   const por = new Map();
@@ -310,7 +333,7 @@ export function tarjetaDe(tag, modelo) {
     if (b) {
       const f = b.arribo || b.eta; const fc = f ? new Date(`${String(f).slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : null;
       const cuando = b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias < 0 ? `${fc} · ${-b.llegaEnDias} d tarde` : b.llegaEnDias === 0 ? `${fc} · hoy` : `${fc} · en ${b.llegaEnDias} d`;
-      t.numeros = [['Proveedor', b.supplier || '—'], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', b.pos ? num(b.pos) : '—']];
+      t.numeros = [['Proveedor', b.supplier || '—'], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', listaCorta(b.listaPos) || (b.pos ? num(b.pos) : '—')]];
       t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';
     }
   } else if (tag.tipo === 'puerto' && m.puerto) {
