@@ -214,6 +214,53 @@ export function leerVista(texto) {
   if (v.cx < Math.min(...pts.map((p) => p.x)) - m || v.cx > Math.max(...pts.map((p) => p.x)) + m || v.cz < Math.min(...pts.map((p) => p.z)) - m || v.cz > Math.max(...pts.map((p) => p.z)) + m) return null;
   return { cx: v.cx, cz: v.cz, zoom: zoomEnRango(v.zoom) };
 }
+/** Tarjeta del edificio (una sola plantilla, estilo Hay Day): de un tag tocado → { titulo, sub, estado: 'verde'|'ambar'|'rojo'|null,
+ *  numeros: [[etiqueta, valor]] (máx. 4), pagina }. Los números salen del mismo modelo (mismas vistas que el dashboard). */
+export function tarjetaDe(tag, modelo) {
+  if (!tag) return null;
+  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  const num = (v) => (Number(v) || 0).toLocaleString('es-MX');
+  const t = { titulo: tag.titulo || '', sub: tag.sub || '', estado: null, numeros: [], pagina: tag.pagina || null };
+  const m = modelo || {};
+  if (tag.tipo === 'oficina' && m.oficina) {
+    const o = m.oficina, pend = (o.personas || []).reduce((s, p) => s + (p.pendientes || 0), 0), hechas = (o.personas || []).reduce((s, p) => s + (p.hechas || 0), 0);
+    t.numeros = [['Personas', num((o.personas || []).length + (o.genericos || 0))], ['Reuniones hoy', num(o.reuniones)], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
+    t.estado = o.reunionEnCurso ? 'ambar' : 'verde';
+  } else if ((tag.tipo === 'cedis' || tag.tipo === 'montacargas') && m.cedis) {
+    const c = m.cedis, d = Number(c.dias) || 0;
+    t.numeros = [['Inventario', pesos(c.valor)], ['Días de inventario', num(Math.round(d))], ['Piezas', num(c.piezas)], ['SKUs con stock', num(c.skus)]];
+    t.estado = d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'puerto' && m.puerto) {
+    const p = m.puerto, b = p.barcos || [], pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
+    t.numeros = [['Navegando', num(b.length)], ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num((p.tarimas || []).length)]];
+    t.estado = b.some((x) => x.llegaEnDias == null) ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'ciudad') {
+    const d = (m.distritos || []).find((x) => x.ciudad === tag.ciudad) || tag.distrito;
+    if (d) {
+      const ts = d.tiendas || [], act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + (Number(x.importe) || 0), 0), r = ts.length ? act / ts.length : 0;
+      t.numeros = [['Tiendas activas', `${act} de ${ts.length}`], ['Venta del mes', pesos(venta)], ['Clientes', num((d.cuentas || []).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num((d.vendedores || []).length)]];
+      t.estado = !ts.length ? null : r >= 0.6 ? 'verde' : r >= 0.3 ? 'ambar' : 'rojo';
+    }
+  } else if (tag.tipo === 'tienda') {
+    const d = (m.distritos || []).find((x) => x.ciudad === tag.ciudad);
+    const s = d?.tiendas?.find((x) => x.cuenta === tag.cuenta && `${x.nombreCuenta} · ${x.sucursal}` === tag.titulo);
+    if (s) {
+      t.numeros = [['Este mes', pesos(s.importe)], ['Mes anterior', pesos(s.previo)]];
+      if (s.vendedores) t.numeros.push(['Vendedores', num(s.vendedores)]);
+      if (s.cartera?.vencido > 0) t.numeros.push(['Cartera vencida', pesos(s.cartera.vencido)]);
+      t.estado = s.cartera?.vencido > 0 ? 'rojo' : s.vendioMes ? 'verde' : s.vendio ? 'ambar' : 'rojo';
+    }
+  } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {
+    const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];
+    t.estado = p.actividad ? 'verde' : p.pendientes > p.hechas ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'barco' && tag.barco) {
+    const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', b.eta || '—'], ['Llega a CEDIS', b.arribo || '—']];
+    if (b.estatus) t.numeros.push(['Estatus', b.estatus]);
+    t.estado = b.llegaEnDias == null ? 'ambar' : 'verde';
+  }
+  t.numeros = t.numeros.slice(0, 4);
+  return t;
+}
 export function vistaMapa({ ang = Math.PI / 4, aspecto = 1.6 } = {}) {
   return encuadre(EXTREMOS_MEXICO.map((c) => ({ ...posDe(c), r: 4 })), { ang, aspecto, margen: 1.05, min: ZOOM_MIN, max: ZOOM_MAX });
 }

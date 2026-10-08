@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe } from './modelo';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
@@ -24,7 +24,8 @@ export default function Ciudad({ onNavegar }) {
   const canvasRef = useRef(null);
   const escenaRef = useRef(null);
   const [hover, setHover] = useState(null);
-  const [sel, setSel] = useState(null);
+  const [sel, setSel] = useState(null); // { tag, pos } · pos = dónde se tocó (la tarjeta flota ahí)
+  const hoverPos = useRef(null);
   const [busca, setBusca] = useState('');
   const [listo, setListo] = useState(false);
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
@@ -34,7 +35,7 @@ export default function Ciudad({ onNavegar }) {
   const clave = claveVista(perfil?.user_id);
   const ultimaVista = useRef({ clave: null, v: null }); // se relee si cambia el usuario (el perfil llega después del primer render)
   if (ultimaVista.current.clave !== clave) { let v = null; try { v = leerVista(window.localStorage.getItem(clave)); } catch { v = null; } ultimaVista.current = { clave, v }; }
-  const alMoverVista = (v) => { setVistaCam(v); ultimaVista.current = { clave, v }; try { window.localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento: sólo no se recuerda */ } };
+  const alMoverVista = (v) => { setVistaCam(v); setSel((s) => (s?.pos ? { ...s, pos: null } : s)); /* la tarjeta flota junto al edificio; si la cámara se mueve se acomoda arriba a la derecha */ ultimaVista.current = { clave, v }; try { window.localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento: sólo no se recuerda */ } };
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
   useEffect(() => {
@@ -55,8 +56,8 @@ export default function Ciudad({ onNavegar }) {
       try {
         escenaRef.current = crearEscena(canvasRef.current, modelo, {
           oscuro, clima, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
-          onHover: (tag, pos) => setHover(tag ? { tag, pos } : null),
-          onClick: (tag) => setSel(tag),
+          onHover: (tag, pos) => { hoverPos.current = tag ? pos : null; setHover(tag ? { tag, pos } : null); },
+          onClick: (tag) => setSel(tag ? { tag, pos: hoverPos.current } : null),
           onNivel: setNivel, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
         });
         setListo(true);
@@ -170,21 +171,28 @@ export default function Ciudad({ onNavegar }) {
           <div style={{ fontSize: 11.5, color: theme.textMuted }}>{hover.tag.sub}</div>
         </div>
       )}
-      {/* panel de selección */}
-      {sel && (
-        <div style={{ position: 'absolute', right: 14, top: 56, width: 300, zIndex: 4, ...card, padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,.16)' }}>
+      {/* Tarjeta del edificio (estilo Hay Day): flota junto a lo que tocaste; una sola plantilla para todo (tarjetaDe en modelo.js) */}
+      {sel && (() => {
+        const tj = tarjetaDe(sel.tag, modelo); const s = sel.tag;
+        const ESTADO = { verde: [theme.green, 'Bien'], ambar: [theme.orange || '#FF9F0A', 'Atención'], rojo: [theme.red, 'Urgente'] };
+        const W = 280, vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+        const flota = sel.pos ? { position: 'fixed', left: Math.max(W / 2 + 8, Math.min(vw - W / 2 - 8, sel.pos.x)), top: sel.pos.y < 300 ? sel.pos.y + 18 : sel.pos.y - 12, transform: `translate(-50%, ${sel.pos.y < 300 ? '0' : '-100%'})`, zIndex: 60 } : { position: 'absolute', right: 14, top: 56, zIndex: 4 };
+        return (
+        <div style={{ ...flota, width: W, ...card, padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,.18)' }}>
           <button type="button" onClick={() => setSel(null)} aria-label="Cerrar" style={{ position: 'absolute', right: 10, top: 10, border: 0, background: theme.border, color: theme.text, width: 24, height: 24, borderRadius: 12, cursor: 'pointer' }}>×</button>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', paddingRight: 28 }}>{sel.titulo}</div>
-          <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2, lineHeight: 1.4 }}>{sel.sub}</div>
-          {sel.persona && !sel.persona.generico && <div style={{ fontSize: 12.5, marginTop: 8 }}>{sel.persona.pendientes} pendientes hoy · {sel.persona.hechas} hechas</div>}
-          {sel.distrito && <div style={{ marginTop: 8, maxHeight: 180, overflowY: 'auto', fontSize: 12 }}>{sel.distrito.tiendas.slice(0, 14).map((t) => <div key={t.nombre} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', borderTop: `1px solid ${theme.border}` }}><span style={{ color: t.vendio ? theme.text : theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nombre}</span><b style={{ fontVariantNumeric: 'tabular-nums', color: t.vendio ? theme.green : theme.textMuted }}>{t.vendio ? `$${t.importe >= 1e6 ? `${(t.importe / 1e6).toFixed(1)} M` : `${Math.round(t.importe / 1e3)} K`}` : '—'}</b></div>)}</div>}
-          {sel.barco && <div style={{ fontSize: 12.5, marginTop: 8 }}>{sel.barco.supplier}<br />ETA puerto {sel.barco.eta || '—'} · CEDIS {sel.barco.arribo || '—'} · {sel.barco.estatus}</div>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingRight: 28 }}>
+            {tj.estado && <i title={ESTADO[tj.estado][1]} style={{ width: 10, height: 10, borderRadius: 5, background: ESTADO[tj.estado][0], flex: 'none', boxShadow: `0 0 0 3px ${ESTADO[tj.estado][0]}33` }} />}
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em' }}>{tj.titulo}</div>
+          </div>
+          <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 2, lineHeight: 1.4 }}>{tj.sub}</div>
+          {tj.numeros.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 10 }}>{tj.numeros.map(([l, v]) => <div key={l} style={{ background: oscuro ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)', borderRadius: 9, padding: '6px 8px' }}><div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div></div>)}</div>}
           <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-            {sel.pagina && <button type="button" onClick={() => navegar(sel)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Abrir en el dashboard</button>}
-            <button type="button" onClick={() => escenaRef.current?.irA(sel)} style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ir ahí</button>
+            {tj.pagina && <button type="button" onClick={() => navegar(s)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Abrir en el dashboard</button>}
+            <button type="button" onClick={() => escenaRef.current?.irA(s)} style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ir ahí</button>
           </div>
         </div>
-      )}
+        );
+      })()}
       </>}
     </div>
   );
