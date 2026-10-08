@@ -180,6 +180,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.83) Cifras cortas: `cifraCorta()` pura y probada (999 600 ya no sale «1000 K» sino «1.0 M», negativos con signo) en etiquetas, tarjetas y `pesosCorto`; la cartera vencida del panel usa `pesosCorto` (antes «$0.0 M» para montos chicos).
   - [x] (3.90.84) Listas cortas sin vacíos ni repetidos: `listaCorta()` limpia espacios, quita nulos/duplicados y el «+N» cuenta sólo lo que falta (POs del barco en la tarjeta del puerto).
   - [x] (3.90.85) `cuotaRitmo()` aguanta fecha inválida (usa hoy) y venta faltante (0): ya no sale «NaN %» en rojo en la capa/tarjeta de cuota.
+  - [x] (3.90.86) Barra de recursos: `recursosBarra()` ya no muestra «NaN d» / «Infinity d» cuando la cobertura de inventario viene sin ritmo; redondea los días.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -196,6 +197,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 02:55 · v3.90.86 · Pulido: `recursosBarra()` sin «NaN d»/«Infinity d» en la cobertura de inventario.
 - 2026-10-08 02:37 · v3.90.85 · Pulido: `cuotaRitmo()` sin «NaN %» con fecha inválida o venta faltante.
 - 2026-10-08 02:35 · v3.90.84 · Pulido: `listaCorta()` sin vacíos ni repetidos (POs del barco).
 - 2026-10-08 02:17 · v3.90.83 · Pulido: cifras cortas sin «1000 K» ni «$0.0 M» (borde K→M, negativos) en etiquetas, tarjetas y cartera vencida.

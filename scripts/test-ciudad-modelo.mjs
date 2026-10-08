@@ -401,6 +401,8 @@ test('barra superior de recursos con los números de Inicio', () => {
   assert.equal(recursosBarra({ cur: { fact_neta: 1 }, cuotaPeriodo: 0 })[0].pct, null, 'sin cuota');
   assert.equal(recursosBarra({ cartera: { vencido: 0 } })[0].tono, 'verde');
   assert.deepEqual(recursosBarra(null), []);
+  for (const c of [NaN, Infinity, '', 'x']) assert.equal(recursosBarra({ inv: { valor: 1, cobertura: c } })[0].extra, null, `cobertura ${c}`);
+  assert.equal(recursosBarra({ inv: { valor: 1, cobertura: 94.6 } })[0].extra, '95 d'); assert.equal(recursosBarra({ inv: { valor: 1, cobertura: 0 } })[0].extra, '0 d');
 });
 
 test('burbujas de atención sobre edificios', () => {
