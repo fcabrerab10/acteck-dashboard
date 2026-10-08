@@ -17,6 +17,8 @@ import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
+// Táctil (3.90.79): botones de al menos 40 px y letra más grande; el buscador a 16 px para que iOS no haga zoom al escribir.
+const TACTIL_CSS = '.ciudad-tactil button{min-height:40px;min-width:40px;font-size:14px!important}.ciudad-tactil input{font-size:16px!important}';
 let recorridoMostrado = false; // sin localStorage (privado): el recorrido sale una vez por sesión
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
 
@@ -62,6 +64,7 @@ export default function Ciudad({ onNavegar }) {
   if (ultimaVista.current.clave !== clave) { let v = null; try { v = leerVista(window.localStorage.getItem(clave)); } catch { v = null; } ultimaVista.current = { clave, v }; }
   const alMoverVista = (v) => { setVistaCam(v); ultimaVista.current = { clave, v }; try { window.localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento: sólo no se recuerda */ } };
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
+  const tactil = useMemo(() => { try { return !!window.matchMedia?.('(pointer: coarse)').matches; } catch { return false; } }, []); // iPad / celular (3.90.79)
   const [tour, setTour] = useState(null); // recorrido de bienvenida (3.90.75): null | índice del paso
   useEffect(() => { if (!cargaFin || !modelo || fallo || recorridoMostrado) return; let visto = false; try { visto = recorridoVisto(window.localStorage.getItem(RECORRIDO_CLAVE)); } catch { visto = false; } recorridoMostrado = true; if (!visto) setTour(0); }, [cargaFin, !!modelo, !!fallo]); // eslint-disable-line react-hooks/exhaustive-deps
   // Sonido ambiente (3.90.76): apagado por defecto; se arma en el mismo clic (el navegador pide un gesto) y se apaga al salir.
@@ -87,7 +90,7 @@ export default function Ciudad({ onNavegar }) {
       if (!vivo) return;
       try {
         escenaRef.current = crearEscena(canvasRef.current, modelo, {
-          oscuro, clima, ligera: !!window.matchMedia?.('(pointer: coarse)').matches, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
+          oscuro, clima, ligera: tactil, onError: (e) => setFallo(String(e?.stack || e?.message || e)),
           onHover: (tag, pos) => { hoverPos.current = tag ? pos : null; setHover(tag ? { tag, pos } : null); },
           onClick: (tag) => setSel(tag ? { tag, pos: hoverPos.current } : null),
           onSeleccion: (pos) => setSel((s) => (s ? { ...s, pos } : s)), // la tarjeta sigue al edificio; fuera de cuadro se acomoda arriba a la derecha
@@ -138,7 +141,8 @@ export default function Ciudad({ onNavegar }) {
   const PASOS = ['Saliendo de órbita…', 'Bajando el motor 3D…', 'Trayendo tus sucursales…', 'Contando contenedores en el mar…', 'Leyendo el clima de Guadalajara…', 'Encendiendo las luces…'];
   const card = { background: oscuro ? 'rgba(28,28,30,.86)' : 'rgba(255,255,255,.88)', border: `1px solid ${theme.border}`, borderRadius: 12, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', fontFamily: TYPO.fontText, color: theme.text };
   return (
-    <div style={{ position: 'relative', height: 'calc(100vh - 92px)', minHeight: 520, borderRadius: 14, overflow: 'hidden', border: `1px solid ${theme.border}`, background: oscuro ? '#121722' : '#EEF1EF' }}>
+    <div className={tactil ? 'ciudad-tactil' : undefined} style={{ position: 'relative', height: 'calc(100vh - 92px)', minHeight: 520, borderRadius: 14, overflow: 'hidden', border: `1px solid ${theme.border}`, background: oscuro ? '#121722' : '#EEF1EF' }}>
+      {tactil && <style>{TACTIL_CSS}</style>}
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', opacity: listo ? 1 : 0, transition: 'opacity 600ms cubic-bezier(.32,.72,0,1)' }} />
       {!cargaFin && !fallo && <Carga pasos={PASOS} listo={listo} onFin={() => setCargaFin(true)} />}
       {tour != null && RECORRIDO[tour] && <div role="dialog" aria-label="Recorrido de bienvenida" style={{ position: 'absolute', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 8, ...card, width: 'min(380px, calc(100% - 32px))', padding: '14px 16px', boxShadow: '0 12px 40px rgba(0,0,0,.18)' }}>

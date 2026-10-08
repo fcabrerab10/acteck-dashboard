@@ -167,9 +167,9 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.76) `capasSonido()` puro y probado + `sonido.js` (WebAudio sintetizado, sin archivos: rumor de ciudad, lluvia, pájaros de día, grillos de noche, según el clima real o el tema) y botón 🔇/🔊 junto al «?»; se arma en el clic y se apaga al salir de la pestaña. Probado en Chrome headless (bundle aparte); la UI sin prueba visual.
 
 ### Etapa 8 · iPad, celular y para el equipo
-- [ ] Gestos táctiles completos (un dedo mueve, pellizco acerca, dos dedos giran, toque largo = info) y botones grandes; versión ligera automática en `pointer: coarse` (menos gente, sin sombras).
+- [x] Gestos táctiles completos (un dedo mueve, pellizco acerca, dos dedos giran, toque largo = info) y botones grandes; versión ligera automática en `pointer: coarse` (menos gente, sin sombras).
   - [x] (3.90.77) `gestoDosDedos()` puro y probado; en `escena/interaccion.js`: dos dedos = pellizco + giro (el arrastre de un dedo se pausa), toque largo (550 ms, vibra) = globo de info mientras se sostiene, el toque corto elige lo que está bajo el dedo (antes podía usar el último hover) y en táctil el globo ya no se queda pegado. Probado en el harness con toques emulados (CDP).
-  - [ ] Botones grandes en táctil (`pointer: coarse` en `Ciudad.jsx`: más padding y letra en la barra de arriba y la tarjeta).
+  - [x] (3.90.79) Botones grandes en táctil: con `pointer: coarse`, `Ciudad.jsx` pone la clase `ciudad-tactil` (botones ≥ 40 px y letra 14 px; buscador a 16 px para que iOS no haga zoom). Sin prueba visual: el harness no dibuja `Ciudad.jsx`.
   - [x] (3.90.78) Versión ligera: `crearEscena(..., { ligera })` (sin sombras, pixel ratio ≤ 1.5, paseantes con `paseantesDistrito()` probado: máx. 1 por manzana); `Ciudad.jsx` la prende con `matchMedia('(pointer: coarse)')`. Harness `?ligera`.
 - [ ] Abrir la Ciudad a más usuarios respetando sus permisos: cada quien ve sólo los edificios de las pestañas a las que tiene acceso (requiere que Fernando apruebe quién entra).
 
@@ -191,6 +191,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:20 · v3.90.79 · Botones grandes en iPad/celular (cierra «Gestos táctiles completos»).
 - 2026-10-08 01:18 · v3.90.78 · Versión ligera automática en iPad/celular: sin sombras, menos resolución y menos paseantes.
 - 2026-10-08 01:15 · v3.90.77 · Gestos táctiles: dos dedos giran y acercan, toque largo muestra la info, el toque corto elige lo que está bajo el dedo.
 - 2026-10-08 01:14 · v3.90.76 · Sonido ambiente opcional (apagado por defecto): ciudad, pájaros o grillos y lluvia según el clima; cierra la Etapa 7.
