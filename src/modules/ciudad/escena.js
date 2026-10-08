@@ -18,7 +18,7 @@ import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
-import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE } from './modelo.js';
+import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE, capaCiudades, CAPA_TONOS } from './modelo.js';
 
 export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, onAdentro, vistaInicial, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
@@ -91,6 +91,24 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     onAdentro?.(adentro);
   }
   const entrarCedis = (on) => entrar(on ? 'cedis' : false);
+  // Capas de información (3.90.48): un disco translúcido por ciudad con el tono de `capaCiudades()`; se arma la primera vez
+  // que se pide (no entra en las instancias) y de lejos crece con el zoom para leerse en el mapa. capa(null) las apaga.
+  let capaGrupo = null; const capaDiscos = new Map();
+  function capa(nombre) {
+    try {
+      const c = nombre ? capaCiudades(modelo, nombre) : null;
+      if (!c) { if (capaGrupo) capaGrupo.visible = false; return null; }
+      const matDe = (tono) => { const k = `capa-${tono}`; if (!mats.has(k)) mats.set(k, new THREE.MeshBasicMaterial({ color: CAPA_TONOS[tono] ?? CAPA_TONOS.gris, transparent: true, opacity: .5, depthWrite: false })); return mats.get(k); };
+      if (!capaGrupo) {
+        capaGrupo = new THREE.Group(); capaGrupo.renderOrder = 5; raiz.add(capaGrupo);
+        const geo = new THREE.CircleGeometry(1, 40); geo.rotateX(-Math.PI / 2);
+        for (const [ciudad, p] of distritoPos) { const d = new THREE.Mesh(geo, matDe('gris')); const r = Math.hypot(p.ancho || 6, p.largo || 6) / 2 + 1.2; d.position.set(p.x, .36, p.z); d.userData.r = r; d.scale.setScalar(r); d.renderOrder = 5; capaGrupo.add(d); capaDiscos.set(ciudad, d); }
+        animados.push(() => { if (!capaGrupo.visible) return; const k = Math.max(1, vista.zoom / 45); for (const d of capaDiscos.values()) d.scale.setScalar(d.userData.r * k); });
+      }
+      for (const [ciudad, d] of capaDiscos) { const v = c.porCiudad.get(ciudad); d.visible = !!v; if (v) d.material = matDe(v.tono); }
+      capaGrupo.visible = true; return c;
+    } catch (e) { console.warn('[ciudad] capa', e); if (capaGrupo) capaGrupo.visible = false; return null; } // falla sola
+  }
   let destino = null; // ciudad a la que viajaste: con ella el botón ofrece «← Volver al mapa»
   const vistaDe = (ciudad) => vistaCiudad(distritoPos.get(ciudad), { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
   function irA(tag) { if (tag?.tipo === 'punto') { if (Number.isFinite(tag.x) && Number.isFinite(tag.z)) { vista.cxObj = tag.x; vista.czObj = tag.z; } return; } if (tag?.tipo === 'mapa') { const m = vistaMapa({ ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) }); if (m) { vista.cxObj = m.cx; vista.czObj = m.cz; vista.zoomObj = m.zoom; } return; } if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.tipo === 'banco' && bancoPos) p = bancoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) { const c = vistaDe(tag.ciudad); if (c) { destino = tag.ciudad; vista.cxObj = c.cx; vista.czObj = c.cz; vista.zoomObj = c.zoom; return; } p = distritoPos.get(tag.ciudad); } if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
@@ -133,7 +151,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);
   return {
-    resize, irA, entrar, entrarCedis, get hayRacks() { return !!ctx.hayRacks; }, get hayOficina() { return !!ctx.oficinaAdentro; },
+    resize, irA, entrar, entrarCedis, capa, get hayRacks() { return !!ctx.hayRacks; }, get hayOficina() { return !!ctx.oficinaAdentro; },
     stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh && o.visible) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
     // Liberar memoria al salir (3.90.8): cada geometría, material y textura una sola vez (escena + cachés, aunque ya no estén
     // colgadas), buffers de instancias y mapas de sombra; se sueltan las listas para que la escena vieja no quede retenida.

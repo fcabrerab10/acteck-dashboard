@@ -113,7 +113,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.46) `misionesDelDia()` puro (alertas de las burbujas + reuniones de hoy + contenedores descargando, hechas al final con ✓), probado; panel abajo a la derecha con «Ir» que vuela y abre la tarjeta.
 - [ ] **Capas de información** (como SimCity): botones «Ventas · Inventario · Cartera · Cuota» que pintan ciudades, manzanas y edificios con una escala de color de ese dato (leyenda visible, «Sin capa» para volver). Mismos números que su pestaña.
   - [x] (3.90.47) Reglas: `capaCiudades(modelo, capa)` puro en `modelo.js` — color por ciudad para 'ventas' (sell out del mes vs anterior) y 'cartera' (cuentas con vencido), con leyenda; probado.
-  - [ ] Dibujar: botones «Sin capa · Ventas · Cartera» en `Ciudad.jsx` con leyenda; `escena.capa(nombre)` tiñe pin y piso de cada manzana con el tono (y la etiqueta/hover dice el texto de la capa).
+  - [x] (3.90.48) Dibujar: botones «Sin capa · Ventas · Cartera» en `Ciudad.jsx` con leyenda; `escena.capa(nombre)` tiñe pin y piso de cada manzana con el tono (y la etiqueta/hover dice el texto de la capa).
   - [ ] Capas «Inventario» (días de inventario por ciudad no existe: probablemente sólo CEDIS/edificios) y «Cuota» (cuota por cuenta del mes, la misma de Inicio/Clientes): revisar qué vista ya existe; si no hay, a «Necesita a Fernando».
 - [ ] **Bitácora en vivo** (como el Chirper de Cities: Skylines): tira de eventos recientes de la empresa — facturas grandes, contenedores que llegan, OCs surtidas, pagos registrados, reuniones que empiezan — cada uno con «Ver» que vuela al lugar. Sólo de tablas que ya existen (`sync_events`, facturas, embarques, pagos, agenda).
 - [ ] **Pensamientos** (como RollerCoaster Tycoon): burbujas cortas sobre tiendas y clientes que resumen su situación en lenguaje natural («Me falta inventario de AC-944571», «30 días sin comprar», «Voy arriba de mi cuota»), generadas con reglas del modelo, máximo unas pocas visibles a la vez.
@@ -158,6 +158,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:36 · v3.90.48 · Capas de información (paso 2): botones «Sin capa · Ventas · Cartera» abajo a la izquierda con leyenda; `escena.capa(nombre)` pone un disco translúcido del tono bajo cada ciudad (crece con el zoom para leerse en el mapa) y el hover de la ciudad dice el dato de la capa. Harness: `?capa=ventas` / `?capa=cartera&mapa`.
 - 2026-10-07 23:32 · v3.90.47 · Capas de información (paso 1): `capaCiudades()` puro — tono por ciudad para Ventas (sell out del mes vs anterior: verde ≥ 0, ámbar hasta −20 %, rojo peor, gris sin venta) y Cartera (cuentas con vencido entre sus tiendas), con leyenda; probado. Aún sin dibujar.
 - 2026-10-07 23:29 · v3.90.46 · «Hoy en Acteck»: lista de misiones del día (`misionesDelDia()`: cartera/pagos vencidos, contenedores con ETA vencida o por llegar, pedidos detenidos, reuniones de hoy y contenedores por descargar; rojo → ámbar → por hora, hechas tachadas) en el panel de abajo a la derecha, cada una con «Ir» que vuela al edificio y abre su tarjeta.
 - 2026-10-07 23:26 · v3.90.45 · Burbujas de atención (paso 3): pedidos de cliente detenidos (alerta `oc_detenida`, consulta chica) → globo rojo sobre el CEDIS que abre su tarjeta; inventario bajo SKU A queda para Fernando

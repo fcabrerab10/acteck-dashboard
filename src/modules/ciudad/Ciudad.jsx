@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -33,6 +33,9 @@ export default function Ciudad({ onNavegar }) {
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
   const [adentro, setAdentro] = useState(false); // false | 'cedis' (racks por marca) | 'oficina' (escritorios y sala, 3.90.38)
+  const [capa, setCapa] = useState(null); // capas de información (3.90.48): null | 'ventas' | 'cartera'
+  const [capaInfo, setCapaInfo] = useState(null); // lo que devolvió escena.capa(): título, leyenda y texto por ciudad
+  const capaRef = useRef(null); capaRef.current = capa;
   const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
   // Última vista por usuario (localStorage, puede fallar en privado): la escena arranca ahí, también al cambiar tema o clima.
   const clave = claveVista(perfil?.user_id);
@@ -64,6 +67,7 @@ export default function Ciudad({ onNavegar }) {
           onSeleccion: (pos) => setSel((s) => (s ? { ...s, pos } : s)), // la tarjeta sigue al edificio; fuera de cuadro se acomoda arriba a la derecha
           onNivel: setNivel, onAdentro: setAdentro, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
         });
+        if (capaRef.current) setCapaInfo(escenaRef.current.capa(capaRef.current)); // al rehacer la escena (tema/clima) la capa sigue
         setListo(true);
       } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }
     }).catch((e) => { console.error('[ciudad] carga', e); setFallo(String(e?.message || e)); });
@@ -76,6 +80,7 @@ export default function Ciudad({ onNavegar }) {
     if (tag.tipo === 'tienda' || tag.tipo === 'vendedor') detail.extra = { cuenta: tag.cuenta };
     if (onNavegar) onNavegar(null, tag.pagina, detail.extra); else window.dispatchEvent(new CustomEvent('acteck:navegar', { detail }));
   };
+  const ponerCapa = (c) => { setCapa(c); setCapaInfo(escenaRef.current?.capa(c) || null); };
   const misiones = useMemo(() => { try { return misionesDelDia(modelo); } catch (e) { console.warn('[ciudad] misiones', e); return []; } }, [modelo]); // falla sola
   const top = useMemo(() => ciudadesTop(modelo, 5), [modelo]); // acceso rápido: las 5 ciudades con más actividad
   const plano = useMemo(() => planoMini(modelo?.distritos), [modelo]); // minimapa: México chico con un punto por ciudad
@@ -165,6 +170,15 @@ export default function Ciudad({ onNavegar }) {
       </div>
       {/* Minimapa + KPIs (columna abajo a la izquierda para que no se encimen) */}
       <div style={{ position: 'absolute', left: 14, bottom: 14, right: 298, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, zIndex: 3, pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', pointerEvents: 'auto' }}>
+        <div style={{ ...card, padding: 3, display: 'flex', gap: 2 }} role="group" aria-label="Capas de información">
+          {[[null, 'Sin capa'], ['ventas', 'Ventas'], ['cartera', 'Cartera']].map(([c, l]) => <button key={l} type="button" onClick={() => ponerCapa(c)} aria-pressed={capa === c} title={c ? `Pintar las ciudades por ${l.toLowerCase()}` : 'Quitar la capa'} style={{ border: 0, borderRadius: 9, padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText, background: capa === c ? theme.accent : 'transparent', color: capa === c ? '#fff' : theme.text }}>{l}</button>)}
+        </div>
+        {capa && capaInfo && <div style={{ ...card, padding: '5px 9px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px 9px', fontSize: 11 }}>
+          <b style={{ fontWeight: 700 }}>{capaInfo.titulo}</b>
+          {capaInfo.leyenda.map((l) => <span key={l.tono} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: theme.textMuted }}><i style={{ width: 9, height: 9, borderRadius: 5, background: hexCss(CAPA_TONOS[l.tono]) }} />{l.texto}</span>)}
+        </div>}
+      </div>
       <div style={{ ...card, padding: 4, pointerEvents: 'auto' }} title="Minimapa: toca una ciudad para viajar ahí o cualquier punto para mover la cámara">
         <svg width={plano.ancho} height={plano.alto} viewBox={`0 0 ${plano.ancho} ${plano.alto}`} onClick={tocarPlano} style={{ display: 'block', cursor: 'pointer' }} role="img" aria-label="Minimapa de México">
           <polygon points={plano.contorno} fill={oscuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)'} stroke={theme.border} strokeWidth={1} strokeLinejoin="round" />
@@ -184,6 +198,7 @@ export default function Ciudad({ onNavegar }) {
         <div style={{ position: 'fixed', left: hover.pos.x, top: hover.pos.y, transform: 'translate(-50%,-100%)', zIndex: 60, ...card, padding: '6px 10px', pointerEvents: 'none', boxShadow: '0 8px 24px rgba(0,0,0,.14)', maxWidth: 320 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700 }}>{hover.tag.titulo}</div>
           <div style={{ fontSize: 11.5, color: theme.textMuted }}>{hover.tag.sub}</div>
+          {capa && hover.tag.tipo === 'ciudad' && capaInfo?.porCiudad.get(hover.tag.ciudad) && <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 2, color: hexCss(CAPA_TONOS[capaInfo.porCiudad.get(hover.tag.ciudad).tono]) }}>{capaInfo.porCiudad.get(hover.tag.ciudad).texto}</div>}
         </div>
       )}
       {/* Tarjeta del edificio (estilo Hay Day): flota junto a lo que tocaste; una sola plantilla para todo (tarjetaDe en modelo.js) */}
