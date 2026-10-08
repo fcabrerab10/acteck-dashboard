@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -626,4 +626,17 @@ test('datosEnFecha: regresa facturas, envíos, contenedores y ventas a esa fecha
   // reconstruida: ya no hay camión de la factura 2 y el contenedor A sigue en camino
   const m = construirModelo({ ...d, ...datosEnFecha({ ...d, facturas: crudos.facturas, contenedores: crudos.contenedores }, new Date(2026, 8, 30, 12)) }, new Date(2026, 8, 30, 12));
   assert.equal(m.hoyIso, '2026-09-30'); assert.ok(!m.camiones.some((c) => c.folio === 2)); assert.ok(m.puerto.barcos.some((b) => b.id === 'A'));
+});
+
+test('eventosCalendario: cierre de mes, Buen Fin, regreso a clases y Navidad', () => {
+  const ids = (t) => eventosCalendario(t).map((e) => `${e.id}:${e.dias}`);
+  assert.deepEqual(ids(new Date(2026, 9, 8)), []);
+  assert.deepEqual(ids(new Date(2026, 9, 29, 23)), ['cierre:2']);
+  assert.equal(eventosCalendario(new Date(2026, 9, 31)).find((e) => e.id === 'cierre').texto, 'Hoy cierra el mes');
+  // 2026: 3.er lunes de noviembre = 16 → Buen Fin 13–16 nov
+  assert.deepEqual(ids(new Date(2026, 10, 1)), ['buenfin:12']); assert.match(eventosCalendario(new Date(2026, 10, 1))[0].texto, /13–16 nov/);
+  assert.deepEqual(ids(new Date(2026, 10, 14)), ['buenfin:0']); assert.deepEqual(ids(new Date(2026, 10, 17)), []);
+  assert.deepEqual(ids(new Date(2025, 10, 14)), ['buenfin:0']); // 2025: 14–17 nov
+  assert.deepEqual(ids(new Date(2026, 7, 10)), ['clases:0']); assert.deepEqual(ids(new Date(2026, 6, 14)), []);
+  assert.deepEqual(ids(new Date(2026, 11, 26)), ['cierre:5']); assert.deepEqual(ids(new Date(2026, 11, 20)), ['navidad:5']);
 });

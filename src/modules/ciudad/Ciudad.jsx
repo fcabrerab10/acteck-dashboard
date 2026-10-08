@@ -11,7 +11,7 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -101,6 +101,7 @@ export default function Ciudad({ onNavegar }) {
   const ponerCapa = (c) => { setCapa(c); setCapaInfo(escenaRef.current?.capa(c) || null); };
   const bitacora = useMemo(() => { try { return bitacoraEventos(modelo); } catch (e) { console.warn('[ciudad] bitácora', e); return []; } }, [modelo]); // falla sola
   const misiones = useMemo(() => { try { return misionesDelDia(modelo); } catch (e) { console.warn('[ciudad] misiones', e); return []; } }, [modelo]); // falla sola
+  const calendario = useMemo(() => { try { return eventosCalendario(modelo?.momento?.fecha || new Date()); } catch (e) { console.warn('[ciudad] calendario', e); return []; } }, [modelo]); // falla sola
   const cadena = useMemo(() => { try { return cadenaSuministro(modelo); } catch (e) { console.warn('[ciudad] cadena', e); return null; } }, [modelo]); // falla sola
   const top = useMemo(() => ciudadesTop(modelo, 5), [modelo]); // acceso rápido: las 5 ciudades con más actividad
   const plano = useMemo(() => planoMini(modelo?.distritos), [modelo]); // minimapa: México chico con un punto por ciudad
@@ -169,6 +170,9 @@ export default function Ciudad({ onNavegar }) {
       </div>
       {/* «Hoy en Acteck» (3.90.46): misiones del día con «Ir» (misionesDelDia), la bitácora con «Ver» (bitacoraEventos, 3.90.50) y lo que está pasando en la ciudad */}
       <div style={{ position: 'absolute', right: 14, bottom: 14, width: 270, zIndex: 3, ...card, padding: '10px 12px', fontSize: 12, lineHeight: 1.45, maxHeight: '48%', overflowY: 'auto' }}>
+        {calendario.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }} aria-label="Calendario comercial">
+          {calendario.map((ev) => <span key={ev.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 9, fontSize: 11.5, fontWeight: 600, background: ev.nivel === 'ambar' ? 'rgba(255,159,10,.2)' : theme.border, color: theme.text }}>{ev.icono} {ev.texto}</span>)}
+        </div>}
         {misiones.length > 0 && <>
           <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>Hoy en Acteck · {misiones.filter((x) => !x.hecha).length} pendiente{misiones.filter((x) => !x.hecha).length === 1 ? '' : 's'}</div>
           {misiones.map((mi) => (
