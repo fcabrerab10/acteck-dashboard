@@ -255,6 +255,19 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
 
+// Rutas de vendedores (etapa 5, 3.90.53): el circuito del vendedor por las sedes de sus clientes principales — ciudades
+// únicas con carretera (`tieneRuta`), máximo `max`, en el orden de `destinos` (de más a menos facturación). tramoActual()
+// reparte un ciclo (0–1) en tramos iguales: CEDIS → 1.ª sede → … → última sede → CEDIS (n paradas = n + 1 tramos).
+export function circuitoVendedor(destinos = [], tieneRuta = () => true, max = 3) {
+  const out = []; const vistas = new Set();
+  for (const d of destinos || []) { if (!d?.ciudad || vistas.has(d.ciudad) || !tieneRuta(d.ciudad)) continue; vistas.add(d.ciudad); out.push(d); if (out.length >= max) break; }
+  return out;
+}
+export function tramoActual(ciclo, paradas) {
+  const n = Math.max(1, paradas) + 1; const c = ((Number(ciclo) % 1) + 1) % 1; const i = Math.min(n - 1, Math.floor(c * n));
+  return { i, q: c * n - i, tramos: n };
+}
+
 // Pensamientos (etapa 4, paso 1, 3.90.52), como RollerCoaster Tycoon: frases cortas en primera persona sobre tiendas con
 // reglas del modelo (no por tamaño: se mira la tendencia). Una por ciudad como máximo y `max` en total; primero lo que pide
 // atención (rojo), luego lo bueno. Reglas: cuenta con cartera vencida → «Tengo pagos vencidos»; la tienda vendió el mes
@@ -585,6 +598,10 @@ export function tarjetaDe(tag, modelo) {
     const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];
     const pr = p.presencia; if (pr) t.numeros.unshift(['Ahora', pr.estado === 'viaje' ? `De viaje · ${pr.titulo}` : pr.estado === 'reunion' ? `En reunión · ${pr.titulo}` : 'Disponible']);
     t.estado = p.actividad ? 'verde' : p.pendientes > p.hechas ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'vendedorErp') {
+    // Vendedor del ERP en ruta (etapa 5, 3.90.53): ventas del mes y del año (`v_ventas_vendedor_cliente_mes`) y a quién visita.
+    const v = (m.vendedoresRuta || []).find((x) => x.nombre === tag.titulo);
+    if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', (v.destinos || []).map((x) => x.cliente).slice(0, 3).join(' → ') || '—']]; t.estado = v.totalMes > 0 ? 'verde' : 'ambar'; }
   } else if (tag.tipo === 'barco' && tag.barco) {
     const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', b.eta || '—'], ['Llega a CEDIS', b.arribo || '—']];
     if (b.estatus) t.numeros.push(['Estatus', b.estatus]);
@@ -764,12 +781,12 @@ export function construirModelo(d, hoy = new Date()) {
 
   // ── Vendedores del ERP (equipo comercial): de la oficina a sus clientes ──
   const ve = new Map();
-  for (const r of d.vendedoresErp || []) { if (N(r.anio) !== anio) continue; const o = ve.get(r.vendedor) || { nombre: r.vendedor, clientes: new Map(), total: 0 }; o.total += N(r.fact_neta); const c = o.clientes.get(r.cliente_key) || { cliente_key: r.cliente_key, nombre: r.cliente_nombre, fact: 0 }; c.fact += N(r.fact_neta); o.clientes.set(r.cliente_key, c); ve.set(r.vendedor, o); }
+  for (const r of d.vendedoresErp || []) { if (N(r.anio) !== anio) continue; const o = ve.get(r.vendedor) || { nombre: r.vendedor, clientes: new Map(), total: 0, totalMes: 0 }; o.total += N(r.fact_neta); if (N(r.mes) === mes) o.totalMes += N(r.fact_neta); const c = o.clientes.get(r.cliente_key) || { cliente_key: r.cliente_key, nombre: r.cliente_nombre, fact: 0 }; c.fact += N(r.fact_neta); o.clientes.set(r.cliente_key, c); ve.set(r.vendedor, o); }
   const porErp = new Map([...cuentas.values()].filter((c) => c.erp_cliente).map((c) => [String(c.erp_cliente), c]));
   const vendedoresRuta = [...ve.values()].filter((v) => v.nombre && v.total > 0).sort((a, b) => b.total - a.total).slice(0, 10).map((v, i) => {
     const top = [...v.clientes.values()].sort((a, b) => b.fact - a.fact).slice(0, 3);
     const destinos = top.map((c) => { const cu = porErp.get(String(c.cliente_key)) || [...cuentas.values()].find((x) => norm(x.nombre) === norm(c.nombre)); const key = cu?.cuenta || null; return { cliente: c.nombre || c.cliente_key, ciudad: (key && SEDE_POR_CUENTA[key]) || 'CIUDAD DE MEXICO', fact: c.fact }; });
-    return { nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, total: v.total, clientes: v.clientes.size, destinos, fase: i / 10 };
+    return { nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, total: v.total, totalMes: v.totalMes, clientes: v.clientes.size, destinos, fase: i / 10 };
   });
 
   const clientesFinales = distritos.reduce((s, x) => s + (x.clientesFinales?.n || 0), 0);

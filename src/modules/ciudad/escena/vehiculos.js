@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { fmtK, capital } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
+import { circuitoVendedor, tramoActual } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
@@ -38,12 +39,25 @@ export function camiones(ctx, rutas) {
 
 export function vendedoresRuta(ctx, rutas) {
   const { M, box, add, modelo, animados } = ctx;
+  // Etapa 5 (3.90.53): circuito real CEDIS → sedes de sus clientes principales → CEDIS (`circuitoVendedor`); entre sedes va
+  // en línea recta. La etiqueta (hover) dice a quién va ahora; tocarlo abre su tarjeta con las ventas del mes.
   modelo.vendedoresRuta.forEach((v, i) => {
-    const dest = v.destinos.find((d) => rutas.has(d.ciudad)); const curva = dest ? rutas.get(dest.ciudad) : null; if (!curva) return;
+    const paradas = circuitoVendedor(v.destinos, (c) => rutas.has(c)); if (!paradas.length) return;
+    const fin = (c) => rutas.get(c).getPointAt(1);
+    const tramos = [{ at: (q) => rutas.get(paradas[0].ciudad).getPointAt(q) }];
+    for (let k = 1; k < paradas.length; k++) { const l = new THREE.LineCurve3(fin(paradas[k - 1].ciudad), fin(paradas[k].ciudad)); tramos.push({ at: (q) => l.getPointAt(q) }); }
+    tramos.push({ at: (q) => rutas.get(paradas[paradas.length - 1].ciudad).getPointAt(1 - q) });
     const g = new THREE.Group(); const cuerpo = box(1.8, .7, 1, ACC.azul); cuerpo.position.y = .55; g.add(cuerpo); const techo = box(1, .5, .9, 0xDCE6F2); techo.position.set(-.1, 1.1, 0); g.add(techo);
     [[-.55, .45], [-.55, -.45], [.55, .45], [.55, -.45]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCoche', () => new THREE.CylinderGeometry(.22, .22, .2, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .22, z); g.add(r); });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); });
-    add(g, { tipo: 'vendedorErp', titulo: v.nombre, sub: `Equipo comercial · ${v.clientes} clientes · va a ${dest.cliente} (${capital(dest.ciudad)})`, pagina: 'sellIn' });
-    animados.push((t) => { const p = (v.fase + t * .04 + i * .03) % 2; const q = p < 1 ? p : 2 - p; const pt = curva.getPointAt(q); const pq = curva.getPointAt(Math.max(0, Math.min(1, q + (p < 1 ? .01 : -.01)))); g.position.set(pt.x + .9, .08, pt.z + .9); g.rotation.y = -Math.atan2(pq.z - pt.z, pq.x - pt.x); });
+    const subDe = (k) => `Equipo comercial · ${v.clientes} clientes · ${k < paradas.length ? `va a ${paradas[k].cliente} (${capital(paradas[k].ciudad)})` : 'regresa al CEDIS'}`;
+    const tag = { tipo: 'vendedorErp', titulo: v.nombre, sub: subDe(0), pagina: 'sellIn' }; let tramoVisto = 0;
+    add(g, tag);
+    animados.push((t) => {
+      const { i: k, q } = tramoActual((v.fase + t * .04 + i * .03) / tramos.length, paradas.length); // misma velocidad por tramo que antes
+      if (k !== tramoVisto) { tramoVisto = k; tag.sub = subDe(k); }
+      const pt = tramos[k].at(q), pq = tramos[k].at(Math.min(1, q + .01)); g.position.set(pt.x + .9, .08, pt.z + .9);
+      if (pq.distanceToSquared(pt) > 1e-8) g.rotation.y = -Math.atan2(pq.z - pt.z, pq.x - pt.x);
+    });
   });
 }

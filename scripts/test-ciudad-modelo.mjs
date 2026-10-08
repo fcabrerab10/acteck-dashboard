@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -515,4 +515,18 @@ test('pensamientos de tiendas', () => {
   assert.equal(pensamientos(m).length, 5); assert.equal(pensamientos(m, 2).length, 2);
   assert.deepEqual(pensamientos(null), []); assert.deepEqual(pensamientos({}), []);
   assert.ok(Array.isArray(pensamientos(construirModelo(d, hoy))));
+});
+
+test('vendedores: circuito por las sedes de sus clientes y tarjeta con ventas del mes', () => {
+  const ds = [{ cliente: 'A', ciudad: 'GDL' }, { cliente: 'B', ciudad: 'GDL' }, { cliente: 'C', ciudad: 'MTY' }, { cliente: 'D', ciudad: 'XXX' }, { cliente: 'E', ciudad: 'CDMX' }, { cliente: 'F', ciudad: 'PUE' }];
+  assert.deepEqual(circuitoVendedor(ds, (c) => c !== 'XXX').map((x) => x.cliente), ['A', 'C', 'E']);
+  assert.deepEqual(circuitoVendedor(ds, () => false), []); assert.deepEqual(circuitoVendedor(null), []);
+  assert.deepEqual(tramoActual(0, 3), { i: 0, q: 0, tramos: 4 }); assert.deepEqual(tramoActual(.5, 3), { i: 2, q: 0, tramos: 4 });
+  assert.equal(tramoActual(.99, 3).i, 3); assert.equal(tramoActual(1.25, 1).i, 0); assert.equal(tramoActual(-.25, 3).i, 3);
+  assert.ok(Math.abs(tramoActual(.3, 1).q - .6) < 1e-9);
+  const dd = { ...d, vendedoresErp: [{ anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, vendedor: 'JUAN PEREZ', cliente_key: '1', cliente_nombre: 'Uno', fact_neta: 100 }, { anio: hoy.getFullYear(), mes: hoy.getMonth() === 0 ? 2 : hoy.getMonth(), vendedor: 'JUAN PEREZ', cliente_key: '1', cliente_nombre: 'Uno', fact_neta: 50 }] };
+  const m = construirModelo(dd, hoy); const v = m.vendedoresRuta[0];
+  assert.equal(v.totalMes, 100); assert.equal(v.total, 150);
+  const tj = tarjetaDe({ tipo: 'vendedorErp', titulo: v.nombre }, m);
+  assert.deepEqual(tj.numeros.slice(0, 3).map((x) => x[0]), ['Ventas del mes', 'Ventas del año', 'Clientes']); assert.equal(tj.numeros[0][1], '$100'); assert.equal(tj.estado, 'verde');
 });

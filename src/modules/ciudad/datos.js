@@ -27,7 +27,7 @@ export function useCiudadData(enabled = true) {
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,pos,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
         seg(fetchAll('mv_sellout_sucursal_mes', 'cuenta,anio,mes,sucursal,importe,vendedores,estado', (q) => q.gte('anio', anio - 1)), 'sucursales'),
         seg(fetchAll('mv_sellout_vendedor_mes', 'cuenta,anio,mes,vendedor,importe,sucursal', (q) => q.eq('anio', anio)), 'vendedores mayoristas'),
-        seg(fetchAll('v_ventas_vendedor_cliente_mes', 'anio,vendedor,cliente_key,cliente_nombre,fact_neta', (q) => q.eq('anio', anio)), 'vendedores ERP'),
+        seg(fetchAll('v_ventas_vendedor_cliente_mes', 'anio,mes,vendedor,cliente_key,cliente_nombre,fact_neta', (q) => q.eq('anio', anio)), 'vendedores ERP'),
         seg(fetchAll('v_sellout_cuentas', 'cuenta,nombre,canal_sellout,erp_cliente,propio,tiene_sellout'), 'cuentas'),
         seg(fetchAll('v_erp_facturas_oc', 'cliente_key,folio,fecha,piezas,monto', (q) => q.gte('fecha', hace10)), 'facturas'),
         seg(supabase.from('agenda_items').select('propietario,responsables,estado,titulo,cuando,fecha_limite,inicio_real').or(`cuando.eq.${hoyIso},fecha_limite.eq.${hoyIso}`).then((r) => r.data || []), 'agenda'),
