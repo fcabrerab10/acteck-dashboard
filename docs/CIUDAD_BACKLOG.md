@@ -92,10 +92,10 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.31) «Entrar» al CEDIS: botón en su tarjeta que acerca la cámara y oculta el techo; un rack por marca con altura según su inventario y etiqueta; tocable con su tarjeta.
   - [x] (3.90.32) Días de inventario por marca (demanda de los 3 meses cerrados, `v_sellin_global_sku_anio`, como Inventario) y montacargas que sólo se mueven si hubo salidas hoy.
 - [x] **Nubes sobre la base**: en la Vista Base las nubes bajas (y 62–74) a veces tapan el CEDIS u otros edificios; subirlas, hacerlas translúcidas o apartarlas del campus (vista agente 2026-10-07).
-- [ ] **Interior del puerto**: cada barco/contenedor tocable con PO, proveedor, ETA y piezas (`v_embarques_contenedor`).
+- [x] **Interior del puerto**: cada barco/contenedor tocable con PO, proveedor, ETA y piezas (`v_embarques_contenedor`).
   - [x] (3.90.34) Tarjeta del contenedor en el mar: proveedor, ETA (o arribo al CEDIS) con días, piezas y número de POs (`pos` de `v_embarques_contenedor`); ETA vencida sin arribo en rojo, sin ETA en ámbar.
   - [x] (3.90.35) Números de PO de cada contenedor (lista de `embarques_compras` por contenedor, sólo de los barcos dibujados) en la tarjeta.
-  - [ ] Contenedores descargando en el puerto/CEDIS (`puerto.tarimas`) tocables uno por uno con la misma tarjeta.
+  - [x] (3.90.36) Contenedores descargando en el puerto/CEDIS (`puerto.tarimas`) tocables uno por uno con la misma tarjeta.
 - [ ] **Interior de la oficina**: salas con las reuniones de hoy (agenda), escritorios por persona con su foto/nombre y su pendiente principal.
 - [ ] **Presencia en la oficina** (como Gather): cada persona aparece en reunión, de viaje o disponible según su agenda de hoy.
 - [ ] **Tienda visitable**: tocar una tienda → su sell out del mes vs mes anterior, top 5 SKUs, inventario en tienda si hay, y «Abrir en Sell Out».
@@ -146,6 +146,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 22:57 · v3.90.36 · Interior del puerto (paso 3, cierra la etapa): cada tarima/contenedor descargando en el CEDIS es tocable y abre la tarjeta de su contenedor (proveedor, arribo, piezas, POs)
 - 2026-10-07 22:55 · v3.90.35 · Interior del puerto (paso 2): la tarjeta del contenedor lista sus números de PO (`embarques_compras` sólo de los contenedores dibujados; 3 + «+N»; si falla queda el conteo). `ponerPosEnPuerto()`/`listaCorta()` probados
 - 2026-10-07 22:49 · v3.90.34 · Interior del puerto (paso 1): tarjeta propia del barco/contenedor con proveedor, ETA con días (o «N d tarde»), piezas y POs; estado verde/ámbar/rojo
 - 2026-10-07 22:46 · v3.90.33 · Nubes como capa 'mapa': sólo se ven de lejos (zoom > 45); en la Vista Base y dentro del CEDIS ya no tapan los edificios
