@@ -21,7 +21,7 @@ export function useCiudadData(enabled = true) {
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
       const seg = (p, nombre) => Promise.resolve(p).catch((e) => { console.warn(`[ciudad] ${nombre}:`, e?.message || e); return []; });
       const mes = hoy.getMonth() + 1; const mesPrev = mes === 1 ? 12 : mes - 1;
-      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku] = await Promise.all([
+      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
@@ -45,8 +45,10 @@ export function useCiudadData(enabled = true) {
         // Interior del CEDIS: inventario por SKU (sólo [Inv Actual], como Inventario) y la marca de cada SKU (roadmap_sku) → racks por marca.
         seg(fetchAll('v_inventario_almacen_medida', 'articulo,inventario,costoinventario', (q) => q.eq('en_inv_actual', true).gt('inventario', 0)), 'inventario por SKU'),
         seg(fetchAll('roadmap_sku', 'sku,marca'), 'marcas'),
+        // Días de inventario por marca: demanda de los 3 meses cerrados del pivote de sell in (como Inventario en el celular).
+        seg(fetchAll('v_sellin_global_sku_anio', 'sku,anio,piezas', (q) => q.in('anio', [...new Set([1, 2, 3].map((i) => new Date(anio, hoy.getMonth() - i, 1).getFullYear()))])), 'demanda por SKU'),
       ]);
-      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
+      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
     },
   });
 }

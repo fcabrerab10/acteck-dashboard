@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -280,7 +280,7 @@ test('racks del CEDIS por marca: valor, piezas y SKUs, top n + «otras»', () =>
   const r = racksPorMarca(filas, marcas);
   assert.deepEqual(r.map((g) => [g.marca, g.valor, g.piezas, g.skus]), [['ACTECK', 1800, 17, 2], ['BALAM RUSH', 900, 4, 1], ['GAME FACTOR', 50, 1, 1], ['SIN MARCA', 10, 3, 1]], 'suma por marca normalizada; SKU × almacén cuenta una vez; sin existencia no cuenta');
   const r2 = racksPorMarca(filas, Object.fromEntries(marcas), 2);
-  assert.equal(r2.length, 3); assert.deepEqual(r2[2], { marca: 'OTRAS', valor: 60, piezas: 4, skus: 2, marcas: 2 }, 'el resto va junto en «otras»');
+  assert.equal(r2.length, 3); assert.deepEqual(r2[2], { marca: 'OTRAS', valor: 60, piezas: 4, skus: 2, marcas: 2, demanda3: 0, dias: null }, 'el resto va junto en «otras»');
   assert.deepEqual(racksPorMarca(null, null), [], 'sin datos no rompe');
   const m = construirModelo(d, hoy); assert.deepEqual(m.cedis.racksMarca, [], 'sin capa de SKU el CEDIS sigue');
   assert.equal(construirModelo({ ...d, inventarioSku: filas, marcasSku: marcas }, hoy).cedis.racksMarca[0].marca, 'ACTECK');
@@ -295,7 +295,27 @@ test('interior del CEDIS: acomodo de racks y tarjeta del rack', () => {
   assert.deepEqual(acomodoRacks(null), []); assert.equal(acomodoRacks([{ marca: 'X', valor: 0 }])[0].niveles, 1, 'sin valor no rompe');
   const m = { cedis: { racksMarca: racks } };
   const t = tarjetaDe({ tipo: 'rack', marca: 'ACTECK', titulo: 'ACTECK', pagina: 'inventarioGlobal' }, m);
-  assert.deepEqual(t.numeros, [['Inventario', '$1 K'], ['Piezas', '10'], ['SKUs con stock', '3'], ['Del CEDIS', '67 %']]);
-  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'OTRAS' }, m).numeros[3][0], 'Marcas');
+  assert.deepEqual(t.numeros, [['Inventario', '$1 K · 67 %'], ['Días de inventario', 'sin demanda'], ['Piezas', '10'], ['SKUs con stock', '3']]); assert.equal(t.estado, null);
+  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'OTRAS' }, m).numeros[3][0], 'SKUs · 4 marcas');
   assert.deepEqual(tarjetaDe({ tipo: 'rack', marca: 'NADA' }, m).numeros, [], 'marca que ya no está no rompe');
+});
+
+test('días de inventario por marca y salidas de hoy del CEDIS', () => {
+  const h = new Date(2026, 9, 7, 22, 40); // de noche: en UTC ya es 8 de octubre
+  const piv = [{ sku: 'ac-1', anio: 2026, piezas: [0, 0, 0, 0, 0, 0, 30, 30, 30, 999, 0, 0] }, { sku: 'BR-1', anio: 2026, piezas: [0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0] }, { sku: 'AC-1', anio: 2025, piezas: Array(12).fill(5) }];
+  const dem = demanda3Meses(piv, h);
+  assert.deepEqual([...dem.entries()], [['AC-1', 90], ['BR-1', 4]], 'jul–sep cerrados; octubre (en curso) no cuenta');
+  const enero = demanda3Meses([{ sku: 'X', anio: 2025, piezas: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3] }, { sku: 'X', anio: 2026, piezas: [100] }], new Date(2026, 0, 15));
+  assert.equal(enero.get('X'), 6, 'cruza de año');
+  const filas = [{ articulo: 'AC-1', inventario: 45, costoinventario: 900 }, { articulo: 'BR-1', inventario: 40, costoinventario: 100 }, { articulo: 'GM-1', inventario: 5, costoinventario: 50 }];
+  const marcas = { 'AC-1': 'Acteck', 'BR-1': 'Balam', 'GM-1': 'Game' };
+  const r = racksPorMarca(filas, marcas, 8, dem);
+  assert.deepEqual(r.map((g) => [g.marca, g.dias]), [['ACTECK', 45], ['BALAM', 900], ['GAME', null]], 'piezas / demanda 3 m × 90; sin demanda → null');
+  assert.deepEqual(racksPorMarca(filas, marcas, 1, dem).map((g) => [g.marca, g.dias, g.demanda3]), [['ACTECK', 45, 90], ['OTRAS', 1013, 4]], '«otras» junta la demanda');
+  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'BALAM' }, { cedis: { racksMarca: r } }).estado, 'rojo');
+  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'ACTECK' }, { cedis: { racksMarca: r } }).estado, 'verde');
+  assert.equal(racksPorMarca(filas, marcas)[0].dias, null, 'sin capa de demanda no rompe');
+  const m = construirModelo({ ...d, facturas: [{ cliente_key: 'x', folio: 1, fecha: '2026-10-07' }, { cliente_key: 'x', folio: 2, fecha: '2026-10-06' }], inventarioSku: filas, marcasSku: marcas, demandaSku: piv }, h);
+  assert.equal(m.cedis.salidasHoy, 1, 'salidas de hoy en hora local'); assert.equal(m.cedis.racksMarca[0].dias, 45);
+  assert.equal(construirModelo(d, hoy).cedis.salidasHoy >= 0, true);
 });

@@ -87,10 +87,11 @@ Principios que no se rompen en ninguna etapa:
   - [x] Banco/tesorería (3.90.28): edificio de columnas al norte del estacionamiento (`campus().banco`), tocable con tarjeta: cartera vencida (`v_vision_cartera_consolidada`, ya cargada) y pagos de Pagos V3 que vencen en 7 días o ya vencieron (`pagos` abiertos, reglas `venceEn`/`estaVencido` que `datos.js` inyecta a `resumenBanco()`); letrero verde/rojo y bandera roja si hay vencidos. «Abrir en el dashboard» → Pagos.
   - [x] Torre de pronóstico (3.90.29): torre de control al norte de la barda del CEDIS (`campus().torre`) con foco que parpadea verde/ámbar/rojo; tarjeta con propuestas abiertas, SKUs confirmados, comprados y arribos en 7 días (`forecast_propuestas` sin borradores + líneas y `forecast_avisos`, como Proyectos y forecast; `resumenTorre()` probado). «Abrir en el dashboard» → Proyectos y forecast.
   - [x] Precisión del pronóstico en la torre → movido a «Necesita a Fernando» (2026-10-07): `compararForecast()` vive en un `.jsx` con React y necesita la serie real por SKU de cada cliente.
-- [ ] **Interior del CEDIS**: al entrar, racks por familia/marca con su nivel de inventario y días de inventario (`v_medidas_inventario_*`), montacargas moviéndose si hubo salidas hoy.
+- [x] **Interior del CEDIS**: al entrar, racks por familia/marca con su nivel de inventario y días de inventario (`v_medidas_inventario_*`), montacargas moviéndose si hubo salidas hoy.
   - [x] (3.90.30) Datos: inventario por marca con las mismas fuentes de Inventario (`v_inventario_almacen_medida` con `en_inv_actual = true` + marca de `roadmap_sku`) → `racksPorMarca()` puro en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «otras»), probado.
   - [x] (3.90.31) «Entrar» al CEDIS: botón en su tarjeta que acerca la cámara y oculta el techo; un rack por marca con altura según su inventario y etiqueta; tocable con su tarjeta.
-  - [ ] Días de inventario por marca (demanda de los 3 meses cerrados, `v_sellin_global_sku_anio`, como Inventario) y montacargas que sólo se mueven si hubo salidas hoy.
+  - [x] (3.90.32) Días de inventario por marca (demanda de los 3 meses cerrados, `v_sellin_global_sku_anio`, como Inventario) y montacargas que sólo se mueven si hubo salidas hoy.
+- [ ] **Nubes sobre la base**: en la Vista Base las nubes bajas (y 62–74) a veces tapan el CEDIS u otros edificios; subirlas, hacerlas translúcidas o apartarlas del campus (vista agente 2026-10-07).
 - [ ] **Interior del puerto**: cada barco/contenedor tocable con PO, proveedor, ETA y piezas (`v_embarques_contenedor`).
 - [ ] **Interior de la oficina**: salas con las reuniones de hoy (agenda), escritorios por persona con su foto/nombre y su pendiente principal.
 - [ ] **Presencia en la oficina** (como Gather): cada persona aparece en reunión, de viaje o disponible según su agenda de hoy.
@@ -142,6 +143,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 22:44 · v3.90.32 · Interior del CEDIS (paso 3): días de inventario por marca (piezas / demanda de los 3 meses cerrados de `v_sellin_global_sku_anio` × 90, `demanda3Meses()` probado) en la etiqueta y tarjeta del rack con estado verde/ámbar/rojo (90/120 d como el CEDIS); el montacargas sólo se mueve si hubo facturas hoy (`cedis.salidasHoy`, hora local)
 - 2026-10-07 22:40 · v3.90.31 · Interior del CEDIS (paso 2): botón «Entrar» en la tarjeta del CEDIS oculta el cascarón (y las nubes), acerca la cámara y muestra un rack por marca (niveles según su inventario, `acomodoRacks()` probado) con etiqueta y tarjeta propia (inventario, piezas, SKUs, % del CEDIS); «← Salir del CEDIS» o alejarse lo cierra. Raycast ahora respeta la visibilidad de los padres
 - 2026-10-07 22:34 · v3.90.30 · Interior del CEDIS (paso 1, datos): `racksPorMarca()` en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «OTRAS», probado) con `v_inventario_almacen_medida` [Inv Actual] + marca de `roadmap_sku`; queda en `modelo.cedis.racksMarca` (capa que falla sola)
 - 2026-10-07 22:30 · v3.90.29 · Torre de pronóstico en la base: propuestas de forecast, SKUs confirmados/comprados y arribos de 7 días (atrasados en rojo), con tarjeta y foco de estado

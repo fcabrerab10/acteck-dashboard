@@ -240,7 +240,7 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().t
 /** Racks del CEDIS por marca (etapa 3 · interior del CEDIS): filas de `v_inventario_almacen_medida` con `en_inv_actual = true`
  *  (SKU × almacén, como Inventario) + marca de `roadmap_sku` (`marcas`: Map u objeto sku → marca). Suma valor (`costoinventario`)
  *  y piezas por marca, cuenta SKUs distintos con existencia; top `n` por valor y el resto junto en «OTRAS». Sin marca → «SIN MARCA». */
-export function racksPorMarca(filas = [], marcas = null, n = 8) {
+export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
   const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
   const por = new Map();
   for (const r of filas || []) {
@@ -248,10 +248,27 @@ export function racksPorMarca(filas = [], marcas = null, n = 8) {
     const m = marcaDe(r.articulo); const g = por.get(m) || { marca: m, valor: 0, piezas: 0, skus: new Set() };
     g.valor += N(r.costoinventario); g.piezas += N(r.inventario); g.skus.add(r.articulo); por.set(m, g);
   }
-  const todas = [...por.values()].map((g) => ({ marca: g.marca, valor: g.valor, piezas: g.piezas, skus: g.skus.size })).sort((a, b) => b.valor - a.valor || b.piezas - a.piezas || a.marca.localeCompare(b.marca));
+  // Días de inventario por marca (3.90.32): piezas / demanda en piezas de los 3 meses cerrados × 90 (la medida del director, en
+  // piezas porque el pivote de sell in las trae); sin demanda → null. `demanda`: Map SKU (mayúsculas) → piezas de los 3 meses.
+  const dem = (g) => { let s2 = 0; for (const k of g.skus) s2 += N(demanda?.get?.(String(k).toUpperCase())); return s2; };
+  const conDias = (o, d3) => ({ ...o, demanda3: d3, dias: d3 > 0 ? Math.round(o.piezas / d3 * 90) : null });
+  const todas = [...por.values()].map((g) => conDias({ marca: g.marca, valor: g.valor, piezas: g.piezas, skus: g.skus.size }, demanda ? dem(g) : 0)).sort((a, b) => b.valor - a.valor || b.piezas - a.piezas || a.marca.localeCompare(b.marca));
   const top = todas.slice(0, n), resto = todas.slice(n);
-  if (resto.length) top.push(resto.reduce((o, g) => ({ ...o, valor: o.valor + g.valor, piezas: o.piezas + g.piezas, skus: o.skus + g.skus, marcas: o.marcas + 1 }), { marca: 'OTRAS', valor: 0, piezas: 0, skus: 0, marcas: 0 }));
+  if (resto.length) { const o = resto.reduce((o2, g) => ({ ...o2, valor: o2.valor + g.valor, piezas: o2.piezas + g.piezas, skus: o2.skus + g.skus, marcas: o2.marcas + 1, d3: o2.d3 + g.demanda3 }), { marca: 'OTRAS', valor: 0, piezas: 0, skus: 0, marcas: 0, d3: 0 }); const { d3, ...rest } = o; top.push(conDias(rest, d3)); }
   return top;
+}
+
+/** Demanda de los 3 meses cerrados anteriores a `hoy` por SKU (piezas, suma), desde el pivote `v_sellin_global_sku_anio`
+ *  ({ sku, anio, piezas[12] }), igual que Inventario: Map SKU en mayúsculas → piezas. */
+export function demanda3Meses(rows = [], hoy = new Date()) {
+  const cerrados = [1, 2, 3].map((i) => { const f = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1); return { anio: f.getFullYear(), mes: f.getMonth() + 1 }; });
+  const m = new Map();
+  for (const r of rows || []) {
+    const sku = String(r?.sku || '').toUpperCase(); if (!sku) continue;
+    let s2 = 0; for (const c of cerrados) if (N(r.anio) === c.anio) s2 += N((r.piezas || [])[c.mes - 1]);
+    if (s2) m.set(sku, (m.get(sku) || 0) + s2);
+  }
+  return m;
 }
 
 /** Acomodo de los racks dentro de la nave del CEDIS (interior, 3.90.31): rejilla de `cols` columnas centrada en la nave
@@ -284,7 +301,8 @@ export function tarjetaDe(tag, modelo) {
     const r = (m.cedis?.racksMarca || []).find((x) => x.marca === tag.marca);
     if (r) {
       const tot = (m.cedis.racksMarca || []).reduce((s2, x) => s2 + (Number(x.valor) || 0), 0);
-      t.numeros = [['Inventario', pesos(r.valor)], ['Piezas', num(r.piezas)], ['SKUs con stock', num(r.skus)], [r.marcas ? 'Marcas' : 'Del CEDIS', r.marcas ? num(r.marcas) : `${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`]];
+      t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${num(r.marcas)} marcas` : 'SKUs con stock', num(r.skus)]];
+      t.estado = r.dias == null ? null : r.dias > 120 ? 'rojo' : r.dias > 90 ? 'ambar' : 'verde'; // mismos umbrales que el CEDIS
     }
   } else if (tag.tipo === 'puerto' && m.puerto) {
     const p = m.puerto, b = p.barcos || [], pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
@@ -393,7 +411,8 @@ export function construirModelo(d, hoy = new Date()) {
 
   // ── CEDIS ──
   const inv = (d.inventario || [])[0] || {};
-  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: N(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null, racksMarca: racksPorMarca(d.inventarioSku, d.marcasSku) };
+  const hoyLocal = `${anio}-${String(mes).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`; // salidas de HOY en Guadalajara (hoyIso es UTC: de noche ya es mañana)
+  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: N(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null, racksMarca: racksPorMarca(d.inventarioSku, d.marcasSku, 8, d.demandaSku ? demanda3Meses(d.demandaSku, hoy) : null), salidasHoy: (d.facturas || []).filter((f) => String(f.fecha || '').slice(0, 10) === hoyLocal).length };
 
   // ── Puerto: contenedores en camino o llegando ──
   const barcos = []; const tarimas = [];

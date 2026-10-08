@@ -103,8 +103,8 @@ export function cedis(ctx) {
   const mc = new THREE.Group(); const cuerpo = box(1.6, 1, 1.1, ACC.naranja); mc.add(cuerpo); const mastil = box(.2, 2.2, .2, 0x444444); mastil.position.set(.9, 1.1, 0); mc.add(mastil); const carga = box(1, .8, 1, 0xC58A3A); carga.position.set(1.4, .6, 0); mc.add(carga);
   [[-.5, .5], [-.5, -.5], [.5, .5], [.5, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaMc', () => new THREE.CylinderGeometry(.3, .3, .25, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); mc.add(r); });
   mc.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // montacargas: instancias dinámicas (3.90.22)
-  mc.position.set(cedisPos.x - 2, 0, cedisPos.z + 5); add(mc, { tipo: 'montacargas', titulo: 'Montacargas', sub: 'moviendo tarimas', pagina: 'inventarioGlobal' });
-  animados.push((t) => { const p = (t * .18) % 1; const x = cedisPos.x - 6 + Math.abs(Math.sin(p * Math.PI * 2)) * 12; mc.position.x = x; mc.rotation.y = Math.cos(p * Math.PI * 2) > 0 ? 0 : Math.PI; });
+  mc.position.set(cedisPos.x - 2, 0, cedisPos.z + 5); const salidas = Number(modelo.cedis.salidasHoy) || 0; add(mc, { tipo: 'montacargas', titulo: 'Montacargas', sub: salidas ? `moviendo tarimas · ${salidas} salida${salidas === 1 ? '' : 's'} hoy` : 'estacionado · sin salidas hoy', pagina: 'inventarioGlobal' });
+  if (salidas) animados.push((t) => { const p = (t * .18) % 1; const x = cedisPos.x - 6 + Math.abs(Math.sin(p * Math.PI * 2)) * 12; mc.position.x = x; mc.rotation.y = Math.cos(p * Math.PI * 2) > 0 ? 0 : Math.PI; });
   return cedisPos;
 }
 
@@ -125,7 +125,7 @@ function interiorCedis(ctx, g, casco, cedisPos) {
       const repisa = box(2.6, .08, 1.1, 0xE58A2E); repisa.position.set(0, .1 + k * .95, 0); rg.add(repisa);
       const caja = box(2.2, .7, .9, COL_RACK[i % COL_RACK.length]); caja.position.set(0, .5 + k * .95, 0); rg.add(caja);
     }
-    add(rg, { tipo: 'rack', marca: r.marca, titulo: capital(r.marca), sub: `$${fmtK(r.valor)} · ${r.skus} SKU${r.skus === 1 ? '' : 's'}${r.marcas ? ` de ${r.marcas} marcas` : ''}`, pagina: 'inventarioGlobal' });
+    add(rg, { tipo: 'rack', marca: r.marca, titulo: capital(r.marca), sub: `$${fmtK(r.valor)} · ${r.dias == null ? 'sin demanda' : `${r.dias} días`} · ${r.skus} SKU${r.skus === 1 ? '' : 's'}${r.marcas ? ` de ${r.marcas} marcas` : ''}`, pagina: 'inventarioGlobal' });
     rg.traverse((o) => { if (o.isMesh) dentro.push(o); });
     const et = etiqueta(ctx, capital(r.marca), '#1D1D1F'); et.position.set(rg.position.x, .56 + alto + 1, rg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);
   });
