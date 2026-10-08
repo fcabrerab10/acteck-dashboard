@@ -425,10 +425,11 @@ export function celebraciones(m, max = 5) {
 // Cuota vs ritmo de un grupo de cuentas (3.90.60; la usan la capa «Cuota» y las tarjetas de ciudad y tienda): venta ÷ cuota
 // del mes de las cuentas con cuota (sumadas, el % se saca al final) contra el ritmo esperado al día de hoy. null = ninguna tiene cuota.
 export function cuotaRitmo(m, cuentas = []) {
-  const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h = m?.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date();
+  // 3.90.85: fecha inválida → hoy y venta faltante → 0 (antes salía «NaN %» y el tono rojo).
+  const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h0 = m?.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date(); const h = Number.isNaN(h0.getTime()) ? new Date() : h0;
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   const cs = [...new Set(cuentas || [])].filter((c) => q.get(c)?.cuota > 0); if (!cs.length) return null;
-  const venta = cs.reduce((s, c) => s + q.get(c).venta, 0), cuo = cs.reduce((s, c) => s + q.get(c).cuota, 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
+  const venta = cs.reduce((s, c) => s + (Number(q.get(c).venta) || 0), 0), cuo = cs.reduce((s, c) => s + q.get(c).cuota, 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
   return { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', pct, ritmo: Math.round(ritmo * 100), n: cs.length, venta, cuota: cuo };
 }
 

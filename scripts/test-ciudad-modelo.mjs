@@ -585,6 +585,7 @@ test('cuota vs ritmo en tarjetas de ciudad y tienda', () => {
   assert.deepEqual(cuotaRitmo(m, ['a', 'a', 'c']), { tono: 'verde', pct: 50, ritmo: 48, n: 1, venta: 100, cuota: 200 });
   assert.equal(cuotaRitmo(m, ['a', 'b']).pct, 37); assert.equal(cuotaRitmo(m, ['a', 'b']).tono, 'rojo'); assert.equal(cuotaRitmo({ ...m, hoyIso: '2026-10-13' }, ['a', 'b']).tono, 'ambar'); assert.equal(cuotaRitmo(m, ['b']).tono, 'rojo');
   assert.equal(cuotaRitmo(m, ['c']), null); assert.equal(cuotaRitmo({}, ['a']), null);
+  { const r = cuotaRitmo({ cuotas: new Map([['x', { cuota: 100 }]]), hoyIso: 'basura' }, ['x']); assert.equal(r.pct, 0); assert.equal(r.venta, 0); assert.ok(Number.isFinite(r.ritmo)); }
   let tj = tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL', titulo: 'GDL' }, m);
   assert.deepEqual(tj.numeros[2], ['Cuota del mes', '37 % · ritmo 48 %']); assert.equal(tj.cuota, 'rojo');
   tj = tarjetaDe({ tipo: 'tienda', ciudad: 'GDL', cuenta: 'a', titulo: 'A · S1' }, m);
