@@ -255,6 +255,33 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
 
+// Capas de información (etapa 4, paso 1, 3.90.47): color por ciudad para una capa, sin escalar por tamaño (se pinta la
+// tendencia o el estado, no quién es más grande). 'ventas' = sell out del mes vs mes anterior (mismas filas que las tiendas:
+// `importe` / `previo`); 'cartera' = cuentas con cartera vencida entre las tiendas de la ciudad (`kpis.cartera`). Devuelve
+// { capa, titulo, leyenda: [{ tono, texto }], porCiudad: Map(ciudad → { tono, valor, texto }) }. Capa desconocida → null.
+export const CAPA_TONOS = { verde: 0x34c759, ambar: 0xff9f0a, rojo: 0xff3b30, gris: 0x8e8e93 };
+export function capaCiudades(m, capa) {
+  if (!m || !['ventas', 'cartera'].includes(capa)) return null;
+  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  const porCiudad = new Map();
+  if (capa === 'ventas') {
+    for (const d of m.distritos || []) {
+      const act = (d.tiendas || []).reduce((s, t) => s + (Number(t.importe) || 0), 0), prev = (d.tiendas || []).reduce((s, t) => s + (Number(t.previo) || 0), 0);
+      const pct = prev > 0 ? Math.round((act / prev - 1) * 100) : null;
+      const tono = pct == null ? (act > 0 ? 'verde' : 'gris') : pct >= 0 ? 'verde' : pct >= -20 ? 'ambar' : 'rojo';
+      porCiudad.set(d.ciudad, { tono, valor: pct, texto: `${pesos(act)}${pct == null ? '' : ` · ${pct > 0 ? '+' : ''}${pct} % vs mes anterior`}` });
+    }
+    return { capa, titulo: 'Sell out vs mes anterior', leyenda: [{ tono: 'verde', texto: 'Igual o arriba' }, { tono: 'ambar', texto: 'Hasta −20 %' }, { tono: 'rojo', texto: 'Más de −20 %' }, { tono: 'gris', texto: 'Sin venta' }], porCiudad };
+  }
+  const venc = new Map((m.kpis?.cartera || []).filter((c) => Number(c.vencido) > 0).map((c) => [c.cuenta, Number(c.vencido)]));
+  for (const d of m.distritos || []) {
+    const cuentas = [...new Set((d.tiendas || []).map((t) => t.cuenta))], malas = cuentas.filter((c) => venc.has(c));
+    const monto = malas.reduce((s, c) => s + venc.get(c), 0);
+    porCiudad.set(d.ciudad, { tono: malas.length ? 'rojo' : 'verde', valor: monto, texto: malas.length ? `${malas.length} cuenta${malas.length === 1 ? '' : 's'} con vencido · ${pesos(monto)}` : 'Sin cartera vencida' });
+  }
+  return { capa, titulo: 'Cartera vencida de sus cuentas', leyenda: [{ tono: 'verde', texto: 'Al corriente' }, { tono: 'rojo', texto: 'Con vencido' }], porCiudad };
+}
+
 /** Racks del CEDIS por marca (etapa 3 · interior del CEDIS): filas de `v_inventario_almacen_medida` con `en_inv_actual = true`
  *  (SKU × almacén, como Inventario) + marca de `roadmap_sku` (`marcas`: Map u objeto sku → marca). Suma valor (`costoinventario`)
  *  y piezas por marca, cuenta SKUs distintos con existencia; top `n` por valor y el resto junto en «OTRAS». Sin marca → «SIN MARCA». */

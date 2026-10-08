@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -435,4 +435,25 @@ test('misiones del día («Hoy en Acteck»)', () => {
   assert.equal(misionesDelDia(m, h, 2).length, 2);
   assert.deepEqual(misionesDelDia(null), []); assert.deepEqual(misionesDelDia({}, h), []);
   assert.ok(Array.isArray(misionesDelDia(construirModelo(d, hoy), hoy)));
+});
+
+test('capas de información por ciudad (ventas y cartera)', () => {
+  const m = { distritos: [
+    { ciudad: 'GDL', tiendas: [{ cuenta: 'a', importe: 120, previo: 100 }, { cuenta: 'b', importe: 0, previo: 0 }] },
+    { ciudad: 'MTY', tiendas: [{ cuenta: 'b', importe: 90, previo: 100 }] },
+    { ciudad: 'CDMX', tiendas: [{ cuenta: 'c', importe: 50, previo: 100 }] },
+    { ciudad: 'PUE', tiendas: [{ cuenta: 'd', importe: 0, previo: 0 }] },
+    { ciudad: 'QRO', tiendas: [{ cuenta: 'd', importe: 30, previo: 0 }] },
+  ], kpis: { cartera: [{ cuenta: 'b', vencido: 2.5e6 }, { cuenta: 'c', vencido: 0 }] } };
+  const v = capaCiudades(m, 'ventas');
+  assert.deepEqual(['GDL', 'MTY', 'CDMX', 'PUE', 'QRO'].map((c) => v.porCiudad.get(c).tono), ['verde', 'ambar', 'rojo', 'gris', 'verde']);
+  assert.equal(v.porCiudad.get('GDL').valor, 20); assert.equal(v.porCiudad.get('GDL').texto, '$120 · +20 % vs mes anterior');
+  assert.equal(v.porCiudad.get('QRO').valor, null); assert.equal(v.leyenda.length, 4);
+  const c = capaCiudades(m, 'cartera');
+  assert.deepEqual(['GDL', 'MTY', 'CDMX'].map((x) => c.porCiudad.get(x).tono), ['rojo', 'rojo', 'verde']);
+  assert.equal(c.porCiudad.get('GDL').texto, '1 cuenta con vencido · $2.5 M'); assert.equal(c.porCiudad.get('CDMX').texto, 'Sin cartera vencida');
+  for (const l of [...v.leyenda, ...c.leyenda]) assert.ok(CAPA_TONOS[l.tono] != null);
+  assert.equal(capaCiudades(m, 'inventario'), null); assert.equal(capaCiudades(null, 'ventas'), null);
+  assert.equal(capaCiudades({}, 'ventas').porCiudad.size, 0);
+  assert.ok(capaCiudades(construirModelo(d, hoy), 'cartera').porCiudad instanceof Map);
 });
