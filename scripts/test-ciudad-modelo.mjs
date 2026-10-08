@@ -319,3 +319,15 @@ test('días de inventario por marca y salidas de hoy del CEDIS', () => {
   assert.equal(m.cedis.salidasHoy, 1, 'salidas de hoy en hora local'); assert.equal(m.cedis.racksMarca[0].dias, 45);
   assert.equal(construirModelo(d, hoy).cedis.salidasHoy >= 0, true);
 });
+
+test('tarjeta del contenedor en el mar: proveedor, ETA, piezas y POs', () => {
+  const m = construirModelo({ ...d, contenedores: d.contenedores.map((c) => ({ ...c, pos: c.contenedor === 'A1' ? 3 : 0 })) }, hoy);
+  const t = tarjetaDe({ tipo: 'barco', id: 'A1', titulo: 'Contenedor A1' }, m);
+  assert.deepEqual(t.numeros.map(([l]) => l), ['Proveedor', 'Arribo CEDIS', 'Piezas', 'POs']);
+  assert.equal(t.numeros[0][1], 'SAITAKE'); assert.equal(t.numeros[2][1], '820'); assert.equal(t.numeros[3][1], '3');
+  assert.match(t.numeros[1][1], /en 20 d$/); assert.equal(t.estado, 'verde');
+  const tarde = { puerto: { barcos: [{ id: 'Z', supplier: '', piezas: 5, eta: '2026-10-01', arribo: null, llegaEnDias: -4 }], tarimas: [] } };
+  const tz = tarjetaDe({ tipo: 'barco', id: 'Z' }, tarde); assert.equal(tz.estado, 'rojo'); assert.match(tz.numeros[1][1], /4 d tarde$/); assert.equal(tz.numeros[0][1], '—'); assert.equal(tz.numeros[3][1], '—');
+  assert.equal(tarjetaDe({ tipo: 'barco', id: 'Z' }, { puerto: { barcos: [{ id: 'Z', llegaEnDias: null }] } }).estado, 'ambar', 'sin ETA');
+  assert.deepEqual(tarjetaDe({ tipo: 'barco', id: 'NO' }, m).numeros, [], 'contenedor que ya no está no rompe');
+});

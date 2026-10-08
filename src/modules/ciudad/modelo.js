@@ -304,6 +304,15 @@ export function tarjetaDe(tag, modelo) {
       t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${num(r.marcas)} marcas` : 'SKUs con stock', num(r.skus)]];
       t.estado = r.dias == null ? null : r.dias > 120 ? 'rojo' : r.dias > 90 ? 'ambar' : 'verde'; // mismos umbrales que el CEDIS
     }
+  } else if (tag.tipo === 'barco' && m.puerto) {
+    // Contenedor en el mar (interior del puerto, 3.90.34): proveedor, ETA, piezas y POs (`v_embarques_contenedor`). ETA vencida sin arribo = rojo.
+    const b = [...(m.puerto.barcos || []), ...(m.puerto.tarimas || [])].find((x) => x.id === tag.id);
+    if (b) {
+      const f = b.arribo || b.eta; const fc = f ? new Date(`${String(f).slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : null;
+      const cuando = b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias < 0 ? `${fc} · ${-b.llegaEnDias} d tarde` : b.llegaEnDias === 0 ? `${fc} · hoy` : `${fc} · en ${b.llegaEnDias} d`;
+      t.numeros = [['Proveedor', b.supplier || '—'], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', b.pos ? num(b.pos) : '—']];
+      t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';
+    }
   } else if (tag.tipo === 'puerto' && m.puerto) {
     const p = m.puerto, b = p.barcos || [], pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
     t.numeros = [['Navegando', num(b.length)], ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num((p.tarimas || []).length)]];
@@ -425,7 +434,7 @@ export function construirModelo(d, hoy = new Date()) {
     let p = 0.5;
     if (inicio && fin) { const tot = Math.max(1, dias(inicio, fin)); p = Math.max(0.02, Math.min(0.98, dias(inicio, hoyIso) / tot)); }
     const llegaEnDias = fin ? dias(hoyIso, fin) : null;
-    const reg = { id: c.contenedor, supplier: c.supplier, naviera: c.naviera || '', piezas: N(c.piezas), fob: N(c.fob_usd), eta: eta, arribo, llegaEnDias, progreso: p, estatus: c.estatus || '' };
+    const reg = { id: c.contenedor, supplier: c.supplier, naviera: c.naviera || '', piezas: N(c.piezas), pos: N(c.pos), fob: N(c.fob_usd), eta: eta, arribo, llegaEnDias, progreso: p, estatus: c.estatus || '' };
     if (arribo && dias(hoyIso, arribo) <= 0) tarimas.push(reg); else barcos.push(reg);
   }
   barcos.sort((a, b) => b.progreso - a.progreso);

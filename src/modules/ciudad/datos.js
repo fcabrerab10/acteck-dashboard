@@ -24,7 +24,7 @@ export function useCiudadData(enabled = true) {
       const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
-        seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
+        seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,pos,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
         seg(fetchAll('mv_sellout_sucursal_mes', 'cuenta,anio,mes,sucursal,importe,vendedores,estado', (q) => q.gte('anio', anio - 1)), 'sucursales'),
         seg(fetchAll('mv_sellout_vendedor_mes', 'cuenta,anio,mes,vendedor,importe,sucursal', (q) => q.eq('anio', anio)), 'vendedores mayoristas'),
         seg(fetchAll('v_ventas_vendedor_cliente_mes', 'anio,vendedor,cliente_key,cliente_nombre,fact_neta', (q) => q.eq('anio', anio)), 'vendedores ERP'),
