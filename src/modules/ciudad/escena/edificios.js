@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -358,6 +358,11 @@ export function distritos(ctx, cedisPos) {
     });
     const tagCasa = d.casas ? { tipo: 'clientesFinales', titulo: `Clientes finales · ${capital(d.ciudad)}`, sub: `${d.clientesFinales.n.toLocaleString('es-MX')} clientes compraron en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${d.clientesFinales.cuentas.length} mayorista${d.clientesFinales.cuentas.length === 1 ? '' : 's'}`, pagina: 'sellOut', ciudad: d.ciudad } : null;
     for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const techo = new THREE.Mesh(ctx.conoCasa ||= new THREE.ConeGeometry(.95, .7, 4), M(P.tiendaTecho)); techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); for (const pz of [cuerpo, techo, v]) { pz.userData.detalle = 'cerca'; instanciar(ctx, pz, tagCasa); } } // de muy lejos las casitas no se distinguen
+    // Banderín de cuota vs ritmo (3.90.61): verde-ámbar-rojo en la esquina de la manzana, de cerca y sin prender la capa; se toca = tarjeta de la ciudad.
+    try { const cq = cuotaRitmo(modelo, d.tiendas.filter((t) => !t.reparto).map((t) => t.cuenta)); if (cq) { const tono = CAPA_TONOS[cq.tono];
+      const asta = box(.1, 3.4, .1, 0x6b6e76); asta.position.set(-ancho / 2 - .5, 1.7, -largo / 2 + .8); const ban = box(1, .6, .06, tono, { emissive: tono, emissiveIntensity: oscuro ? 1 : .25 }); ban.position.set(-ancho / 2 - .5 + .55, 3.05, -largo / 2 + .8);
+      const tagB = { ...piso.userData.tag, sub: `${cq.pct} % de la cuota del mes · ritmo ${cq.ritmo} %` };
+      for (const pz of [asta, ban]) { pz.userData.detalle = 'fino'; pz.userData.tag = tagB; interact.push(pz); g.add(pz); } } } catch (e) { console.warn('[ciudad] banderín de cuota', e); } // falla sola
     // árboles y farol
     arbol(ctx, g, -ancho / 2 - 1.2, -largo / 2 - 1.2, .9); arbol(ctx, g, ancho / 2 + 1.2, largo / 2 + 1.2, 1); if (n > 6) arbol(ctx, g, ancho / 2 + 1.2, -largo / 2 - 1.2, .8);
     const farol = box(.12, 2.6, .12, 0x6b6e76); farol.position.set(ancho / 2 + .6, 1.3, largo / 2 + .6); g.add(farol); const foco = new THREE.Mesh(geo(ctx, 'foco', () => new THREE.SphereGeometry(.22, 8, 6)), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.6 : .2 })); foco.position.set(ancho / 2 + .6, 2.7, largo / 2 + .6); g.add(foco);
