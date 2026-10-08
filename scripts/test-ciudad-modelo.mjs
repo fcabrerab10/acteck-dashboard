@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -694,4 +694,12 @@ test('capas del sonido ambiente', () => {
   const noche = capasSonido({ esDia: false }); assert.ok(noche.grillos > 0 && noche.pajaros === 0 && noche.ruido < dia.ruido);
   const lluvia = capasSonido({ esDia: true, lluvia: true }); assert.ok(lluvia.lluvia > 0 && lluvia.pajaros === 0);
   assert.deepEqual(capasSonido(), dia);
+});
+
+test('gesto de dos dedos', () => {
+  const p = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y1 }];
+  assert.equal(gestoDosDedos(p(0, 0, 100, 0), p(0, 0, 200, 0)).escala, .5); // separar = acercar
+  assert.ok(Math.abs(gestoDosDedos(p(0, 0, 100, 0), p(0, 0, 0, 100)).giro - Math.PI / 2) < 1e-9);
+  assert.ok(Math.abs(gestoDosDedos(p(0, 0, -100, 1), p(0, 0, -100, -1)).giro) < .1); // cruza ±π sin brincar
+  assert.equal(gestoDosDedos(p(5, 5, 5, 5), p(0, 0, 10, 0)).escala, .1); // dedos encimados: sin dividir entre 0
 });

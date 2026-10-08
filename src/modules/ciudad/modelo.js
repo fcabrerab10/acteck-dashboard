@@ -817,6 +817,15 @@ export function rebote(t, dur = .5) {
   return { y, xz: 1 - (y - 1) * .5, fin: false };
 }
 
+// Gesto de dos dedos (3.90.77, Etapa 8): de la pareja inicial `a` a la actual `b` ([{x,y},{x,y}] en px) → `escala` para el
+// zoom (separar los dedos = acercar, < 1) y `giro` en radianes (-π..π) para girar la cámara.
+export function gestoDosDedos(a, b) {
+  const dist = (p) => Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y) || 1;
+  const ang = (p) => Math.atan2(p[1].y - p[0].y, p[1].x - p[0].x);
+  let giro = ang(b) - ang(a); while (giro > Math.PI) giro -= 2 * Math.PI; while (giro < -Math.PI) giro += 2 * Math.PI;
+  return { escala: dist(a) / dist(b), giro };
+}
+
 // Sonido ambiente (3.90.76, Etapa 7): qué capas suenan y a qué volumen según día/noche y lluvia. `ruido` = rumor de la ciudad
 // (ruido café filtrado), `lluvia` = ruido más brillante, `pajaros` de día y `grillos` de noche (cada cuántos segundos, aprox.).
 export function capasSonido({ esDia = true, lluvia = false } = {}) {

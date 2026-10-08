@@ -168,6 +168,9 @@ Principios que no se rompen en ninguna etapa:
 
 ### Etapa 8 · iPad, celular y para el equipo
 - [ ] Gestos táctiles completos (un dedo mueve, pellizco acerca, dos dedos giran, toque largo = info) y botones grandes; versión ligera automática en `pointer: coarse` (menos gente, sin sombras).
+  - [x] (3.90.77) `gestoDosDedos()` puro y probado; en `escena/interaccion.js`: dos dedos = pellizco + giro (el arrastre de un dedo se pausa), toque largo (550 ms, vibra) = globo de info mientras se sostiene, el toque corto elige lo que está bajo el dedo (antes podía usar el último hover) y en táctil el globo ya no se queda pegado. Probado en el harness con toques emulados (CDP).
+  - [ ] Botones grandes en táctil (`pointer: coarse` en `Ciudad.jsx`: más padding y letra en la barra de arriba y la tarjeta).
+  - [ ] Versión ligera automática en `pointer: coarse`: menos gente y sin sombras (opción de `crearEscena`).
 - [ ] Abrir la Ciudad a más usuarios respetando sus permisos: cada quien ve sólo los edificios de las pestañas a las que tiene acceso (requiere que Fernando apruebe quién entra).
 
 ### Siempre (cuando no quede nada arriba)
@@ -188,6 +191,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:20 · v3.90.77 · Gestos táctiles: dos dedos giran y acercan, toque largo muestra la info, el toque corto elige lo que está bajo el dedo.
 - 2026-10-08 01:14 · v3.90.76 · Sonido ambiente opcional (apagado por defecto): ciudad, pájaros o grillos y lluvia según el clima; cierra la Etapa 7.
 - 2026-10-08 01:10 · v3.90.75 · Recorrido de bienvenida de 3 pasos la primera vez y botón «?» para repetirlo.
 - 2026-10-08 01:07 · v3.90.74 · Animaciones de respuesta, paso 2 (cierra el pendiente): la gente da dos saltitos al pasarle el cursor.
