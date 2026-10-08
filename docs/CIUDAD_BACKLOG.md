@@ -175,6 +175,7 @@ Principios que no se rompen en ninguna etapa:
 
 ### Siempre (cuando no quede nada arriba)
 - [ ] Pulido: rendimiento, legibilidad de etiquetas, pruebas nuevas en `scripts/test-ciudad-modelo.mjs`, comparar números de cada tarjeta contra su pestaña del dashboard.
+  - [x] (3.90.81) Pruebas de coherencia: proyección (GDL en el origen, rumbos de Monterrey/Mérida/Tijuana), coordenadas del catálogo dentro de México, cada cuenta con color y sede existente, `CIUDAD_POR_ESTADO` válido, `hexCss` y `norm`.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -191,6 +192,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:23 · v3.90.81 · Pulido: pruebas de coherencia de la proyección y de los catálogos de ciudades/cuentas.
 - 2026-10-08 01:22 · v3.90.80 · Nota «Acteck Ciudad» de CLAUDE.md al día (kit low-poly, rebote/saludo, sonido, versión ligera, recorrido).
 - 2026-10-08 01:20 · v3.90.79 · Botones grandes en iPad/celular (cierra «Gestos táctiles completos»).
 - 2026-10-08 01:18 · v3.90.78 · Versión ligera automática en iPad/celular: sin sombras, menos resolución y menos paseantes.

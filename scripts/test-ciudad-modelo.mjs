@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -707,4 +707,26 @@ test('gesto de dos dedos', () => {
 test('paseantes por manzana (versión ligera)', () => {
   assert.equal(paseantesDistrito(2), 0); assert.equal(paseantesDistrito(3), 1); assert.equal(paseantesDistrito(9), 3); assert.equal(paseantesDistrito(40), 4);
   assert.equal(paseantesDistrito(40, true), 1); assert.equal(paseantesDistrito(2, true), 0);
+});
+
+test('pulido: proyección y catálogos coherentes', () => {
+  // Guadalajara es el origen de la escena; norte = z negativa, oriente = x positiva.
+  const o = pxAEscena(PX_ORIGEN.X, PX_ORIGEN.Y);
+  assert.equal(o.x, 0); assert.equal(o.z, 0);
+  assert.deepEqual(posDe(ORIGEN), { x: 0, z: 0 });
+  const mty = posDe(CIUDADES.MONTERREY), mer = posDe(CIUDADES.MERIDA), tij = posDe(CIUDADES.TIJUANA);
+  assert.ok(mty.x > 0 && mty.z < 0, 'Monterrey al noreste'); assert.ok(mer.x > mty.x, 'Mérida al oriente'); assert.ok(tij.x < 0 && tij.z < mty.z, 'Tijuana al noroeste');
+  assert.ok(Math.abs(aPx(1, 0).X - aPx(0, 0).X - PX.a) < 1e-9 && Math.abs(K * PX.a - 11) < 1e-9);
+  // Todas las ciudades del catálogo con coordenadas dentro de México.
+  for (const [k, c] of Object.entries(CIUDADES)) {
+    assert.ok(Number.isFinite(c.lon) && Number.isFinite(c.lat), k);
+    assert.ok(c.lon > -118 && c.lon < -86 && c.lat > 14 && c.lat < 33, `${k} fuera de México`);
+  }
+  // Cada cuenta tiene color y sede, y la sede existe en el catálogo (si no, sus tiendas caerían en GDL sin avisar).
+  for (const [cu, sede] of Object.entries(SEDE_POR_CUENTA)) { assert.ok(CIUDADES[sede], `sede de ${cu}`); assert.ok(COLOR_CUENTA[cu] != null, `color de ${cu}`); }
+  for (const cu of Object.keys(COLOR_CUENTA)) assert.ok(SEDE_POR_CUENTA[cu], `sede de ${cu}`);
+  for (const [edo, c] of Object.entries(CIUDAD_POR_ESTADO)) assert.ok(CIUDADES[c], `ciudad de ${edo}`);
+  assert.equal(hexCss(0x0A84FF), '#0a84ff'); assert.equal(hexCss(0xFF), '#0000ff'); assert.equal(hexCss(0), '#000000');
+  assert.equal(norm('  Mérida, Yucatán '), 'MERIDA, YUCATAN'); assert.equal(norm(null), ''); assert.equal(norm('Ñuño'), 'NUNO');
+  assert.equal(RECORRIDO_CLAVE, 'acteck-ciudad-recorrido');
 });
