@@ -3,7 +3,7 @@
 // clientes, los vendedores (del ERP y de los mayoristas), los camiones con las facturas y los contenedores navegando.
 // Nada de esto carga con el resto del dashboard: datos (useCiudadData) y three.js (import() de ./escena) se piden sólo aquí.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, Search, Home, Map as MapaIcono } from 'lucide-react';
+import { Building2, Search, Home, Map as MapaIcono, HelpCircle } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
@@ -11,11 +11,12 @@ import { Cargando, Pill } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
-import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario } from './modelo';
+import { COLOR_CUENTA, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
 const fmtM = (v) => `$${(Number(v || 0) / 1e6).toFixed(1)} M`;
+let recorridoMostrado = false; // sin localStorage (privado): el recorrido sale una vez por sesión
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
 
 export default function Ciudad({ onNavegar }) {
@@ -60,6 +61,9 @@ export default function Ciudad({ onNavegar }) {
   if (ultimaVista.current.clave !== clave) { let v = null; try { v = leerVista(window.localStorage.getItem(clave)); } catch { v = null; } ultimaVista.current = { clave, v }; }
   const alMoverVista = (v) => { setVistaCam(v); ultimaVista.current = { clave, v }; try { window.localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento: sólo no se recuerda */ } };
   const [cargaFin, setCargaFin] = useState(false); // la pantalla «descenso desde órbita» ya terminó
+  const [tour, setTour] = useState(null); // recorrido de bienvenida (3.90.75): null | índice del paso
+  useEffect(() => { if (!cargaFin || !modelo || fallo || recorridoMostrado) return; let visto = false; try { visto = recorridoVisto(window.localStorage.getItem(RECORRIDO_CLAVE)); } catch { visto = false; } recorridoMostrado = true; if (!visto) setTour(0); }, [cargaFin, !!modelo, !!fallo]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cerrarTour = () => { setTour(null); try { window.localStorage.setItem(RECORRIDO_CLAVE, '1'); } catch { /* sin almacenamiento */ } };
   const [clima, setClima] = useState(undefined); // undefined = cargando · null = sin clima
   useEffect(() => {
     // Clima real de Guadalajara (Open-Meteo, sin llave): manda sobre el tema para día/noche, nubes y lluvia.
@@ -132,6 +136,14 @@ export default function Ciudad({ onNavegar }) {
     <div style={{ position: 'relative', height: 'calc(100vh - 92px)', minHeight: 520, borderRadius: 14, overflow: 'hidden', border: `1px solid ${theme.border}`, background: oscuro ? '#121722' : '#EEF1EF' }}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none', opacity: listo ? 1 : 0, transition: 'opacity 600ms cubic-bezier(.32,.72,0,1)' }} />
       {!cargaFin && !fallo && <Carga pasos={PASOS} listo={listo} onFin={() => setCargaFin(true)} />}
+      {tour != null && RECORRIDO[tour] && <div role="dialog" aria-label="Recorrido de bienvenida" style={{ position: 'absolute', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 8, ...card, width: 'min(380px, calc(100% - 32px))', padding: '14px 16px', boxShadow: '0 12px 40px rgba(0,0,0,.18)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><span style={{ fontSize: 20 }}>{RECORRIDO[tour].icono}</span><b style={{ fontFamily: TYPO.fontDisplay, fontSize: 15 }}>{RECORRIDO[tour].titulo}</b><span style={{ marginLeft: 'auto', fontSize: 11, color: theme.textMuted }}>{tour + 1} de {RECORRIDO.length}</span></div>
+        <div style={{ fontSize: 13, lineHeight: 1.45, color: theme.textMuted }}>{RECORRIDO[tour].texto}</div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+          {tour < RECORRIDO.length - 1 && <button type="button" onClick={cerrarTour} style={{ border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: 12.5 }}>Saltar</button>}
+          <button type="button" onClick={() => (tour < RECORRIDO.length - 1 ? setTour(tour + 1) : cerrarTour())} style={{ border: 0, background: theme.accent, color: '#fff', borderRadius: 999, padding: '6px 14px', cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>{tour < RECORRIDO.length - 1 ? 'Siguiente' : '¡Listo!'}</button>
+        </div>
+      </div>}
       {fallo && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 24, zIndex: 9 }}><pre style={{ ...card, padding: 16, maxWidth: 720, whiteSpace: 'pre-wrap', fontSize: 12, color: theme.red }}>No se pudo dibujar la ciudad:\n{fallo}</pre></div>}
       {/* cabecera */}
       {modelo && <>
@@ -157,6 +169,7 @@ export default function Ciudad({ onNavegar }) {
           : nivel === 'lejos'
           ? <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'base' })} title="Volver a la base de Acteck (oficina, CEDIS y puerto)" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><Home size={14} />Base</button>
           : <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Ver el mapa de México completo con todas las ciudades" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}><MapaIcono size={14} />Mapa</button>}
+        <button type="button" onClick={() => setTour(0)} title="Ver otra vez el recorrido de bienvenida" aria-label="Ayuda: recorrido de bienvenida" style={{ ...card, padding: '7px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><HelpCircle size={15} style={{ color: theme.textMuted }} /></button>
       </div>
       {top.length > 0 && (
         <div style={{ position: 'absolute', left: 14, top: 52, zIndex: 3, display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 'calc(50% - 28px)' }}>

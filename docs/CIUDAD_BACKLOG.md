@@ -161,7 +161,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.73) Rebote al tocar: `rebote(t)` puro y probado (aplasta/estira 0.5 s) y `escena/rebote.js`: todas las piezas instanciadas con el mismo tag rebotan alrededor de un pivote común en el suelo; oficina/CEDIS escalan su grupo. Gente y camiones no (son dinámicos). La cámara ya tenía suavizado exponencial al viajar.
   - [x] Burbujas que flotan: ya lo hacían `burbujas()` y `pensar()` (seno desfasado por burbuja); sin cambios.
   - [x] (3.90.74) Gente que saluda: `saltito(t)` puro y probado; `crearSaludo()` en `escena/rebote.js` hace dar dos saltitos a la persona bajo el cursor (mueve su grupo; la instancia lo sigue).
-- [ ] Recorrido de bienvenida la primera vez (3 pasos: así se mueve, así se toca un edificio, así se viaja) y botón «?» para repetirlo.
+- [x] Recorrido de bienvenida la primera vez (3 pasos: así se mueve, así se toca un edificio, así se viaja) y botón «?» para repetirlo.
+  - [x] (3.90.75) `RECORRIDO` / `recorridoVisto()` en `modelo.js` (probados) y tarjeta abajo al centro en `Ciudad.jsx` al terminar la carga (Saltar / Siguiente / ¡Listo!; visto = `acteck-ciudad-recorrido` en localStorage, sin almacenamiento sale una vez por sesión) + botón «?» junto al de nivel. Sin prueba visual: el harness no dibuja `Ciudad.jsx`.
 - [ ] Sonido ambiente opcional (apagado por defecto, interruptor en la esquina).
 
 ### Etapa 8 · iPad, celular y para el equipo
@@ -186,6 +187,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:10 · v3.90.75 · Recorrido de bienvenida de 3 pasos la primera vez y botón «?» para repetirlo.
 - 2026-10-08 01:07 · v3.90.74 · Animaciones de respuesta, paso 2 (cierra el pendiente): la gente da dos saltitos al pasarle el cursor.
 - 2026-10-08 01:04 · v3.90.73 · Animaciones de respuesta, paso 1: lo que tocas rebota (tiendas completas, oficina, CEDIS).
 - 2026-10-08 01:01 · v3.90.72 · Kit low-poly, paso 5 (cierra el pendiente): paleta de día alineada al tema Marfil del sistema de diseño.

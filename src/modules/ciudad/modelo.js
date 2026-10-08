@@ -817,6 +817,16 @@ export function rebote(t, dur = .5) {
   return { y, xz: 1 - (y - 1) * .5, fin: false };
 }
 
+// Recorrido de bienvenida (3.90.75, Etapa 7): 3 pasos la primera vez; el botón «?» lo repite. Se guarda como visto con
+// RECORRIDO_CLAVE = '1' en localStorage (si no hay almacenamiento, se muestra una vez por sesión).
+export const RECORRIDO_CLAVE = 'acteck-ciudad-recorrido';
+export const RECORRIDO = [
+  { icono: '🖐️', titulo: 'Así te mueves', texto: 'Arrastra para moverte, usa la rueda (o pellizca) para acercarte y clic derecho o Shift + arrastrar para girar. Las flechas también sirven.' },
+  { icono: '👆', titulo: 'Así se toca un edificio', texto: 'Toca un edificio, una tienda o una persona: rebota y se abre su tarjeta con sus números y el botón para ir a su pestaña.' },
+  { icono: '✈️', titulo: 'Así se viaja', texto: 'Aléjate hasta el mapa de México y toca una ciudad para volar a ella. El buscador y el botón de arriba te regresan a la base.' },
+];
+export const recorridoVisto = (v) => v === '1';
+
 // Saludo al pasar el cursor (3.90.74): dos saltitos en `dur` segundos; regresa la altura extra (0 fuera de rango).
 export function saltito(t, dur = .7, alto = .45) {
   if (!(t >= 0) || t >= dur) return 0;
