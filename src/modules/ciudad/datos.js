@@ -21,7 +21,7 @@ export function useCiudadData(enabled = true) {
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
       const seg = (p, nombre) => Promise.resolve(p).catch((e) => { console.warn(`[ciudad] ${nombre}:`, e?.message || e); return []; });
       const mes = hoy.getMonth() + 1; const mesPrev = mes === 1 ? 12 : mes - 1;
-      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku, cuotaMes, ventaMes] = await Promise.all([
+      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku, demandaSku, cuotaMes, ventaMes, pagosHechos, syncUlt] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,pos,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
@@ -54,8 +54,12 @@ export function useCiudadData(enabled = true) {
         // Capa «Cuota» (3.90.49): cuota del mes por cliente ERP con su cuenta de sell out y la venta del mes, como Análisis.
         seg(fetchAll('v_cuota_erp_mes', 'cliente_erp,cuenta_sellout,cuota_venta', (q) => q.eq('anio', anio).eq('mes', mes)), 'cuotas del mes'),
         seg(fetchAll('mv_analisis_cliente_mes', 'cliente,fact_neta', (q) => q.eq('anio', anio).eq('mes', mes)), 'venta del mes por cliente'),
+        // Bitácora (3.90.51): pagos registrados de los últimos 3 días (Pagos V3) y la última sincronización del puente (como Configuración).
+        seg(supabase.from('pagos').select('id,cliente,concepto,monto,pagado_at').eq('estado', 'pagado').gte('pagado_at', iso(new Date(hoy.getTime() - 3 * 86400000))).order('pagado_at', { ascending: false }).limit(20).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'pagos registrados'),
+        seg(supabase.from('sync_events').select('status, created_at').order('created_at', { ascending: false }).limit(1).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'última sincronización'),
       ]);
       const modelo = construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
+      modelo.pagosHechos = pagosHechos; modelo.ultimaSync = syncUlt[0] || null; // bitácora: si fallan, quedan vacíos
       try { modelo.cuotas = cuotasPorCuenta(cuotaMes, ventaMes); } catch (e) { console.warn('[ciudad] cuotas', e); } // capa «Cuota»: falla sola
       // Números de PO de los contenedores dibujados (tarjeta del barco). Consulta chica; si falla, la tarjeta muestra sólo el conteo.
       const ids = [...(modelo.puerto?.barcos || []), ...(modelo.puerto?.tarimas || [])].map((b) => b.id).filter(Boolean);

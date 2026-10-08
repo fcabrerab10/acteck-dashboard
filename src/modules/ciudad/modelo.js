@@ -275,10 +275,18 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
     if (!b?.arribo) continue; const f = String(b.arribo).slice(0, 10); if (f > hoyIso) continue;
     out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${(Number(b.piezas) || 0).toLocaleString('es-MX')} pz`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
   }
+  // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.
+  const fechaHora = (ts) => { const t = new Date(ts); if (Number.isNaN(t.getTime())) return null; const p2 = (n) => String(n).padStart(2, '0'); return { f: `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`, h: `${p2(t.getHours())}:${p2(t.getMinutes())}` }; };
+  for (const p of m.pagosHechos || []) {
+    const fh = p?.pagado_at ? fechaHora(p.pagado_at) : null; if (!fh || fh.f > hoyIso) continue;
+    out.push({ id: `pago-${p.id ?? `${p.pagado_at}-${p.cliente}`}`, icono: '💸', texto: `Pago registrado${p.cliente ? ` · ${p.cliente}` : ''}${p.concepto ? ` · ${p.concepto}` : ''} · ${pesos(p.monto)}`, clave: `${fh.f} ${fh.h}`, cuando: fh.f === hoyIso ? fh.h : cuando(fh.f), grande: Number(p.monto) >= 500000, ir: { tipo: 'banco' }, tarjeta: { tipo: 'banco' } });
+  }
+  const sy = m.ultimaSync?.created_at ? fechaHora(m.ultimaSync.created_at) : null;
+  if (sy && sy.f <= hoyIso) out.push({ id: 'sync', icono: '🔄', texto: `Se actualizaron los datos${m.ultimaSync.status ? ` · ${m.ultimaSync.status}` : ''}`, clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   for (const r of m.oficina?.agenda || []) if (r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${r.titulo}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
   const vistos = new Set();
-  return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ...x }));
+  return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ir: null, ...x }));
 }
 
 // Cuota por cuenta (capa «Cuota», 3.90.49): filas de `v_cuota_erp_mes` del mes (cliente_erp, cuenta_sellout, cuota_venta) y

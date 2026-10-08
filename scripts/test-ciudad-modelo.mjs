@@ -486,3 +486,14 @@ test('bitácora en vivo: eventos recientes', () => {
   assert.deepEqual(bitacoraEventos(null), []); assert.deepEqual(bitacoraEventos({}, h), []);
   assert.ok(Array.isArray(bitacoraEventos(construirModelo(d, hoy), hoy)));
 });
+
+test('bitácora: pagos registrados y última sincronización', () => {
+  const h = new Date('2026-10-07T11:00:00');
+  const m = { hoyIso: '2026-10-07', camiones: [{ folio: 'F1', cliente: 'Digitalife', ciudad: 'GDL', monto: 1000, fecha: '2026-10-07' }],
+    pagosHechos: [{ id: 7, cliente: 'pcel', concepto: 'Rebate', monto: 600000, pagado_at: '2026-10-07T10:15:00' }, { id: 8, cliente: 'x', monto: 10, pagado_at: '2026-10-05T09:00:00' }, { id: 9, monto: 1, pagado_at: 'mal' }],
+    ultimaSync: { status: 'ok', created_at: '2026-10-07T10:40:00' } };
+  const b = bitacoraEventos(m, h);
+  assert.deepEqual(b.map((x) => [x.cuando, x.texto]), [['10:40', 'Se actualizaron los datos · ok'], ['10:15', 'Pago registrado · pcel · Rebate · $600 K'], ['hoy', 'Factura F1 · Digitalife · $1 K'], ['hace 2 d', 'Pago registrado · x · $10']]);
+  assert.equal(b[0].ir, null); assert.deepEqual(b[1].ir, { tipo: 'banco' }); assert.equal(b[1].grande, true);
+  assert.deepEqual(bitacoraEventos({ hoyIso: '2026-10-07', ultimaSync: { created_at: null } }, h), []);
+});

@@ -167,7 +167,7 @@ export default function Ciudad({ onNavegar }) {
             <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
               <span style={{ flex: 'none', width: 46, fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{ev.cuando}</span>
               <span style={{ flex: 1, minWidth: 0, fontWeight: ev.grande ? 700 : 400 }}>{ev.icono} {ev.texto}</span>
-              <button type="button" onClick={() => { escenaRef.current?.irA(ev.ir); setSel(ev.tarjeta ? { tag: ev.tarjeta, pos: null } : null); }} title="Volar al lugar" style={{ flex: 'none', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.accent, borderRadius: 8, padding: '1px 7px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText }}>Ver</button>
+              {ev.ir && <button type="button" onClick={() => { escenaRef.current?.irA(ev.ir); setSel(ev.tarjeta ? { tag: ev.tarjeta, pos: null } : null); }} title="Volar al lugar" style={{ flex: 'none', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.accent, borderRadius: 8, padding: '1px 7px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText }}>Ver</button>}
             </div>
           ))}
           <div style={{ height: 1, background: theme.border, margin: '6px 0' }} />
