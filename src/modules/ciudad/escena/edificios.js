@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -14,19 +14,22 @@ export function oficina(ctx) {
   const ofiPos = { ...(ctx.campus?.oficina || { x: esc.x - 7, z: esc.z + 2 }) };
   const g = new THREE.Group(); g.position.set(ofiPos.x, 0, ofiPos.z);
   const base = box(14, .5, 14, P.banqueta); g.add(base);
-  const cuerpo = box(9, 9, 7, P.oficina); cuerpo.position.set(0, 4.75, 0); g.add(cuerpo);
-  const techo = box(9.8, .6, 7.8, P.oficinaTecho); techo.position.set(0, 9.6, 0); g.add(techo);
-  const letrero = box(5, .9, .3, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); letrero.position.set(0, 10.4, 3.6); g.add(letrero);
+  // Cascarón (cuerpo, techo, letrero, ventanas, puerta y la sala de juntas) en su propio grupo: «Entrar» lo oculta (3.90.38).
+  const casco = new THREE.Group(); g.add(casco);
+  const cuerpo = box(9, 9, 7, P.oficina); cuerpo.position.set(0, 4.75, 0); casco.add(cuerpo);
+  const techo = box(9.8, .6, 7.8, P.oficinaTecho); techo.position.set(0, 9.6, 0); casco.add(techo);
+  const letrero = box(5, .9, .3, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); letrero.position.set(0, 10.4, 3.6); casco.add(letrero);
   const vm = M(P.ventana, { roughness: .4 }); const vOn = M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.4 : .15, roughness: .4 });
-  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.userData.detalle = 'fino'; v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); g.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); g.add(v2); instanciar(ctx, v); instanciar(ctx, v2); } // ventanas: InstancedMesh con el tag de la oficina (3.90.21)
-  const puerta = new THREE.Mesh(G(1.6, 2.2, .12), M(0x5A4636)); puerta.position.set(0, 1.35, 3.56); g.add(puerta);
+  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.userData.detalle = 'fino'; v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); casco.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); casco.add(v2); } // ventanas: sin instanciar desde 3.90.38 (se ocultan con el cascarón al «Entrar»)
+  const puerta = new THREE.Mesh(G(1.6, 2.2, .12), M(0x5A4636)); puerta.position.set(0, 1.35, 3.56); casco.add(puerta);
   // sala de juntas (anexo bajo) que se enciende con reunión
-  const sala = box(4.5, 3.2, 4.5, P.oficina); sala.position.set(-6, 1.85, -3); g.add(sala);
-  const salaTecho = box(5, .4, 5, P.oficinaTecho); salaTecho.position.set(-6, 3.65, -3); g.add(salaTecho);
-  const salaVent = new THREE.Mesh(G(3, 1.4, .12), modelo.oficina.reunionEnCurso ? vOn : vm); salaVent.position.set(-6, 1.9, -.7); g.add(salaVent);
+  const sala = box(4.5, 3.2, 4.5, P.oficina); sala.position.set(-6, 1.85, -3); casco.add(sala);
+  const salaTecho = box(5, .4, 5, P.oficinaTecho); salaTecho.position.set(-6, 3.65, -3); casco.add(salaTecho);
+  const salaVent = new THREE.Mesh(G(3, 1.4, .12), modelo.oficina.reunionEnCurso ? vOn : vm); salaVent.position.set(-6, 1.9, -.7); casco.add(salaVent);
   if (oscuro && modelo.oficina.reunionEnCurso) { const l = new THREE.PointLight(0xFFD66B, 1.4, 14); l.position.set(-6, 3, .5); g.add(l); }
   for (const [x, z] of [[6, 5.5], [-6, 5.5], [6.2, -5.8]]) arbol(ctx, g, x, z, 1.1);
   add(g, { tipo: 'oficina', titulo: 'Oficina Acteck', sub: `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reunión${modelo.oficina.reuniones === 1 ? '' : 'es'} hoy`, pagina: 'agenda' });
+  try { interiorOficina(ctx, g, casco, ofiPos); } catch (e) { console.warn('[ciudad] interior oficina', e); } // capa nueva: si falla, la oficina sigue cerrada
   // gente: equipo con nombre + genéricos, caminando entre oficina, sala y CEDIS
   const rutasOf = [[0, 5.5], [-6, 1.2], [3, 7], [9, 2], [12, -3], [0, 5.5]];
   const todos = [...modelo.oficina.personas.map((p) => ({ ...p, generico: false })), ...Array.from({ length: modelo.oficina.genericos }, (_, i) => ({ nombre: ['Ventas', 'Almacén', 'Administración'][i % 3], generico: true, rol: ['comercial', 'almacen', 'finanzas'][i % 3] }))];
@@ -38,6 +41,43 @@ export function oficina(ctx) {
     animados.push((t) => caminar(per, rutasOf, t * vel + fase, ofiPos));
   });
   return ofiPos;
+}
+
+// Interior de la oficina (3.90.38): piso, un escritorio por persona (nombre y pendiente principal, tocable con su tarjeta) y la mesa
+// de la sala de juntas con las reuniones de hoy. Nace oculto; `ctx.oficinaAdentro(true)` oculta el cascarón y lo muestra.
+function interiorOficina(ctx, g, casco, ofiPos) {
+  const { box, add, raiz, modelo } = ctx;
+  const dentro = []; const etiquetas = [];
+  const piso = box(8.6, .06, 6.6, 0xE4DED2); piso.position.set(0, .53, 0); g.add(piso); dentro.push(piso);
+  const gente = (modelo.oficina?.personas || []);
+  acomodoEscritorios(gente.length, { ancho: 6, largo: 4.4, cols: 4 }).forEach((pos, i) => {
+    const p = gente[i]; const eg = new THREE.Group(); eg.position.set(ofiPos.x + pos.x, .56, ofiPos.z + pos.z);
+    const mesa = box(1.5, .08, .8, 0xC9A27A); mesa.position.set(0, .72, 0); eg.add(mesa);
+    for (const [x, z] of [[-.65, -.32], [.65, -.32], [-.65, .32], [.65, .32]]) { const pata = box(.07, .72, .07, 0x6B5A48); pata.position.set(x, .36, z); eg.add(pata); }
+    const monitor = box(.7, .45, .05, 0x1D1D1F); monitor.position.set(0, 1.02, -.25); eg.add(monitor);
+    const silla = box(.5, .5, .5, p.actividad ? ACC.verde : p.pendientes ? ACC.naranja : ACC.gris); silla.position.set(0, .25, .65); eg.add(silla);
+    add(eg, { tipo: 'persona', titulo: p.nombre, sub: p.actividad ? `pendiente principal: ${p.actividad}` : `${p.pendientes} pendiente${p.pendientes === 1 ? '' : 's'} hoy · ${p.hechas} hecha${p.hechas === 1 ? '' : 's'}`, pagina: 'agenda', persona: p });
+    eg.traverse((o) => { if (o.isMesh) dentro.push(o); });
+    const et = etiqueta(ctx, String(p.nombre || '').split(' ')[0], '#1D1D1F'); et.position.set(eg.position.x, 2.4, eg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);
+  });
+  // sala de juntas: mesa con sillas bajo el techo del anexo (que se oculta con el cascarón)
+  const ag = modelo.oficina?.agenda || []; const enCurso = ag.some((r) => r.estado === 'en curso');
+  const sg = new THREE.Group(); sg.position.set(ofiPos.x - 6, .25, ofiPos.z - 3);
+  const pisoSala = box(4.5, .06, 4.5, 0xE4DED2); pisoSala.position.set(0, .28, 0); sg.add(pisoSala);
+  const mesa = box(2.6, .1, 1.3, 0x8A6A4E); mesa.position.set(0, .8, 0); sg.add(mesa);
+  const pie = box(.3, .75, .3, 0x5A4636); pie.position.set(0, .4, 0); sg.add(pie);
+  for (const [x, z] of [[-.8, -1], [0, -1], [.8, -1], [-.8, 1], [0, 1], [.8, 1]]) { const s2 = box(.45, .5, .45, enCurso ? ACC.naranja : 0x9AA3B2); s2.position.set(x, .25, z); sg.add(s2); }
+  const prox = ag.find((r) => r.estado !== 'hecha');
+  add(sg, { tipo: 'sala', titulo: 'Sala de juntas', sub: !ag.length ? 'sin reuniones hoy' : prox ? `${prox.estado === 'en curso' ? 'ahora' : prox.hora}: ${prox.titulo}` : `${ag.length} reunión${ag.length === 1 ? '' : 'es'} hoy · todas hechas`, pagina: 'agenda' });
+  sg.traverse((o) => { if (o.isMesh) dentro.push(o); });
+  const mallasCasco = []; casco.traverse((o) => { if (o.isMesh) mallasCasco.push(o); });
+  const poner = (on) => {
+    casco.visible = !on; for (const o of mallasCasco) o.visible = !on;
+    for (const o of dentro) o.visible = on;
+    for (const et of etiquetas) et.userData.minZoom = on ? 40 : -1;
+  };
+  poner(false);
+  ctx.oficinaAdentro = poner;
 }
 
 // Banco/tesorería (3.90.28): edificio de columnas al norte del estacionamiento; bandera roja si hay pagos vencidos o cartera vencida.

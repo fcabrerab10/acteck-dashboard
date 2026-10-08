@@ -274,6 +274,13 @@ export function reunionesDelDia(reuniones = [], hoy = new Date()) {
   }).filter(Boolean).sort((a, b) => a.ini - b.ini);
 }
 
+// Interior de la oficina (3.90.38): escritorios en rejilla dentro de la planta (`ancho` × `largo`, centrada en 0,0), hasta `max`.
+export function acomodoEscritorios(n, { ancho = 7, largo = 5.2, cols = 4, max = 12 } = {}) {
+  const k = Math.max(0, Math.min(Number(n) || 0, max)); if (!k) return [];
+  const c = Math.min(cols, k), filas = Math.ceil(k / c);
+  return Array.from({ length: k }, (_, i) => ({ x: c === 1 ? 0 : -ancho / 2 + (i % c) * (ancho / (c - 1)), z: filas === 1 ? 0 : -largo / 2 + Math.floor(i / c) * (largo / (filas - 1)) }));
+}
+
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
   const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
   const por = new Map();
@@ -327,6 +334,11 @@ export function tarjetaDe(tag, modelo) {
     const o = m.oficina, pend = (o.personas || []).reduce((s, p) => s + (p.pendientes || 0), 0), hechas = (o.personas || []).reduce((s, p) => s + (p.hechas || 0), 0);
     t.numeros = [['Personas', num((o.personas || []).length + (o.genericos || 0))], ['Reuniones hoy', (() => { const p = (o.agenda || []).find((r) => r.estado !== 'hecha'); return p ? `${num(o.reuniones)} · ${p.estado === 'en curso' ? 'en curso' : `próxima ${p.hora}`}` : num(o.reuniones); })()], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
     t.estado = o.reunionEnCurso ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'sala' && m.oficina) {
+    // Sala de juntas (interior de la oficina, 3.90.38): las reuniones de hoy en orden; en curso = ámbar.
+    const ag = m.oficina.agenda || [];
+    t.numeros = ag.length ? ag.slice(0, 5).map((r) => [`${r.hora}${r.estado === 'en curso' ? ' · ahora' : r.estado === 'hecha' ? ' · ✓' : ''}`, r.titulo]) : [['Reuniones hoy', 'ninguna']];
+    t.estado = ag.some((r) => r.estado === 'en curso') ? 'ambar' : 'verde';
   } else if ((tag.tipo === 'cedis' || tag.tipo === 'montacargas') && m.cedis) {
     const c = m.cedis, d = Number(c.dias) || 0;
     t.numeros = [['Inventario', pesos(c.valor)], ['Días de inventario', num(Math.round(d))], ['Piezas', num(c.piezas)], ['SKUs con stock', num(c.skus)]];

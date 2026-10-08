@@ -30,7 +30,7 @@ export default function Ciudad({ onNavegar }) {
   const [listo, setListo] = useState(false);
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
-  const [adentro, setAdentro] = useState(false); // dentro del CEDIS (racks por marca)
+  const [adentro, setAdentro] = useState(false); // false | 'cedis' (racks por marca) | 'oficina' (escritorios y sala, 3.90.38)
   const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
   // Última vista por usuario (localStorage, puede fallar en privado): la escena arranca ahí, también al cambiar tema o clima.
   const clave = claveVista(perfil?.user_id);
@@ -122,7 +122,7 @@ export default function Ciudad({ onNavegar }) {
             </div>
           )}
         </div>
-        {adentro && <button type="button" onClick={() => { escenaRef.current?.entrarCedis(false); escenaRef.current?.irA({ tipo: 'base' }); }} title="Salir del CEDIS y volver a la base" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: theme.text }}>← Salir del CEDIS</button>}
+        {adentro && <button type="button" onClick={() => { escenaRef.current?.entrar(false); escenaRef.current?.irA({ tipo: 'base' }); }} title={`Salir ${adentro === 'oficina' ? 'de la oficina' : 'del CEDIS'} y volver a la base`} style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: theme.text }}>← Salir {adentro === 'oficina' ? 'de la oficina' : 'del CEDIS'}</button>}
         {nivel === 'ciudad'
           ? <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Regresar al mapa de México" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}>← <MapaIcono size={14} />Volver al mapa</button>
           : nivel === 'lejos'
@@ -192,6 +192,7 @@ export default function Ciudad({ onNavegar }) {
           <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
             {tj.pagina && <button type="button" onClick={() => navegar(s)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Abrir en el dashboard</button>}
             {s.tipo === 'cedis' && escenaRef.current?.hayRacks && !adentro && <button type="button" onClick={() => { escenaRef.current?.entrarCedis(true); setSel(null); }} title="Ver los racks por marca dentro del CEDIS" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Entrar</button>}
+            {s.tipo === 'oficina' && escenaRef.current?.hayOficina && !adentro && <button type="button" onClick={() => { escenaRef.current?.entrar('oficina'); setSel(null); }} title="Ver los escritorios y la sala de juntas" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Entrar</button>}
             <button type="button" onClick={() => escenaRef.current?.irA(s)} style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ir ahí</button>
           </div>
         </div>
