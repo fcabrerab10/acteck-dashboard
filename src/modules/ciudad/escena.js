@@ -17,6 +17,7 @@ import { oficina, cedis, puerto, distritos, campusCalles, banco, torre, burbujas
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
+import { crearRebote } from './escena/rebote.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE, capaCiudades, CAPA_TONOS, cintasCadena } from './modelo.js';
 
@@ -76,7 +77,9 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   const detalle = prepararDetalle(raiz); // gente y piezas finas que se ocultan de lejos
 
   // Viajar: desde lejos (mapa), tocar una ciudad acerca la cámara a ella; de cerca el clic sólo abre su panel.
-  const inter = crearInteraccion(canvas, camara, { onClick: (tag) => { if (tag?.tipo === 'ciudad' && tag.ciudad && vista.zoom > DETALLE.mapa) irA(tag); onClick?.(tag); } });
+  let rebotar = null; // se arma tras plantarInstancias() (necesita los InstancedMesh ya hechos)
+  const inter = crearInteraccion(canvas, camara, { onClick: (tag) => { try { rebotar?.tocar(inter.st.hov, tag); } catch (e) { console.warn('[ciudad] rebote', e); } if (tag?.tipo === 'ciudad' && tag.ciudad && vista.zoom > DETALLE.mapa) irA(tag); onClick?.(tag); } });
+  rebotar = crearRebote(ctx); // 3.90.73: lo tocado rebota
 
   // Vista Base (inicial): oficina, CEDIS, banco, torre y puerto encuadrados de cerca según el tamaño del lienzo y el giro actual.
   const puntosBase = [{ ...ofiPos, r: 8 }, { ...cedisPos, r: 8 }, { ...puertoPos, r: 9 }, ...(bancoPos ? [{ ...bancoPos, r: 5 }] : []), ...(torrePos ? [{ ...torrePos, r: 4 }] : [])];
@@ -178,6 +181,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     if (onVista && cuadros % 15 === 0) { const v = { cx: Math.round(vista.cx), cz: Math.round(vista.cz), zoom: Math.round(vista.zoom) }; const k = `${v.cx}|${v.cz}|${v.zoom}`; if (k !== vistaAvisada) { vistaAvisada = k; onVista(v); } } // minimapa
     for (const f of animados) f(tiempo);
     actualizarInstancias(ctx);
+    rebotar?.paso(dt);
     escalarEtiquetas(sprites, vista.zoom, cam, canvas.clientWidth, canvas.clientHeight);
     inter.hover(interact, onHover);
     if (onSeleccion && inter.st.sel !== undefined && cuadros % 3 === 0) { const p = inter.posSeleccion(); const k = p ? `${Math.round(p.x)}|${Math.round(p.y)}` : ''; if (k !== selAvisada) { selAvisada = k; onSeleccion(p); } } // la tarjeta sigue al edificio

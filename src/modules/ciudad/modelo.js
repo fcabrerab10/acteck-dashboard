@@ -810,6 +810,13 @@ export function camionesTemporada(m, hoy = new Date()) {
  * @param d  { perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes }
  * @returns  modelo para la escena
  */
+// Rebote al tocar (3.90.73, Etapa 7): escala (y, xz) a los `t` segundos; aplasta, estira y se asienta en `dur`. `fin` = ya terminó.
+export function rebote(t, dur = .5) {
+  if (!(t >= 0) || t >= dur) return { y: 1, xz: 1, fin: t >= dur };
+  const p = t / dur; const y = 1 - .16 * Math.sin(p * Math.PI * 3) * (1 - p);
+  return { y, xz: 1 - (y - 1) * .5, fin: false };
+}
+
 // Forma de árbol (3.90.71, kit low-poly): estable por posición (misma ciudad = mismos árboles en cada recarga).
 // ~45 % pino, 30 % redondo, 15 % palma, 10 % arbusto; `tono` 0/1 para alternar el verde.
 export function formaArbol(x = 0, z = 0) {
