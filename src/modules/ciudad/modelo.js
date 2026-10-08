@@ -817,6 +817,12 @@ export function rebote(t, dur = .5) {
   return { y, xz: 1 - (y - 1) * .5, fin: false };
 }
 
+// Saludo al pasar el cursor (3.90.74): dos saltitos en `dur` segundos; regresa la altura extra (0 fuera de rango).
+export function saltito(t, dur = .7, alto = .45) {
+  if (!(t >= 0) || t >= dur) return 0;
+  return alto * Math.abs(Math.sin(t / dur * Math.PI * 2));
+}
+
 // Forma de árbol (3.90.71, kit low-poly): estable por posición (misma ciudad = mismos árboles en cada recarga).
 // ~45 % pino, 30 % redondo, 15 % palma, 10 % arbusto; `tono` 0/1 para alternar el verde.
 export function formaArbol(x = 0, z = 0) {

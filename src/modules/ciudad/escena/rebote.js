@@ -3,7 +3,7 @@
 // en el suelo, así no se separan. Mallas sueltas (oficina, CEDIS): se escala su grupo padre desde su origen (a ras de suelo).
 // Las piezas dinámicas (gente, camiones) no rebotan: actualizarInstancias() reescribe su matriz cada cuadro.
 import * as THREE from 'three';
-import { rebote } from '../modelo.js';
+import { rebote, saltito } from '../modelo.js';
 
 export function crearRebote({ raiz, interact, dinamicas }) {
   let activo = null; let t = 0;
@@ -39,4 +39,18 @@ export function crearRebote({ raiz, interact, dinamicas }) {
     for (const { o, base } of activo.objs) o.scale.set(base.x * r.xz, base.y * r.y, base.z * r.xz);
   }
   return { tocar, paso, restaurar };
+}
+
+// Saludo (3.90.74): la persona bajo el cursor da dos saltitos. La gente es dinámica (su malla original sigue en su grupo y
+// actualizarInstancias() copia la matriz), así que basta con mover el grupo: caminar() respeta su position.y.
+export function crearSaludo({ dinamicas }) {
+  const saltando = new Map(); // grupo → { y0, t }
+  function tocar(im, id) {
+    const d = (dinamicas || []).find((x) => x.im === im); const per = d?.mallas[id]?.parent; if (!per?.userData.piernas) return;
+    if (!saltando.has(per)) saltando.set(per, { y0: per.position.y, t: 0 });
+  }
+  function paso(dt) {
+    for (const [per, s] of saltando) { s.t += dt; const h = saltito(s.t); per.position.y = s.y0 + h; if (s.t >= .7) { per.position.y = s.y0; saltando.delete(per); } }
+  }
+  return { tocar, paso };
 }

@@ -17,7 +17,7 @@ import { oficina, cedis, puerto, distritos, campusCalles, banco, torre, burbujas
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
-import { crearRebote } from './escena/rebote.js';
+import { crearRebote, crearSaludo } from './escena/rebote.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE, capaCiudades, CAPA_TONOS, cintasCadena } from './modelo.js';
 
@@ -80,6 +80,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   let rebotar = null; // se arma tras plantarInstancias() (necesita los InstancedMesh ya hechos)
   const inter = crearInteraccion(canvas, camara, { onClick: (tag) => { try { rebotar?.tocar(inter.st.hov, tag); } catch (e) { console.warn('[ciudad] rebote', e); } if (tag?.tipo === 'ciudad' && tag.ciudad && vista.zoom > DETALLE.mapa) irA(tag); onClick?.(tag); } });
   rebotar = crearRebote(ctx); // 3.90.73: lo tocado rebota
+  const saludo = crearSaludo(ctx); let hovSaludo = null; // 3.90.74: la gente saluda al pasar el cursor
 
   // Vista Base (inicial): oficina, CEDIS, banco, torre y puerto encuadrados de cerca según el tamaño del lienzo y el giro actual.
   const puntosBase = [{ ...ofiPos, r: 8 }, { ...cedisPos, r: 8 }, { ...puertoPos, r: 9 }, ...(bancoPos ? [{ ...bancoPos, r: 5 }] : []), ...(torrePos ? [{ ...torrePos, r: 4 }] : [])];
@@ -184,6 +185,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     rebotar?.paso(dt);
     escalarEtiquetas(sprites, vista.zoom, cam, canvas.clientWidth, canvas.clientHeight);
     inter.hover(interact, onHover);
+    try { const k = inter.st.hov ? `${inter.st.hov.uuid}|${inter.st.hovId}` : null; if (k !== hovSaludo) { hovSaludo = k; if (inter.st.hov?.isInstancedMesh) saludo.tocar(inter.st.hov, inter.st.hovId); } saludo.paso(dt); } catch (e) { console.warn('[ciudad] saludo', e); }
     if (onSeleccion && inter.st.sel !== undefined && cuadros % 3 === 0) { const p = inter.posSeleccion(); const k = p ? `${Math.round(p.x)}|${Math.round(p.y)}` : ''; if (k !== selAvisada) { selAvisada = k; onSeleccion(p); } } // la tarjeta sigue al edificio
     R.render(scene, cam);
     med.cuadros++; if (now - med.desde >= 1000) { med.fps = Math.round(med.cuadros * 1000 / (now - med.desde)); med.cuadros = 0; med.desde = now; }

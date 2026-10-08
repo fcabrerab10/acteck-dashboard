@@ -157,10 +157,10 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.70) Oficina y nave del CEDIS con `cajaBiselada()`; ventanas de la oficina prendidas según presencia con `ventanasOficina()` puro y probado (todos menos los de viaje, repartidas parejo; sin personas, 2 de cada 3 como antes).
   - [x] (3.90.71) Árboles variados: `formaArbol(x, z)` puro y probado (pino / redondo / palma / arbusto y tono, estable por posición) y `plantarArboles()` con una pieza instanciada por forma.
   - [x] (3.90.72) Paleta de día alineada al tema Marfil: oficina = `#F7F3EC`, banquetas = `#EEE7DA`, cielo/niebla `#EEF1EF` (sin azul frío; también el fondo de `Ciudad.jsx` y del harness). La de noche ya era neutra, sin cambios.
-- [ ] Animaciones de respuesta: el edificio «rebota» al tocarlo, burbujas que flotan, transiciones suaves de cámara con easing, gente que saluda al pasar el cursor.
+- [x] Animaciones de respuesta: el edificio «rebota» al tocarlo, burbujas que flotan, transiciones suaves de cámara con easing, gente que saluda al pasar el cursor.
   - [x] (3.90.73) Rebote al tocar: `rebote(t)` puro y probado (aplasta/estira 0.5 s) y `escena/rebote.js`: todas las piezas instanciadas con el mismo tag rebotan alrededor de un pivote común en el suelo; oficina/CEDIS escalan su grupo. Gente y camiones no (son dinámicos). La cámara ya tenía suavizado exponencial al viajar.
-  - [ ] Burbujas que flotan (subir y bajar suave, desfasadas) en `burbujas()` / `pensar()` de `escena/edificios.js`.
-  - [ ] Gente que saluda al pasar el cursor (brazo arriba o saltito en `escena/gente.js`).
+  - [x] Burbujas que flotan: ya lo hacían `burbujas()` y `pensar()` (seno desfasado por burbuja); sin cambios.
+  - [x] (3.90.74) Gente que saluda: `saltito(t)` puro y probado; `crearSaludo()` en `escena/rebote.js` hace dar dos saltitos a la persona bajo el cursor (mueve su grupo; la instancia lo sigue).
 - [ ] Recorrido de bienvenida la primera vez (3 pasos: así se mueve, así se toca un edificio, así se viaja) y botón «?» para repetirlo.
 - [ ] Sonido ambiente opcional (apagado por defecto, interruptor en la esquina).
 
@@ -186,6 +186,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:07 · v3.90.74 · Animaciones de respuesta, paso 2 (cierra el pendiente): la gente da dos saltitos al pasarle el cursor.
 - 2026-10-08 01:04 · v3.90.73 · Animaciones de respuesta, paso 1: lo que tocas rebota (tiendas completas, oficina, CEDIS).
 - 2026-10-08 01:01 · v3.90.72 · Kit low-poly, paso 5 (cierra el pendiente): paleta de día alineada al tema Marfil del sistema de diseño.
 - 2026-10-08 00:59 · v3.90.71 · Kit low-poly, paso 4: árboles variados (pinos, copas redondas, palmas y arbustos) por posición, todos instanciados.
