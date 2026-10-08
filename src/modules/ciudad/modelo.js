@@ -255,6 +255,35 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
 
+// Pensamientos (etapa 4, paso 1, 3.90.52), como RollerCoaster Tycoon: frases cortas en primera persona sobre tiendas con
+// reglas del modelo (no por tamaño: se mira la tendencia). Una por ciudad como máximo y `max` en total; primero lo que pide
+// atención (rojo), luego lo bueno. Reglas: cuenta con cartera vencida → «Tengo pagos vencidos»; la tienda vendió el mes
+// anterior y éste no → «Este mes no he vendido nada»; cae > 30 % → «Vendo N % menos que el mes pasado»; sube > 30 % →
+// «¡Voy N % arriba del mes pasado!»; cuenta al ritmo de su cuota (`m.cuotas`) → «Voy arriba de mi cuota».
+export function pensamientos(m, max = 5) {
+  if (!m) return [];
+  const venc = new Set((m.kpis?.cartera || []).filter((c) => Number(c.vencido) > 0).map((c) => c.cuenta));
+  const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = m.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date();
+  const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+  const out = [];
+  for (const d of m.distritos || []) {
+    let mejor = null;
+    for (const t of d.tiendas || []) {
+      const act = Number(t.importe) || 0, prev = Number(t.previo) || 0, cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cu = q.get(t.cuenta);
+      const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: `${t.nombreCuenta || t.cuenta} · ${t.sucursal}` };
+      let p = null;
+      if (venc.has(t.cuenta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
+      else if (prev > 0 && act <= 0) p = { tono: 'rojo', peso: 1, texto: 'Este mes no he vendido nada' };
+      else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Vendo ${-cambio} % menos que el mes pasado` };
+      else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${cambio} % arriba del mes pasado!` };
+      else if (cu?.cuota > 0 && cu.venta / cu.cuota >= ritmo) p = { tono: 'verde', peso: 4, texto: 'Voy arriba de mi cuota' };
+      if (p && (!mejor || p.peso < mejor.peso)) mejor = { ...quien, ...p };
+    }
+    if (mejor) out.push(mejor);
+  }
+  return out.sort((a, c) => a.peso - c.peso).slice(0, max).map(({ peso, ...x }) => x);
+}
+
 // Bitácora en vivo (etapa 4, paso 1, 3.90.50): eventos recientes con lo que ya trae el modelo — facturas que salieron
 // (camiones), envíos surtidos del Tracking, contenedores que llegaron al CEDIS y reuniones de hoy que ya empezaron. Lo más
 // nuevo primero; cada uno con `cuando` (hoy / ayer / hace N d, o la hora) e `ir` para volar al lugar.

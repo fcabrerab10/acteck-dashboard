@@ -13,7 +13,7 @@ import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
 import { terreno, carretera, plantarArboles, plantarCarreteras } from './escena/terreno.js';
 import { plantarInstancias, actualizarInstancias } from './escena/instancias.js';
-import { oficina, cedis, puerto, distritos, campusCalles, banco, torre, burbujas } from './escena/edificios.js';
+import { oficina, cedis, puerto, distritos, campusCalles, banco, torre, burbujas, pensar } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
@@ -62,6 +62,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   try { burbujas(ctx, { oficina: ofiPos, banco: bancoPos, puerto: puertoPos, cedis: cedisPos }); } catch (e) { console.warn('[ciudad] burbujas', e); } // 3.90.44: capa nueva, falla sola
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
   const { distritoPos, rutas } = distritos(ctx, cedisPos);
+  try { pensar(ctx); } catch (e) { console.warn('[ciudad] pensamientos', e); } // 3.90.52: capa nueva, falla sola
   plantarArboles(ctx); // después de todos los arbol(): oficina, CEDIS y distritos
   plantarCarreteras(ctx); // después de todas las carretera(): una sola malla
   const etA = etiqueta(ctx, 'acteck. · Guadalajara', '#0A84FF'); etA.position.set(ctx.esc.x + 1, 17, ctx.esc.z - 4); etA.userData.prioridad = 4; raiz.add(etA);

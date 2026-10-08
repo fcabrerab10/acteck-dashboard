@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -123,6 +123,29 @@ export function burbujas(ctx, posiciones) {
     const tag = { tipo: b.lugar, titulo: cfg.titulo, sub: `${b.nivel === 'rojo' ? 'Urgente' : 'Atención'}: ${b.texto}`, pagina: cfg.pagina };
     add(sp); sp.userData.tag = tag; ctx.interact.push(sp); // add() sólo etiqueta mallas: el sprite se registra a mano para poder tocarlo
     animados.push((t) => { sp.position.y = y0 + Math.sin(t * 2 + i) * .35; });
+  });
+}
+
+// Pensamientos (etapa 4, paso 2, 3.90.52): nube blanca con la frase de `pensamientos()` sobre la tienda (borde del tono,
+// burbujitas de «pensar» hacia abajo), flotando. Pocas a la vez; tocarla abre la tarjeta de la tienda.
+const TONO_PENSAR = { rojo: '#FF453A', ambar: '#FF9F0A', verde: '#30D158' };
+export function pensar(ctx) {
+  const { add, modelo, animados } = ctx;
+  pensamientos(modelo, 5).forEach((p, i) => {
+    const pos = ctx.tiendaPos?.get(`${p.cuenta}|${p.sucursal}`); if (!pos) return;
+    const c = document.createElement('canvas'); const g2 = c.getContext('2d'); const fuente = '600 30px -apple-system, "Segoe UI", sans-serif';
+    g2.font = fuente; const w = Math.min(560, Math.ceil(g2.measureText(p.texto).width) + 44); c.width = w; c.height = 110;
+    const borde = TONO_PENSAR[p.tono] || '#8E8E93';
+    g2.fillStyle = '#FFFFFF'; g2.strokeStyle = borde; g2.lineWidth = 5;
+    g2.beginPath(); g2.roundRect(4, 4, w - 8, 62, 30); g2.fill(); g2.stroke();
+    for (const [cx, cy, r] of [[w / 2 - 10, 80, 9], [w / 2 - 22, 98, 6]]) { g2.beginPath(); g2.arc(cx, cy, r, 0, Math.PI * 2); g2.fill(); g2.stroke(); }
+    g2.font = fuente; g2.fillStyle = '#1D1D1F'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(p.texto, w / 2, 36, w - 36);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.renderOrder = 5;
+    const alto = 2.6; sp.scale.set(alto * w / 110, alto, 1);
+    const y0 = 4.4; sp.position.set(pos.x, y0, pos.z);
+    add(sp); sp.userData.tag = { tipo: 'tienda', titulo: p.nombre, sub: `«${p.texto}»`, ciudad: p.ciudad, cuenta: p.cuenta, sucursal: p.sucursal, pagina: 'sellOut' }; ctx.interact.push(sp);
+    animados.push((t) => { sp.position.y = y0 + Math.sin(t * 1.6 + i * 1.3) * .2; });
   });
 }
 
@@ -318,6 +341,7 @@ export function distritos(ctx, cedisPos) {
       const x = -ancho / 2 + 2.1 + c * 2.7, z = -largo / 2 + 2.1 + f * 2.9;
       const col = COLOR_CUENTA[t.cuenta] || ACC.gris;
       const tg = new THREE.Group(); tg.position.set(x, .3, z);
+      (ctx.tiendaPos ||= new Map()).set(`${t.cuenta}|${t.sucursal}`, { x: base.x + x, z: base.z + z }); // pensamientos (3.90.52)
       const tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
       const cuerpo = box(2, 1.9, 2, P.tienda); cuerpo.position.y = .95; tg.add(cuerpo);
       const techo = box(2.3, .3, 2.3, P.tiendaTecho); techo.position.y = 2.05; tg.add(techo);

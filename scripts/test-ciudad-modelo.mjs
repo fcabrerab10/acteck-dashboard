@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -496,4 +496,23 @@ test('bitácora: pagos registrados y última sincronización', () => {
   assert.deepEqual(b.map((x) => [x.cuando, x.texto]), [['10:40', 'Se actualizaron los datos · ok'], ['10:15', 'Pago registrado · pcel · Rebate · $600 K'], ['hoy', 'Factura F1 · Digitalife · $1 K'], ['hace 2 d', 'Pago registrado · x · $10']]);
   assert.equal(b[0].ir, null); assert.deepEqual(b[1].ir, { tipo: 'banco' }); assert.equal(b[1].grande, true);
   assert.deepEqual(bitacoraEventos({ hoyIso: '2026-10-07', ultimaSync: { created_at: null } }, h), []);
+});
+
+test('pensamientos de tiendas', () => {
+  const T = (cuenta, sucursal, importe, previo) => ({ cuenta, nombreCuenta: cuenta.toUpperCase(), sucursal, importe, previo });
+  const m = { hoyIso: '2026-10-15', kpis: { cartera: [{ cuenta: 'mala', vencido: 10 }] }, cuotas: new Map([['q', { venta: 60, cuota: 100 }]]),
+    distritos: [
+      { ciudad: 'GDL', tiendas: [T('a', 'Centro', 200, 100), T('mala', 'Sur', 50, 50)] },
+      { ciudad: 'MTY', tiendas: [T('b', 'Valle', 0, 80)] },
+      { ciudad: 'CDMX', tiendas: [T('c', 'Polanco', 50, 100), T('d', 'Roma', 100, 100)] },
+      { ciudad: 'PUE', tiendas: [T('q', 'Angelópolis', 100, 100)] },
+      { ciudad: 'QRO', tiendas: [T('e', 'Juriquilla', 100, 100)] },
+      { ciudad: 'LEO', tiendas: [T('f', 'Plaza', 150, 100)] },
+    ] };
+  const p = pensamientos(m, 10);
+  assert.deepEqual(p.map((x) => [x.ciudad, x.tono, x.texto]), [['GDL', 'rojo', 'Tengo pagos vencidos'], ['MTY', 'rojo', 'Este mes no he vendido nada'], ['CDMX', 'ambar', 'Vendo 50 % menos que el mes pasado'], ['LEO', 'verde', '¡Voy 50 % arriba del mes pasado!'], ['PUE', 'verde', 'Voy arriba de mi cuota']]);
+  assert.equal(p[0].nombre, 'MALA · Sur'); assert.equal(p[0].sucursal, 'Sur'); assert.ok(!p.some((x) => 'peso' in x));
+  assert.equal(pensamientos(m).length, 5); assert.equal(pensamientos(m, 2).length, 2);
+  assert.deepEqual(pensamientos(null), []); assert.deepEqual(pensamientos({}), []);
+  assert.ok(Array.isArray(pensamientos(construirModelo(d, hoy))));
 });

@@ -118,7 +118,8 @@ Principios que no se rompen en ninguna etapa:
 - [x] **Bitácora en vivo** (como el Chirper de Cities: Skylines): tira de eventos recientes de la empresa — facturas grandes, contenedores que llegan, OCs surtidas, pagos registrados, reuniones que empiezan — cada uno con «Ver» que vuela al lugar. Sólo de tablas que ya existen (`sync_events`, facturas, embarques, pagos, agenda).
   - [x] (3.90.50) `bitacoraEventos()` puro con lo que ya trae el modelo (facturas → camiones, envíos surtidos del Tracking, contenedores que llegaron al CEDIS, reuniones de hoy que ya empezaron), probado; sección «Bitácora» en el panel con «Ver» que vuela al lugar (y abre la tarjeta del contenedor o de la sala).
   - [x] (3.90.51) Pagos registrados (`pagos` con estado pagado y su fecha, consulta chica) y última sincronización del puente (`sync_events`, si el dashboard ya la lee) como eventos de la bitácora.
-- [ ] **Pensamientos** (como RollerCoaster Tycoon): burbujas cortas sobre tiendas y clientes que resumen su situación en lenguaje natural («Me falta inventario de AC-944571», «30 días sin comprar», «Voy arriba de mi cuota»), generadas con reglas del modelo, máximo unas pocas visibles a la vez.
+- [x] **Pensamientos** (como RollerCoaster Tycoon): burbujas cortas sobre tiendas y clientes que resumen su situación en lenguaje natural («Me falta inventario de AC-944571», «30 días sin comprar», «Voy arriba de mi cuota»), generadas con reglas del modelo, máximo unas pocas visibles a la vez.
+  - [x] (3.90.52) Reglas `pensamientos()` puras (cartera vencida, sin venta este mes, caída o alza > 30 % vs mes anterior, al ritmo de su cuota; una por ciudad, máximo 5), probadas; nube blanca con borde del tono sobre la tienda (`escena/edificios.js#pensar`), tocable → tarjeta de la tienda.
 
 ### Etapa 5 · Gente y vehículos con sentido
 - [ ] Vendedores con rutas reales entre las sedes de sus clientes (ya vienen en el modelo); su etiqueta dice a quién visitan; tocarlos muestra sus ventas del mes.
@@ -161,6 +162,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:45 · v3.90.52 · Pensamientos: hasta 5 nubes de «pensar» sobre tiendas («Tengo pagos vencidos», «Este mes no he vendido nada», «Vendo N % menos…», «¡Voy N % arriba…!», «Voy arriba de mi cuota») con reglas puras `pensamientos()`; una por ciudad, lo urgente primero; tocar abre la tarjeta de la tienda.
 - 2026-10-07 23:43 · v3.90.51 · Bitácora en vivo (paso 2): pagos registrados de los últimos 3 días (Pagos V3, `pagado_at`; «Ver» vuela al banco) y la última sincronización del puente (`sync_events`, como Configuración) como eventos; cada consulta falla sola.
 - 2026-10-07 23:41 · v3.90.50 · Bitácora en vivo (paso 1): `bitacoraEventos()` — facturas que salieron (en negritas ≥ $500 K), envíos surtidos, contenedores que llegaron al CEDIS y reuniones de hoy, lo más nuevo primero con «hoy / ayer / hace N d» u hora; sección «Bitácora» en el panel derecho con «Ver» (reemplaza las líneas de camiones).
 - 2026-10-07 23:38 · v3.90.49 · Capas de información (paso 3): botón «Cuota» — avance del mes de las cuentas con tiendas en cada ciudad (venta ÷ cuota sumadas, `v_cuota_erp_mes` + `mv_analisis_cliente_mes` como Análisis) contra el ritmo del mes: verde al ritmo, ámbar hasta 20 % abajo, rojo peor, gris sin cuota. Capa Inventario → «Necesita a Fernando».
