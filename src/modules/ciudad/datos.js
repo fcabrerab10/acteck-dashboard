@@ -53,7 +53,7 @@ export function useCiudadData(enabled = true) {
         seg(fetchAll('v_sellin_global_sku_anio', 'sku,anio,piezas', (q) => q.in('anio', [...new Set([1, 2, 3].map((i) => new Date(anio, hoy.getMonth() - i, 1).getFullYear()))])), 'demanda por SKU'),
         // Capa «Cuota» (3.90.49): cuota del mes por cliente ERP con su cuenta de sell out y la venta del mes, como Análisis.
         seg(fetchAll('v_cuota_erp_mes', 'cliente_erp,cuenta_sellout,cuota_venta', (q) => q.eq('anio', anio).eq('mes', mes)), 'cuotas del mes'),
-        seg(fetchAll('mv_analisis_cliente_mes', 'cliente,fact_neta', (q) => q.eq('anio', anio).eq('mes', mes)), 'venta del mes por cliente'),
+        seg(fetchAll('v_analisis_cliente_mes', 'cliente,fact_neta', (q) => q.eq('anio', anio).eq('mes', mes)), 'venta del mes por cliente'),
         // Bitácora (3.90.51): pagos registrados de los últimos 3 días (Pagos V3) y la última sincronización del puente (como Configuración).
         seg(supabase.from('pagos').select('id,cliente,concepto,monto,pagado_at').eq('estado', 'pagado').gte('pagado_at', iso(new Date(hoy.getTime() - 3 * 86400000))).order('pagado_at', { ascending: false }).limit(20).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'pagos registrados'),
         seg(supabase.from('sync_events').select('status, created_at').order('created_at', { ascending: false }).limit(1).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'última sincronización'),
