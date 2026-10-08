@@ -107,7 +107,7 @@ Principios que no se rompen en ninguna etapa:
 - [x] **Barra superior tipo recursos**: Ventas del mes vs cuota (barra de progreso), Inventario comercial, Cartera vencida, Embarques en tránsito. Mismos números que Inicio. Tocar cada recurso lleva a su edificio.
 - [ ] **Burbujas sobre edificios** cuando algo pide atención (cartera vencida, inventario bajo de un SKU A, barco llegando en ≤ 3 días, OC de cliente atrasada, reunión en 15 min). Tocar la burbuja abre la tarjeta del edificio con ese tema.
   - [x] (3.90.43) Reglas: `burbujasAtencion()` puro en `modelo.js` (cartera/pagos vencidos → banco, ETA vencida o llegada en ≤ 3 días → puerto, reunión en ≤ 15 min → oficina), probado.
-  - [ ] Dibujar las burbujas (sprite con icono sobre cada edificio, rojo/ámbar, que flota) y que tocarlas abra la tarjeta del edificio.
+  - [x] (3.90.44) Dibujar las burbujas (sprite con icono sobre cada edificio, rojo/ámbar, que flota) y que tocarlas abra la tarjeta del edificio.
   - [ ] Inventario bajo de un SKU A y OC de cliente atrasada (buscar de dónde lo saca el dashboard sin consultas pesadas).
 - [ ] **«Hoy en Acteck»** como lista de misiones del día (las mismas alertas y pendientes del dashboard), cada una con «Ir» que vuela al lugar.
 - [ ] **Capas de información** (como SimCity): botones «Ventas · Inventario · Cartera · Cuota» que pintan ciudades, manzanas y edificios con una escala de color de ese dato (leyenda visible, «Sin capa» para volver). Mismos números que su pestaña.
@@ -153,6 +153,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:23 · v3.90.44 · Burbujas de atención (paso 2): globo rojo/ámbar con icono flotando sobre banco, puerto u oficina cuando `burbujasAtencion()` lo pide; tocarlo abre la tarjeta del edificio con el motivo. Harness `?burbujas`
 - 2026-10-07 23:21 · v3.90.43 · Burbujas de atención (paso 1): `burbujasAtencion()` decide qué edificio pide atención (banco, puerto, oficina) y por qué; probado, aún sin dibujar
 - 2026-10-07 23:18 · v3.90.42 · Barra superior de recursos (arriba a la derecha, en lugar de la ayuda, que pasa a tooltip): ventas del mes vs cuota con barrita, inventario con cobertura, cartera vencida y en tránsito con POs, con los mismos números que Inicio (`useInicioData` + `calcular`; `recursosBarra()` probado); tocar uno vuela a oficina/CEDIS/banco/puerto. Sin verificación visual (el harness no dibuja la UI de React)
 - 2026-10-07 23:15 · v3.90.41 · Tienda visitable: la tarjeta de la tienda pide al tocarla su top 5 SKUs del mes (o del anterior si aún no vende) con la misma consulta que Análisis (`v_sellout_general_cuenta` por sucursal; `topSkus()` probado) y el botón dice «Abrir en Sell Out». Inventario por tienda → Necesita a Fernando

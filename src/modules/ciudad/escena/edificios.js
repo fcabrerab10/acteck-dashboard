@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -103,6 +103,27 @@ function fotoPersona(p, ACC) {
     img.src = p.avatar;
   };
   return sp;
+}
+
+// Burbujas de atención (etapa 4, paso 2, 3.90.44): un globo con icono sobre el edificio que pide atención (reglas en
+// `burbujasAtencion`), rojo o ámbar, flotando. Tocarlo abre la tarjeta del edificio con el motivo como subtítulo.
+const BURBUJA = { banco: { titulo: 'Banco', pagina: 'pagos', y: 9 }, puerto: { titulo: 'Puerto de Manzanillo', pagina: 'inventarioGlobal', y: 11 }, oficina: { titulo: 'Oficina Acteck', pagina: 'agenda', y: 14 } };
+export function burbujas(ctx, posiciones) {
+  const { add, modelo, animados } = ctx;
+  burbujasAtencion(modelo, new Date()).forEach((b, i) => {
+    const pos = posiciones[b.lugar]; const cfg = BURBUJA[b.lugar]; if (!pos || !cfg) return;
+    const c = document.createElement('canvas'); c.width = c.height = 128; const g2 = c.getContext('2d');
+    g2.fillStyle = b.nivel === 'rojo' ? '#FF453A' : '#FF9F0A'; g2.beginPath(); g2.arc(64, 56, 50, 0, Math.PI * 2); g2.fill();
+    g2.beginPath(); g2.moveTo(48, 98); g2.lineTo(80, 98); g2.lineTo(64, 124); g2.closePath(); g2.fill(); // piquito hacia el edificio
+    g2.fillStyle = '#FFFFFF'; g2.beginPath(); g2.arc(64, 56, 38, 0, Math.PI * 2); g2.fill();
+    g2.font = '44px -apple-system, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(b.icono, 64, 60);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.renderOrder = 5; sp.scale.set(3, 3, 1);
+    const y0 = cfg.y; sp.position.set(pos.x, y0, pos.z);
+    const tag = { tipo: b.lugar, titulo: cfg.titulo, sub: `${b.nivel === 'rojo' ? 'Urgente' : 'Atención'}: ${b.texto}`, pagina: cfg.pagina };
+    add(sp); sp.userData.tag = tag; ctx.interact.push(sp); // add() sólo etiqueta mallas: el sprite se registra a mano para poder tocarlo
+    animados.push((t) => { sp.position.y = y0 + Math.sin(t * 2 + i) * .35; });
+  });
 }
 
 // Banco/tesorería (3.90.28): edificio de columnas al norte del estacionamiento; bandera roja si hay pagos vencidos o cartera vencida.

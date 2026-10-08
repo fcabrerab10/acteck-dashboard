@@ -13,7 +13,7 @@ import { crearCamara } from './escena/camara.js';
 import { PAL, luces, fondo, cielo } from './escena/luz-clima.js';
 import { terreno, carretera, plantarArboles, plantarCarreteras } from './escena/terreno.js';
 import { plantarInstancias, actualizarInstancias } from './escena/instancias.js';
-import { oficina, cedis, puerto, distritos, campusCalles, banco, torre } from './escena/edificios.js';
+import { oficina, cedis, puerto, distritos, campusCalles, banco, torre, burbujas } from './escena/edificios.js';
 import { barcos, camiones, vendedoresRuta } from './escena/vehiculos.js';
 import { etiqueta, escalarEtiquetas } from './escena/etiquetas.js';
 import { crearInteraccion } from './escena/interaccion.js';
@@ -59,6 +59,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   let torrePos = null; try { torrePos = torre(ctx); } catch (e) { console.warn('[ciudad] torre', e); }
   const puertoPos = puerto(ctx);
   barcos(ctx, puertoPos);
+  try { burbujas(ctx, { oficina: ofiPos, banco: bancoPos, puerto: puertoPos }); } catch (e) { console.warn('[ciudad] burbujas', e); } // 3.90.44: capa nueva, falla sola
   carretera(ctx, { x: puertoPos.x, z: puertoPos.z }, { x: cedisPos.x, z: cedisPos.z + 8 }, 1.8);
   const { distritoPos, rutas } = distritos(ctx, cedisPos);
   plantarArboles(ctx); // después de todos los arbol(): oficina, CEDIS y distritos
