@@ -501,9 +501,11 @@ export function ponerPosEnPuerto(puerto, filas = []) {
   return puerto;
 }
 // Lista de POs para la tarjeta: las primeras 3 y «+N» (la tarjeta es angosta).
+// Lista corta (3.90.84): sin vacíos ni repetidos (« PO-2 » y «PO-2» cuentan una vez), así el «+N» cuenta lo que de verdad falta.
 export function listaCorta(lista, n = 3) {
-  if (!lista?.length) return '';
-  return lista.slice(0, n).join(', ') + (lista.length > n ? ` +${lista.length - n}` : '');
+  if (!Array.isArray(lista)) return '';
+  const u = [...new Set(lista.map((x) => (x == null ? '' : String(x).trim())).filter(Boolean))];
+  return u.slice(0, n).join(', ') + (u.length > n ? ` +${u.length - n}` : '');
 }
 
 // Interior de la oficina (paso 1, 3.90.37): reuniones de hoy (`agenda_reuniones`, sin viajes) en orden, con hora local y si ya

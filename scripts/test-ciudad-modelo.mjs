@@ -338,6 +338,7 @@ test('números de PO de cada contenedor en la tarjeta', () => {
   assert.deepEqual(puerto.barcos[0].listaPos, ['PO-2', 'PO-9', 'PO-10', 'PO-11'], 'únicas y en orden numérico');
   assert.equal(puerto.barcos[1].listaPos, undefined); assert.deepEqual(puerto.tarimas[0].listaPos, ['77']);
   assert.equal(listaCorta(puerto.barcos[0].listaPos), 'PO-2, PO-9, PO-10 +1'); assert.equal(listaCorta([]), ''); assert.equal(listaCorta(null), '');
+  assert.equal(listaCorta(['PO-1', ' PO-1 ', '', null, 'PO-2']), 'PO-1, PO-2'); assert.equal(listaCorta(['a', 'b', 'a', 'c', 'd', undefined], 2), 'a, b +2'); assert.equal(listaCorta('PO-1'), '');
   const m = { puerto };
   assert.equal(tarjetaDe({ tipo: 'barco', id: 'A1' }, m).numeros[3][1], 'PO-2, PO-9, PO-10 +1');
   assert.equal(tarjetaDe({ tipo: 'barco', id: 'B2' }, m).numeros[3][1], '2', 'sin lista queda el conteo');
