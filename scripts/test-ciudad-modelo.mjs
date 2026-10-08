@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -648,4 +648,14 @@ test('camionesTemporada: facturas de Buen Fin y de la semana del cierre', () => 
   assert.deepEqual([...camionesTemporada({ camiones: cam }, new Date(2026, 10, 28))].map(([f, e]) => [f, e.texto]), [[4, 'Cierre de mes']]);
   assert.equal(camionesTemporada(null).size, 0);
   assert.equal(eventosCalendario(new Date(2026, 9, 29))[0].desde, '2026-10-25');
+});
+
+test('ventanas de la oficina según presencia', () => {
+  const cuenta = (a) => a.filter(Boolean).length;
+  assert.equal(cuenta(ventanasOficina([])), 8);
+  const ps = (...e) => e.map((estado) => ({ presencia: { estado } }));
+  assert.equal(cuenta(ventanasOficina(ps('disponible', 'reunion', 'viaje', 'viaje'))), 6);
+  assert.equal(cuenta(ventanasOficina(ps('viaje', 'viaje'))), 0);
+  assert.equal(cuenta(ventanasOficina(ps('disponible'))), 12);
+  assert.deepEqual(ventanasOficina(ps('disponible', 'viaje'), 4), [false, true, false, true]); // repartidas, no amontonadas
 });

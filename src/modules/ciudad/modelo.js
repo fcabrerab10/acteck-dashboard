@@ -810,6 +810,14 @@ export function camionesTemporada(m, hoy = new Date()) {
  * @param d  { perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes }
  * @returns  modelo para la escena
  */
+// Ventanas de la oficina (3.90.70, kit low-poly): cuántas se prenden según quién está (todos menos los de viaje), repartidas
+// parejo entre las `total` ventanas. Sin personas: el patrón de siempre (2 de cada 3).
+export function ventanasOficina(personas = [], total = 12) {
+  if (!personas.length) return Array.from({ length: total }, (_, k) => k % 3 !== 0);
+  const n = Math.round(total * personas.filter((p) => p.presencia?.estado !== 'viaje').length / personas.length);
+  return Array.from({ length: total }, (_, k) => Math.floor((k + 1) * n / total) > Math.floor(k * n / total));
+}
+
 export function construirModelo(d, hoy = new Date()) {
   const hoyIso = hoy.toISOString().slice(0, 10);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;

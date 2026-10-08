@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -16,11 +16,12 @@ export function oficina(ctx) {
   const base = box(14, .5, 14, P.banqueta); g.add(base);
   // Cascarón (cuerpo, techo, letrero, ventanas, puerta y la sala de juntas) en su propio grupo: «Entrar» lo oculta (3.90.38).
   const casco = new THREE.Group(); g.add(casco);
-  const cuerpo = box(9, 9, 7, P.oficina); cuerpo.position.set(0, 4.75, 0); casco.add(cuerpo);
+  const cuerpo = new THREE.Mesh(cajaBiselada(9, 9, 7, .3), M(P.oficina)); cuerpo.castShadow = cuerpo.receiveShadow = true; cuerpo.position.set(0, 4.75, 0); casco.add(cuerpo); // biselada (3.90.70)
   const techo = box(9.8, .6, 7.8, P.oficinaTecho); techo.position.set(0, 9.6, 0); casco.add(techo);
   const letrero = box(5, .9, .3, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); letrero.position.set(0, 10.4, 3.6); casco.add(letrero);
   const vm = M(P.ventana, { roughness: .4 }); const vOn = M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.4 : .15, roughness: .4 });
-  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), (f + i) % 3 ? vOn : vm); v.userData.detalle = 'fino'; v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); casco.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); casco.add(v2); } // ventanas: sin instanciar desde 3.90.38 (se ocultan con el cascarón al «Entrar»)
+  const prendidas = ventanasOficina(modelo.oficina?.personas || [], 12); // según quién está en la oficina (3.90.70)
+  for (let f = 0; f < 3; f++) for (let i = 0; i < 4; i++) { const v = new THREE.Mesh(G(1.2, 1.4, .12), prendidas[f * 4 + i] ? vOn : vm); v.userData.detalle = 'fino'; v.position.set(-3 + i * 2, 1.8 + f * 2.8, 3.56); casco.add(v); const v2 = v.clone(); v2.rotation.y = Math.PI / 2; v2.position.set(4.56, 1.8 + f * 2.8, -2.2 + i * 1.5); casco.add(v2); } // ventanas: sin instanciar desde 3.90.38 (se ocultan con el cascarón al «Entrar»)
   const puerta = new THREE.Mesh(G(1.6, 2.2, .12), M(0x5A4636)); puerta.position.set(0, 1.35, 3.56); casco.add(puerta);
   // sala de juntas (anexo bajo) que se enciende con reunión
   const sala = box(4.5, 3.2, 4.5, P.oficina); sala.position.set(-6, 1.85, -3); casco.add(sala);
@@ -240,7 +241,7 @@ export function cedis(ctx) {
   g.add(box(22, .5, 16, P.banqueta));
   // Cascarón (nave, techo, claraboyas, portones, ventanas y rótulo) en su propio grupo: «Entrar» lo oculta y deja ver los racks por marca (3.90.31).
   const casco = new THREE.Group(); g.add(casco);
-  const nave = box(16, 6, 11, P.cedis); nave.position.set(0, 3.25, -1); casco.add(nave);
+  const nave = new THREE.Mesh(cajaBiselada(16, 6, 11, .3), M(P.cedis)); nave.castShadow = nave.receiveShadow = true; nave.position.set(0, 3.25, -1); casco.add(nave); // biselada (3.90.70)
   const techo = box(17, .7, 12, P.cedisTecho); techo.position.set(0, 6.6, -1); casco.add(techo);
   for (let i = 0; i < 3; i++) { const cl = box(2.2, .4, 3, P.cedisTecho); cl.position.set(-5 + i * 5, 7.1, -1); casco.add(cl); } // sin instanciar: se ocultan con el cascarón
   for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(G(2.4, 2.6, .14), M(0x4A4F5C)); p.position.set(-5 + i * 5, 1.5, 4.57); casco.add(p); }
