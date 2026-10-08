@@ -124,6 +124,8 @@ Principios que no se rompen en ninguna etapa:
 ### Etapa 5 · Gente y vehículos con sentido
 - [x] Vendedores con rutas reales entre las sedes de sus clientes (ya vienen en el modelo); su etiqueta dice a quién visitan; tocarlos muestra sus ventas del mes.
 - [ ] Camiones por guía real (`guias_erp` con destino) del CEDIS a la ciudad destino; facturas de 10 días como respaldo si la guía no trae ciudad. Tocar un camión → cliente, factura/guía, piezas.
+  - [x] (3.90.54) Tocar un camión → tarjeta con cliente, factura (monto y piezas) o envío (paquetería), cuándo salió y destino; envío con más de 5 días en camino en ámbar.
+  - [ ] Camiones por guía real con destino: `guias_erp` no la consulta el dashboard desde `src/` (sólo entra a `oc_envios` por la RPC del Tracking) → movido a «Necesita a Fernando».
 - [ ] Barcos que entran al puerto según su ETA real y descargan contenedores al llegar.
 - [ ] Cuentas sin sucursal repartidas por estado (`CIUDAD_POR_ESTADO`) para que ninguna ciudad con ventas quede vacía.
 - [ ] **Seguir a alguien** (como Cities: Skylines): en la tarjeta de un vendedor, camión o barco, botón «Seguir» que deja la cámara pegada a él con una ficha de su recorrido; cualquier arrastre o «Esc» lo suelta.
@@ -154,6 +156,7 @@ Principios que no se rompen en ninguna etapa:
 - Cualquier vista o tabla nueva en Supabase (el agente no corre migraciones).
 - `~/acteck/ciudad/.env.local` con `SUPABASE_ACCESS_TOKEN` para probar con datos reales en el harness.
 - Etapa 8: quién más puede entrar a la Ciudad.
+- Camiones por guía real (Etapa 5): `guias_erp` no la lee el frontend (sólo la RPC `oc_sincronizar_erp` la liga a `oc_envios`, que la Ciudad ya dibuja). Para usar el destino de la guía hace falta una vista con ciudad/estado destino (o permitir que la Ciudad lea `guias_erp`).
 - Capa «Inventario» por ciudad (Capas de información): no hay vista de inventario en tienda por sucursal/ciudad (sólo `v_sellout_inventario_cuenta_sku` por cuenta). Opciones: pintar por cuenta con esa vista (mismo tono en todas las ciudades de la cuenta) o crear una vista por sucursal; decidir.
 - Burbuja «inventario bajo de un SKU A»: la alerta `stock_vs_transito` está apagada para todos (def 'off') y no hay clasificación ABC a la mano; decidir la fuente (¿prender la alerta?) y el agente la conecta al CEDIS.
 - Inventario en tienda (Tienda visitable): no hay vista de inventario por sucursal (sólo `v_sellout_inventario_cuenta_sku` por cuenta); si existe una, el agente la agrega a la tarjeta de la tienda.
@@ -162,6 +165,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:51 · v3.90.54 · Tarjeta del camión: factura (cliente, monto, piezas, salió) o envío del Tracking (cliente, paquetería, salió, destino; ámbar si lleva > 5 días). Guías reales (`guias_erp`) → «Necesita a Fernando».
 - 2026-10-07 23:49 · v3.90.53 · Vendedores del ERP en circuito real: CEDIS → sedes de sus 3 clientes principales (ciudades únicas, `circuitoVendedor` / `tramoActual` puros) → CEDIS; el hover dice a quién van ahora y su tarjeta muestra ventas del mes y del año, clientes y ruta (`v_ventas_vendedor_cliente_mes` ahora con `mes`).
 - 2026-10-07 23:45 · v3.90.52 · Pensamientos: hasta 5 nubes de «pensar» sobre tiendas («Tengo pagos vencidos», «Este mes no he vendido nada», «Vendo N % menos…», «¡Voy N % arriba…!», «Voy arriba de mi cuota») con reglas puras `pensamientos()`; una por ciudad, lo urgente primero; tocar abre la tarjeta de la tienda.
 - 2026-10-07 23:43 · v3.90.51 · Bitácora en vivo (paso 2): pagos registrados de los últimos 3 días (Pagos V3, `pagado_at`; «Ver» vuela al banco) y la última sincronización del puente (`sync_events`, como Configuración) como eventos; cada consulta falla sola.

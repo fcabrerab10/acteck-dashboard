@@ -530,3 +530,12 @@ test('vendedores: circuito por las sedes de sus clientes y tarjeta con ventas de
   const tj = tarjetaDe({ tipo: 'vendedorErp', titulo: v.nombre }, m);
   assert.deepEqual(tj.numeros.slice(0, 3).map((x) => x[0]), ['Ventas del mes', 'Ventas del año', 'Clientes']); assert.equal(tj.numeros[0][1], '$100'); assert.equal(tj.estado, 'verde');
 });
+
+test('tarjeta del camión: factura o envío', () => {
+  const m = { hoyIso: '2026-10-07', camiones: [{ folio: 'F1', cliente: 'Digitalife', ciudad: 'SAN LUIS POTOSI', monto: 1.25e6, piezas: 1200, fecha: '2026-10-06' }, { folio: 'guía 9', cliente: 'PCEL', ciudad: 'MONTERREY', fecha: '2026-09-30', envio: true, paqueteria: 'DHL', monto: 0, piezas: 0 }] };
+  let tj = tarjetaDe({ tipo: 'camion', folio: 'F1', titulo: 'Factura F1' }, m);
+  assert.deepEqual(tj.numeros, [['Cliente', 'Digitalife'], ['Factura', '$1.3 M'], ['Piezas', '1,200'], ['Salió', '2026-10-06 · ayer']]); assert.equal(tj.estado, 'verde');
+  tj = tarjetaDe({ tipo: 'camion', folio: 'guía 9' }, m);
+  assert.deepEqual(tj.numeros, [['Cliente', 'PCEL'], ['Paquetería', 'DHL'], ['Salió', '2026-09-30 · hace 7 d'], ['Destino', 'Monterrey']]); assert.equal(tj.estado, 'ambar');
+  assert.deepEqual(tarjetaDe({ tipo: 'camion', folio: 'nada', titulo: 'X' }, m).numeros, []);
+});

@@ -598,6 +598,17 @@ export function tarjetaDe(tag, modelo) {
     const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];
     const pr = p.presencia; if (pr) t.numeros.unshift(['Ahora', pr.estado === 'viaje' ? `De viaje · ${pr.titulo}` : pr.estado === 'reunion' ? `En reunión · ${pr.titulo}` : 'Disponible']);
     t.estado = p.actividad ? 'verde' : p.pendientes > p.hechas ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'camion') {
+    // Camión (etapa 5, 3.90.54): factura (cliente, monto, piezas) o envío del Tracking (paquetería), cuándo salió y destino.
+    // Envío con más de 5 días en camino = ámbar.
+    const c = (m.camiones || []).find((x) => x.folio === tag.folio);
+    if (c) {
+      const n = c.fecha ? dias(c.fecha, m.hoyIso || new Date().toISOString().slice(0, 10)) : null;
+      const salio = c.fecha ? `${String(c.fecha).slice(0, 10)}${n == null ? '' : n <= 0 ? ' · hoy' : n === 1 ? ' · ayer' : ` · hace ${n} d`}` : '—';
+      const destino = String(c.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) || '—';
+      t.numeros = c.envio ? [['Cliente', c.cliente || '—'], ['Paquetería', c.paqueteria || '—'], ['Salió', salio], ['Destino', destino]] : [['Cliente', c.cliente || '—'], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], ['Salió', salio]];
+      t.estado = c.envio && n != null && n > 5 ? 'ambar' : 'verde';
+    }
   } else if (tag.tipo === 'vendedorErp') {
     // Vendedor del ERP en ruta (etapa 5, 3.90.53): ventas del mes y del año (`v_ventas_vendedor_cliente_mes`) y a quién visita.
     const v = (m.vendedoresRuta || []).find((x) => x.nombre === tag.titulo);
