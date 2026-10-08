@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -538,4 +538,11 @@ test('tarjeta del camión: factura o envío', () => {
   tj = tarjetaDe({ tipo: 'camion', folio: 'guía 9' }, m);
   assert.deepEqual(tj.numeros, [['Cliente', 'PCEL'], ['Paquetería', 'DHL'], ['Salió', '2026-09-30 · hace 7 d'], ['Destino', 'Monterrey']]); assert.equal(tj.estado, 'ambar');
   assert.deepEqual(tarjetaDe({ tipo: 'camion', folio: 'nada', titulo: 'X' }, m).numeros, []);
+});
+
+test('barcos por ETA real: atracado, en fila, llegando, mar abierto', () => {
+  const r = rumboBarcos([{ llegaEnDias: 0 }, { llegaEnDias: -3 }, { llegaEnDias: 4 }, { llegaEnDias: 20, progreso: .9 }, { llegaEnDias: null, progreso: .3 }, { llegaEnDias: -5, arribo: '2026-10-01', progreso: .2 }, { llegaEnDias: 8, progreso: -1 }]);
+  assert.deepEqual(r.map((x) => [x.modo, x.muelle]), [['esperando', 1], ['atracado', 0], ['llegando', null], ['navegando', null], ['navegando', null], ['navegando', null], ['navegando', null]]);
+  assert.equal(r[2].avance, .5); assert.equal(r[3].avance, .6); assert.equal(r[4].avance, .3); assert.equal(r[6].avance, 0);
+  assert.deepEqual(rumboBarcos(null), []);
 });

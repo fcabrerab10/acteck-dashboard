@@ -3,23 +3,34 @@ import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { fmtK, capital } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
-import { circuitoVendedor, tramoActual } from '../modelo.js';
+import { circuitoVendedor, tramoActual, rumboBarcos } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
   const { P, M, box, add, modelo, animados } = ctx;
+  const rumbo = rumboBarcos(modelo.puerto.barcos); // 3.90.55: posición por ETA real (atracado / en fila / llegando / mar abierto)
   modelo.puerto.barcos.forEach((b, i) => {
-    const g = new THREE.Group();
+    const g = new THREE.Group(); const cajas = [];
     const casco = box(5, 1.1, 1.8, P.barco); casco.position.y = .5; g.add(casco);
     const proa = new THREE.Mesh(geo(ctx, 'proa', () => new THREE.ConeGeometry(.9, 1.6, 4)), M(P.barco)); proa.rotation.z = -Math.PI / 2; proa.rotation.y = Math.PI / 4; proa.position.set(3.1, .55, 0); proa.castShadow = true; g.add(proa);
     const cab = box(1.3, 1.3, 1.5, P.barcoCab); cab.position.set(-1.6, 1.65, 0); g.add(cab);
-    for (let k = 0; k < 3; k++) { const c = box(1, .7, 1.4, [ACC.azul, ACC.naranja, ACC.verde, ACC.morado][(k + i) % 4]); c.position.set(.2 + k * -.0 + (k - 1) * 1.1, 1.4, 0); g.add(c); }
+    for (let k = 0; k < 3; k++) { const c = box(1, .7, 1.4, [ACC.azul, ACC.naranja, ACC.verde, ACC.morado][(k + i) % 4]); c.position.set(.2 + k * -.0 + (k - 1) * 1.1, 1.4, 0); g.add(c); cajas.push(c); }
     const ini = { x: puertoPos.x - 52 - (i % 4) * 9, z: puertoPos.z + 46 + (i % 3) * 8 }; const fin = { x: puertoPos.x - 3, z: puertoPos.z + 5 };
-    g.position.set(ini.x + (fin.x - ini.x) * b.progreso, 0, ini.z + (fin.z - ini.z) * b.progreso); g.rotation.y = -Math.atan2(fin.z - ini.z, fin.x - ini.x);
-    add(g, { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}`, sub: `${b.naviera || b.supplier} · ${b.piezas.toLocaleString('es-MX')} pz · ${b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias <= 0 ? 'llegó' : `llega en ${b.llegaEnDias} d`}`, pagina: 'inventarioGlobal', barco: b });
+    const ru = rumbo[i]; const lx = fin.x - ini.x, lz = fin.z - ini.z, largo = Math.hypot(lx, lz) || 1;
+    if (ru.muelle != null) { const atras = ru.muelle * 6.5; g.position.set(fin.x - lx / largo * atras, 0, fin.z - lz / largo * atras); } // la fila se forma mar adentro
+    else { const a = Math.min(ru.avance, .9); g.position.set(ini.x + lx * a, 0, ini.z + lz * a); }
+    g.rotation.y = -Math.atan2(lz, lx);
+    const estado = ru.modo === 'atracado' ? 'en el puerto · descargando' : ru.modo === 'esperando' ? 'en el puerto · esperando muelle' : b.llegaEnDias == null ? 'sin ETA' : `llega en ${b.llegaEnDias} d`;
+    add(g, { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}`, sub: `${b.naviera || b.supplier} · ${b.piezas.toLocaleString('es-MX')} pz · ${estado}`, pagina: 'inventarioGlobal', barco: b });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.22: piezas del barco como instancias dinámicas (tag de su contenedor)
     const base = g.position.clone();
-    animados.push((t) => { g.position.y = Math.sin(t * 1.4 + i) * .12; g.position.x = base.x + Math.sin(t * .11 + i) * .4; g.rotation.z = Math.sin(t * 1.1 + i) * .02; });
+    const quieto = ru.muelle != null; // atracado o en fila: no deriva
+    // Descarga (atracado): una caja a la vez sube, cruza hacia el muelle y desaparece; luego vuelve a su lugar (ciclo de 4 s).
+    const descarga = ru.modo === 'atracado' ? cajas.map((c) => c.position.clone()) : null;
+    animados.push((t) => {
+      g.position.y = Math.sin(t * 1.4 + i) * (quieto ? .05 : .12); if (!quieto) g.position.x = base.x + Math.sin(t * .11 + i) * .4; g.rotation.z = Math.sin(t * 1.1 + i) * (quieto ? .008 : .02);
+      if (descarga) { const ciclo = (t / 4) % cajas.length, k = Math.floor(ciclo), f = ciclo - k; cajas.forEach((c, j) => { const o = descarga[j]; if (j !== k) { c.position.copy(o); c.scale.setScalar(1); return; } c.position.set(o.x, o.y + Math.min(1, f * 3) * 2.2, o.z - Math.max(0, f * 3 - 1) * 2.2); c.scale.setScalar(f < .95 ? 1 : .001); }); } // instancias: copian la matriz, no `visible`
+    });
   });
 }
 

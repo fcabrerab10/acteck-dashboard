@@ -255,6 +255,20 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
 
+// Barcos por ETA real (etapa 5, 3.90.55): dónde va cada barco sin arribo al CEDIS. ETA vencida o de hoy → en el puerto:
+// el más atrasado atraca y descarga (`muelle` 0), los demás esperan en fila (`muelle` 1, 2…); llega en ≤ 7 días → se
+// acerca (`avance` = 1 − días/8); más lejos o sin ETA → mar abierto (`avance` ≤ .6, con el progreso de sus fechas).
+export function rumboBarcos(barcos = []) {
+  const enPuerto = (barcos || []).map((b, i) => ({ b, i })).filter(({ b }) => !b?.arribo && b?.llegaEnDias != null && b.llegaEnDias <= 0).sort((a, c) => a.b.llegaEnDias - c.b.llegaEnDias || a.i - c.i);
+  const fila = new Map(enPuerto.map(({ i }, k) => [i, k]));
+  return (barcos || []).map((b, i) => {
+    if (fila.has(i)) { const k = fila.get(i); return { modo: k === 0 ? 'atracado' : 'esperando', muelle: k, avance: 1 }; }
+    const d = b?.llegaEnDias;
+    if (!b?.arribo && d != null && d > 0 && d <= 7) return { modo: 'llegando', muelle: null, avance: Math.round((1 - d / 8) * 1000) / 1000 };
+    return { modo: 'navegando', muelle: null, avance: Math.min(.6, Math.max(0, Number(b?.progreso) || 0)) };
+  });
+}
+
 // Rutas de vendedores (etapa 5, 3.90.53): el circuito del vendedor por las sedes de sus clientes principales — ciudades
 // únicas con carretera (`tieneRuta`), máximo `max`, en el orden de `destinos` (de más a menos facturación). tramoActual()
 // reparte un ciclo (0–1) en tramos iguales: CEDIS → 1.ª sede → … → última sede → CEDIS (n paradas = n + 1 tramos).

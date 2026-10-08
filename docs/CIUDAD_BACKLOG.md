@@ -123,10 +123,11 @@ Principios que no se rompen en ninguna etapa:
 
 ### Etapa 5 · Gente y vehículos con sentido
 - [x] Vendedores con rutas reales entre las sedes de sus clientes (ya vienen en el modelo); su etiqueta dice a quién visitan; tocarlos muestra sus ventas del mes.
-- [ ] Camiones por guía real (`guias_erp` con destino) del CEDIS a la ciudad destino; facturas de 10 días como respaldo si la guía no trae ciudad. Tocar un camión → cliente, factura/guía, piezas.
+- [x] Camiones por guía real (`guias_erp` con destino) del CEDIS a la ciudad destino; facturas de 10 días como respaldo si la guía no trae ciudad. Tocar un camión → cliente, factura/guía, piezas.
   - [x] (3.90.54) Tocar un camión → tarjeta con cliente, factura (monto y piezas) o envío (paquetería), cuándo salió y destino; envío con más de 5 días en camino en ámbar.
-  - [ ] Camiones por guía real con destino: `guias_erp` no la consulta el dashboard desde `src/` (sólo entra a `oc_envios` por la RPC del Tracking) → movido a «Necesita a Fernando».
-- [ ] Barcos que entran al puerto según su ETA real y descargan contenedores al llegar.
+  - [x] Camiones por guía real con destino: `guias_erp` no la consulta el dashboard desde `src/` (sólo entra a `oc_envios` por la RPC del Tracking) → movido a «Necesita a Fernando».
+- [x] Barcos que entran al puerto según su ETA real y descargan contenedores al llegar.
+  - [x] (3.90.55) `rumboBarcos()` puro: ETA vencida/hoy → en el puerto (el más atrasado atraca y descarga, los demás en fila mar adentro), ≤ 7 días → se acerca, resto en mar abierto; el atracado baja sus cajas una por una al muelle. Harness `?atracar`.
 - [ ] Cuentas sin sucursal repartidas por estado (`CIUDAD_POR_ESTADO`) para que ninguna ciudad con ventas quede vacía.
 - [ ] **Seguir a alguien** (como Cities: Skylines): en la tarjeta de un vendedor, camión o barco, botón «Seguir» que deja la cámara pegada a él con una ficha de su recorrido; cualquier arrastre o «Esc» lo suelta.
 - [ ] **Flujo de mercancía de punta a punta** (como Anno 1800 / Factorio): vista «Cadena» que dibuja el recorrido barco → puerto → CEDIS → camión → tienda → cliente final con el volumen de cada tramo, y marca en rojo dónde se atora (barco atrasado, días de inventario altos, tienda sin inventario).
@@ -165,6 +166,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 23:54 · v3.90.55 · Barcos por ETA real: el más atrasado atraca en Manzanillo y descarga sus cajas una por una; los demás con ETA vencida esperan en fila; los que llegan en ≤ 7 días se acercan; el hover dice «descargando», «esperando muelle» o «llega en N d».
 - 2026-10-07 23:51 · v3.90.54 · Tarjeta del camión: factura (cliente, monto, piezas, salió) o envío del Tracking (cliente, paquetería, salió, destino; ámbar si lleva > 5 días). Guías reales (`guias_erp`) → «Necesita a Fernando».
 - 2026-10-07 23:49 · v3.90.53 · Vendedores del ERP en circuito real: CEDIS → sedes de sus 3 clientes principales (ciudades únicas, `circuitoVendedor` / `tramoActual` puros) → CEDIS; el hover dice a quién van ahora y su tarjeta muestra ventas del mes y del año, clientes y ruta (`v_ventas_vendedor_cliente_mes` ahora con `mes`).
 - 2026-10-07 23:45 · v3.90.52 · Pensamientos: hasta 5 nubes de «pensar» sobre tiendas («Tengo pagos vencidos», «Este mes no he vendido nada», «Vendo N % menos…», «¡Voy N % arriba…!», «Voy arriba de mi cuota») con reglas puras `pensamientos()`; una por ciudad, lo urgente primero; tocar abre la tarjeta de la tienda.
