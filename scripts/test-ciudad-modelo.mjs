@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -600,4 +600,30 @@ test('celebraciones: cuota cruzada y tiendas que vuelven a vender', () => {
   r = celebraciones({ cuotas: new Map([['a', { venta: 99, cuota: 100 }]]), distritos: ds }, 1);
   assert.equal(r.cuota, null); assert.equal(r.tiendas.length, 1);
   assert.deepEqual(celebraciones(null), { cuota: null, tiendas: [] });
+});
+
+test('momentosTiempo: hoy, ayer, hace 7 días e inicio de mes sin repetir día', () => {
+  let r = momentosTiempo(new Date(2026, 9, 8, 0, 30));
+  assert.deepEqual(r.map((m) => [m.id, m.iso]), [['hoy', '2026-10-08'], ['ayer', '2026-10-07'], ['semana', '2026-10-01']]);
+  assert.equal(r[1].fecha.getHours(), 0);
+  r = momentosTiempo(new Date(2026, 9, 20, 9));
+  assert.deepEqual(r.map((m) => m.iso), ['2026-10-20', '2026-10-19', '2026-10-13', '2026-10-01']);
+  assert.deepEqual(momentosTiempo(new Date(2026, 9, 1, 9)).map((m) => m.id), ['hoy', 'ayer', 'semana']);
+});
+
+test('datosEnFecha: regresa facturas, envíos, contenedores y ventas a esa fecha', () => {
+  const crudos = { facturas: [{ folio: 1, fecha: '2026-09-28' }, { folio: 2, fecha: '2026-10-03' }],
+    envios: [{ fecha_surtida: '2026-09-29', fecha_entregada: '2026-10-02' }, { fecha_surtida: '2026-10-04' }],
+    contenedores: [{ contenedor: 'A', fecha_emision: '2026-08-01', arribo_cedis: '2026-10-05', estatus: 'CONCLUIDO' }, { contenedor: 'B', fecha_emision: '2026-10-02' }],
+    sucursales: [{ anio: 2026, mes: 9, importe: 1 }, { anio: 2026, mes: 10, importe: 2 }], agendaHoy: [{ id: 1 }], inventario: [{ inv_actual: 5 }] };
+  const r = datosEnFecha(crudos, new Date(2026, 8, 30, 12));
+  assert.deepEqual(r.facturas.map((x) => x.folio), [1]);
+  assert.equal(r.envios.length, 1); assert.equal(r.envios[0].fecha_entregada, null);
+  assert.deepEqual(r.contenedores.map((c) => [c.contenedor, c.arribo_cedis, c.estatus]), [['A', null, 'EN TRANSITO']]);
+  assert.deepEqual(r.sucursales.map((x) => x.mes), [9]); assert.deepEqual(r.agendaHoy, []); assert.equal(r.inventario, crudos.inventario);
+  assert.ok(r._aprox.includes('inventario'));
+  assert.equal(datosEnFecha(crudos, null), crudos);
+  // reconstruida: ya no hay camión de la factura 2 y el contenedor A sigue en camino
+  const m = construirModelo({ ...d, ...datosEnFecha({ ...d, facturas: crudos.facturas, contenedores: crudos.contenedores }, new Date(2026, 8, 30, 12)) }, new Date(2026, 8, 30, 12));
+  assert.equal(m.hoyIso, '2026-09-30'); assert.ok(!m.camiones.some((c) => c.folio === 2)); assert.ok(m.puerto.barcos.some((b) => b.id === 'A'));
 });

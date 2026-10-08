@@ -754,6 +754,32 @@ export function ciudadDeSucursal(nombre) {
 const dias = (a, b) => Math.round((new Date(`${String(b).slice(0, 10)}T12:00:00`) - new Date(`${String(a).slice(0, 10)}T12:00:00`)) / 86400000);
 const nombreCorto = (s) => { const p = norm(s).split(/\s+/).filter(Boolean); if (!p.length) return ''; const cap = (w) => w.charAt(0) + w.slice(1).toLowerCase(); return p.length >= 3 ? `${cap(p[0])} ${cap(p[p.length - 2])}` : p.map(cap).join(' '); };
 
+// Barra de tiempo (etapa 6, paso 1): momentos a los que se puede regresar la ciudad (Hoy / Ayer / Hace 7 días / Inicio de mes,
+// a la misma hora; inicio de mes = día 1 a mediodía). Se quitan los que caen en el mismo día que uno anterior.
+const isoLocal = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+export function momentosTiempo(hoy = new Date()) {
+  const atras = (n) => { const t = new Date(hoy); t.setDate(t.getDate() - n); return t; };
+  const todos = [{ id: 'hoy', texto: 'Hoy', fecha: hoy }, { id: 'ayer', texto: 'Ayer', fecha: atras(1) }, { id: 'semana', texto: 'Hace 7 días', fecha: atras(7) },
+    { id: 'mes', texto: 'Inicio de mes', fecha: new Date(hoy.getFullYear(), hoy.getMonth(), 1, 12, 0) }];
+  const vistos = new Set();
+  return todos.filter((m) => { const k = isoLocal(m.fecha); if (vistos.has(k)) return false; vistos.add(k); return true; }).map((m) => ({ ...m, iso: isoLocal(m.fecha) }));
+}
+// Los datos crudos de `construirModelo` como estaban en `fecha` (lo que se puede reconstruir): sin facturas, envíos ni
+// contenedores que aún no existían; envíos sin entregar y contenedores sin arribo si eso pasó después; ventas mensuales hasta
+// el mes de esa fecha (el mes en curso cuenta completo: no hay venta por día de sucursal). Agenda/reuniones sólo existen para
+// hoy → vacías. Inventario, cartera, pagos y forecast son foto de hoy: quedan igual y se listan en `_aprox`.
+export function datosEnFecha(d, fecha) {
+  if (!d || !(fecha instanceof Date) || Number.isNaN(fecha.getTime())) return d;
+  const f = isoLocal(fecha), am = fecha.getFullYear() * 12 + fecha.getMonth() + 1;
+  const despues = (x) => !!x && String(x).slice(0, 10) > f;
+  const hastaMes = (rows) => (rows || []).filter((r) => N(r.anio) * 12 + N(r.mes) <= am);
+  const envios = (d.envios || []).filter((e) => !despues(e.fecha_envio_erp || e.fecha_surtida)).map((e) => (despues(e.fecha_entrega_erp || e.fecha_entregada) ? { ...e, fecha_entrega_erp: null, fecha_entregada: null } : e));
+  const contenedores = (d.contenedores || []).filter((c) => !despues(c.fecha_emision)).map((c) => (despues(c.arribo_cedis) ? { ...c, arribo_cedis: null, estatus: /CONCLUIDO/i.test(c.estatus || '') ? 'EN TRANSITO' : c.estatus } : c));
+  return { ...d, facturas: (d.facturas || []).filter((x) => !despues(x.fecha)), envios, contenedores,
+    sucursales: hastaMes(d.sucursales), cuentaMes: hastaMes(d.cuentaMes), clientesFinales: hastaMes(d.clientesFinales), vendedoresMayoristas: hastaMes(d.vendedoresMayoristas), vendedoresErp: hastaMes(d.vendedoresErp),
+    agendaHoy: [], reunionesHoy: [], viajesHoy: [], _aprox: ['inventario', 'cartera', 'pagos', 'ventas del mes completas', 'agenda'] };
+}
+
 /**
  * @param d  { perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes }
  * @returns  modelo para la escena

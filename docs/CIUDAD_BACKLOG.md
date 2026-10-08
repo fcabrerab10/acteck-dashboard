@@ -143,6 +143,8 @@ Principios que no se rompen en ninguna etapa:
 - [x] Celebraciones discretas: fuegos artificiales sobre la base al cruzar la cuota del mes; confeti en una tienda que vuelve a vender tras 30 días sin venta.
   - [x] (3.90.62) `celebraciones()` puro: cuota cruzada = total de `m.cuotas` ≥ 100 % → 3 cohetes de puntos sobre la base; «volvió a vender» = vendió este mes y nada el anterior (aprox. de 30 días: no hay fecha de última venta por sucursal) → confeti en bucle sobre la tienda (máx. 5). Harness `?fiesta`.
 - [ ] Barra de tiempo: «Hoy / Ayer / Hace 7 días / Inicio de mes» que reconstruye la ciudad con los datos de esa fecha.
+  - [x] (3.90.63) `momentosTiempo(hoy)` (Hoy / Ayer / Hace 7 días / Inicio de mes, sin días repetidos) y `datosEnFecha(d, fecha)` puros, probados: quitan facturas/envíos/contenedores posteriores, des-entregan envíos y des-arriban contenedores que llegaron después, ventas mensuales hasta ese mes (el mes cuenta completo: no hay venta diaria por sucursal), agenda vacía; inventario, cartera, pagos y forecast quedan como hoy (`_aprox`).
+  - [ ] Barra en `Ciudad.jsx`: `datos.js` guarda los crudos en el modelo; al elegir un momento, `construirModelo(datosEnFecha(crudos, fecha), fecha)` (+ pagosHechos/ultimaSync; cuotas sólo si es el mismo mes) y la escena se rearma; aviso «Viendo <momento> · aproximado: …» y botón «Volver a hoy».
 - [ ] **Eventos del calendario comercial** (como Animal Crossing): decoración y avisos según la fecha real — cierre de mes (cuenta regresiva en la base), Buen Fin, regreso a clases, Navidad — con su efecto en la ciudad (más camiones, letreros de promoción) usando sólo fechas y datos existentes.
 
 ### Etapa 7 · Arte y sensación de juego
@@ -173,6 +175,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 00:35 · v3.90.63 · Barra de tiempo, paso 1: `momentosTiempo()` y `datosEnFecha()` puros y probados (reconstruyen facturas, envíos, contenedores y ventas mensuales a Ayer / Hace 7 días / Inicio de mes); falta la barra en la UI.
 - 2026-10-08 00:28 · v3.90.62 · Celebraciones: fuegos artificiales sobre la base cuando la cuota del mes ya se cruzó y confeti sobre las tiendas que volvieron a vender este mes tras no vender el anterior.
 - 2026-10-08 00:25 · v3.90.61 · Banderín de cuota: cada manzana con cuota lleva un banderín verde/ámbar/rojo (avance de cuota vs ritmo del mes) visible de cerca; al tocarlo abre la tarjeta de la ciudad.
 - 2026-10-08 00:23 · v3.90.60 · Cuota vs ritmo en tarjetas: la ciudad muestra «Cuota del mes» de sus cuentas y la tienda «Cuota de la cuenta» (% de la cuota · ritmo del mes), con la misma regla que la capa «Cuota».
