@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -268,4 +268,20 @@ test('torre de pronóstico: propuestas, líneas y avisos de arribo', () => {
   const choca = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 && b.z0 < a.z1; const t = caja(c.torre);
   assert.ok(!choca(t, caja(c.banco)) && !choca(t, caja(c.estacionamiento)) && t.z1 <= c.bardas[0].a.z, 'la torre no se encima y queda al norte de la barda');
   assert.ok(t.z0 >= c.caja.z0, 'dentro del terreno del campus'); assert.ok(construirModelo(d, hoy).torre);
+});
+
+test('racks del CEDIS por marca: valor, piezas y SKUs, top n + «otras»', () => {
+  const filas = [
+    { articulo: 'AC-1', inventario: 10, costoinventario: 1000 }, { articulo: 'AC-1', inventario: 5, costoinventario: 500 }, { articulo: 'AC-2', inventario: 2, costoinventario: 300 },
+    { articulo: 'BR-1', inventario: 4, costoinventario: 900 }, { articulo: 'GM-1', inventario: 1, costoinventario: 50 }, { articulo: 'XX-9', inventario: 3, costoinventario: 10 },
+    { articulo: 'CERO', inventario: 0, costoinventario: 999 }, null, { inventario: 5 },
+  ];
+  const marcas = new Map([['AC-1', 'Acteck'], ['AC-2', ' acteck '], ['BR-1', 'Balam Rush'], ['GM-1', 'Game Factor'], ['CERO', 'Acteck']]);
+  const r = racksPorMarca(filas, marcas);
+  assert.deepEqual(r.map((g) => [g.marca, g.valor, g.piezas, g.skus]), [['ACTECK', 1800, 17, 2], ['BALAM RUSH', 900, 4, 1], ['GAME FACTOR', 50, 1, 1], ['SIN MARCA', 10, 3, 1]], 'suma por marca normalizada; SKU × almacén cuenta una vez; sin existencia no cuenta');
+  const r2 = racksPorMarca(filas, Object.fromEntries(marcas), 2);
+  assert.equal(r2.length, 3); assert.deepEqual(r2[2], { marca: 'OTRAS', valor: 60, piezas: 4, skus: 2, marcas: 2 }, 'el resto va junto en «otras»');
+  assert.deepEqual(racksPorMarca(null, null), [], 'sin datos no rompe');
+  const m = construirModelo(d, hoy); assert.deepEqual(m.cedis.racksMarca, [], 'sin capa de SKU el CEDIS sigue');
+  assert.equal(construirModelo({ ...d, inventarioSku: filas, marcasSku: marcas }, hoy).cedis.racksMarca[0].marca, 'ACTECK');
 });

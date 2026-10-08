@@ -21,7 +21,7 @@ export function useCiudadData(enabled = true) {
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
       const seg = (p, nombre) => Promise.resolve(p).catch((e) => { console.warn(`[ciudad] ${nombre}:`, e?.message || e); return []; });
       const mes = hoy.getMonth() + 1; const mesPrev = mes === 1 ? 12 : mes - 1;
-      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast] = await Promise.all([
+      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast, inventarioSku, marcasSku] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
@@ -42,8 +42,11 @@ export function useCiudadData(enabled = true) {
         // Torre de pronóstico: propuestas (sin borradores) con sus líneas y avisos de arribo de ayer a 7 días (como Proyectos y forecast).
         seg(supabase.from('forecast_propuestas').select('id,estatus,cerrado_at,forecast_propuesta_lineas(confirmado,comprado_at)').neq('estatus', 'borrador').then((r) => { if (r.error) throw r.error; return r.data || []; }), 'forecast'),
         seg(supabase.from('forecast_avisos').select('propuesta_id,tipo,fecha_arribo,piezas_a_reservar').gte('fecha_arribo', iso(new Date(hoy.getTime() - 86400000))).lte('fecha_arribo', iso(new Date(hoy.getTime() + 7 * 86400000))).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'avisos forecast'),
+        // Interior del CEDIS: inventario por SKU (sólo [Inv Actual], como Inventario) y la marca de cada SKU (roadmap_sku) → racks por marca.
+        seg(fetchAll('v_inventario_almacen_medida', 'articulo,inventario,costoinventario', (q) => q.eq('en_inv_actual', true).gt('inventario', 0)), 'inventario por SKU'),
+        seg(fetchAll('roadmap_sku', 'sku,marca'), 'marcas'),
       ]);
-      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast }, hoy);
+      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) }, hoy);
     },
   });
 }

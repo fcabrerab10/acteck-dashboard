@@ -88,7 +88,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] Torre de pronóstico (3.90.29): torre de control al norte de la barda del CEDIS (`campus().torre`) con foco que parpadea verde/ámbar/rojo; tarjeta con propuestas abiertas, SKUs confirmados, comprados y arribos en 7 días (`forecast_propuestas` sin borradores + líneas y `forecast_avisos`, como Proyectos y forecast; `resumenTorre()` probado). «Abrir en el dashboard» → Proyectos y forecast.
   - [x] Precisión del pronóstico en la torre → movido a «Necesita a Fernando» (2026-10-07): `compararForecast()` vive en un `.jsx` con React y necesita la serie real por SKU de cada cliente.
 - [ ] **Interior del CEDIS**: al entrar, racks por familia/marca con su nivel de inventario y días de inventario (`v_medidas_inventario_*`), montacargas moviéndose si hubo salidas hoy.
-  - [ ] Datos: inventario por marca con las mismas fuentes de Inventario (`v_inventario_almacen_medida` con `en_inv_actual = true` + marca de `roadmap_sku`) → `racksPorMarca()` puro en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «otras»), probado.
+  - [x] (3.90.30) Datos: inventario por marca con las mismas fuentes de Inventario (`v_inventario_almacen_medida` con `en_inv_actual = true` + marca de `roadmap_sku`) → `racksPorMarca()` puro en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «otras»), probado.
   - [ ] «Entrar» al CEDIS: botón en su tarjeta que acerca la cámara y oculta el techo; un rack por marca con altura según su inventario y etiqueta; tocable con su tarjeta.
   - [ ] Días de inventario por marca (demanda de los 3 meses cerrados, `v_sellin_global_sku_anio`, como Inventario) y montacargas que sólo se mueven si hubo salidas hoy.
 - [ ] **Interior del puerto**: cada barco/contenedor tocable con PO, proveedor, ETA y piezas (`v_embarques_contenedor`).
@@ -142,6 +142,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-07 22:34 · v3.90.30 · Interior del CEDIS (paso 1, datos): `racksPorMarca()` en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «OTRAS», probado) con `v_inventario_almacen_medida` [Inv Actual] + marca de `roadmap_sku`; queda en `modelo.cedis.racksMarca` (capa que falla sola)
 - 2026-10-07 22:30 · v3.90.29 · Torre de pronóstico en la base: propuestas de forecast, SKUs confirmados/comprados y arribos de 7 días (atrasados en rojo), con tarjeta y foco de estado
 - 2026-10-07 22:26 · v3.90.28 · Banco/tesorería en la base: cartera vencida + pagos de la semana/vencidos (mismas reglas de Pagos V3), tarjeta con estado, bandera roja si hay vencidos; entra al encuadre de la Vista Base
 - 2026-10-07 22:20 · v3.90.27 · Tarjeta del edificio (paso 2): la escena avisa con `onSeleccion(pos)` dónde está en pantalla lo tocado (`posPantalla()` en `interaccion.js`, cada 3 cuadros y sólo si cambió) y la tarjeta lo sigue al mover la cámara o si es un vehículo; fuera de cuadro se acomoda arriba a la derecha

@@ -237,6 +237,23 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().t
   return { abiertas: ps.filter((p) => !p.cerrado_at).length, lineas: lineas.length, confirmadas: lineas.filter((l) => l.confirmado).length, compradas: lineas.filter((l) => l.comprado_at).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, a) => s + N(a.piezas_a_reservar), 0), atrasados: atrasados.length };
 }
 
+/** Racks del CEDIS por marca (etapa 3 · interior del CEDIS): filas de `v_inventario_almacen_medida` con `en_inv_actual = true`
+ *  (SKU × almacén, como Inventario) + marca de `roadmap_sku` (`marcas`: Map u objeto sku → marca). Suma valor (`costoinventario`)
+ *  y piezas por marca, cuenta SKUs distintos con existencia; top `n` por valor y el resto junto en «OTRAS». Sin marca → «SIN MARCA». */
+export function racksPorMarca(filas = [], marcas = null, n = 8) {
+  const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
+  const por = new Map();
+  for (const r of filas || []) {
+    if (!r?.articulo || !(N(r.inventario) > 0)) continue;
+    const m = marcaDe(r.articulo); const g = por.get(m) || { marca: m, valor: 0, piezas: 0, skus: new Set() };
+    g.valor += N(r.costoinventario); g.piezas += N(r.inventario); g.skus.add(r.articulo); por.set(m, g);
+  }
+  const todas = [...por.values()].map((g) => ({ marca: g.marca, valor: g.valor, piezas: g.piezas, skus: g.skus.size })).sort((a, b) => b.valor - a.valor || b.piezas - a.piezas || a.marca.localeCompare(b.marca));
+  const top = todas.slice(0, n), resto = todas.slice(n);
+  if (resto.length) top.push(resto.reduce((o, g) => ({ ...o, valor: o.valor + g.valor, piezas: o.piezas + g.piezas, skus: o.skus + g.skus, marcas: o.marcas + 1 }), { marca: 'OTRAS', valor: 0, piezas: 0, skus: 0, marcas: 0 }));
+  return top;
+}
+
 /** Tarjeta del edificio (una sola plantilla, estilo Hay Day): de un tag tocado → { titulo, sub, estado: 'verde'|'ambar'|'rojo'|null,
  *  numeros: [[etiqueta, valor]] (máx. 4), pagina }. Los números salen del mismo modelo (mismas vistas que el dashboard). */
 export function tarjetaDe(tag, modelo) {
@@ -360,7 +377,7 @@ export function construirModelo(d, hoy = new Date()) {
 
   // ── CEDIS ──
   const inv = (d.inventario || [])[0] || {};
-  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: N(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null };
+  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: N(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null, racksMarca: racksPorMarca(d.inventarioSku, d.marcasSku) };
 
   // ── Puerto: contenedores en camino o llegando ──
   const barcos = []; const tarimas = [];
