@@ -473,6 +473,7 @@ test('capa de cuota por ciudad', () => {
   assert.equal(c.porCiudad.get('GDL').texto, '60 % de la cuota del mes (1 cuenta) · ritmo 48 %');
   assert.equal(capaCiudades({ distritos: m.distritos }, 'cuota').porCiudad.get('GDL').tono, 'gris'); // sin datos de cuota: falla sola
   assert.equal(cuotasPorCuenta(null, null).size, 0);
+  assert.equal(cuotasPorCuenta([{ cliente_erp: ' 10 ', cuenta_sellout: 'a', cuota_venta: 5 }], [{ cliente: '10', fact_neta: 3 }, { cliente: 10, fact_neta: 'x' }]).get('a').venta, 3, 'cliente con espacios');
 });
 
 test('bitácora en vivo: eventos recientes', () => {

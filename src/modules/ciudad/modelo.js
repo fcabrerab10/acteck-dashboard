@@ -439,10 +439,10 @@ export function cuotaRitmo(m, cuentas = []) {
 export function cuotasPorCuenta(cuotas = [], ventas = []) {
   const cuentaDe = new Map(); const out = new Map();
   for (const r of cuotas || []) {
-    if (!r?.cuenta_sellout) continue; const k = String(r.cliente_erp ?? ''); if (k) cuentaDe.set(k, r.cuenta_sellout);
+    if (!r?.cuenta_sellout) continue; const k = String(r.cliente_erp ?? '').trim(); if (k) cuentaDe.set(k, r.cuenta_sellout);
     const o = out.get(r.cuenta_sellout) || { venta: 0, cuota: 0 }; o.cuota += Number(r.cuota_venta) || 0; out.set(r.cuenta_sellout, o);
   }
-  for (const v of ventas || []) { const c = cuentaDe.get(String(v?.cliente ?? '')); if (c) out.get(c).venta += Number(v.fact_neta) || 0; }
+  for (const v of ventas || []) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += Number(v.fact_neta) || 0; }
   return out;
 }
 
