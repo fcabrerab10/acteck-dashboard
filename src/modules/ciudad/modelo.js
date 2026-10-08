@@ -403,6 +403,16 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ir: null, ...x }));
 }
 
+// Cuota vs ritmo de un grupo de cuentas (3.90.60; la usan la capa «Cuota» y las tarjetas de ciudad y tienda): venta ÷ cuota
+// del mes de las cuentas con cuota (sumadas, el % se saca al final) contra el ritmo esperado al día de hoy. null = ninguna tiene cuota.
+export function cuotaRitmo(m, cuentas = []) {
+  const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h = m?.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date();
+  const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+  const cs = [...new Set(cuentas || [])].filter((c) => q.get(c)?.cuota > 0); if (!cs.length) return null;
+  const venta = cs.reduce((s, c) => s + q.get(c).venta, 0), cuo = cs.reduce((s, c) => s + q.get(c).cuota, 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
+  return { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', pct, ritmo: Math.round(ritmo * 100), n: cs.length, venta, cuota: cuo };
+}
+
 // Cuota por cuenta (capa «Cuota», 3.90.49): filas de `v_cuota_erp_mes` del mes (cliente_erp, cuenta_sellout, cuota_venta) y
 // de `mv_analisis_cliente_mes` del mes (cliente = código ERP, fact_neta), las mismas de Análisis → Map(cuenta → { venta, cuota }).
 // La venta se suma sólo de los clientes ERP con cuota (su cuenta sale de la fila de cuota); el % se saca al agregar, nunca se suma.
@@ -436,13 +446,9 @@ export function capaCiudades(m, capa) {
   }
   if (capa === 'cuota') {
     // Avance del mes de las cuentas con tiendas en la ciudad (venta ÷ cuota, sumadas) contra el ritmo esperado al día de hoy.
-    const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = m.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date();
-    const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
     for (const d of m.distritos || []) {
-      const cs = [...new Set((d.tiendas || []).map((t) => t.cuenta))].filter((c) => q.get(c)?.cuota > 0);
-      if (!cs.length) { porCiudad.set(d.ciudad, { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' }); continue; }
-      const venta = cs.reduce((s, c) => s + q.get(c).venta, 0), cuo = cs.reduce((s, c) => s + q.get(c).cuota, 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
-      porCiudad.set(d.ciudad, { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', valor: pct, texto: `${pct} % de la cuota del mes (${cs.length} cuenta${cs.length === 1 ? '' : 's'}) · ritmo ${Math.round(ritmo * 100)} %` });
+      const c = cuotaRitmo(m, (d.tiendas || []).map((t) => t.cuenta));
+      porCiudad.set(d.ciudad, c ? { tono: c.tono, valor: c.pct, texto: `${c.pct} % de la cuota del mes (${c.n} cuenta${c.n === 1 ? '' : 's'}) · ritmo ${c.ritmo} %` } : { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' });
     }
     return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
@@ -655,6 +661,7 @@ export function tarjetaDe(tag, modelo) {
     if (d) {
       const ts = d.tiendas || [], act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + (Number(x.importe) || 0), 0), r = ts.length ? act / ts.length : 0;
       t.numeros = [['Tiendas activas', `${act} de ${ts.length}`], ['Venta del mes', pesos(venta)], ['Clientes', num((d.cuentas || []).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num((d.vendedores || []).length)]];
+      const cq = cuotaRitmo(m, ts.map((x) => x.cuenta)); if (cq) { t.numeros.splice(2, 0, ['Cuota del mes', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
       t.estado = !ts.length ? null : r >= 0.6 ? 'verde' : r >= 0.3 ? 'ambar' : 'rojo';
     }
   } else if (tag.tipo === 'tienda') {
@@ -664,6 +671,7 @@ export function tarjetaDe(tag, modelo) {
       t.numeros = [['Este mes', pesos(s.importe)], ['Mes anterior', pesos(s.previo)]];
       if (s.vendedores) t.numeros.push(['Vendedores', num(s.vendedores)]);
       if (s.cartera?.vencido > 0) t.numeros.push(['Cartera vencida', pesos(s.cartera.vencido)]);
+      const cq = cuotaRitmo(m, [s.cuenta]); if (cq) { t.numeros.splice(2, 0, ['Cuota de la cuenta', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
       t.estado = s.cartera?.vencido > 0 ? 'rojo' : s.vendioMes ? 'verde' : s.vendio ? 'ambar' : 'rojo';
     }
   } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {

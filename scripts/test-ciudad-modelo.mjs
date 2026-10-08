@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -576,4 +576,18 @@ test('cintas de la cadena: mar, puerto y ciudades con grosor y tono', () => {
   const c = cintasCadena(m);
   assert.deepEqual(c.map((x) => [x.de, x.a, x.tono, x.peso]), [['mar', 'puerto', 'rojo', 2], ['puerto', 'cedis', 'rojo', 2], ['cedis', 'MONTERREY', 'verde', 4], ['cedis', 'PUEBLA', 'ambar', 3], ['cedis', 'LEON', 'rojo', 1]]);
   assert.equal(cintasCadena(m, 1).length, 3); assert.deepEqual(cintasCadena(null), []);
+});
+
+test('cuota vs ritmo en tarjetas de ciudad y tienda', () => {
+  const m = { hoyIso: '2026-10-15', cuotas: new Map([['a', { venta: 100, cuota: 200 }], ['b', { venta: 10, cuota: 100 }]]),
+    distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a', nombreCuenta: 'A', sucursal: 'S1', importe: 5, previo: 1, vendio: true, vendioMes: true }, { cuenta: 'b', nombreCuenta: 'B', sucursal: 'S2', importe: 0, previo: 0, vendio: false }, { cuenta: 'c', nombreCuenta: 'C', sucursal: 'S3', importe: 1, previo: 0, vendio: true }] }] };
+  assert.deepEqual(cuotaRitmo(m, ['a', 'a', 'c']), { tono: 'verde', pct: 50, ritmo: 48, n: 1, venta: 100, cuota: 200 });
+  assert.equal(cuotaRitmo(m, ['a', 'b']).pct, 37); assert.equal(cuotaRitmo(m, ['a', 'b']).tono, 'rojo'); assert.equal(cuotaRitmo({ ...m, hoyIso: '2026-10-13' }, ['a', 'b']).tono, 'ambar'); assert.equal(cuotaRitmo(m, ['b']).tono, 'rojo');
+  assert.equal(cuotaRitmo(m, ['c']), null); assert.equal(cuotaRitmo({}, ['a']), null);
+  let tj = tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL', titulo: 'GDL' }, m);
+  assert.deepEqual(tj.numeros[2], ['Cuota del mes', '37 % · ritmo 48 %']); assert.equal(tj.cuota, 'rojo');
+  tj = tarjetaDe({ tipo: 'tienda', ciudad: 'GDL', cuenta: 'a', titulo: 'A · S1' }, m);
+  assert.deepEqual(tj.numeros[2], ['Cuota de la cuenta', '50 % · ritmo 48 %']); assert.equal(tj.cuota, 'verde');
+  tj = tarjetaDe({ tipo: 'tienda', ciudad: 'GDL', cuenta: 'c', titulo: 'C · S3' }, m);
+  assert.ok(!tj.numeros.some((x) => /Cuota/.test(x[0]))); assert.equal(tj.cuota, undefined);
 });

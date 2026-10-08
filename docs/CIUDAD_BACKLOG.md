@@ -138,6 +138,8 @@ Principios que no se rompen en ninguna etapa:
 
 ### Etapa 6 · Dinero, tiempo y celebraciones
 - [ ] Cuota vs ritmo por ciudad/cuenta: banderín o halo verde-ámbar-rojo en la manzana y el dato en su tarjeta (vista de cuotas que ya usa el dashboard).
+  - [x] (3.90.60) `cuotaRitmo(m, cuentas)` puro (lo usan la capa «Cuota» y las tarjetas): «Cuota del mes» en la tarjeta de la ciudad y «Cuota de la cuenta» en la de la tienda (% · ritmo), con `t.cuota` = tono.
+  - [ ] Banderín verde-ámbar-rojo en cada manzana con cuota (siempre visible de cerca, sin prender la capa), con el tono de `cuotaRitmo()`.
 - [ ] Celebraciones discretas: fuegos artificiales sobre la base al cruzar la cuota del mes; confeti en una tienda que vuelve a vender tras 30 días sin venta.
 - [ ] Barra de tiempo: «Hoy / Ayer / Hace 7 días / Inicio de mes» que reconstruye la ciudad con los datos de esa fecha.
 - [ ] **Eventos del calendario comercial** (como Animal Crossing): decoración y avisos según la fecha real — cierre de mes (cuenta regresiva en la base), Buen Fin, regreso a clases, Navidad — con su efecto en la ciudad (más camiones, letreros de promoción) usando sólo fechas y datos existentes.
@@ -170,6 +172,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 00:23 · v3.90.60 · Cuota vs ritmo en tarjetas: la ciudad muestra «Cuota del mes» de sus cuentas y la tienda «Cuota de la cuenta» (% de la cuota · ritmo del mes), con la misma regla que la capa «Cuota».
 - 2026-10-08 00:21 · v3.90.59 · Cadena en la escena: con «Cadena» activa se dibujan cintas mar → puerto → CEDIS → ciudades, más gruesas con más volumen y en rojo/ámbar donde se atora; tocar un tramo de la tira lleva la cámara al puerto, la base o el mapa.
 - 2026-10-08 00:16 · v3.90.58 · Cadena de punta a punta (paso 1): botón «Cadena» con la tira mar → puerto → CEDIS → camiones → tiendas → clientes finales, volumen de cada tramo y en rojo/ámbar dónde se atora (ETA vencida, días de inventario, envíos lentos, tiendas sin venta).
 - 2026-10-07 23:59 · v3.90.57 · Seguir a alguien: botón «Seguir» en la tarjeta de vendedores, camiones y barcos; la cámara se queda pegada a él con una ficha «Siguiendo … · Soltar»; arrastrar, tocar el mapa o «Esc» lo suelta.
