@@ -20,7 +20,7 @@ import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE, capaCiudades, CAPA_TONOS } from './modelo.js';
 
-export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, onAdentro, vistaInicial, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, onAdentro, onSiguiendo, vistaInicial, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   const P = noche ? PAL.noche : PAL.dia;
@@ -92,6 +92,16 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     onAdentro?.(adentro);
   }
   const entrarCedis = (on) => entrar(on ? 'cedis' : false);
+  // Seguir a alguien (etapa 5, 3.90.57): la cámara se queda pegada a un vendedor, camión o barco (su malla fuente, que se
+  // mueve cada cuadro); cualquier arrastre/clic sobre el lienzo o «Esc» lo suelta y avisa con onSiguiendo(null).
+  let siguiendo = null; const _pos = new THREE.Vector3();
+  function seguir(tag) {
+    let obj = null; if (tag) raiz.traverse((o) => { if (!obj && o.isMesh && o.userData.tag === tag) obj = o; });
+    siguiendo = obj; if (obj) vista.zoomObj = Math.min(vista.zoomObj, 24); onSiguiendo?.(obj ? tag : null); return !!obj;
+  }
+  const soltar = () => { if (siguiendo) { siguiendo = null; onSiguiendo?.(null); } };
+  const onSoltarTecla = (e) => { if (e.key === 'Escape') soltar(); };
+  canvas.addEventListener('pointerdown', soltar); window.addEventListener('keydown', onSoltarTecla);
   // Capas de información (3.90.48): un disco translúcido por ciudad con el tono de `capaCiudades()`; se arma la primera vez
   // que se pide (no entra en las instancias) y de lejos crece con el zoom para leerse en el mapa. capa(null) las apaga.
   let capaGrupo = null; const capaDiscos = new Map();
@@ -137,6 +147,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     // cuadro): sin el tope en 0, `tiempo` quedaba negativo y caminar() pedía ruta[-1] → «reading '0'» (3.76.3).
     const dt = Math.max(0, Math.min(.11, (now - ultimo) / 1000)); // tope .11: en calma (10 fps) el tiempo sigue a velocidad real
     ultimo = now; tiempo += dt; // 3.90.3: desde 3.76.9 esta línea había quedado dentro del comentario y nada se movía
+    if (siguiendo) { siguiendo.getWorldPosition(_pos); vista.cxObj = _pos.x; vista.czObj = _pos.z; }
     camara.mover(dt, inter.st);
     aplicarDetalle(detalle, vista.zoom);
     if (++cuadros % 10 === 0) { const nb = nivelVista(vista, vistaBase(), destino ? vistaDe(destino) : null); if (nb !== nivel) { nivel = nb; onNivel?.(nb); } } if (adentro && cuadros % 10 === 0) { const l = LUGARES[adentro](); if (vista.zoomObj > 45 || Math.hypot(vista.cxObj - l.x, vista.czObj - l.z) > 30) entrar(false); } // se alejó: el edificio se cierra // cada 10 cuadros basta para el botón
@@ -152,13 +163,13 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);
   return {
-    resize, irA, entrar, entrarCedis, capa, get hayRacks() { return !!ctx.hayRacks; }, get hayOficina() { return !!ctx.oficinaAdentro; },
+    resize, irA, entrar, entrarCedis, capa, seguir, get hayRacks() { return !!ctx.hayRacks; }, get hayOficina() { return !!ctx.oficinaAdentro; },
     stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh && o.visible) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
     // Liberar memoria al salir (3.90.8): cada geometría, material y textura una sola vez (escena + cachés, aunque ya no estén
     // colgadas), buffers de instancias y mapas de sombra; se sueltan las listas para que la escena vieja no quede retenida.
     // Regresa lo que el renderer aún tenía vivo antes de cerrarse (debe ser 0 · 0; el harness lo revisa).
     destruir() {
-      viva = false; ro.disconnect(); inter.quitar(); document.removeEventListener('visibilitychange', onVisible);
+      viva = false; ro.disconnect(); inter.quitar(); document.removeEventListener('visibilitychange', onVisible); canvas.removeEventListener('pointerdown', soltar); window.removeEventListener('keydown', onSoltarTecla); siguiendo = null;
       const geoms = new Set([...geos.values(), ...(ctx.geoComp?.values() || [])]); const materiales = new Set(mats.values());
       scene.traverse((o) => { if (o.geometry) geoms.add(o.geometry); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => materiales.add(m)); if (o.isInstancedMesh || o.isLight) o.dispose?.(); });
       geoms.forEach((g) => g.dispose()); materiales.forEach((m) => { m.map?.dispose(); m.dispose(); });

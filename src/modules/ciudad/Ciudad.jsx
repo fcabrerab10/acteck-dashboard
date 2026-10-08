@@ -33,6 +33,7 @@ export default function Ciudad({ onNavegar }) {
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
   const [adentro, setAdentro] = useState(false); // false | 'cedis' (racks por marca) | 'oficina' (escritorios y sala, 3.90.38)
+  const [siguiendo, setSiguiendo] = useState(null); // tag que sigue la cámara (3.90.57)
   const [capa, setCapa] = useState(null); // capas de información (3.90.48): null | 'ventas' | 'cuota' | 'cartera'
   const [capaInfo, setCapaInfo] = useState(null); // lo que devolvió escena.capa(): título, leyenda y texto por ciudad
   const capaRef = useRef(null); capaRef.current = capa;
@@ -65,7 +66,7 @@ export default function Ciudad({ onNavegar }) {
           onHover: (tag, pos) => { hoverPos.current = tag ? pos : null; setHover(tag ? { tag, pos } : null); },
           onClick: (tag) => setSel(tag ? { tag, pos: hoverPos.current } : null),
           onSeleccion: (pos) => setSel((s) => (s ? { ...s, pos } : s)), // la tarjeta sigue al edificio; fuera de cuadro se acomoda arriba a la derecha
-          onNivel: setNivel, onAdentro: setAdentro, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
+          onNivel: setNivel, onAdentro: setAdentro, onSiguiendo: setSiguiendo, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
         });
         if (capaRef.current) setCapaInfo(escenaRef.current.capa(capaRef.current)); // al rehacer la escena (tema/clima) la capa sigue
         setListo(true);
@@ -204,6 +205,15 @@ export default function Ciudad({ onNavegar }) {
         ))}
       </div>
       </div>
+      {siguiendo && (
+        <div style={{ position: 'absolute', left: '50%', top: 56, transform: 'translateX(-50%)', zIndex: 4, ...card, padding: '6px 8px 6px 12px', display: 'flex', alignItems: 'center', gap: 10, maxWidth: 'min(520px, calc(100% - 28px))', boxShadow: '0 8px 24px rgba(0,0,0,.14)' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>Siguiendo</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{siguiendo.titulo} <span style={{ fontWeight: 400, color: theme.textMuted }}>· {siguiendo.sub}</span></div>
+          </div>
+          <button type="button" onClick={() => escenaRef.current?.seguir(null)} title="Soltar (o pulsa Esc)" style={{ flex: 'none', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.text, borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: TYPO.fontText }}>Soltar</button>
+        </div>
+      )}
       {/* hover */}
       {hover && !sel && (
         <div style={{ position: 'fixed', left: hover.pos.x, top: hover.pos.y, transform: 'translate(-50%,-100%)', zIndex: 60, ...card, padding: '6px 10px', pointerEvents: 'none', boxShadow: '0 8px 24px rgba(0,0,0,.14)', maxWidth: 320 }}>
@@ -232,6 +242,7 @@ export default function Ciudad({ onNavegar }) {
             {tj.pagina && <button type="button" onClick={() => navegar(s)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{tj.pagina === 'sellOut' ? 'Abrir en Sell Out' : 'Abrir en el dashboard'}</button>}
             {s.tipo === 'cedis' && escenaRef.current?.hayRacks && !adentro && <button type="button" onClick={() => { escenaRef.current?.entrarCedis(true); setSel(null); }} title="Ver los racks por marca dentro del CEDIS" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Entrar</button>}
             {s.tipo === 'oficina' && escenaRef.current?.hayOficina && !adentro && <button type="button" onClick={() => { escenaRef.current?.entrar('oficina'); setSel(null); }} title="Ver los escritorios y la sala de juntas" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Entrar</button>}
+            {['vendedorErp', 'camion', 'barco'].includes(s.tipo) && <button type="button" onClick={() => escenaRef.current?.seguir(s)} title="La cámara lo sigue; arrastra o pulsa Esc para soltarlo" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Seguir</button>}
             <button type="button" onClick={() => escenaRef.current?.irA(s)} style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ir ahí</button>
           </div>
         </div>
