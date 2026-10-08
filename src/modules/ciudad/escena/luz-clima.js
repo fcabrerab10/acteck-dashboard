@@ -1,9 +1,10 @@
 // Acteck Ciudad · paleta, luces y clima (cielo, nubes, lluvia). Clima de Open-Meteo para Guadalajara; si no llega, manda el tema.
 import * as THREE from 'three';
 
+// Día alineado al tema Marfil de docs/DESIGN_SYSTEM.md (3.90.72): oficina = bg #F7F3EC, banqueta = surface #EEE7DA, cielo sin azul frío.
 export const PAL = {
-  dia:   { cielo: 0xEAF2F7, suelo: 0xE8DCC2, suelo2: 0xDFCFAE, calle: 0xCDBFA3, banqueta: 0xE6DCC8, agua: 0x6FB1E8, agua2: 0x5AA0DA, cerro: 0xC9D8C3, cerro2: 0xB4C8B0, arbol: 0x7FA66B, arbol2: 0x6B9458, tronco: 0x8B6D4B,
-           oficina: 0xF6EEDC, oficinaTecho: 0xE0C6A2, cedis: 0xE8A77A, cedisTecho: 0xD98F63, tienda: 0xF3E7D3, tiendaTecho: 0xC98B5B, ventana: 0x3B4252, ventanaOn: 0xFFE9A8, camion: 0xF4F1EA, cabina: 0xE05A45, barco: 0xF4F1EA, barcoCab: 0x3B4252, nube: 0xFFFFFF, sol: 1.35, amb: .85, fog: 0xEAF2F7 },
+  dia:   { cielo: 0xEEF1EF, suelo: 0xE8DCC2, suelo2: 0xDFCFAE, calle: 0xCDBFA3, banqueta: 0xEEE7DA, agua: 0x6FB1E8, agua2: 0x5AA0DA, cerro: 0xC9D8C3, cerro2: 0xB4C8B0, arbol: 0x7FA66B, arbol2: 0x6B9458, tronco: 0x8B6D4B,
+           oficina: 0xF7F3EC, oficinaTecho: 0xE0C6A2, cedis: 0xE8A77A, cedisTecho: 0xD98F63, tienda: 0xF3E7D3, tiendaTecho: 0xC98B5B, ventana: 0x3B4252, ventanaOn: 0xFFE9A8, camion: 0xF4F1EA, cabina: 0xE05A45, barco: 0xF4F1EA, barcoCab: 0x3B4252, nube: 0xFFFFFF, sol: 1.35, amb: .85, fog: 0xEEF1EF },
   noche: { cielo: 0x121722, suelo: 0x343644, suelo2: 0x25252D, calle: 0x1B1C22, banqueta: 0x33343C, agua: 0x18324D, agua2: 0x15293F, cerro: 0x25303A, cerro2: 0x1E272F, arbol: 0x2E4A33, arbol2: 0x27402C, tronco: 0x3A2E24,
            oficina: 0x3B3F4B, oficinaTecho: 0x4A4F5C, cedis: 0x5C4335, cedisTecho: 0x6B4E3E, tienda: 0x3C3F4A, tiendaTecho: 0x5A4030, ventana: 0x1D1F26, ventanaOn: 0xFFD66B, camion: 0xC9C6BE, cabina: 0xE05A45, barco: 0xC9C6BE, barcoCab: 0x2A2E38, nube: 0x2A3140, sol: .4, amb: .55, fog: 0x121722 },
 };

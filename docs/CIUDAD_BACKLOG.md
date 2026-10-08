@@ -151,12 +151,12 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.67) `camionesTemporada()` puro y probado (facturas de `m.camiones` que salieron con Buen Fin ya empezado o en la semana del cierre) → caja roja y «· Buen Fin / · Cierre de mes» en el título del camión. Sin prueba visual: en el harness las facturas de ejemplo no caen en esas fechas.
 
 ### Etapa 7 · Arte y sensación de juego
-- [ ] Kit de piezas low-poly propio (edificios con bordes biselados, techos, ventanas iluminadas de noche, árboles variados) en lugar de cajas lisas; paleta cálida consistente con el sistema de diseño del dashboard (`docs/DESIGN_SYSTEM.md`).
+- [x] Kit de piezas low-poly propio (edificios con bordes biselados, techos, ventanas iluminadas de noche, árboles variados) en lugar de cajas lisas; paleta cálida consistente con el sistema de diseño del dashboard (`docs/DESIGN_SYSTEM.md`).
   - [x] (3.90.68) Tiendas: cuerpo con esquinas y orillas biseladas (`cajaBiselada()` en `escena/edificios.js`, geometría compartida e instanciada) y 2 ventanas por costado que se prenden de noche (todas si la tienda vendió, una sí y una no si no).
   - [x] (3.90.69) Techos: pretil al frente de cada tienda, tinaco negro en 2 de cada 3 y antena + platito en el resto; casitas de clientes finales alternan techo de cuatro aguas y de dos aguas (`techoDosAguas()`). Todo instanciado y en capa fina.
   - [x] (3.90.70) Oficina y nave del CEDIS con `cajaBiselada()`; ventanas de la oficina prendidas según presencia con `ventanasOficina()` puro y probado (todos menos los de viaje, repartidas parejo; sin personas, 2 de cada 3 como antes).
   - [x] (3.90.71) Árboles variados: `formaArbol(x, z)` puro y probado (pino / redondo / palma / arbusto y tono, estable por posición) y `plantarArboles()` con una pieza instanciada por forma.
-  - [ ] Paleta cálida revisada contra `docs/DESIGN_SYSTEM.md` (`PAL` de `escena/luz-clima.js`, día y noche).
+  - [x] (3.90.72) Paleta de día alineada al tema Marfil: oficina = `#F7F3EC`, banquetas = `#EEE7DA`, cielo/niebla `#EEF1EF` (sin azul frío; también el fondo de `Ciudad.jsx` y del harness). La de noche ya era neutra, sin cambios.
 - [ ] Animaciones de respuesta: el edificio «rebota» al tocarlo, burbujas que flotan, transiciones suaves de cámara con easing, gente que saluda al pasar el cursor.
 - [ ] Recorrido de bienvenida la primera vez (3 pasos: así se mueve, así se toca un edificio, así se viaja) y botón «?» para repetirlo.
 - [ ] Sonido ambiente opcional (apagado por defecto, interruptor en la esquina).
@@ -183,6 +183,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-10-08 01:01 · v3.90.72 · Kit low-poly, paso 5 (cierra el pendiente): paleta de día alineada al tema Marfil del sistema de diseño.
 - 2026-10-08 00:59 · v3.90.71 · Kit low-poly, paso 4: árboles variados (pinos, copas redondas, palmas y arbustos) por posición, todos instanciados.
 - 2026-10-08 00:57 · v3.90.70 · Kit low-poly, paso 3: oficina y CEDIS biselados; las ventanas de la oficina se prenden según quién está (los de viaje apagan la suya).
 - 2026-10-08 00:55 · v3.90.69 · Kit low-poly, paso 2: azoteas con tinacos, antenas y pretil; casitas con techo de dos aguas alternado.
