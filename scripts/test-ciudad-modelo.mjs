@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -254,4 +254,18 @@ test('banco: cartera vencida y pagos de la semana con las reglas de Pagos V3', a
   assert.ok(bk.z + bk.largo / 2 <= est.z - est.largo / 2, 'el banco queda al norte del estacionamiento sin encimarse');
   assert.ok(bk.z - bk.largo / 2 >= c.caja.z0 && bk.x - bk.ancho / 2 >= c.caja.x0, 'el banco está dentro del terreno del campus');
   assert.ok(construirModelo(d, hoy).banco, 'el modelo trae el banco');
+});
+test('torre de pronóstico: propuestas, líneas y avisos de arribo', () => {
+  const hoyIso = '2026-10-07';
+  const props = [{ estatus: 'activa', cerrado_at: null, forecast_propuesta_lineas: [{ confirmado: true, comprado_at: '2026-10-01' }, { confirmado: false }] }, { estatus: 'cerrada', cerrado_at: '2026-09-30', forecast_propuesta_lineas: [{ confirmado: true }] }, { estatus: 'borrador', forecast_propuesta_lineas: [{ confirmado: true }] }];
+  const avisos = [{ fecha_arribo: '2026-10-06', piezas_a_reservar: 5 }, { fecha_arribo: '2026-10-10', piezas_a_reservar: 10 }, { fecha_arribo: '2026-10-30', piezas_a_reservar: 99 }, { fecha_arribo: null }];
+  const r = resumenTorre(props, avisos, hoyIso);
+  assert.deepEqual(r, { abiertas: 1, lineas: 3, confirmadas: 2, compradas: 1, arribos7: 1, piezas7: 15, atrasados: 1 }, 'sin borradores; arribos hasta 7 días; ayer = atrasado');
+  assert.equal(tarjetaDe({ tipo: 'torre' }, { torre: r }).estado, 'rojo');
+  assert.equal(tarjetaDe({ tipo: 'torre' }, { torre: resumenTorre(props, [avisos[1]], hoyIso) }).estado, 'ambar');
+  assert.equal(tarjetaDe({ tipo: 'torre' }, { torre: resumenTorre(null, null, hoyIso) }).estado, 'verde', 'sin datos no rompe');
+  const c = campus({ x: 0, z: 0 }); const caja = (p) => ({ x0: p.x - p.ancho / 2, x1: p.x + p.ancho / 2, z0: p.z - p.largo / 2, z1: p.z + p.largo / 2 });
+  const choca = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 && b.z0 < a.z1; const t = caja(c.torre);
+  assert.ok(!choca(t, caja(c.banco)) && !choca(t, caja(c.estacionamiento)) && t.z1 <= c.bardas[0].a.z, 'la torre no se encima y queda al norte de la barda');
+  assert.ok(t.z0 >= c.caja.z0, 'dentro del terreno del campus'); assert.ok(construirModelo(d, hoy).torre);
 });

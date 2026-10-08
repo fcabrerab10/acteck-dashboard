@@ -21,7 +21,7 @@ export function useCiudadData(enabled = true) {
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
       const seg = (p, nombre) => Promise.resolve(p).catch((e) => { console.warn(`[ciudad] ${nombre}:`, e?.message || e); return []; });
       const mes = hoy.getMonth() + 1; const mesPrev = mes === 1 ? 12 : mes - 1;
-      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos] = await Promise.all([
+      const [perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, forecast, avisosForecast] = await Promise.all([
         seg(fetchAll('perfiles', 'user_id,nombre,email,puesto,rol,tipo,activo,avatar_url'), 'perfiles'),
         seg(cachedQuery(supabase.from('v_medidas_inventario').select('inv_actual,inv_actual_piezas,dias_inv,skus_con_stock,actualizado').limit(1)).then((r) => r.data || []), 'inventario'),
         seg(fetchAll('v_embarques_contenedor', 'contenedor,supplier,naviera,estatus,piezas,fob_usd,fecha_emision,fin_produccion,etd,eta_puerto,arribo_cedis', (q) => q.or(`arribo_cedis.is.null,arribo_cedis.gte.${hace40}`)), 'contenedores'),
@@ -39,8 +39,11 @@ export function useCiudadData(enabled = true) {
         seg(supabase.from('oc_envios').select('fecha_surtida,fecha_entregada,fecha_envio_erp,fecha_entrega_erp,guia_rastreo,paqueteria,oc_clientes(cliente_key,numero_oc)').or(`fecha_surtida.gte.${iso(new Date(hoy.getTime() - 30 * 86400000))},fecha_envio_erp.gte.${iso(new Date(hoy.getTime() - 30 * 86400000))}`).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'envíos'),
         // Etapa 3: banco/tesorería · pagos abiertos de Pagos V3 (sólo lo necesario para «vence en 7 días» y «vencidos»).
         seg(supabase.from('pagos').select('estado,monto,fecha_programada,fecha_compromiso').not('estado', 'in', '(pagado,cancelado,rechazado)').then((r) => { if (r.error) throw r.error; return r.data || []; }), 'pagos'),
+        // Torre de pronóstico: propuestas (sin borradores) con sus líneas y avisos de arribo de ayer a 7 días (como Proyectos y forecast).
+        seg(supabase.from('forecast_propuestas').select('id,estatus,cerrado_at,forecast_propuesta_lineas(confirmado,comprado_at)').neq('estatus', 'borrador').then((r) => { if (r.error) throw r.error; return r.data || []; }), 'forecast'),
+        seg(supabase.from('forecast_avisos').select('propuesta_id,tipo,fecha_arribo,piezas_a_reservar').gte('fecha_arribo', iso(new Date(hoy.getTime() - 86400000))).lte('fecha_arribo', iso(new Date(hoy.getTime() + 7 * 86400000))).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'avisos forecast'),
       ]);
-      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido } }, hoy);
+      return construirModelo({ perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast }, hoy);
     },
   });
 }

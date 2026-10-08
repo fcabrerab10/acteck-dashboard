@@ -61,6 +61,24 @@ export function banco(ctx) {
   return { x: b.x, z: b.z };
 }
 
+// Torre de pronóstico (3.90.29): torre de control delgada con antena; la luz de arriba parpadea con el estado del forecast.
+export function torre(ctx) {
+  const { P, box, add, oscuro, modelo, esc, animados } = ctx;
+  const b = ctx.campus?.torre || { x: esc.x + 4, z: esc.z - 16.5, ancho: 6, largo: 6 }; const r = modelo.torre || {};
+  const g = new THREE.Group(); g.position.set(b.x, 0, b.z);
+  g.add(box(b.ancho, .5, b.largo, P.banqueta));
+  const fuste = box(2.2, 10, 2.2, P.oficina); fuste.position.y = 5.5; g.add(fuste);
+  const mirador = box(3.6, 1.6, 3.6, P.ventana, { roughness: .35 }); mirador.position.y = 11.3; g.add(mirador);
+  const techo = box(4, .4, 4, P.oficinaTecho); techo.position.y = 12.3; g.add(techo);
+  const antena = box(.14, 2.6, .14, 0x8E8E93); antena.position.y = 13.8; g.add(antena);
+  const color = r.atrasados > 0 ? ACC.rojo : r.arribos7 > 0 ? ACC.naranja : ACC.verde;
+  const foco = box(.5, .5, .5, color, { emissive: color, emissiveIntensity: oscuro ? 1.8 : .6 }); foco.position.y = 15.2; g.add(foco);
+  animados.push((t) => { foco.visible = Math.sin(t * 3) > -.3; }); // parpadeo suave
+  arbol(ctx, g, 2.2, 2.2, .8);
+  add(g, { tipo: 'torre', titulo: 'Torre de pronóstico', sub: `${r.abiertas || 0} propuesta${r.abiertas === 1 ? '' : 's'} abierta${r.abiertas === 1 ? '' : 's'} · ${r.arribos7 || 0} arribo${r.arribos7 === 1 ? '' : 's'} en 7 días${r.atrasados ? ` · ${r.atrasados} atrasado${r.atrasados === 1 ? '' : 's'}` : ''}`, pagina: 'forecastReservas' });
+  return { x: b.x, z: b.z };
+}
+
 // CEDIS: nave, racks, tarimas descargando y montacargas.
 export function cedis(ctx) {
   const { P, M, G, box, add, oscuro, modelo, esc, animados } = ctx;
