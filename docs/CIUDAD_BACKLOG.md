@@ -83,11 +83,14 @@ Principios que no se rompen en ninguna etapa:
 - [x] **Tarjeta del edificio** al tocar (estilo menú de Hay Day, flotando junto al edificio, no panel lateral): nombre, 3–4 números clave de su pestaña, estado (verde/ámbar/rojo) y botón «Abrir en el dashboard». Una sola plantilla para todos.
   - [x] Plantilla única y tarjeta flotante (3.90.26): `tarjetaDe(tag, modelo)` en `modelo.js` (probada) da nombre, estado y hasta 4 números para oficina, CEDIS/montacargas, puerto, ciudad, tienda, persona y contenedor; `Ciudad.jsx` la dibuja junto a donde se tocó (si la cámara se mueve se acomoda arriba a la derecha). Umbrales de estado elegidos por el agente: CEDIS > 90 d ámbar / > 120 d rojo; ciudad ≥ 60 % tiendas activas verde / ≥ 30 % ámbar; tienda con cartera vencida o sin venta = rojo. Fernando puede ajustarlos.
   - [x] (3.90.27) Que la tarjeta siga al edificio mientras la cámara se mueve (la escena avisa la posición en pantalla del tag seleccionado, p. ej. `onSeleccion(pos)` cada ~15 cuadros) en vez de acomodarse en la esquina.
-- [ ] Banco/tesorería nuevo en la base (Pagos y cobranza: cartera vencida, pagos de la semana) y torre de pronóstico (Forecast: precisión, avisos), con datos de las vistas que ya usan esas pestañas.
+- [x] Banco/tesorería nuevo en la base (Pagos y cobranza: cartera vencida, pagos de la semana) y torre de pronóstico (Forecast: precisión, avisos), con datos de las vistas que ya usan esas pestañas.
   - [x] Banco/tesorería (3.90.28): edificio de columnas al norte del estacionamiento (`campus().banco`), tocable con tarjeta: cartera vencida (`v_vision_cartera_consolidada`, ya cargada) y pagos de Pagos V3 que vencen en 7 días o ya vencieron (`pagos` abiertos, reglas `venceEn`/`estaVencido` que `datos.js` inyecta a `resumenBanco()`); letrero verde/rojo y bandera roja si hay vencidos. «Abrir en el dashboard» → Pagos.
   - [x] Torre de pronóstico (3.90.29): torre de control al norte de la barda del CEDIS (`campus().torre`) con foco que parpadea verde/ámbar/rojo; tarjeta con propuestas abiertas, SKUs confirmados, comprados y arribos en 7 días (`forecast_propuestas` sin borradores + líneas y `forecast_avisos`, como Proyectos y forecast; `resumenTorre()` probado). «Abrir en el dashboard» → Proyectos y forecast.
-  - [ ] Precisión del pronóstico en la torre: el mismo cálculo de `comercial/proyectos/ForecastSeguimiento.jsx` (real vs forecast por SKU, % de precisión). Revisar si se puede reutilizar su función sin traer React; si no, anotarlo en «Necesita a Fernando».
+  - [x] Precisión del pronóstico en la torre → movido a «Necesita a Fernando» (2026-10-07): `compararForecast()` vive en un `.jsx` con React y necesita la serie real por SKU de cada cliente.
 - [ ] **Interior del CEDIS**: al entrar, racks por familia/marca con su nivel de inventario y días de inventario (`v_medidas_inventario_*`), montacargas moviéndose si hubo salidas hoy.
+  - [ ] Datos: inventario por marca con las mismas fuentes de Inventario (`v_inventario_almacen_medida` con `en_inv_actual = true` + marca de `roadmap_sku`) → `racksPorMarca()` puro en `modelo.js` (valor, piezas y SKUs por marca, top 8 + «otras»), probado.
+  - [ ] «Entrar» al CEDIS: botón en su tarjeta que acerca la cámara y oculta el techo; un rack por marca con altura según su inventario y etiqueta; tocable con su tarjeta.
+  - [ ] Días de inventario por marca (demanda de los 3 meses cerrados, `v_sellin_global_sku_anio`, como Inventario) y montacargas que sólo se mueven si hubo salidas hoy.
 - [ ] **Interior del puerto**: cada barco/contenedor tocable con PO, proveedor, ETA y piezas (`v_embarques_contenedor`).
 - [ ] **Interior de la oficina**: salas con las reuniones de hoy (agenda), escritorios por persona con su foto/nombre y su pendiente principal.
 - [ ] **Presencia en la oficina** (como Gather): cada persona aparece en reunión, de viaje o disponible según su agenda de hoy.
@@ -134,6 +137,7 @@ Principios que no se rompen en ninguna etapa:
 - Cualquier vista o tabla nueva en Supabase (el agente no corre migraciones).
 - `~/acteck/ciudad/.env.local` con `SUPABASE_ACCESS_TOKEN` para probar con datos reales en el harness.
 - Etapa 8: quién más puede entrar a la Ciudad.
+- Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
 
