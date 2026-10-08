@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -85,17 +85,20 @@ export function cedis(ctx) {
   const cedisPos = { ...(ctx.campus?.cedis || { x: esc.x + 9, z: esc.z - 2 }) };
   const g = new THREE.Group(); g.position.set(cedisPos.x, 0, cedisPos.z);
   g.add(box(22, .5, 16, P.banqueta));
-  const nave = box(16, 6, 11, P.cedis); nave.position.set(0, 3.25, -1); g.add(nave);
-  const techo = box(17, .7, 12, P.cedisTecho); techo.position.set(0, 6.6, -1); g.add(techo);
-  for (let i = 0; i < 3; i++) { const cl = box(2.2, .4, 3, P.cedisTecho); cl.position.set(-5 + i * 5, 7.1, -1); g.add(cl); instanciar(ctx, cl); }
-  for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(G(2.4, 2.6, .14), M(0x4A4F5C)); p.position.set(-5 + i * 5, 1.5, 4.57); g.add(p); instanciar(ctx, p); }
-  for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(G(1.6, .8, .12), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .12, roughness: .4 })); v.userData.detalle = 'fino'; v.position.set(-6.5 + i * 2.6, 4.6, 4.57); g.add(v); }
-  const rotulo = box(5.5, .9, .25, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); rotulo.position.set(0, 7.4, 4.6); g.add(rotulo);
+  // Cascarón (nave, techo, claraboyas, portones, ventanas y rótulo) en su propio grupo: «Entrar» lo oculta y deja ver los racks por marca (3.90.31).
+  const casco = new THREE.Group(); g.add(casco);
+  const nave = box(16, 6, 11, P.cedis); nave.position.set(0, 3.25, -1); casco.add(nave);
+  const techo = box(17, .7, 12, P.cedisTecho); techo.position.set(0, 6.6, -1); casco.add(techo);
+  for (let i = 0; i < 3; i++) { const cl = box(2.2, .4, 3, P.cedisTecho); cl.position.set(-5 + i * 5, 7.1, -1); casco.add(cl); } // sin instanciar: se ocultan con el cascarón
+  for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(G(2.4, 2.6, .14), M(0x4A4F5C)); p.position.set(-5 + i * 5, 1.5, 4.57); casco.add(p); }
+  for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(G(1.6, .8, .12), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .12, roughness: .4 })); v.userData.detalle = 'fino'; v.position.set(-6.5 + i * 2.6, 4.6, 4.57); casco.add(v); }
+  const rotulo = box(5.5, .9, .25, ACC.azul, { emissive: ACC.azul, emissiveIntensity: oscuro ? 1.6 : .35 }); rotulo.position.set(0, 7.4, 4.6); casco.add(rotulo);
   // racks al frente (altura por días de inventario) y tarimas descargando
   for (let i = 0; i < modelo.cedis.racks; i++) { const col = i % 2 ? 0xC58A3A : 0xD49A4A; for (let k = 0; k < 1 + (i % 3); k++) { const c = box(1.3, 1, 1.3, col); c.position.set(-9 + (i % 5) * 2.2, .75 + k * 1.05, 6.5 + Math.floor(i / 5) * 2); g.add(c); instanciar(ctx, c); } } // racks, claraboyas y portones: InstancedMesh con el tag del CEDIS (3.90.20)
   modelo.puerto.tarimas.slice(0, 6).forEach((tp, i) => { const c = box(1.3, 1, 1.3, 0xA86A2E); c.position.set(6 + (i % 3) * 2, .75, 6 + Math.floor(i / 3) * 2); c.userData.detalle = 'fino'; g.add(c); instanciar(ctx, c); }); // tarimas: capa fina (3.90.7)
   for (const [x, z] of [[-10.5, -6.5], [10.5, -6.5]]) arbol(ctx, g, x, z, 1.2);
   add(g, { tipo: 'cedis', titulo: 'CEDIS', sub: `$${(modelo.cedis.valor / 1e6).toFixed(1)} M · ${Math.round(modelo.cedis.dias)} días · ${modelo.puerto.tarimas.length} contenedor${modelo.puerto.tarimas.length === 1 ? '' : 'es'} descargando`, pagina: 'inventarioGlobal' });
+  try { interiorCedis(ctx, g, casco, cedisPos); } catch (e) { console.warn('[ciudad] interior CEDIS', e); } // capa nueva: si falla, el CEDIS sigue cerrado
   // montacargas
   const mc = new THREE.Group(); const cuerpo = box(1.6, 1, 1.1, ACC.naranja); mc.add(cuerpo); const mastil = box(.2, 2.2, .2, 0x444444); mastil.position.set(.9, 1.1, 0); mc.add(mastil); const carga = box(1, .8, 1, 0xC58A3A); carga.position.set(1.4, .6, 0); mc.add(carga);
   [[-.5, .5], [-.5, -.5], [.5, .5], [.5, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaMc', () => new THREE.CylinderGeometry(.3, .3, .25, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); mc.add(r); });
@@ -103,6 +106,37 @@ export function cedis(ctx) {
   mc.position.set(cedisPos.x - 2, 0, cedisPos.z + 5); add(mc, { tipo: 'montacargas', titulo: 'Montacargas', sub: 'moviendo tarimas', pagina: 'inventarioGlobal' });
   animados.push((t) => { const p = (t * .18) % 1; const x = cedisPos.x - 6 + Math.abs(Math.sin(p * Math.PI * 2)) * 12; mc.position.x = x; mc.rotation.y = Math.cos(p * Math.PI * 2) > 0 ? 0 : Math.PI; });
   return cedisPos;
+}
+
+// Interior del CEDIS (3.90.31): piso y un rack por marca (`modelo.cedis.racksMarca`, top 8 + «otras») con niveles de cajas según su
+// inventario y etiqueta; tocable con su tarjeta. Todo nace oculto; `ctx.cedisAdentro(true)` oculta el cascarón y lo muestra.
+// Las mallas se ocultan una por una (no sólo el grupo) porque el raycast de interaccion.js descarta por `visible` de cada malla.
+const COL_RACK = [0x0A84FF, 0xFF9F0A, 0x30D158, 0xBF5AF2, 0xFF453A, 0x5AC8FA, 0xFFD60A, 0x64D2FF, 0x8E8E93];
+function interiorCedis(ctx, g, casco, cedisPos) {
+  const { P, box, add, raiz, modelo } = ctx;
+  const racks = acomodoRacks(modelo.cedis?.racksMarca, { ancho: 14, largo: 8.4, cols: 3, maxNiveles: 5 });
+  const dentro = []; const etiquetas = [];
+  const piso = box(15.6, .06, 10.6, 0xD9D4C7); piso.position.set(0, .53, -1); g.add(piso); dentro.push(piso);
+  racks.forEach((r, i) => {
+    const rg = new THREE.Group(); rg.position.set(cedisPos.x + r.x, .56, cedisPos.z - 1 + r.z);
+    const alto = r.niveles * .95 + .2;
+    for (const [x, z] of [[-1.25, -.5], [1.25, -.5], [-1.25, .5], [1.25, .5]]) { const poste = box(.12, alto, .12, 0x3A4A6B); poste.position.set(x, alto / 2, z); rg.add(poste); }
+    for (let k = 0; k < r.niveles; k++) {
+      const repisa = box(2.6, .08, 1.1, 0xE58A2E); repisa.position.set(0, .1 + k * .95, 0); rg.add(repisa);
+      const caja = box(2.2, .7, .9, COL_RACK[i % COL_RACK.length]); caja.position.set(0, .5 + k * .95, 0); rg.add(caja);
+    }
+    add(rg, { tipo: 'rack', marca: r.marca, titulo: capital(r.marca), sub: `$${fmtK(r.valor)} · ${r.skus} SKU${r.skus === 1 ? '' : 's'}${r.marcas ? ` de ${r.marcas} marcas` : ''}`, pagina: 'inventarioGlobal' });
+    rg.traverse((o) => { if (o.isMesh) dentro.push(o); });
+    const et = etiqueta(ctx, capital(r.marca), '#1D1D1F'); et.position.set(rg.position.x, .56 + alto + 1, rg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);
+  });
+  const mallasCasco = []; casco.traverse((o) => { if (o.isMesh) mallasCasco.push(o); });
+  const poner = (on) => {
+    casco.visible = !on; for (const o of mallasCasco) o.visible = !on;
+    for (const o of dentro) o.visible = on;
+    for (const et of etiquetas) et.userData.minZoom = on ? 40 : -1; // fuera: nunca (escalarEtiquetas compara con el zoom)
+  };
+  poner(false);
+  ctx.cedisAdentro = poner; ctx.hayRacks = racks.length > 0;
 }
 
 // Campus de la base: calles con banqueta y raya punteada (avenida al frente, calle interior entre oficina y CEDIS) y el

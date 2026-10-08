@@ -30,6 +30,7 @@ export default function Ciudad({ onNavegar }) {
   const [listo, setListo] = useState(false);
   const [nivel, setNivel] = useState('base'); // 'base' | 'ciudad' | 'lejos': un solo botón que ofrece ir al otro nivel
   const [fallo, setFallo] = useState(null);
+  const [adentro, setAdentro] = useState(false); // dentro del CEDIS (racks por marca)
   const [vistaCam, setVistaCam] = useState(null); // { cx, cz, zoom } de la cámara para el marcador del minimapa
   // Última vista por usuario (localStorage, puede fallar en privado): la escena arranca ahí, también al cambiar tema o clima.
   const clave = claveVista(perfil?.user_id);
@@ -59,7 +60,7 @@ export default function Ciudad({ onNavegar }) {
           onHover: (tag, pos) => { hoverPos.current = tag ? pos : null; setHover(tag ? { tag, pos } : null); },
           onClick: (tag) => setSel(tag ? { tag, pos: hoverPos.current } : null),
           onSeleccion: (pos) => setSel((s) => (s ? { ...s, pos } : s)), // la tarjeta sigue al edificio; fuera de cuadro se acomoda arriba a la derecha
-          onNivel: setNivel, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
+          onNivel: setNivel, onAdentro: setAdentro, onVista: alMoverVista, vistaInicial: ultimaVista.current.v,
         });
         setListo(true);
       } catch (e) { console.error('[ciudad] escena', e); setFallo(String(e?.stack || e?.message || e)); }
@@ -121,6 +122,7 @@ export default function Ciudad({ onNavegar }) {
             </div>
           )}
         </div>
+        {adentro && <button type="button" onClick={() => { escenaRef.current?.entrarCedis(false); escenaRef.current?.irA({ tipo: 'base' }); }} title="Salir del CEDIS y volver a la base" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: theme.text }}>← Salir del CEDIS</button>}
         {nivel === 'ciudad'
           ? <button type="button" onClick={() => escenaRef.current?.irA({ tipo: 'mapa' })} title="Regresar al mapa de México" style={{ ...card, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600 }}>← <MapaIcono size={14} />Volver al mapa</button>
           : nivel === 'lejos'
@@ -189,6 +191,7 @@ export default function Ciudad({ onNavegar }) {
           {tj.numeros.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 10 }}>{tj.numeros.map(([l, v]) => <div key={l} style={{ background: oscuro ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)', borderRadius: 9, padding: '6px 8px' }}><div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div></div>)}</div>}
           <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
             {tj.pagina && <button type="button" onClick={() => navegar(s)} style={{ flex: 1, height: 36, border: 0, borderRadius: 10, background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Abrir en el dashboard</button>}
+            {s.tipo === 'cedis' && escenaRef.current?.hayRacks && !adentro && <button type="button" onClick={() => { escenaRef.current?.entrarCedis(true); setSel(null); }} title="Ver los racks por marca dentro del CEDIS" style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Entrar</button>}
             <button type="button" onClick={() => escenaRef.current?.irA(s)} style={{ height: 36, padding: '0 12px', border: `1px solid ${theme.border}`, borderRadius: 10, background: 'transparent', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ir ahí</button>
           </div>
         </div>

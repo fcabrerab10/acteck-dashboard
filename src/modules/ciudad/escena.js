@@ -1,6 +1,6 @@
 // Acteck Ciudad · escena 3D (three.js, low-poly cálido). Sólo se importa desde Ciudad.jsx dentro de un import()
 // dinámico: el chunk `vendor-three`, este archivo y escena/* no viajan con ninguna otra pestaña.
-//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'ciudad'|'lejos'), onVista({ cx, cz, zoom }), onSeleccion({x,y}|null) = dónde está en pantalla lo tocado, oscuro }) → { destruir(), resize(), irA(tag), stats() }
+//   crearEscena(canvas, modelo, { onHover(obj|null, {x,y}), onClick(obj|null), onNivel('base'|'ciudad'|'lejos'), onVista({ cx, cz, zoom }), onSeleccion({x,y}|null) = dónde está en pantalla lo tocado, oscuro }) → { destruir(), resize(), irA(tag), entrarCedis(on), hayRacks, stats() }; onAdentro(bool) avisa si se está dentro del CEDIS
 //   Arranca en la Vista Base (oficina + CEDIS + puerto de cerca); irA({ tipo: 'base' }) regresa a ella e irA({ tipo: 'mapa' }) encuadra México completo.
 //   irA({ tipo: 'punto', x, z }) mueve la cámara a ese punto sin cambiar el zoom (minimapa); onVista avisa el centro y zoom
 //   de la cámara (como mucho ~4 veces por segundo y sólo si cambió) para el marcador del minimapa.
@@ -20,7 +20,7 @@ import { crearInteraccion } from './escena/interaccion.js';
 import { prepararDetalle, aplicarDetalle } from './escena/detalle.js';
 import { encuadre, campus, vistaMapa, vistaCiudad, nivelVista, DETALLE } from './modelo.js';
 
-export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, vistaInicial, oscuro = false, clima = null } = {}) {
+export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel, onVista, onSeleccion, onAdentro, vistaInicial, oscuro = false, clima = null } = {}) {
   // clima = { esDia, nubes (0-1), lluvia (bool), temp } de Open-Meteo para Guadalajara; si no llega, manda el tema.
   const noche = clima ? !clima.esDia : oscuro;
   const P = noche ? PAL.noche : PAL.dia;
@@ -79,6 +79,9 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   const vistaBase = () => encuadre(puntosBase, { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
   const b0 = vistaInicial && Number.isFinite(vistaInicial.cx) && Number.isFinite(vistaInicial.cz) && Number.isFinite(vistaInicial.zoom) ? vistaInicial : vistaBase(); if (b0) { vista.cx = vista.cxObj = b0.cx; vista.cz = vista.czObj = b0.cz; vista.zoom = vista.zoomObj = b0.zoom; resize(); camara.colocarCam(); }
 
+  // Interior del CEDIS (3.90.31): «Entrar» oculta el cascarón, muestra los racks por marca y acerca la cámara; al alejarse sale solo.
+  let adentro = false;
+  function entrarCedis(on) { if (!ctx.cedisAdentro || adentro === !!on) return; adentro = !!on; ctx.cedisAdentro(adentro); for (const o of raiz.children) if (o.userData.nube) o.visible = !adentro; /* las nubes tapaban la nave de cerca */ onAdentro?.(adentro); if (adentro) { vista.cxObj = cedisPos.x; vista.czObj = cedisPos.z - 1; vista.zoomObj = 12; } }
   let destino = null; // ciudad a la que viajaste: con ella el botón ofrece «← Volver al mapa»
   const vistaDe = (ciudad) => vistaCiudad(distritoPos.get(ciudad), { ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) });
   function irA(tag) { if (tag?.tipo === 'punto') { if (Number.isFinite(tag.x) && Number.isFinite(tag.z)) { vista.cxObj = tag.x; vista.czObj = tag.z; } return; } if (tag?.tipo === 'mapa') { const m = vistaMapa({ ang: vista.ang, aspecto: (canvas.clientWidth || 800) / (canvas.clientHeight || 600) }); if (m) { vista.cxObj = m.cx; vista.czObj = m.cz; vista.zoomObj = m.zoom; } return; } if (tag?.tipo === 'base') { const b = vistaBase(); if (b) { vista.cxObj = b.cx; vista.czObj = b.cz; vista.zoomObj = b.zoom; } return; } let p = null; if (tag?.tipo === 'oficina') p = ofiPos; else if (tag?.tipo === 'cedis') p = cedisPos; else if (tag?.tipo === 'puerto') p = puertoPos; else if (tag?.ciudad && distritoPos.has(tag.ciudad)) { const c = vistaDe(tag.ciudad); if (c) { destino = tag.ciudad; vista.cxObj = c.cx; vista.czObj = c.cz; vista.zoomObj = c.zoom; return; } p = distritoPos.get(tag.ciudad); } if (!p) return; vista.cxObj = p.x; vista.czObj = p.z; vista.zoomObj = 18; }
@@ -108,7 +111,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
     ultimo = now; tiempo += dt; // 3.90.3: desde 3.76.9 esta línea había quedado dentro del comentario y nada se movía
     camara.mover(dt, inter.st);
     aplicarDetalle(detalle, vista.zoom);
-    if (++cuadros % 10 === 0) { const nb = nivelVista(vista, vistaBase(), destino ? vistaDe(destino) : null); if (nb !== nivel) { nivel = nb; onNivel?.(nb); } } // cada 10 cuadros basta para el botón
+    if (++cuadros % 10 === 0) { const nb = nivelVista(vista, vistaBase(), destino ? vistaDe(destino) : null); if (nb !== nivel) { nivel = nb; onNivel?.(nb); } } if (adentro && cuadros % 10 === 0 && (vista.zoomObj > 45 || Math.hypot(vista.cxObj - cedisPos.x, vista.czObj - cedisPos.z) > 30)) entrarCedis(false); // se alejó: el CEDIS se cierra // cada 10 cuadros basta para el botón
     if (onVista && cuadros % 15 === 0) { const v = { cx: Math.round(vista.cx), cz: Math.round(vista.cz), zoom: Math.round(vista.zoom) }; const k = `${v.cx}|${v.cz}|${v.zoom}`; if (k !== vistaAvisada) { vistaAvisada = k; onVista(v); } } // minimapa
     for (const f of animados) f(tiempo);
     actualizarInstancias(ctx);
@@ -121,7 +124,7 @@ export function crearEscena(canvas, modelo, { onHover, onClick, onError, onNivel
   requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(canvas);
   return {
-    resize, irA,
+    resize, irA, entrarCedis, get hayRacks() { return !!ctx.hayRacks; },
     stats({ dibujar = false } = {}) { if (dibujar) R.render(scene, cam); let mallas = 0; raiz.traverse((o) => { if (o.isMesh && o.visible) mallas++; }); return { fps: med.fps, llamadas: R.info.render.calls, triangulos: R.info.render.triangles, geometrias: R.info.memory.geometries, mallas }; },
     // Liberar memoria al salir (3.90.8): cada geometría, material y textura una sola vez (escena + cachés, aunque ya no estén
     // colgadas), buffers de instancias y mapas de sombra; se sueltan las listas para que la escena vieja no quede retenida.

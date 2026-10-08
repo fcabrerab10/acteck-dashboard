@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -284,4 +284,18 @@ test('racks del CEDIS por marca: valor, piezas y SKUs, top n + «otras»', () =>
   assert.deepEqual(racksPorMarca(null, null), [], 'sin datos no rompe');
   const m = construirModelo(d, hoy); assert.deepEqual(m.cedis.racksMarca, [], 'sin capa de SKU el CEDIS sigue');
   assert.equal(construirModelo({ ...d, inventarioSku: filas, marcasSku: marcas }, hoy).cedis.racksMarca[0].marca, 'ACTECK');
+});
+
+test('interior del CEDIS: acomodo de racks y tarjeta del rack', () => {
+  const racks = [{ marca: 'ACTECK', valor: 1000, piezas: 10, skus: 3 }, { marca: 'BALAM RUSH', valor: 500, piezas: 4, skus: 1 }, { marca: 'GAME FACTOR', valor: 1, piezas: 1, skus: 1 }, { marca: 'OTRAS', valor: 0, piezas: 2, skus: 2, marcas: 4 }];
+  const a = acomodoRacks(racks, { ancho: 12, largo: 8, cols: 3, maxNiveles: 5 });
+  assert.deepEqual(a.map((r) => r.niveles), [5, 3, 1, 1], 'niveles por valor frente a la mayor, mínimo 1');
+  assert.deepEqual(a.map((r) => [r.x, r.z]), [[-4, -2], [0, -2], [4, -2], [-4, 2]], 'rejilla centrada en la nave');
+  assert.ok(a.every((r) => Math.abs(r.x) < 6 && Math.abs(r.z) < 4), 'todos dentro de la nave');
+  assert.deepEqual(acomodoRacks(null), []); assert.equal(acomodoRacks([{ marca: 'X', valor: 0 }])[0].niveles, 1, 'sin valor no rompe');
+  const m = { cedis: { racksMarca: racks } };
+  const t = tarjetaDe({ tipo: 'rack', marca: 'ACTECK', titulo: 'ACTECK', pagina: 'inventarioGlobal' }, m);
+  assert.deepEqual(t.numeros, [['Inventario', '$1 K'], ['Piezas', '10'], ['SKUs con stock', '3'], ['Del CEDIS', '67 %']]);
+  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'OTRAS' }, m).numeros[3][0], 'Marcas');
+  assert.deepEqual(tarjetaDe({ tipo: 'rack', marca: 'NADA' }, m).numeros, [], 'marca que ya no está no rompe');
 });

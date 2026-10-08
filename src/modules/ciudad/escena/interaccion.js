@@ -4,6 +4,9 @@ import * as THREE from 'three';
 import { tagDe } from './instancias.js';
 import { zoomEnRango } from '../modelo.js';
 
+// Visible de verdad: la malla y todos sus padres (el cascarón del CEDIS se oculta por grupo al «Entrar», 3.90.31).
+const visibleArriba = (o) => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
+
 export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn }, { onClick }) {
   const st = { hov: null, drag: null, mouse: { x: -1, y: -1 }, inercia: { x: 0, z: 0 }, teclas: {}, ultimoInput: performance.now() };
   // 3.90.8: todos los eventos cuelgan de un AbortController; quitar() los suelta todos. Ciudad.jsx rearma la escena sobre el
@@ -45,7 +48,7 @@ export function crearInteraccion(canvas, { cam, vista, colocarCam, colocarCamEn 
   // Posición en pantalla (px del documento) encima de un objeto o de una de sus instancias; null si queda fuera del lienzo.
   function posPantalla(obj, id, dentro = false) { const p = new THREE.Vector3(); if (obj.isInstancedMesh && id != null) { obj.getMatrixAt(id, mtx); p.setFromMatrixPosition(mtx).applyMatrix4(obj.matrixWorld); } else obj.getWorldPosition(p); p.y += (obj.geometry?.parameters?.height || 1) + 1.2; const sp = p.project(cam); if (dentro && (Math.abs(sp.x) > 1 || Math.abs(sp.y) > 1)) return null; const r = canvas.getBoundingClientRect(); return { x: r.left + (sp.x + 1) / 2 * r.width, y: r.top + (1 - sp.y) / 2 * r.height }; }
   function hover(interact, onHover) {
-    if (st.mouse.x >= 0 && !st.drag) { const r = canvas.getBoundingClientRect(); vec.set(((st.mouse.x - r.left) / r.width) * 2 - 1, -((st.mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false).filter((h) => h.object.visible); /* lo oculto por zoom no se toca */ st.hov = hs.length ? hs[0].object : null; st.hovId = hs.length ? hs[0].instanceId : undefined; }
+    if (st.mouse.x >= 0 && !st.drag) { const r = canvas.getBoundingClientRect(); vec.set(((st.mouse.x - r.left) / r.width) * 2 - 1, -((st.mouse.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(vec, cam); const hs = ray.intersectObjects(interact, false).filter((h) => visibleArriba(h.object)); /* lo oculto por zoom no se toca */ st.hov = hs.length ? hs[0].object : null; st.hovId = hs.length ? hs[0].instanceId : undefined; }
     const hov = st.hov; const tag = hov ? tagDe(hov, st.hovId) : null;
     if (tag !== hovPrev) { hovPrev = tag; canvas.style.cursor = tag ? 'pointer' : 'grab'; }
     if (onHover) { if (tag) onHover(tag, posPantalla(hov, st.hovId)); else onHover(null); }

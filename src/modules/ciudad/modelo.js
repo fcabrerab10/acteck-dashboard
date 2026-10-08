@@ -254,6 +254,16 @@ export function racksPorMarca(filas = [], marcas = null, n = 8) {
   return top;
 }
 
+/** Acomodo de los racks dentro de la nave del CEDIS (interior, 3.90.31): rejilla de `cols` columnas centrada en la nave
+ *  (`ancho` × `largo`, centro 0,0) y `niveles` de cajas según el valor de la marca frente a la mayor (1…`maxNiveles`).
+ *  Nada escala por tamaño de cliente: aquí escala el inventario propio de Acteck por marca, que es lo que se ve en Inventario. */
+export function acomodoRacks(racks = [], { ancho = 14, largo = 9, cols = 3, maxNiveles = 5 } = {}) {
+  const rs = (racks || []).filter((r) => r && r.marca); if (!rs.length) return [];
+  const max = Math.max(...rs.map((r) => N(r.valor))); const filas = Math.ceil(rs.length / cols);
+  const dx = ancho / cols, dz = largo / filas;
+  return rs.map((r, i) => ({ ...r, x: -ancho / 2 + dx * ((i % cols) + .5), z: -largo / 2 + dz * (Math.floor(i / cols) + .5), niveles: max > 0 ? Math.max(1, Math.min(maxNiveles, Math.ceil(N(r.valor) / max * maxNiveles))) : 1 }));
+}
+
 /** Tarjeta del edificio (una sola plantilla, estilo Hay Day): de un tag tocado → { titulo, sub, estado: 'verde'|'ambar'|'rojo'|null,
  *  numeros: [[etiqueta, valor]] (máx. 4), pagina }. Los números salen del mismo modelo (mismas vistas que el dashboard). */
 export function tarjetaDe(tag, modelo) {
@@ -270,6 +280,12 @@ export function tarjetaDe(tag, modelo) {
     const c = m.cedis, d = Number(c.dias) || 0;
     t.numeros = [['Inventario', pesos(c.valor)], ['Días de inventario', num(Math.round(d))], ['Piezas', num(c.piezas)], ['SKUs con stock', num(c.skus)]];
     t.estado = d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde';
+  } else if (tag.tipo === 'rack') {
+    const r = (m.cedis?.racksMarca || []).find((x) => x.marca === tag.marca);
+    if (r) {
+      const tot = (m.cedis.racksMarca || []).reduce((s2, x) => s2 + (Number(x.valor) || 0), 0);
+      t.numeros = [['Inventario', pesos(r.valor)], ['Piezas', num(r.piezas)], ['SKUs con stock', num(r.skus)], [r.marcas ? 'Marcas' : 'Del CEDIS', r.marcas ? num(r.marcas) : `${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`]];
+    }
   } else if (tag.tipo === 'puerto' && m.puerto) {
     const p = m.puerto, b = p.barcos || [], pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
     t.numeros = [['Navegando', num(b.length)], ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num((p.tarimas || []).length)]];
