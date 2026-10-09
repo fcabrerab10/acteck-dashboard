@@ -27,10 +27,14 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 - [x] «Dónde está el movimiento» (Resumen y Sell Out del cliente) y «<Cuenta> frente al resto» (Sell Out del cliente) en la web (3.92.0).
 
+## Web pestaña por pestaña (desde el 8-oct, orden del árbol del menú)
+- [ ] Inicio: mockup 2523721b (A · dos columnas · B · seis tarjetas) por revisar.
+- [ ] Siguen: Agenda (incluida la pestaña de pendientes, con las mismas reglas que se decidan hoy) → Estado de Resultados → Análisis por Cliente → Sell In → Sell Out → Inventario → Estrategia de Precios → S&OP → Proyectos y forecast → Propuestas → Tracking → Pagos → Crédito y Cobranza → clientes propios → Actividad del equipo → Administración.
+
 ## Aprobado, por construir
 - [x] Pagos del cliente propio (celular): pestaña Pagos en la ficha con flujo del mes, rebate según la regla, apoyo por producto, apoyos por costo convenio y reglas editables (% y base) (3.85.0–3.85.1).
 - [x] Cobranza general (celular) rehecha con el formato estándar sobre los tres propios (3.86.0).
-- [ ] **Cartera de TODO el ERP**: la base sólo tiene estados de cuenta de los tres propios; falta una vista de cuentas por cobrar del ERP por el puente (no tocar `bridge/` en el viaje). Cuando exista, Cobranza general la toma sin cambiar de formato.
+- [ ] **Cartera de TODO el ERP** (Fernando: se trabaja hasta noviembre 2026): la base sólo tiene estados de cuenta de los tres propios; falta una vista de cuentas por cobrar del ERP por el puente (no tocar `bridge/` en el viaje). Cuando exista, Cobranza general la toma sin cambiar de formato.
 - [x] Propuestas (celular) rehechas: lista estándar, sugeridos en el armador, Revisar con lista por SKU y sus otros precios, WhatsApp · Excel · Enviar (3.87.0).
 - [x] Actividad del equipo (celular) rehecha según el mockup 2c58bf4c aprobado: Equipo (hero, 4 tarjetas, actividad por día 4 semanas, umbral en chips, lista con ritmo · día armado · plan vs real · vencidos · estado, externos plegados) · Persona (ritmo en el sub, Su día · Semana · Pendientes · Evaluación, hero del día, 4 tarjetas, mandar mensaje, reasignar pendientes) · Evaluación (hero con resultado y bono, dictado, «Cerrar evaluación», abre en el mes por cerrar) (3.88.0–3.88.1; verificada con la sesión de Fernando el 6-oct). 3.88.2: celular en el perfil (Preferencias › Yo y Administración) para que «Mandar mensaje» abra WhatsApp directo.
 - [x] Correos: plantilla del dashboard en todos (vigilante, reservas y arribos pasaban en texto plano) (3.85.2); prueba del vigilante pedida para la corrida de las 07:20.
@@ -42,7 +46,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 ## Responsivo (lo que Fernando reportó el 5-oct)
 - [x] Inicio celular: gráfica y pay con sus 16 px; gráfica medida al ancho con altura fija (GraficaScrub, 2026-10-05).
 - [x] Misma regla en Agenda Día y en las pantallas nuevas (todas usan la GraficaScrub genérica).
-- [ ] Navegación general: Fernando manda capturas de iPhone e iPad mini (no se reproduce en la emulación: área segura).
+- [x] Auditoría sin capturas (8-oct, 3.92.1): a 393×852 (iPhone) y 744×1133 (iPad mini vertical) no hay desbordes ni contenido tapado; los botones de texto que medían 17–23 px (chips de pay, «Año completo ›», «hora de cerrar el día») ya tienen 30–34 px de área táctil. Si en el iPhone real algo sigue mal, una sola captura basta para reproducirlo.
 
 ## Reportado el 5-oct, por atender
 - [x] S&OP en el celular «ni siquiera me deja verla» (corregido 3.80.1 y rehecha en 3.83.0): reproducir con la sesión de Fernando y corregir.

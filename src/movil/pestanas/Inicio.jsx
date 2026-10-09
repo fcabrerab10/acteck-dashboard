@@ -103,7 +103,7 @@ export default function Inicio() {
         <div style={{ marginTop: 18, padding: '0 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '0 4px 6px 2px' }}>
             <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text }}>{anio} frente a {anio - 1}</span>
-            <span style={{ fontSize: 11.5, color: theme.textMuted }}>{mes !== 'anio' ? <button type="button" onClick={() => setMes('anio')} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 500, padding: 0, cursor: 'pointer' }}>Año completo ›</button> : metaGrafica}</span>
+            <span style={{ fontSize: 11.5, color: theme.textMuted }}>{mes !== 'anio' ? <button type="button" onClick={() => setMes('anio')} style={{ border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 12.5, fontWeight: 500, padding: '8px 0 8px 10px', margin: '-8px 0', cursor: 'pointer' }}>Año completo ›</button> : metaGrafica}</span>
           </div>
           <div style={{ background: theme.surface, borderRadius: 14, padding: '10px 10px 6px' }}>
             <GraficaScrub meses={c.meses} anio={anio} formato={fmtM} mesActivo={mes === 'anio' ? null : mes - 1} onMes={(m) => setMes(m)} />

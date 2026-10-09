@@ -48,7 +48,7 @@ export default function DiaM({ d, uid, propietario, puedeEditar, hoy, abrirItem,
     <div style={{ paddingBottom: 120 }}>
       <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', alignItems: 'center' }}>
         {FASES.map(([id, l]) => <button key={id} type="button" onClick={() => setFase(id)} style={chip(f === id)}>{l}</button>)}
-        <button type="button" onClick={() => esMia && puedeEditar && setRitmo(true)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 11.5, color: esMia && puedeEditar ? theme.accent : theme.textMuted, fontFamily: TYPO.fontText, padding: 0, cursor: 'pointer' }}>{sub}</button>
+        <button type="button" onClick={() => esMia && puedeEditar && setRitmo(true)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 11.5, color: esMia && puedeEditar ? theme.accent : theme.textMuted, fontFamily: TYPO.fontText, padding: '8px 0 8px 10px', minHeight: 34, cursor: 'pointer', textAlign: 'right' }}>{sub}</button>
       </div>
       {ritmo && <RitmoM abierto={ritmo} onClose={() => setRitmo(false)} horas={horasGuardadas} personas={d.personas} propietario={propietario} hoy={hoy} />}
       {f === 'armar' && <ArmarM theme={theme} inv={inv} h={h} props={props} cargando={fuentes.isLoading} horas={horas} uid={uid} propietario={propietario} hoyIso={hoyIso} puedeEditar={puedeEditar} onEmpezar={() => setFase('guia')} areasPorId={areasPorId} abrirItem={abrirItem} toggle={toggle} />}

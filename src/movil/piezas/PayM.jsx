@@ -62,6 +62,6 @@ export default function PayM({ titulo, filas = [], formato = (n) => String(n), a
 export function ChipsPay({ opciones = [], value, onChange }) {
   const { theme } = useTheme();
   return opciones.map(([id, l]) => (
-    <button key={id} type="button" onClick={() => onChange(id)} style={{ border: 0, borderRadius: 999, padding: '3px 9px', fontFamily: TYPO.fontText, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', background: value === id ? theme.accent : `${theme.text}14`, color: value === id ? (theme.textOnDark || '#FFF') : theme.textMuted }}>{l}</button>
+    <button key={id} type="button" onClick={() => onChange(id)} style={{ border: 0, borderRadius: 999, padding: '6px 12px', minHeight: 30, fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 500, cursor: 'pointer', background: value === id ? theme.accent : `${theme.text}14`, color: value === id ? (theme.textOnDark || '#FFF') : theme.textMuted }}>{l}</button>
   ));
 }
