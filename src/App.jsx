@@ -52,6 +52,8 @@ import PaginaContenido from './components/PaginaContenido';
 const Paneles = lazy(() => import('./components/nav/Paneles'));
 // MobileNav y MobileShell (legacy) ya no se montan: los sustituyó MovilApp (V3).
 const MovilApp = lazy(() => import('./movil/MovilApp'));
+// Agenda V6 (2026-10-08): pop-up «Organiza tu día» la primera vez que entras en el día, en cualquier pestaña (web y celular).
+const OrganizaGlobal = lazy(() => import('./modules/agenda6/OrganizaGlobal'));
 import { ToastHost, toast as toastKit } from './components/kit';
 
 
@@ -590,6 +592,7 @@ export default function App() {
       )}
 
       {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
+      {perfil && !arranque && <Suspense fallback={null}><OrganizaGlobal movil={!!mobile} /></Suspense>}
 
       <Toaster />
       <OfflineBadge />

@@ -5,7 +5,7 @@
 // Módulos: Hoy · Bandeja · Pendientes · Reuniones (minutas de la V4 dentro del nuevo armazón) · Ideas · Registro del día ·
 // Semana · Equipo. Captura rápida con N o ⌘⇧N en lenguaje natural (agenda5/interpretar.js).
 import React, { useEffect, useMemo, useState } from 'react';
-import { Sun, Inbox, CheckSquare, Users, Lightbulb, BookOpen, CalendarRange, UserCheck, ChevronDown, Compass } from 'lucide-react';
+import { Sun, Inbox, CheckSquare, Users, Lightbulb, BookOpen, CalendarRange, UserCheck, ChevronDown, Send, Building2, MoreHorizontal } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
@@ -18,9 +18,16 @@ import { useAgenda5, actualizarItem, completarItem, guardarRegistroDia, guardarC
 import { cuentasPendientes } from './base/calculo';
 import { hoyDe, bandejaDe, pendientesDe, isoDia, sumarDias, fmtMin, esDe, abierto } from './calculo';
 import { Avatar, FilaTarea, Titulo, Seccion, Palomita } from './comun';
-import Captura from './Captura';
 import Hoy from './Hoy';
 import Dia from './Dia';
+// V6 «que te lleva» (2026-10-08): Hoy único que cambia con la hora, captura libre, Lo que mandé, Por cliente, Organiza tu día.
+import { usePreferencias } from '../../lib/preferencias';
+import { horasDe } from './dia/datos';
+import Hoy6 from '../agenda6/Hoy6';
+import Mande from '../agenda6/Mande';
+import PorCliente from '../agenda6/PorCliente';
+import Captura6 from '../agenda6/Captura6';
+import OrganizaDia from '../agenda6/OrganizaDia';
 import Bandeja from './Bandeja';
 import Pendientes from './Pendientes';
 import ReunionesV5 from './Reuniones';
@@ -29,19 +36,25 @@ import Minuta from './base/Minuta';
 import FormReunion from './base/FormReunion';
 import { comentariosPorItem } from './base/calculo';
 
+// Menú corto (V6): Hoy · Pendientes · Lo que mandé · Por cliente · Reuniones · Semana. Lo demás vive plegado en «Más».
 const MODULOS = [
-  { id: 'dia', label: 'Día', icon: Compass }, { id: 'hoy', label: 'Horario', icon: Sun }, { id: 'bandeja', label: 'Bandeja', icon: Inbox }, { id: 'pendientes', label: 'Pendientes', icon: CheckSquare },
-  { id: 'reuniones', label: 'Reuniones', icon: Users }, { id: 'ideas', label: 'Ideas', icon: Lightbulb },
-  { id: 'registro', label: 'Registro del día', icon: BookOpen, grupo: 'Ritmo' }, { id: 'semana', label: 'Semana', icon: CalendarRange, grupo: 'Ritmo' },
-  { id: 'equipo', label: 'Equipo', icon: UserCheck, grupo: 'Equipo' },
+  { id: 'hoy6', label: 'Hoy', icon: Sun, tecla: '1' }, { id: 'pendientes', label: 'Pendientes', icon: CheckSquare, tecla: '2' }, { id: 'mande', label: 'Lo que mandé', icon: Send, tecla: '3' },
+  { id: 'clientes', label: 'Por cliente', icon: Building2, tecla: '4' }, { id: 'reuniones', label: 'Reuniones', icon: Users, tecla: '5' }, { id: 'semana', label: 'Semana', icon: CalendarRange, tecla: '6' },
+  { id: 'hoy', label: 'Horario', icon: Sun, mas: true }, { id: 'dia', label: 'Armar · Guía · Cierre', icon: BookOpen, mas: true }, { id: 'bandeja', label: 'Bandeja', icon: Inbox, mas: true },
+  { id: 'ideas', label: 'Ideas', icon: Lightbulb, mas: true }, { id: 'registro', label: 'Registro del día', icon: BookOpen, mas: true }, { id: 'equipo', label: 'Equipo', icon: UserCheck, mas: true },
 ];
+const VISTA_INICIAL = { dia: 'hoy6', hoy: 'hoy6', horario: 'hoy' };
 
 export default function Agenda5({ onNavegar, inicial = null }) {
   const perfil = usePerfil();
   const { theme } = useTheme();
   const [uid, setUid] = useState(null);
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUid(data?.user?.id || null)); }, []);
-  const [modulo, setModulo] = useState(inicial?.vista || 'dia');
+  const [modulo, setModulo] = useState(VISTA_INICIAL[inicial?.vista] || inicial?.vista || 'hoy6');
+  const [verMas, setVerMas] = useState(false);
+  const [capturaInicial, setCapturaInicial] = useState('');
+  const [organiza, setOrganiza] = useState(null); // { estado } → pop-up «Organiza tu día» desde la Agenda
+  const prefs = usePreferencias();
   const [propietario, setPropietario] = useState(null);
   const [captura, setCaptura] = useState(!!inicial?.captura); // el correo de la Agenda trae #/ir/agenda?captura=1
   const [hojaItem, setHojaItem] = useState(null);
@@ -58,12 +71,15 @@ export default function Agenda5({ onNavegar, inicial = null }) {
   const persona = useMemo(() => d.personas.find((p) => p.user_id === propietario) || yo, [d.personas, propietario, yo]);
   const esMia = propietario === uid;
   const puedeEditar = (esMia || !!perfil?.es_super_admin) && puedeEditarPestanaGlobal(perfil, 'agenda');
+  const horas = useMemo(() => ({ ...horasDe(null), ...((esMia ? prefs?.agenda?.horas || perfil?.preferencias?.agenda?.horas : persona?.preferencias?.agenda?.horas) || {}) }), [esMia, prefs, perfil, persona]);
 
-  // Atajos: N / ⌘⇧N captura · 1-8 módulos (fuera de inputs)
+  // Atajos: N captura · 1-6 módulos · Esc cierra (fuera de inputs y diálogos)
   useEffect(() => {
     const h = (e) => {
-      if (e.target.closest('input, textarea, [contenteditable], select')) return;
-      if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey && puedeEditar) { e.preventDefault(); setCaptura(true); }
+      if (e.target.closest('input, textarea, [contenteditable], select, [role="dialog"]')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.key === 'n' || e.key === 'N') && puedeEditar) { e.preventDefault(); setCapturaInicial(''); setCaptura(true); }
+      const m = MODULOS.find((x) => x.tecla === e.key); if (m) { e.preventDefault(); setModulo(m.id); }
       if (e.key === 'Escape') { setCaptura(false); setHojaItem(null); }
     };
     window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
@@ -74,7 +90,8 @@ export default function Agenda5({ onNavegar, inicial = null }) {
   if (d.error) return <Panel titulo="No se pudo cargar la Agenda"><div style={{ fontSize: 12, color: theme.red }}>{String(d.error.message || d.error)}</div></Panel>;
 
   const conteos = { bandeja: bandejaDe(d.items, propietario, hoy).length, hoy: hoyDe(d.items, propietario, hoy, { reuniones: d.reuniones, google: d.google }).deHoy.length, pendientes: Object.values(pendientesDe(d.items, propietario, hoy)).reduce((s, l) => s + l.length, 0) };
-  const comunes = { d, uid, propietario, personasPorId: d.personasPorId, puedeEditar, onAbrirItem: (it) => setHojaItem(it), onCapturar: () => setCaptura(true), onAbrirReunion: (r) => { setModulo('reuniones'); setMinutaId(r.id); } };
+  conteos.hoy6 = conteos.hoy + (hoyDe(d.items, propietario, hoy).deAyer.length);
+  const comunes = { d, uid, propietario, personasPorId: d.personasPorId, puedeEditar, onAbrirItem: (it) => setHojaItem(it), onCapturar: (texto) => { setCapturaInicial(typeof texto === 'string' ? texto : ''); setCaptura(true); }, onAbrirReunion: (r) => { setModulo('reuniones'); setMinutaId(r.id); } };
   const comentariosPor = comentariosPorItem(d.comentarios || []);
   const minuta = minutaId ? d.reuniones.find((r) => r.id === minutaId) : null;
 
@@ -93,18 +110,22 @@ export default function Agenda5({ onNavegar, inicial = null }) {
             </div>
           )}
         </div>
-        {MODULOS.map((m) => { const Icon = m.icon; const on = modulo === m.id; const n = conteos[m.id]; const cab = m.grupo && m.grupo !== grupoAnt ? m.grupo : null; grupoAnt = m.grupo || grupoAnt; return (
+        {MODULOS.filter((m) => !m.mas || verMas || modulo === m.id).map((m) => { const Icon = m.icon; const on = modulo === m.id; const n = conteos[m.id]; const cab = m.mas && grupoAnt !== 'mas' ? 'Más' : null; if (m.mas) grupoAnt = 'mas'; return (
           <React.Fragment key={m.id}>
             {cab && <div style={{ fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: theme.textSubtle || theme.textMuted, padding: '10px 10px 3px', fontWeight: 600 }}>{cab}</div>}
-            <button type="button" onClick={() => setModulo(m.id)} style={{ ...nav, background: on ? theme.accent : 'transparent', color: on ? '#fff' : theme.text, fontWeight: on ? 600 : 500 }}
+            <button type="button" onClick={() => setModulo(m.id)} title={m.tecla ? `Tecla ${m.tecla}` : undefined} style={{ ...nav, background: on ? theme.accent : 'transparent', color: on ? '#fff' : theme.text, fontWeight: on ? 600 : 500 }}
               onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = 'rgba(120,120,128,0.12)'; }} onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
               <Icon size={15} />{m.label}{n > 0 && <span style={{ marginLeft: 'auto', fontSize: 10.5, borderRadius: 999, padding: '1px 7px', background: on ? 'rgba(255,255,255,0.25)' : 'rgba(120,120,128,0.18)' }}>{n}</span>}
             </button>
           </React.Fragment>); })}
-        <div style={{ marginTop: 'auto', fontSize: 10.5, color: theme.textMuted, padding: '8px 10px', lineHeight: 1.5 }}>{puedeEditar ? <><b>N</b> captura rápida</> : 'Sólo lectura'}</div>
+        <button type="button" onClick={() => setVerMas((v) => !v)} style={{ ...nav, color: theme.textMuted, fontSize: 12 }}><MoreHorizontal size={15} />{verMas ? 'Menos' : 'Más'}</button>
+        <div style={{ marginTop: 'auto', fontSize: 10.5, color: theme.textMuted, padding: '8px 10px', lineHeight: 1.5 }}>{puedeEditar ? <><b>N</b> captura · <b>1–6</b> módulos · <b>H</b> hecha · <b>M</b> mañana</> : 'Sólo lectura'}</div>
       </aside>
       <main style={{ padding: '16px 18px', minWidth: 0, animation: `agIn ${DUR.content}ms ${EASE} both` }} key={modulo + propietario}>
         <style>{`@keyframes agIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }`}</style>
+        {modulo === 'hoy6' && <Hoy6 {...comunes} horas={horas} persona={persona} onIrA={setModulo} onOrganizar={(estado) => setOrganiza({ estado })} />}
+        {modulo === 'mande' && <Mande {...comunes} />}
+        {modulo === 'clientes' && <PorCliente {...comunes} />}
         {modulo === 'dia' && <Dia {...comunes} />}
         {modulo === 'hoy' && <Hoy {...comunes} />}
         {modulo === 'bandeja' && <Bandeja {...comunes} />}
@@ -117,7 +138,8 @@ export default function Agenda5({ onNavegar, inicial = null }) {
         {modulo === 'semana' && <Semana {...comunes} />}
         {modulo === 'equipo' && <Equipo {...comunes} personas={d.personas} yo={yo} perfil={perfil} onVerAgenda={(p) => { setPropietario(p.user_id); setModulo('hoy'); }} />}
       </main>
-      <Captura abierto={captura} onClose={() => setCaptura(false)} personas={d.personas} propietario={propietario} hoy={hoy} />
+      <Captura6 abierto={captura} onClose={() => setCaptura(false)} personas={d.personas} propietario={propietario} uid={uid} hoy={hoy} inicial={capturaInicial} />
+      {organiza && <OrganizaDia abierto onClose={() => setOrganiza(null)} d={d} uid={uid} propietario={propietario} hoy={hoy} hoyIso={isoDia(hoy)} horas={horas} estado={organiza.estado} puedeEditar={puedeEditar} nombre={persona?.nombre?.split(' ')[0]} onAbrirItem={(it) => setHojaItem(it)} />}
       {hojaItem && <HojaItem item={d.porId.get(hojaItem.id) || hojaItem} personas={d.personas} personasPorId={d.personasPorId} porId={d.porId} reuniones={d.reuniones} hoy={hoy} subtareas={d.subtareas} comentariosPor={comentariosPor} items={d.items} puedeEditar={puedeEditar} onClose={() => setHojaItem(null)} onAbrirMinuta={(rid) => { setHojaItem(null); setModulo('reuniones'); setMinutaId(rid); }} />}
       {formReunion && <FormReunion inicial={formReunion} personas={d.personas} google={{ ...d.googleEstado, eventos: d.google }} onClose={() => setFormReunion(null)} onCreada={(r) => { setFormReunion(null); if (r?.id) { setModulo('reuniones'); setMinutaId(r.id); } }} />}
     </div>

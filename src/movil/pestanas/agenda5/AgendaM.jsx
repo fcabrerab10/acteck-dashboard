@@ -26,8 +26,18 @@ import CapturaHoja from './Captura';
 import Reuniones from './Reuniones';
 import DiaM from './DiaM';
 import Minuta from './Minuta';
+// V6 «que te lleva» (2026-10-08): Hoy único, captura libre, Lo que mandé, Por cliente, Organiza tu día.
+import { usePreferencias } from '../../../lib/preferencias';
+import { horasDe } from '../../../modules/agenda5/dia/datos';
+import HoyM6 from '../agenda6/HoyM6';
+import MandeM from '../agenda6/MandeM';
+import PorClienteM from '../agenda6/PorClienteM';
+import CapturaM6 from '../agenda6/CapturaM6';
+import OrganizaDiaM from '../agenda6/OrganizaDiaM';
 
-const VISTAS = [{ id: 'dia', label: 'Día' }, { id: 'hoy', label: 'Horario' }, { id: 'bandeja', label: 'Bandeja' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'reuniones', label: 'Reuniones' }, { id: 'mas', label: 'Más' }];
+const VISTAS = [{ id: 'hoy6', label: 'Hoy' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'mande', label: 'Lo que mandé' }, { id: 'clientes', label: 'Por cliente' }, { id: 'reuniones', label: 'Reuniones' }, { id: 'mas', label: 'Más' }];
+const VISTA_INICIAL = { dia: 'hoy6', hoy: 'hoy6', horario: 'hoy' };
+const OTRAS = [{ id: 'hoy', label: 'Horario del día' }, { id: 'dia', label: 'Armar · Guía · Cierre' }, { id: 'bandeja', label: 'Bandeja' }];
 const DIAS_1 = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const lunesDe = (iso) => { const d = new Date(`${iso}T12:00:00`); return isoDia(sumarDias(d, -((d.getDay() + 6) % 7))); };
@@ -41,7 +51,10 @@ export default function AgendaM({ inicial, raiz = false }) {
   const puedeVer = puedeVerPaginaGlobal(perfil, 'agenda');
   const d = useAgenda5({ enabled: !!perfil && puedeVer });
   const google = useGoogleEstado();
-  const [vista, setVista] = useState(inicial?.vista || 'dia');
+  const [vista, setVista] = useState(VISTA_INICIAL[inicial?.vista] || inicial?.vista || 'hoy6');
+  const [capInicial, setCapInicial] = useState('');
+  const [organiza, setOrganiza] = useState(null);
+  const prefs = usePreferencias();
   const [propietario, setPropietario] = useState(null);
   const [cap, setCap] = useState(null);       // hoja V4 (editar ítem)
   const [rapida, setRapida] = useState(false); // captura rápida V5
@@ -56,12 +69,14 @@ export default function AgendaM({ inicial, raiz = false }) {
   const visibles = useMemo(() => d.personas.filter((p) => p.user_id === uid || perfil?.es_super_admin || p.es_super_admin), [d.personas, uid, perfil]);
   const esMia = propietario === uid;
   const puedeEditar = (esMia || !!perfil?.es_super_admin) && puedeEditarPestanaGlobal(perfil, 'agenda');
+  const personaVista = useMemo(() => d.personas.find((p) => p.user_id === propietario) || null, [d.personas, propietario]);
+  const horas = useMemo(() => ({ ...horasDe(null), ...((esMia ? prefs?.agenda?.horas || perfil?.preferencias?.agenda?.horas : personaVista?.preferencias?.agenda?.horas) || {}) }), [esMia, prefs, perfil, personaVista]);
 
   const abrirMinuta = (r) => { const id = typeof r === 'string' ? r : r?.id; if (!id) return; nav.push(<Minuta reunionId={id} />, `minuta-${id}`); };
   const abrirItem = (item) => setCap({ item });
   const toggle = async (item, hecha) => { try { await completarItem(item, hecha); if (hecha) toast.ok('Hecha', { accion: 'Deshacer', onAccion: () => completarItem(item, false).catch((e) => toast.error(e.message)) }); } catch (e) { toast.error(e.message); } };
   const posponerM = async (item, dias = 1) => { try { await moverA(item, isoDia(sumarDias(hoy, dias))); toast.ok(dias === 1 ? 'Para mañana' : `Pospuesto ${dias} días`); } catch (e) { toast.error(e.message); } };
-  const ctx = useMemo(() => ({ ...d, uid, perfil, puedeEditar, google, abrirItem, abrirMinuta, capturar: () => setRapida(true), toggle, posponer: posponerM, navegarAviso: () => {}, setVista }), [d, uid, perfil, puedeEditar, google]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ctx = useMemo(() => ({ ...d, uid, perfil, puedeEditar, google, abrirItem, abrirMinuta, capturar: () => { setCapInicial(''); setRapida(true); }, toggle, posponer: posponerM, navegarAviso: () => {}, setVista }), [d, uid, perfil, puedeEditar, google]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const conteos = useMemo(() => conteosMes(d.items || [], propietario, { reuniones: d.reuniones || [], google: d.google || [] }), [d.items, d.reuniones, d.google, propietario]);
   const bandejaN = useMemo(() => (d.items ? bandejaDe(d.items, propietario, hoy).length : 0), [d.items, propietario, hoy]);
@@ -73,7 +88,7 @@ export default function AgendaM({ inicial, raiz = false }) {
   const chip = (on) => ({ border: 0, borderRadius: 999, padding: '7px 13px', fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', background: on ? theme.text : theme.surface, color: on ? theme.bg : theme.text, boxShadow: on ? 'none' : `inset 0 0 0 1px ${theme.border}`, display: 'inline-flex', alignItems: 'center', gap: 6, transition: 'background 220ms cubic-bezier(.32,.72,0,1), color 220ms' });
   const cabecera = (
     <>
-      <TituloGrande titulo={vista === 'hoy' ? (dia === hoyIso ? 'Hoy' : `${fechaSel.getDate()} ${MESES_C[fechaSel.getMonth()]}`) : VISTAS.find((v) => v.id === vista)?.label}
+      <TituloGrande titulo={vista === 'hoy' ? (dia === hoyIso ? 'Horario' : `${fechaSel.getDate()} ${MESES_C[fechaSel.getMonth()]}`) : (VISTAS.find((v) => v.id === vista) || OTRAS.find((v) => v.id === vista))?.label}
         sub={vista === 'hoy' ? fechaLarga(fechaSel).replace(/^./, (c) => c.toUpperCase()) : fechaLarga(hoy).replace(/^./, (c) => c.toUpperCase())}
         derecha={<div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {vista === 'hoy' && dia !== hoyIso && <button type="button" onClick={irHoy} style={{ ...chip(false), padding: '6px 11px' }}>Hoy</button>}
@@ -99,7 +114,7 @@ export default function AgendaM({ inicial, raiz = false }) {
       )}
       {/* Chips: Día · Bandeja n · Pendientes n · Reuniones · Más (+ Mes en Día) */}
       <div style={{ display: 'flex', gap: 6, padding: '2px 16px 10px', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-        {VISTAS.map((v) => { const n = v.id === 'bandeja' ? bandejaN : v.id === 'pendientes' ? pendN : 0; return (
+        {VISTAS.map((v) => { const n = v.id === 'pendientes' ? pendN : 0; return (
           <button key={v.id} type="button" onClick={() => setVista(v.id)} aria-pressed={vista === v.id} style={chip(vista === v.id)}>
             {v.label}{n > 0 && <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: vista === v.id ? `${theme.bg}33` : `${theme.accent}1f`, color: vista === v.id ? theme.bg : theme.accent, fontVariantNumeric: 'tabular-nums' }}>{n}</span>}
           </button>); })}
@@ -114,45 +129,26 @@ export default function AgendaM({ inicial, raiz = false }) {
   return (
     <AgendaCtx.Provider value={ctx}>
       {cabecera}
+      {vista === 'hoy6' && <HoyM6 {...com} horas={horas} persona={personaVista} onOrganizar={(estado) => setOrganiza({ estado })} onIrA={setVista} />}
+      {vista === 'mande' && <MandeM {...com} />}
+      {vista === 'clientes' && <PorClienteM {...com} onNuevo={(t) => { setCapInicial(t); setRapida(true); }} />}
       {vista === 'dia' && <DiaM {...com} perfil={perfil} />}
       {vista === 'hoy' && <HoyM {...com} />}
       {vista === 'bandeja' && <BandejaM {...com} />}
       {vista === 'pendientes' && <PendientesM {...com} />}
       {vista === 'reuniones' && <Reuniones />}
-      {vista === 'mas' && <MasM {...com} />}
+      {vista === 'mas' && <><ListaAgrupada titulo="Otras vistas" style={{ marginTop: 4 }}>{OTRAS.map((o) => <Fila key={o.id} titulo={o.label} sub={o.id === 'bandeja' && bandejaN ? `${bandejaN} sin fecha` : undefined} onClick={() => setVista(o.id)} />)}</ListaAgrupada><MasM {...com} /></>}
       {/* Captura rápida como barra fija (Recordatorios de iOS): encima de la barra de grupos, se mueve con ella. */}
       {puedeEditar && vista !== 'reuniones' && (
-        <button type="button" onClick={() => setRapida(true)} aria-label="Captura rápida" style={{ position: 'fixed', left: 16, right: 16, bottom, zIndex: 40, height: 48, borderRadius: 14, border: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, boxShadow: `0 8px 24px ${theme.accent}55`, cursor: 'pointer', transition: 'bottom 340ms cubic-bezier(.32,.72,0,1)' }}>
-          <Plus size={20} strokeWidth={2.6} />Captura rápida<span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 500, opacity: 0.8 }}>fecha · hora · #cliente</span>
+        <button type="button" onClick={() => { setCapInicial(''); setRapida(true); }} aria-label="Nuevo" style={{ position: 'fixed', left: 16, right: 16, bottom, zIndex: 40, height: 48, borderRadius: 14, border: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', background: theme.accent, color: '#fff', fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, boxShadow: `0 8px 24px ${theme.accent}55`, cursor: 'pointer', transition: 'bottom 340ms cubic-bezier(.32,.72,0,1)' }}>
+          <Plus size={20} strokeWidth={2.6} />Nuevo<span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 500, opacity: 0.8 }}>escribe como hablas</span>
         </button>
       )}
-      <CapturaRapidaM abierto={rapida} onClose={() => setRapida(false)} personas={d.personas} propietario={propietario} hoy={hoy} />
+      <CapturaM6 abierto={rapida} onClose={() => setRapida(false)} personas={d.personas} propietario={propietario} uid={uid} hoy={hoy} inicial={capInicial} />
+      {organiza && <OrganizaDiaM abierto onClose={() => setOrganiza(null)} d={d} uid={uid} propietario={propietario} hoy={hoy} hoyIso={hoyIso} horas={horas} estado={organiza.estado} puedeEditar={puedeEditar} nombre={personaVista?.nombre?.split(' ')[0]} onAbrirItem={abrirItem} />}
       <GuiameM abierto={guia} onClose={() => setGuia(false)} d={d} propietario={propietario} hoy={hoy} puedeEditar={puedeEditar} abrirItem={abrirItem} />
       <CapturaHoja cfg={cap} personas={d.personas} reuniones={d.reuniones} hoy={hoy} subtareas={d.subtareas} puedeEditar={puedeEditar} onClose={() => setCap(null)} onAbrirMinuta={abrirMinuta} />
     </AgendaCtx.Provider>
-  );
-}
-
-function CapturaRapidaM({ abierto, onClose, personas, propietario, hoy }) {
-  const { theme } = useTheme();
-  const [texto, setTexto] = useState('');
-  const ref = useRef(null);
-  useEffect(() => { if (abierto) { setTexto(''); setTimeout(() => ref.current?.focus(), 120); } }, [abierto]);
-  const i = texto.trim() ? interpretarCaptura(texto, personas, hoy) : null;
-  const crear = async () => { if (!texto.trim()) return; try { const r = await crearDesdeCaptura(texto, { personas, propietario, hoy }); toast.ok(r.interpretado.bandeja ? 'Guardado en la Bandeja' : 'Guardado'); onClose(); } catch (e) { toast.error(e.message); } };
-  return (
-    <HojaM abierto={abierto} onClose={onClose} titulo="Captura rápida" sub="fecha, hora, duración, #cliente, @persona, p1 · «idea:» · «nota:»" alto="46vh">
-      <div style={{ padding: '0 16px 10px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 12px' }}>
-          <Sparkles size={16} style={{ color: theme.accent }} /><input ref={ref} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Llamar a Juan mañana 10am 30m #Dicotech" onKeyDown={(e) => { if (e.key === 'Enter') crear(); }} style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 16, color: theme.text, fontFamily: TYPO.fontText }} />
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minHeight: 26 }}>
-          {i?.chips.map((c, k) => { const [bg, col] = TONO[c.tipo] || TONO.categoria; return <span key={k} style={{ background: bg, color: col, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>{c.label}</span>; })}
-          {i && !i.chips.length && <span style={{ fontSize: 12, color: theme.textMuted }}>Sin fecha → Bandeja</span>}
-        </div>
-        <BotonGrande primario icon={Check} onClick={crear}>Guardar</BotonGrande>
-      </div>
-    </HojaM>
   );
 }
 

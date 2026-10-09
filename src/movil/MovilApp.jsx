@@ -271,7 +271,7 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
           const topIdx = pila.length - 1;
           return (
             <div key={id} data-tab={id} style={{ position: 'absolute', inset: 0, display: activa ? 'block' : 'none' }}>
-              <Pantalla id="raiz" cubierta={pila.some((e) => e.fase !== 'saliendo')} onRefrescar={refrescar} sinBarraInferior={sinBarra}>
+              <Pantalla id="raiz" cubierta={pila.some((e) => e.fase !== 'saliendo')} onRefrescar={id === 'agenda' ? undefined : refrescar} sinBarraInferior={sinBarra}>
                 <Suspense fallback={<Cargando />}>
                   <Comp key={claveRaiz} {...propsRaiz} />
                 </Suspense>
