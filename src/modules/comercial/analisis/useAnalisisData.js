@@ -76,3 +76,20 @@ export function useSellInDia(clienteCodigo, anio, enabled = true) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/** Diario de TODA la cartera (6 meses): «Quién se mueve» y «A quién llamar hoy». Una consulta; la vista ya filtra por cliente visible. */
+export function useSellInDiaCartera(enabled = true, meses = 6) {
+  const hoy = new Date();
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth() - meses, 1);
+  const a0 = desde.getFullYear(), m0 = desde.getMonth() + 1;
+  return useQuery({
+    queryKey: ['analisis_clientes', 'dia-cartera', a0, m0],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await cachedQuery(supabase.from('v_sellin_cliente_dia').select('cliente,cliente_key,anio,mes,dia,fact_neta,piezas,facturas').or(`anio.gt.${a0},and(anio.eq.${a0},mes.gte.${m0})`).limit(5000));
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}

@@ -13,13 +13,13 @@ import { useAlertas } from '../../lib/alertas';
 import ExportMenu from '../../components/ExportMenu';
 import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando } from '../../components/kit';
 import { tooltip } from '../../lib/medidas';
-import ComparadorPeriodos from './ComparadorPeriodos';
 import { useAniosDisponibles, useAnalisisClientes, useCuotasClientes } from './analisis/useAnalisisData';
 import { MESES, PROPIOS, OTROS_KEY, OCASIONAL, agregarClientes, filaOtros, aplanar, ultimoMesConVenta, totalesMensuales, idxMes, yoyDe, mcDe, ajustesDe, sumarPeriodo, pctDe, vacio, mapaCuotas, cuotaPeriodo, alcanceCuota } from './analisis/calc';
 import { money, moneyFull, int, pct, signo, toneDe, toneCanal, labelCanal } from './analisis/formato';
 import DrillCliente from './analisis/DrillCliente';
 import PaginaCliente from './analisis/PaginaCliente';
-import ParetoPanel from './analisis/ParetoPanel';
+import { QuienSeMuevePanel, LlamarHoyPanel } from './analisis/RitmoPanels';
+import { useSellInDiaCartera } from './analisis/useAnalisisData';
 
 const MODOS = [{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD' }];
 const ORIGENES = [{ id: 'todos', label: 'Todos' }, { id: 'propios', label: 'Propios' }, { id: 'erp', label: 'ERP' }];
@@ -39,7 +39,6 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
   const [origen, setOrigen] = useState('todos');
   const [orden, setOrden] = useState({ col: 'fact_neta', dir: 'desc' });
   const [abierto, setAbierto] = useState(null);
-  const [compCliente, setCompCliente] = useState(null);
   const [paginaCliente, setPaginaCliente] = useState(null); // código ERP del cliente abierto en página completa (2026-10-01)
 
   const { data: anios = [] } = useAniosDisponibles();
@@ -61,6 +60,7 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
   const mesAuto = useMemo(() => ultimoMesConVenta(rows || [], anio) || (anio === hoy.getFullYear() ? hoy.getMonth() + 1 : 12), [rows, anio]);
   const mesMax = mesSel && mesSel <= mesAuto ? mesSel : mesAuto;
   const agg = useMemo(() => agregarClientes(rows || [], anio, mesMax, modo), [rows, anio, mesMax, modo]);
+  const diario = useSellInDiaCartera(true);
   const global = useMemo(() => {
     const r = rows || [];
     const tm = totalesMensuales(r);
@@ -187,8 +187,7 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
     };
   };
 
-  const compOpciones = agg.clientes.filter((c) => c.ytd.fact_neta > 0).sort((a, b) => b.ytd.fact_neta - a.ytd.fact_neta);
-  const compSel = compOpciones.find((c) => c.cliente === compCliente) || compOpciones[0] || null;
+  const nombresClientes = useMemo(() => new Map(agg.clientes.map((c) => [c.cliente, { nombre: c.nombre, canal: c.canal }])), [agg.clientes]);
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
@@ -269,16 +268,9 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
           : <DrillCliente cliente={r} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} vista="preview" onAbrir={(c) => setPaginaCliente(c.cliente)} />
         )} />
 
-      <ParetoPanel filas={filas} periodoLbl={periodoLbl} />
-
-      <Panel titulo="Comparador de periodos por cliente" meta={compSel ? compSel.nombre : 'sin clientes'} plegable abiertoInicial={false}
-        acciones={(
-          <select value={compSel?.cliente || ''} onChange={(e) => setCompCliente(e.target.value)} style={{ ...sel, maxWidth: 280 }}>
-            {compOpciones.map((c) => <option key={c.cliente} value={c.cliente}>{c.cliente} · {c.nombre}</option>)}
-          </select>
-        )}>
-        {compSel ? <ComparadorPeriodos clienteNombre={compSel.nombre} clienteCodigo={compSel.cliente} ocultarSensible={!verSensible} /> : <div style={{ fontSize: 11.5, color: theme.textMuted }}>Sin clientes con venta este año.</div>}
-      </Panel>
+      {/* Quién se mueve · A quién llamar hoy (2026-10-08): sustituyen al Pareto y al Comparador. */}
+      <QuienSeMuevePanel diario={diario.data} cargando={diario.isLoading} nombres={nombresClientes} hoy={hoy} onAbrir={(c) => setPaginaCliente(c)} />
+      <LlamarHoyPanel diario={diario.data} cargando={diario.isLoading} nombres={nombresClientes} hoy={hoy} onAbrir={(c) => setPaginaCliente(c)} />
     </div>
   );
 }
