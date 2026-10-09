@@ -61,6 +61,9 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
   const mesMax = mesSel && mesSel <= mesAuto ? mesSel : mesAuto;
   const agg = useMemo(() => agregarClientes(rows || [], anio, mesMax, modo), [rows, anio, mesMax, modo]);
   const diario = useSellInDiaCartera(true);
+  // Hooks ANTES del return de la página del cliente (si van después, React #300 al abrirla · 3.95.2).
+  const nombresClientes = useMemo(() => new Map(agg.clientes.map((c) => [c.cliente, { nombre: c.nombre, canal: c.canal }])), [agg.clientes]);
+  const clientesRecurrentes = useMemo(() => new Set(agg.clientes.filter((c) => !c.ocasional).map((c) => c.cliente)), [agg.clientes]);
   const global = useMemo(() => {
     const r = rows || [];
     const tm = totalesMensuales(r);
@@ -187,8 +190,6 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
     };
   };
 
-  const nombresClientes = useMemo(() => new Map(agg.clientes.map((c) => [c.cliente, { nombre: c.nombre, canal: c.canal }])), [agg.clientes]);
-  const clientesRecurrentes = useMemo(() => new Set(agg.clientes.filter((c) => !c.ocasional).map((c) => c.cliente)), [agg.clientes]);
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
