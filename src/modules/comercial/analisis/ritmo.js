@@ -28,7 +28,16 @@ export function porClienteDia(filas = []) {
  * Quién se mueve: este mes a mismo día contra el mes anterior a mismo día. `hoy` manda el mes y el día.
  * Devuelve { suben, bajan, sinComprar, mesLbl, mesPrevLbl, dia } con frases cortas por cliente.
  */
-export function quienSeMueve(filas = [], { hoy = new Date(), nombres = new Map(), top = 5, umbral = 50000 } = {}) {
+/** Nombre para pintar: si dos códigos comparten nombre (Ingram, PCH…), se agrega el código. */
+export function nombrar(nombres) {
+  const cuenta = new Map();
+  for (const [, v] of nombres) { const n = v?.nombre || v; cuenta.set(n, (cuenta.get(n) || 0) + 1); }
+  return (k) => { const n = nombres.get(k)?.nombre || nombres.get(k) || k; return cuenta.get(n) > 1 ? `${n} · ${k}` : n; };
+}
+const filtrar = (filas, solo) => (solo ? filas.filter((r) => solo.has(r.cliente)) : filas);
+
+export function quienSeMueve(filasTodas = [], { hoy = new Date(), nombres = new Map(), top = 5, umbral = 50000, solo = null } = {}) {
+  const filas = filtrar(filasTodas, solo);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1, dia = hoy.getDate();
   const prevAnio = mes === 1 ? anio - 1 : anio, prevMes = mes === 1 ? 12 : mes - 1;
   const enMes = (r, a, m, hastaDia = 31) => r.anio === a && r.mes === m && r.dia <= hastaDia;
@@ -42,7 +51,7 @@ export function quienSeMueve(filas = [], { hoy = new Date(), nombres = new Map()
     if (f > 0 && !(r.anio === anio && r.mes === mes)) { const k = r.anio * 100 + r.mes; if (!c.ultimoMesConVenta || k > c.ultimoMesConVenta) c.ultimoMesConVenta = k; }
     porC.set(r.cliente, c);
   }
-  const nombre = (k) => nombres.get(k)?.nombre || nombres.get(k) || k;
+  const nombre = nombrar(nombres);
   const lista = [...porC.values()].map((c) => {
     const delta = c.cur - c.prevMismoDia;
     let frase;
@@ -66,12 +75,13 @@ export function quienSeMueve(filas = [], { hoy = new Date(), nombres = new Map()
  * atrasado (lleva > cadencia + 2 y > cadencia × 1.5) · leToca (lleva ≥ cadencia − 1) · enfriado (compra, pero este mes
  * va < 50 % del anterior a mismo día) · alRitmo · ocasional (menos de 3 compras en la ventana). Ordenado por atraso.
  */
-export function ritmoCompra(filas = [], { hoy = new Date(), ventana = 180, nombres = new Map(), minCompras = 3 } = {}) {
+export function ritmoCompra(filasTodas = [], { hoy = new Date(), ventana = 180, nombres = new Map(), minCompras = 3, solo = null } = {}) {
+  const filas = filtrar(filasTodas, solo);
   const desde = new Date(hoy.getTime() - ventana * 86400000);
   const mes = hoy.getMonth() + 1, anio = hoy.getFullYear(), dia = hoy.getDate();
   const prevAnio = mes === 1 ? anio - 1 : anio, prevMes = mes === 1 ? 12 : mes - 1;
   const porC = porClienteDia(filas);
-  const nombre = (k) => nombres.get(k)?.nombre || nombres.get(k) || k;
+  const nombre = nombrar(nombres);
   const out = [];
   for (const g of porC.values()) {
     const compras = g.dias.filter((d) => d.f > 0 && d.fecha >= desde);
@@ -88,14 +98,15 @@ export function ritmoCompra(filas = [], { hoy = new Date(), ventana = 180, nombr
     if (cadencia == null) estado = 'ocasional';
     else {
       atraso = lleva - cadencia;
-      if (atraso > 2 && lleva > cadencia * 1.5) estado = 'atrasado';
+      if (lleva > Math.max(45, cadencia * 4)) estado = 'perdido';   // dejó de comprar hace más de 45 días: se llama, pero no es la urgencia de hoy
+      else if (atraso > 2 && lleva > cadencia * 1.5) estado = 'atrasado';
       else if (lleva >= cadencia - 1) estado = 'leToca';
       else if (vsPrev != null && vsPrev < -50) estado = 'enfriado';
       else estado = 'alRitmo';
     }
     out.push({ cliente: g.cliente, key: g.key, nombre: nombre(g.cliente), cadencia, lleva, ultima: iso(ultima.fecha), ticket, compras: compras.length, cur, prev, vsPrev, estado, atraso });
   }
-  const orden = { atrasado: 0, leToca: 1, enfriado: 2, alRitmo: 3, ocasional: 4 };
+  const orden = { atrasado: 0, leToca: 1, enfriado: 2, perdido: 3, alRitmo: 4, ocasional: 5 };
   out.sort((a, b) => orden[a.estado] - orden[b.estado] || b.atraso - a.atraso || b.ticket - a.ticket);
   const conteo = out.reduce((m, c) => { m[c.estado] = (m[c.estado] || 0) + 1; return m; }, {});
   return { lista: out, conteo };
@@ -103,12 +114,13 @@ export function ritmoCompra(filas = [], { hoy = new Date(), ventana = 180, nombr
 
 export const ESTADO_RITMO = {
   atrasado: { label: 'atrasado · llamar', tone: 'red' }, leToca: { label: 'le toca', tone: 'blue' }, enfriado: { label: 'se enfrió', tone: 'orange' },
-  alRitmo: { label: 'al ritmo', tone: 'green' }, ocasional: { label: 'ocasional', tone: 'gray' },
+  perdido: { label: 'dejó de comprar', tone: 'gray' }, alRitmo: { label: 'al ritmo', tone: 'green' }, ocasional: { label: 'ocasional', tone: 'gray' },
 };
 export const fraseEstado = (c) => {
   if (c.estado === 'atrasado') return `atrasado ${c.atraso} d`;
   if (c.estado === 'leToca') return c.lleva >= c.cadencia ? 'le toca hoy' : 'le toca mañana';
   if (c.estado === 'enfriado') return 'compra, pero menos';
+  if (c.estado === 'perdido') return `sin comprar ${c.lleva} d`;
   if (c.estado === 'ocasional') return `${c.compras} compra${c.compras === 1 ? '' : 's'} en 6 meses`;
   return 'al ritmo';
 };

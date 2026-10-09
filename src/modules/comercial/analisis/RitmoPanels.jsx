@@ -30,10 +30,10 @@ function Lista({ titulo, pill, tone, items, vacio, onAbrir, valor }) {
 }
 
 /** Quién se mueve: suben · bajan (vs el mes anterior a mismo día) · compraron el mes pasado y este no. */
-export function QuienSeMuevePanel({ diario, cargando, nombres, hoy, onAbrir }) {
+export function QuienSeMuevePanel({ diario, cargando, nombres, hoy, onAbrir, solo }) {
   const { theme } = useTheme();
-  const m = useMemo(() => quienSeMueve(diario || [], { hoy, nombres }), [diario, hoy, nombres]);
-  const r = useMemo(() => ritmoCompra(diario || [], { hoy, nombres }), [diario, hoy, nombres]);
+  const m = useMemo(() => quienSeMueve(diario || [], { hoy, nombres, solo }), [diario, hoy, nombres, solo]);
+  const r = useMemo(() => ritmoCompra(diario || [], { hoy, nombres, solo }), [diario, hoy, nombres, solo]);
   const ritmoDe = new Map(r.lista.map((c) => [c.cliente, c]));
   if (cargando) return <Panel titulo="Quién se mueve"><Skeleton lineas={4} /></Panel>;
   const sin = m.sinComprar.map((c) => { const rc = ritmoDe.get(c.cliente); return { ...c, frase: rc?.cadencia ? `compra cada ${rc.cadencia} d · lleva ${rc.lleva}` : `en ${m.mesPrevLbl} ${fmtM(c.prevTotal)}`, estado: rc?.estado || 'ocasional', atraso: rc?.atraso || 0 }; }).sort((a, b) => b.atraso - a.atraso);
@@ -55,11 +55,11 @@ export function QuienSeMuevePanel({ diario, cargando, nombres, hoy, onAbrir }) {
 }
 
 /** A quién llamar hoy: cadencia · lleva · última · ticket · este mes vs anterior · estado. */
-export function LlamarHoyPanel({ diario, cargando, nombres, hoy, onAbrir }) {
+export function LlamarHoyPanel({ diario, cargando, nombres, hoy, onAbrir, solo }) {
   const { theme } = useTheme();
-  const r = useMemo(() => ritmoCompra(diario || [], { hoy, nombres }), [diario, hoy, nombres]);
+  const r = useMemo(() => ritmoCompra(diario || [], { hoy, nombres, solo }), [diario, hoy, nombres, solo]);
   const c = r.conteo;
-  const meta = `${c.atrasado || 0} atrasados · ${c.leToca || 0} les toca · ${c.enfriado || 0} se enfriaron · ${c.alRitmo || 0} al ritmo · ${c.ocasional || 0} ocasionales`;
+  const meta = `${c.atrasado || 0} atrasados · ${c.leToca || 0} les toca · ${c.enfriado || 0} se enfriaron · ${c.perdido || 0} dejaron de comprar · ${c.alRitmo || 0} al ritmo · ${c.ocasional || 0} ocasionales`;
   const cols = [
     { key: 'nombre', label: 'Cliente', align: 'left', maxWidth: 240, render: (x) => <b>{x.nombre}</b> },
     { key: 'cadencia', label: 'Compra cada', width: 90, sort: true, render: (x) => (x.cadencia ? `${x.cadencia} d` : '—') },
@@ -73,7 +73,7 @@ export function LlamarHoyPanel({ diario, cargando, nombres, hoy, onAbrir }) {
     <Panel titulo="A quién llamar hoy" meta={cargando ? 'calculando…' : meta} plegable abiertoInicial>
       {cargando ? <Skeleton lineas={5} /> : <>
         <TablaCompacta dense columnas={cols} filas={r.lista} rowKey={(x) => x.cliente} maxHeight={460} onRowClick={onAbrir ? (x) => onAbrir(x.cliente) : undefined} vacio="Sin compras en los últimos 6 meses." />
-        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>«Compra cada» = mediana de los días entre compras en los últimos 6 meses; atrasado = lleva más de 1.5 veces su ritmo. Ordenada por atraso: los de arriba son las llamadas de hoy.</div>
+        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Sólo los clientes recurrentes de la tabla (los ocasionales no). «Compra cada» = mediana de los días entre compras en los últimos 6 meses; atrasado = lleva más de 1.5 veces su ritmo; «dejó de comprar» = más de 45 días. Ordenada por atraso: los de arriba son las llamadas de hoy.</div>
       </>}
     </Panel>
   );

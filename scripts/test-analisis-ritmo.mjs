@@ -42,5 +42,9 @@ test('ritmoCompra: cadencia, lleva, estado y orden', () => {
   assert.equal(lista[0].cliente, 'EXEL'); // el más atrasado arriba
   assert.equal(conteo.atrasado, 2); assert.ok(conteo.ocasional >= 1);
   assert.equal(r.fraseEstado(by.EXEL), 'atrasado 5 d');
+  // perdido: cadencia 5 y 100 días sin comprar; solo: deja fuera a los que no estén en el set; nombres repetidos llevan código
+  const viejo = [1, 6, 11, 16].map((d) => f('VIEJO', 2026, 6, d, 1000));
+  const r2 = r.ritmoCompra([...filas, ...viejo], { hoy: HOY, nombres: new Map([['CT', { nombre: 'X' }], ['CVA', { nombre: 'X' }]]), solo: new Set(['CT', 'CVA', 'VIEJO']) });
+  assert.deepEqual(r2.lista.map((c) => c.cliente), ['CVA', 'VIEJO', 'CT']); assert.equal(r2.lista[1].estado, 'perdido'); assert.equal(r2.lista[2].nombre, 'X · CT');
   assert.equal(by.EXEL.ultima, '2026-09-24'); assert.equal(Math.round(by.EXEL.ticket), 180000);
 });

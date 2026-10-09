@@ -188,6 +188,7 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
   };
 
   const nombresClientes = useMemo(() => new Map(agg.clientes.map((c) => [c.cliente, { nombre: c.nombre, canal: c.canal }])), [agg.clientes]);
+  const clientesRecurrentes = useMemo(() => new Set(agg.clientes.filter((c) => !c.ocasional).map((c) => c.cliente)), [agg.clientes]);
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
@@ -269,8 +270,8 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
         )} />
 
       {/* Quién se mueve · A quién llamar hoy (2026-10-08): sustituyen al Pareto y al Comparador. */}
-      <QuienSeMuevePanel diario={diario.data} cargando={diario.isLoading} nombres={nombresClientes} hoy={hoy} onAbrir={(c) => setPaginaCliente(c)} />
-      <LlamarHoyPanel diario={diario.data} cargando={diario.isLoading} nombres={nombresClientes} hoy={hoy} onAbrir={(c) => setPaginaCliente(c)} />
+      <QuienSeMuevePanel diario={diario.data} cargando={diario.isLoading} nombres={nombresClientes} hoy={hoy} solo={clientesRecurrentes} onAbrir={(c) => setPaginaCliente(c)} />
+      <LlamarHoyPanel diario={diario.data} cargando={diario.isLoading} nombres={nombresClientes} hoy={hoy} solo={clientesRecurrentes} onAbrir={(c) => setPaginaCliente(c)} />
     </div>
   );
 }
