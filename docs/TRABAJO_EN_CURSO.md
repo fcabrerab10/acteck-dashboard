@@ -32,10 +32,10 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] Propuestas (celular) rehechas: lista estándar, sugeridos en el armador, Revisar con lista por SKU y sus otros precios, WhatsApp · Excel · Enviar (3.87.0).
 - [x] Actividad del equipo (celular) rehecha según el mockup 2c58bf4c aprobado: Equipo (hero, 4 tarjetas, actividad por día 4 semanas, umbral en chips, lista con ritmo · día armado · plan vs real · vencidos · estado, externos plegados) · Persona (ritmo en el sub, Su día · Semana · Pendientes · Evaluación, hero del día, 4 tarjetas, mandar mensaje, reasignar pendientes) · Evaluación (hero con resultado y bono, dictado, «Cerrar evaluación», abre en el mes por cerrar) (3.88.0–3.88.1; verificada con la sesión de Fernando el 6-oct). 3.88.2: celular en el perfil (Preferencias › Yo y Administración) para que «Mandar mensaje» abra WhatsApp directo.
 - [x] Correos: plantilla del dashboard en todos (vigilante, reservas y arribos pasaban en texto plano) (3.85.2); prueba del vigilante pedida para la corrida de las 07:20.
-- [ ] Revisión de Fernando (7-oct temprano) de 3.83–3.84: S&OP, Proyectos y forecast, ficha de clientes propios.
-- [ ] ~~Sell Out global (celular)~~, mockup 2b9599a5: hero, 4 tarjetas, gráfica vs año anterior, pay del mix, **tabla de detalle por SKU × 12 m** con Piezas · $, ordenar por cualquier columna y buscador que entiende (chips con lo entendido). Sin cuentas.
-- [ ] Sell In global (celular): mismo esqueleto con cuota, margen y clientes que compraron; tabla por SKU igual. Sin tabla de clientes.
-- [ ] Producto 360: hero completo (sell in, sell out, SO/SI, inventario nuestro, en cuentas, en camino), gráfica sell in vs sell out, Segmented «Quién lo desplaza · Quién lo compra» (ranking con piezas, Δ, semanas de inventario; clientes que dejaron de comprarlo), dónde se vende. Botones conectados: Preparar propuesta (canasta precargada + cliente + sugerido), Proponer (cliente puesto + pendiente en la Agenda), Ver en Inventario (buscador con el SKU), Precios (Ficha de producto). Cuentas y clientes tocables → Análisis por cliente.
+- [ ] Revisión de Fernando de lo publicado del 6 al 8 de octubre: S&OP y Proyectos y forecast (3.83), ficha de clientes propios con Pagos (3.84–3.85), Cobranza general (3.86), Propuestas (3.87), Actividad del equipo (3.88) y lo traído a la web (3.90).
+- [x] Sell Out global (celular) (3.80.0), mockup 2b9599a5: hero, 4 tarjetas, gráfica vs año anterior, pay del mix, **tabla de detalle por SKU × 12 m** con Piezas · $, ordenar por cualquier columna y buscador que entiende (chips con lo entendido). Sin cuentas.
+- [x] Sell In global (celular) (3.80.0): mismo esqueleto con cuota, margen y clientes que compraron; tabla por SKU igual. Sin tabla de clientes.
+- [x] Producto 360 (3.81.0): hero completo (sell in, sell out, SO/SI, inventario nuestro, en cuentas, en camino), gráfica sell in vs sell out, Segmented «Quién lo desplaza · Quién lo compra» (ranking con piezas, Δ, semanas de inventario; clientes que dejaron de comprarlo), dónde se vende. Botones conectados: Preparar propuesta (canasta precargada + cliente + sugerido), Proponer (cliente puesto + pendiente en la Agenda), Ver en Inventario (buscador con el SKU), Precios (Ficha de producto). Cuentas y clientes tocables → Análisis por cliente.
 
 ## Responsivo (lo que Fernando reportó el 5-oct)
 - [ ] Inicio celular: gráfica y pay sin los 16 px de margen; gráfica demasiado alta en iPad mini vertical (medir al ancho, altura fija).
@@ -43,7 +43,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [ ] Navegación general: Fernando manda capturas de iPhone e iPad mini (no se reproduce en la emulación: área segura).
 
 ## Reportado el 5-oct, por atender
-- [ ] S&OP en el celular «ni siquiera me deja verla»: reproducir con la sesión de Fernando y corregir.
+- [x] S&OP en el celular «ni siquiera me deja verla» (corregido 3.80.1 y rehecha en 3.83.0): reproducir con la sesión de Fernando y corregir.
 
 ## Pendientes de Fernando
 - [ ] Pasarme los celulares de Karolina y David (con lada) para capturarlos en Administración → Editar datos; así «WhatsApp» en Actividad del equipo abre directo su chat.
