@@ -22,6 +22,8 @@ import CuotasTrimestre from './CuotasTrimestre';
 import CategoriasSiSo from './CategoriasSiSo';
 import DrillCuenta from '../sellout/DrillCuenta';
 import SellOutPorReceta, { BloqueSkus } from '../sellout/BloquesCuenta';
+import MovimientoPanel from './MovimientoPanel';
+import FrenteAlRestoPanel from '../sellout/FrenteAlRestoPanel';
 import { useCuentas, useMensual, useDias, useCuotas, useDrillSkus, CUENTA_POR_ERP } from '../sellout/datos';
 import { construirFilas, ultimoMesConVenta as ultimoMesSellOut, ultimoDiaConVenta, ultimosMeses, skusDeCuenta } from '../sellout/calculo';
 import { useDetalleCliente, useSellInDia } from './useAnalisisData';
@@ -144,7 +146,14 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
             : { k: 'Cuota YTD', v: pctYtd == null ? '—' : pct(pctYtd, 0), sub: cuotaYtd == null ? 'sin cuota' : moneyFull(cuotaYtd) },
         ]} />
 
-      {tab === 'resumen' && <DrillCliente cliente={cliente} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} vista="completa" />}
+      {tab === 'resumen' && (
+        <>
+          <DrillCliente cliente={cliente} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} vista="completa" />
+          {/* 2026-10-08 (del celular): mayores subidas y bajadas del sell in contra el mes anterior. */}
+          <MovimientoPanel titulo="Dónde está el movimiento · Sell In" filas={detalleSku || []} clave="articulo" valor="fact_neta" piezas="piezas_venta_neta" rd={new Map((roadmapExp || []).map((r) => [r.sku, r]))} anio={anio} mes={mesMax}
+            nota="Lo que más subió y lo que más bajó en lo que nos compra este cliente, mezclando SKU y categoría; una categoría que ya explica un SKU listado no se repite." />
+        </>
+      )}
       {tab === 'sellin' && <SellInCliente cliente={cliente} anio={anio} mesMax={mesMax} verSensible={verSensible} cuotas={cuotas} />}
       {tab === 'sellout' && <SellOutCuenta codigo={cliente.cliente} nombre={cliente.nombre} anio={anio} />}
     </div>
@@ -322,6 +331,8 @@ function SellOutCuenta({ codigo, nombre, anio }) {
           <DrillCuenta fila={fila} anio={anio} mes={mes} corteDia={corteDia} estadoSel={estadoSel} onEstado={setEstadoSel} />
         </Panel>
         <ZoomDiario titulo={`Sell out por día · ${MESES[mes - 1]} ${anio}`} filas={diasCuenta} anio={anio} mes={mes} formato={money} />
+        <MovimientoSellOut cuenta={cuenta} anio={anio} mes={mes} />
+        <FrenteAlRestoPanel cuenta={cuenta} nombre={nombre} anio={anio} mes={mes} corteDia={corteDia} clienteKey={cuenta} />
         <BloqueSkus cuenta={cuenta} anio={anio} mes={mes} conInventario={fila.invValor != null} />
       </>
     );
@@ -329,7 +340,18 @@ function SellOutCuenta({ codigo, nombre, anio }) {
   return (
     <>
       <SellOutPorReceta cuenta={cuenta} fila={fila} anio={anio} mes={mes} corteDia={corteDia} />
+      <FrenteAlRestoPanel cuenta={cuenta} nombre={nombre} anio={anio} mes={mes} corteDia={corteDia} />
       <ZoomDiario titulo={`Sell out por día · ${MESES[mes - 1]} ${anio}`} filas={diasCuenta} anio={anio} mes={mes} formato={money} />
     </>
   );
+}
+
+
+/** Movimiento del sell out de la cuenta (SKU y categoría) contra el mes anterior · 2026-10-08. */
+function MovimientoSellOut({ cuenta, anio, mes }) {
+  const { data: skus = [], isLoading } = useDrillSkus(cuenta, anio);
+  const { data: roadmap } = useRoadmap();
+  const rd = useMemo(() => new Map((roadmap || []).map((r) => [r.sku, r])), [roadmap]);
+  return <MovimientoPanel titulo="Dónde está el movimiento · Sell Out" filas={skus} clave="sku" valor="importe" piezas="cantidad" rd={rd} anio={anio} mes={mes} cargando={isLoading}
+    nota="Lo que más subió y bajó en lo que esta cuenta desplaza, mezclando SKU y categoría." />;
 }

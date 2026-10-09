@@ -25,6 +25,8 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 - [x] Seguridad de externos a nivel de datos (3.91.0, 8-oct): Camilo (Digitalife) ya sólo puede leer lo de Digitalife y sin costos ni márgenes, también por la API; internos sin cambios.
 
+- [x] «Dónde está el movimiento» (Resumen y Sell Out del cliente) y «<Cuenta> frente al resto» (Sell Out del cliente) en la web (3.92.0).
+
 ## Aprobado, por construir
 - [x] Pagos del cliente propio (celular): pestaña Pagos en la ficha con flujo del mes, rebate según la regla, apoyo por producto, apoyos por costo convenio y reglas editables (% y base) (3.85.0–3.85.1).
 - [x] Cobranza general (celular) rehecha con el formato estándar sobre los tres propios (3.86.0).
@@ -38,8 +40,8 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] Producto 360 (3.81.0): hero completo (sell in, sell out, SO/SI, inventario nuestro, en cuentas, en camino), gráfica sell in vs sell out, Segmented «Quién lo desplaza · Quién lo compra» (ranking con piezas, Δ, semanas de inventario; clientes que dejaron de comprarlo), dónde se vende. Botones conectados: Preparar propuesta (canasta precargada + cliente + sugerido), Proponer (cliente puesto + pendiente en la Agenda), Ver en Inventario (buscador con el SKU), Precios (Ficha de producto). Cuentas y clientes tocables → Análisis por cliente.
 
 ## Responsivo (lo que Fernando reportó el 5-oct)
-- [ ] Inicio celular: gráfica y pay sin los 16 px de margen; gráfica demasiado alta en iPad mini vertical (medir al ancho, altura fija).
-- [ ] Misma regla en Agenda Día y en las pantallas nuevas.
+- [x] Inicio celular: gráfica y pay con sus 16 px; gráfica medida al ancho con altura fija (GraficaScrub, 2026-10-05).
+- [x] Misma regla en Agenda Día y en las pantallas nuevas (todas usan la GraficaScrub genérica).
 - [ ] Navegación general: Fernando manda capturas de iPhone e iPad mini (no se reproduce en la emulación: área segura).
 
 ## Reportado el 5-oct, por atender
