@@ -480,3 +480,46 @@ export function InventarioPanel({ r, onNavegar }) {
     </Panel>
   );
 }
+
+// ═══ Inicio por objetivos (3.93.0 · 2026-10-08) ═══
+// Fernando: «me gusta la propuesta B, pero quiero dejar claro el objetivo de la pestaña por prioridad: 1. cómo vamos en
+// este mes, 2. cómo vamos en el año, 3. información de toma de decisiones y el resumen del negocio».
+
+/** Cabecera de sección numerada: deja claro a qué pregunta responde cada bloque. */
+export function SeccionTitulo({ n, titulo, sub }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 2px 0' }}>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.accent, letterSpacing: '0.06em' }}>{n}</span>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text }}>{titulo}</span>
+      {sub && <span style={{ fontSize: 11.5, color: theme.textMuted }}>{sub}</span>}
+    </div>
+  );
+}
+
+/** Tarjeta que cuenta un tema por sí sola: cifra, dato chico, frase y su trazo de 12 meses. */
+export function TarjetaNarrativa({ eyebrow, badge, big, small, frase, serie = [], color, formato = $c, onClick, medida }) {
+  const { theme } = useTheme();
+  const datos = (serie || []).filter((p) => p && p.v != null).map((p) => ({ x: p.x, v: p.v }));
+  return (
+    <div role={onClick ? 'button' : undefined} onClick={onClick} title={medida}
+      style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px', minWidth: 0, cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{eyebrow}</span>
+        {badge && <Pill tone={badge.tone || 'gray'} size="xs">{badge.l}</Pill>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{big}</span>
+          {small && <span style={{ fontSize: 12, color: theme.textMuted, marginLeft: 6 }}>{small}</span>}
+        </div>
+        {datos.length > 1 && (
+          <div style={{ width: 110, flexShrink: 0 }}>
+            <GraficaLineas mini alto={28} datos={datos} series={[{ key: 'v', tipo: 'principal', color }]} formato={formato} />
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 12, lineHeight: 1.4, color: theme.text }}>{frase}</div>
+    </div>
+  );
+}

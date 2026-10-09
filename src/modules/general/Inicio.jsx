@@ -24,10 +24,13 @@ import FrescuraPill from '../../components/FrescuraPill';
 import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, Cargando } from '../../components/kit';
 const VisionGeneral = lazy(() => import('../comercial/VisionGeneral'));
 const RentabilidadBloque = lazy(() => import('../comercial/RentabilidadBloque'));
-import { FUENTES_INICIO, PAGINAS, MAX_ALERTAS, MESES, abrirNotificaciones } from './inicio/config';
+import { FUENTES_INICIO, PAGINAS, MAX_ALERTAS, MESES, abrirNotificaciones, CLIENTE_NOMBRE as CLIENTE_NOMBRE_LOCAL } from './inicio/config';
 import { useInicioData } from './inicio/useInicioData';
 import { calcular } from './inicio/calc';
-import { DecisionPanel, ClientesGrid, AgendaPanel, HoyPanel, ComparativoAnual, SelectorPeriodo, BarraCuota, SellOutPanel, MixPanel, InventarioPanel } from './inicio/bloques';
+import { DecisionPanel, ClientesGrid, AgendaPanel, HoyPanel, ComparativoAnual, SelectorPeriodo, BarraCuota, SellOutPanel, MixPanel, InventarioPanel, SeccionTitulo, TarjetaNarrativa } from './inicio/bloques';
+import MovimientoNegocio from './inicio/MovimientoNegocio';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAll } from '../../lib/queries';
 
 const signo = (v, d = 0) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`);
 const toneDe = (v) => (v == null ? 'gray' : v >= 0 ? 'green' : 'red');
@@ -61,6 +64,8 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
     sellIn: puedeVerPestanaGlobal(perfil, 'sell_in'),
   }), [perfil]);
   const clientesVisibles = useMemo(() => ['digitalife', 'pcel', 'dicotech'].filter((k) => puedeVerCliente(perfil, k)), [perfil]);
+  // 3.93.0: inventario al cierre por mes (trazo de la tarjeta y cambio contra el cierre del mes pasado).
+  const { data: cvMes } = useQuery({ queryKey: ['inventario', 'cv_mes'], staleTime: 5 * 60 * 1000, enabled: sensible, queryFn: () => fetchAll('v_inventario_cv_mes', 'anio,mes,fecha_cierre,inv_cierre_mes', (q) => q.gte('anio', anioHoy - 1)).then((rows) => rows.slice().sort((a, b) => a.anio - b.anio || a.mes - b.mes).slice(-12)).catch(() => []) });
   const r = useMemo(() => (data ? calcular(data, alertasQ.data || [], { anio, mesActual, hoy, modo, sensible, clientesVisibles, enCurso }) : null), [data, alertasQ.data, anio, mesActual, hoy, modo, sensible, clientesVisibles, enCurso]);
 
   if (!puedeVerInicio(perfil)) return <SinAcceso motivo="No tienes acceso a Inicio." />;
@@ -79,6 +84,13 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
   const labelPeriodo = esMes ? (enCurso ? `MTD · ${r.mesL}` : `${r.mesL} ${anio}`) : (anio === anioHoy ? `YTD ${anio}` : `${anio}`);
   const c = r.cur, cart = r.cartera, inv = r.inv, so = r.sellOut, ec = r.enCamino;
   const diaTxt = fmtDia.format(hoy).replace(',', '');
+  const cambioMes = (() => {
+    const ant = mesHoy === 1 ? { anio: anioHoy - 1, mes: 12 } : { anio: anioHoy, mes: mesHoy - 1 };
+    const f = (cvMes || []).find((m) => Number(m.anio) === ant.anio && Number(m.mes) === ant.mes);
+    if (!f || f.inv_cierre_mes == null || !inv.valor) return '';
+    const d = inv.valor - Number(f.inv_cierre_mes);
+    return `${d >= 0 ? 'Creció' : 'Bajó'} ${$c(Math.abs(d))} (${(Math.abs(d) / Number(f.inv_cierre_mes) * 100).toFixed(1)} %) contra el cierre de ${MESES[ant.mes - 1].toLowerCase()}`;
+  })();
   const coberturaTone = inv.cobertura == null ? 'gray' : inv.cobertura > 120 ? 'orange' : inv.cobertura < 30 ? 'red' : 'green';
 
   // La facturación de TODA la empresa es información sensible (Fernando, 2026-09-21): sin el permiso, el tablero
@@ -124,28 +136,43 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
         </div>}
       </Hero>
 
-      <div data-entrada-kpis style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
-        <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`Sell in · ${labelPeriodo}`} badge={r.yoy != null ? { l: `${signo(r.yoy)} ${r.yoyLabel}`, tone: toneDe(r.yoy) } : undefined}
-          big={$c(c.fact_neta)} bigSmall={r.cuotaPeriodo ? `de ${$c(r.cuotaPeriodo)}` : ''} progress={r.pctCuota ?? undefined}
-          sub={r.pctCuota != null ? `${Math.round(r.pctCuota)}% de cuota${esMes && r.pctOtro != null ? ` · YTD ${Math.round(r.pctOtro)}% de ${$c(r.cuotaOtro)}` : ''}` : 'sin cuota cargada'} onClick={ir(null, PAGINAS.sellIn)} />
-        <KpiCard eyebrow={`Sell out · ${labelPeriodo}`} badge={so.yoy != null ? { l: `${signo(so.yoy)} vs ${anio - 1}`, tone: toneDe(so.yoy) } : undefined}
-          big={so.total > 0 ? $c(so.total) : '—'} bigSmall={so.soSi != null ? `SO/SI ${so.soSi.toFixed(2)}` : ''}
-          sub={so.total > 0 ? `${so.nCuentas} cuenta${so.nCuentas === 1 ? '' : 's'} · sell in a cuentas ${$c(so.sellIn)}${so.invCuentas ? ` · inv. en cuentas ${$c(so.invValor)}` : ''}` : 'sin sell out cargado en el período'} onClick={ir(null, 'sellOut')} />
-        <KpiCard medida={tooltip('contribucion')} eyebrow={`Contribución · ${labelPeriodo}`} badge={r.dMc != null ? { l: `${pp(r.dMc)} MC`, tone: r.dMc >= 0 ? 'green' : 'red' } : undefined}
-          big={$c(c.contribucion)} bigSmall={c.mc != null ? `MC ${pct(c.mc)}` : ''}
-          sub={`lost profit ${$c(c.lost)}${c.lostPct != null ? ` (${pct(c.lostPct)} de la bruta)` : ''} · utilidad comercial ${$c(c.utilidad_comercial)}`} />
-        {ve.inventario && <KpiCard medida={`${tooltip('inv_actual')} — ${tooltip('dias_inv')}`} eyebrow="Inventario comercial" badge={{ l: inv.cobertura != null ? `${inv.cobertura} d de inv` : 'sin ritmo', tone: coberturaTone }}
-          big={$c(inv.valor)} bigSmall={`${int(inv.piezas)} pz`}
-          sub={`${int(inv.skus)} SKUs con stock${inv.skusAgotados != null ? ` · ${int(inv.skusAgotados)} agotados con demanda` : ''}`} onClick={ir(null, PAGINAS.inventario)} />}
-        {ve.inventario && <KpiCard eyebrow="En camino" badge={ec.atrasados.pos > 0 ? { l: `${ec.atrasados.pos} PO con ETA vencida`, tone: 'red' } : ec.proximos[0] ? { l: `próximo ${fecha(ec.proximos[0].eta)}`, tone: 'blue' } : undefined}
-          big={$c(ec.valor)} bigSmall={`${int(ec.piezas)} pz`}
-          sub={`${ec.pos} PO${ec.porMes[0] ? ` · ${ec.porMes[0].label}: ${$c(ec.porMes[0].valor)}` : ''}${ec.porMes[1] ? ` · ${ec.porMes[1].label}: ${$c(ec.porMes[1].valor)}` : ''}`} onClick={ir(null, PAGINAS.inventario)} />}
-        {ve.cobranza && <KpiCard eyebrow={cart.corte ? `Cartera · corte ${fecha(cart.corte)}` : 'Cartera'} badge={cart.vencido > 0 ? { l: `${$c(cart.vencido)} vencido`, tone: cart.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al corriente', tone: 'green' }}
-          big={$c(cart.saldo)} bigSmall={`${cart.filas.length} cliente${cart.filas.length === 1 ? '' : 's'}`} bigColor={cart.vencido > 0 && cart.pctVencido > 25 ? theme.red : undefined}
-          sub={[cart.dso != null ? `DSO ${cart.dso} d` : null, cart.mas90 > 0 ? `${$c(cart.mas90)} > 90 d` : null].filter(Boolean).join(' · ') || 'sin estado de cuenta'} onClick={ir(null, PAGINAS.cobranza)} />}
+      {/* ── 1 · Cómo vamos en este mes (3.93.0): seis tarjetas que cuentan cada tema con su trazo de 12 meses ── */}
+      <SeccionTitulo n="1" titulo={esMes ? `Cómo vamos en ${r.mesL.toLowerCase()}` : `Cómo va ${anio}`} sub={enCurso ? 'a mismo día del año anterior' : undefined} />
+      <div data-entrada-kpis style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+        <TarjetaNarrativa eyebrow={`Sell in · ${labelPeriodo}`} medida={tooltip('pct_alcance_venta')} badge={r.yoy != null ? { l: `${signo(r.yoy)} ${r.yoyLabel}`, tone: toneDe(r.yoy) } : undefined}
+          big={$c(c.fact_neta)} small={r.pctCuota != null ? `${Math.round(r.pctCuota)} % de cuota` : 'sin cuota'} color={theme.accent}
+          serie={r.serie.map((m) => ({ x: m.label, v: m.fn || null }))}
+          frase={`${r.pctCuota != null ? `${$c(c.fact_neta)} de ${$c(r.cuotaPeriodo)} de cuota` : $c(c.fact_neta)}${r.yoy != null ? `, ${signo(r.yoy)} ${r.yoyLabel}` : ''}${esMes && r.pctOtro != null ? `. El año lleva ${$c(r.otro?.fact_neta)}, ${Math.round(r.pctOtro)} % de la cuota a la fecha.` : '.'}`} onClick={ir(null, PAGINAS.sellIn)} />
+        <TarjetaNarrativa eyebrow={`Sell out · ${labelPeriodo}`} badge={so.yoy != null ? { l: `${signo(so.yoy)} vs ${anio - 1}`, tone: toneDe(so.yoy) } : undefined}
+          big={so.total > 0 ? $c(so.total) : '—'} small={so.soSi != null ? `SO/SI ${so.soSi.toFixed(2)}` : ''} color={theme.purple || '#AF52DE'}
+          serie={so.serie.map((m) => ({ x: m.label, v: m.so || null }))}
+          frase={so.total > 0 ? `${so.nCuentas} cuenta${so.nCuentas === 1 ? '' : 's'} con venta${so.cuentas[0] ? `; ${so.cuentas[0].nombre.split(' ')[0]} concentra el ${Math.round((so.cuentas[0].cur / so.total) * 100)} %` : ''}. Inventario en cuentas ${$c(so.invValor)} en ${so.invCuentas} que reportan.` : 'Sin sell out cargado en el período.'} onClick={ir(null, 'sellOut')} />
+        <TarjetaNarrativa eyebrow={`Margen · ${labelPeriodo}`} medida={tooltip('pct_mc')} badge={r.dMc != null ? { l: `${pp(r.dMc)} MC`, tone: r.dMc >= 0 ? 'green' : 'red' } : undefined}
+          big={c.mc != null ? pct(c.mc) : '—'} small={`${$c(c.contribucion)} contribución`} color={theme.green} formato={(v) => pct(v)}
+          serie={r.serie.map((m) => ({ x: m.label, v: m.mc }))}
+          frase={`${r.dMc != null ? `${Math.abs(r.dMc).toFixed(1)} pp ${r.dMc >= 0 ? 'arriba' : 'abajo'} de ${anio - 1}; ` : ''}lost profit ${$c(c.lost)}${c.lostPct != null ? ` (${pct(c.lostPct)} de la bruta)` : ''} · utilidad comercial ${$c(c.utilidad_comercial)}.`} />
+        {ve.inventario && <TarjetaNarrativa eyebrow="Inventario comercial" medida={`${tooltip('inv_actual')} — ${tooltip('dias_inv')}`} badge={{ l: inv.cobertura != null ? `${inv.cobertura} d` : 'sin ritmo', tone: coberturaTone }}
+          big={$c(inv.valor)} small={`${int(inv.piezas)} pz`} color={theme.orange}
+          serie={(cvMes || []).map((m) => ({ x: `${MESES[m.mes - 1]}`, v: m.inv_cierre_mes != null ? Number(m.inv_cierre_mes) : null }))}
+          frase={`${inv.cobertura != null ? `${inv.cobertura} días al ritmo de los 3 meses cerrados; ` : ''}${int(inv.skus)} SKUs con stock${inv.skusAgotados != null ? `, ${int(inv.skusAgotados)} agotados con demanda` : ''}${cambioMes ? `. ${cambioMes}` : '.'}`} onClick={ir(null, PAGINAS.inventario)} />}
+        {ve.inventario && <TarjetaNarrativa eyebrow="En camino" badge={ec.atrasados.pos > 0 ? { l: `${ec.atrasados.pos} PO con ETA vencida`, tone: 'red' } : ec.proximos[0] ? { l: `próximo ${fecha(ec.proximos[0].eta)}`, tone: 'blue' } : undefined}
+          big={$c(ec.valor)} small={`${ec.pos} PO`} color={theme.accent}
+          serie={ec.porMes.slice(0, 6).map((m) => ({ x: m.label, v: m.valor }))}
+          frase={`${ec.porMes[0] ? `${ec.porMes[0].label} ${$c(ec.porMes[0].valor)}` : 'nada este mes'}${ec.porMes[1] ? ` · ${ec.porMes[1].label} ${$c(ec.porMes[1].valor)}` : ''}${ec.proximos[0] ? ` · el próximo arribo es el ${fecha(ec.proximos[0].eta)}` : ''}${ec.atrasados.pos > 0 ? ` · ${ec.atrasados.pos} PO ya pasaron su ETA` : ''}.`} onClick={ir(null, PAGINAS.inventario)} />}
+        {ve.cobranza && <TarjetaNarrativa eyebrow={cart.corte ? `Cartera · corte ${fecha(cart.corte)}` : 'Cartera'} badge={cart.vencido > 0 ? { l: `${$c(cart.vencido)} vencido`, tone: cart.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al corriente', tone: 'green' }}
+          big={$c(cart.saldo)} small={`${cart.filas.length} cliente${cart.filas.length === 1 ? '' : 's'}`} color={theme.red}
+          frase={`${cart.vencido > 0 ? `${$c(cart.vencido)} vencido (${Math.round(cart.pctVencido)} % del saldo)` : 'Sin saldo vencido'}${cart.dso != null ? ` · DSO ${cart.dso} días` : ''}${cart.mas90 > 0 ? ` · ${$c(cart.mas90)} con más de 90 días` : ''}${cart.filas[0] ? ` · el más vencido: ${CLIENTE_NOMBRE_LOCAL[cart.filas[0].cliente] || cart.filas[0].cliente}` : ''}.`} onClick={ir(null, PAGINAS.cobranza)} />}
       </div>
 
+      {/* ── 2 · Cómo vamos en el año ── */}
+      <SeccionTitulo n="2" titulo={`Cómo vamos en ${anio}`} sub={`frente a ${anio - 1} y a la cuota`} />
       <ComparativoAnual r={r} mesSel={mes} onMes={(m) => setMes(m)} />
+
+      {/* ── 3 · Para decidir y el resumen del negocio ── */}
+      <SeccionTitulo n="3" titulo="Para decidir" sub="qué se movió, qué requiere decisión y el resumen del negocio" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
+        <MovimientoNegocio anio={anio} mes={mesActual} hoy={hoy} onNavegar={onNavegar} />
+        </div>
       <MixPanel r={r} onNavegar={ir(null, PAGINAS.sellIn)} />
       <SellOutPanel r={r} onNavegar={ir(null, 'sellOut')} />
       {ve.inventario && <InventarioPanel r={r} onNavegar={ir(null, PAGINAS.inventario)} />}

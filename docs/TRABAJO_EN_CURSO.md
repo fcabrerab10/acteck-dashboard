@@ -28,7 +28,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] «Dónde está el movimiento» (Resumen y Sell Out del cliente) y «<Cuenta> frente al resto» (Sell Out del cliente) en la web (3.92.0).
 
 ## Web pestaña por pestaña (desde el 8-oct, orden del árbol del menú)
-- [ ] Inicio: mockup 2523721b (A · dos columnas · B · seis tarjetas) por revisar.
+- [x] Inicio (3.93.0): propuesta B con el orden que fijó Fernando (1 este mes · 2 el año · 3 para decidir y resumen del negocio).
 - [ ] Siguen: Agenda (incluida la pestaña de pendientes, con las mismas reglas que se decidan hoy) → Estado de Resultados → Análisis por Cliente → Sell In → Sell Out → Inventario → Estrategia de Precios → S&OP → Proyectos y forecast → Propuestas → Tracking → Pagos → Crédito y Cobranza → clientes propios → Actividad del equipo → Administración.
 
 ## Aprobado, por construir
