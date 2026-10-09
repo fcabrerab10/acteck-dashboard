@@ -53,7 +53,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] S&OP en el celular «ni siquiera me deja verla» (corregido 3.80.1 y rehecha en 3.83.0): reproducir con la sesión de Fernando y corregir.
 
 ## Siguiente en la web (pedido el 8-oct, noche)
-- [ ] Análisis por cliente: Fernando está de acuerdo con todo menos el Pareto y el Comparador de periodos por cliente (ver propuesta en la conversación del 8-oct).
+- [x] Análisis por cliente (3.95.1): fuera Pareto y Comparador; dentro «Quién se mueve» y «A quién llamar hoy» (eligió sólo esos dos del mockup b6c25d79). Siguiente: Sell In (quiere el sell in por día del mes).
 
 ## Pendientes de Fernando
 - [ ] Pasarme los celulares de Karolina y David (con lada) para capturarlos en Administración → Editar datos; así «WhatsApp» en Actividad del equipo abre directo su chat.
