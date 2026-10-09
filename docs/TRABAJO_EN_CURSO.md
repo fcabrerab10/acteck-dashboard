@@ -29,7 +29,8 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 ## Web pestaña por pestaña (desde el 8-oct, orden del árbol del menú)
 - [x] Inicio (3.93.0): propuesta B con el orden que fijó Fernando (1 este mes · 2 el año · 3 para decidir y resumen del negocio).
-- [ ] Siguen: Agenda (incluida la pestaña de pendientes, con las mismas reglas que se decidan hoy) → Estado de Resultados → Análisis por Cliente → Sell In → Sell Out → Inventario → Estrategia de Precios → S&OP → Proyectos y forecast → Propuestas → Tracking → Pagos → Crédito y Cobranza → clientes propios → Actividad del equipo → Administración.
+- [x] Agenda V6 «que te lleva» (3.94.0, 8-oct): pop-up «Organiza tu día» en toda la app (cierra ayer primero), Hoy único que cambia con la hora, captura libre sin etiquetas (personas, clientes, mandar a varios), Lo que mandé, Por cliente, acciones optimistas con Deshacer, teclado 1–6/H/M/↵ y gestos; verificada web y celular con la sesión de Fernando.
+- [ ] Siguen: Pendientes (dentro de la Agenda, con las reglas de la V6) → Estado de Resultados → Análisis por Cliente → Sell In → Sell Out → Inventario → Estrategia de Precios → S&OP → Proyectos y forecast → Propuestas → Tracking → Pagos → Crédito y Cobranza → clientes propios → Actividad del equipo → Administración.
 
 ## Aprobado, por construir
 - [x] Pagos del cliente propio (celular): pestaña Pagos en la ficha con flujo del mes, rebate según la regla, apoyo por producto, apoyos por costo convenio y reglas editables (% y base) (3.85.0–3.85.1).
@@ -50,6 +51,9 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 ## Reportado el 5-oct, por atender
 - [x] S&OP en el celular «ni siquiera me deja verla» (corregido 3.80.1 y rehecha en 3.83.0): reproducir con la sesión de Fernando y corregir.
+
+## Siguiente en la web (pedido el 8-oct, noche)
+- [ ] Análisis por cliente: Fernando está de acuerdo con todo menos el Pareto y el Comparador de periodos por cliente (ver propuesta en la conversación del 8-oct).
 
 ## Pendientes de Fernando
 - [ ] Pasarme los celulares de Karolina y David (con lada) para capturarlos en Administración → Editar datos; así «WhatsApp» en Actividad del equipo abre directo su chat.
