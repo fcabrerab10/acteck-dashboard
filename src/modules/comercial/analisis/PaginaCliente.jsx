@@ -2,11 +2,13 @@
 // con su Sell In y Sell Out como la veo con mis clientes propios, entrando por Análisis por cliente; el drill queda como
 // vista previa»). Se abre desde la fila de Análisis por Cliente (botón «Ver página completa») y vive dentro de esa
 // pestaña (como Revisar en Propuestas): «‹ Análisis por cliente» regresa a la tabla con el mismo año y modo.
-//   Resumen  → DrillCliente en vista completa (sell out resumido, KPIs, tendencia, categorías, apoyo, top 10 SKUs).
+//   Resumen  → DrillCliente en vista completa (sell out resumido, KPIs, categorías) + «Sell in vs sell out del año, con la
+//              cuota» (SiSoAnio) + «Ritmo de compra de este cliente» (RitmoCliente) + dónde está el movimiento (3.96.0).
 //   Sell In  → KPIs del mes/YTD con cuota, evolución 12 m vs año anterior, tabla SKU × 12 meses (piezas o monto,
 //              buscador, MC % si sensible), composición por categoría, apoyo comercial y comparador de periodos.
 //   Sell Out → el MISMO drill del Sell Out consolidado (DrillCuenta) para la cuenta ligada al código del ERP
-//              (CUENTA_POR_ERP: 12 mayoristas + 3 propios); si el cliente no reporta sell out, se dice y ya.
+//              (CUENTA_POR_ERP: 12 mayoristas + 3 propios) + «Sucursales que suben, bajan y dejaron de vender» si la
+//              fuente trae sucursales (3.96.0); si el cliente no reporta sell out, se dice y ya.
 import React, { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -23,6 +25,9 @@ import CategoriasSiSo from './CategoriasSiSo';
 import DrillCuenta from '../sellout/DrillCuenta';
 import SellOutPorReceta, { BloqueSkus } from '../sellout/BloquesCuenta';
 import MovimientoPanel from './MovimientoPanel';
+import SiSoAnio from './SiSoAnio';
+import RitmoCliente from './RitmoCliente';
+import SucursalesMovimiento from '../sellout/SucursalesMovimientoPanel';
 import FrenteAlRestoPanel from '../sellout/FrenteAlRestoPanel';
 import { useCuentas, useMensual, useDias, useCuotas, useDrillSkus, CUENTA_POR_ERP } from '../sellout/datos';
 import { construirFilas, ultimoMesConVenta as ultimoMesSellOut, ultimoDiaConVenta, ultimosMeses, skusDeCuenta } from '../sellout/calculo';
@@ -149,6 +154,9 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
       {tab === 'resumen' && (
         <>
           <DrillCliente cliente={cliente} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} vista="completa" />
+          {/* 3.96.0 (2026-10-26): bloques 1 y 2 del mockup aprobado: el año con sell in, sell out y cuota, y el ritmo de compra. */}
+          <SiSoAnio cliente={cliente} anio={anio} cuotas={cuotas} />
+          <RitmoCliente cliente={cliente} anio={anio} />
           {/* 2026-10-08 (del celular): mayores subidas y bajadas del sell in contra el mes anterior. */}
           <MovimientoPanel titulo="Dónde está el movimiento · Sell In" filas={detalleSku || []} clave="articulo" valor="fact_neta" piezas="piezas_venta_neta" rd={new Map((roadmapExp || []).map((r) => [r.sku, r]))} anio={anio} mes={mesMax}
             nota="Lo que más subió y lo que más bajó en lo que nos compra este cliente, mezclando SKU y categoría; una categoría que ya explica un SKU listado no se repite." />
@@ -332,6 +340,7 @@ function SellOutCuenta({ codigo, nombre, anio }) {
         </Panel>
         <ZoomDiario titulo={`Sell out por día · ${MESES[mes - 1]} ${anio}`} filas={diasCuenta} anio={anio} mes={mes} formato={money} />
         <MovimientoSellOut cuenta={cuenta} anio={anio} mes={mes} />
+        <SucursalesMovimiento cuenta={cuenta} fila={fila} anio={anio} mes={mes} />
         <FrenteAlRestoPanel cuenta={cuenta} nombre={nombre} anio={anio} mes={mes} corteDia={corteDia} clienteKey={cuenta} />
         <BloqueSkus cuenta={cuenta} anio={anio} mes={mes} conInventario={fila.invValor != null} />
       </>
@@ -340,6 +349,7 @@ function SellOutCuenta({ codigo, nombre, anio }) {
   return (
     <>
       <SellOutPorReceta cuenta={cuenta} fila={fila} anio={anio} mes={mes} corteDia={corteDia} />
+      <SucursalesMovimiento cuenta={cuenta} fila={fila} anio={anio} mes={mes} />
       <FrenteAlRestoPanel cuenta={cuenta} nombre={nombre} anio={anio} mes={mes} corteDia={corteDia} />
       <ZoomDiario titulo={`Sell out por día · ${MESES[mes - 1]} ${anio}`} filas={diasCuenta} anio={anio} mes={mes} formato={money} />
     </>

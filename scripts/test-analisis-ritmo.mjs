@@ -48,3 +48,17 @@ test('ritmoCompra: cadencia, lleva, estado y orden', () => {
   assert.deepEqual(r2.lista.map((c) => c.cliente), ['CVA', 'VIEJO', 'CT']); assert.equal(r2.lista[1].estado, 'perdido'); assert.equal(r2.lista[2].nombre, 'X · CT');
   assert.equal(by.EXEL.ultima, '2026-09-24'); assert.equal(Math.round(by.EXEL.ticket), 180000);
 });
+
+test('ritmoDeUnCliente: un cliente sin columna cliente en el diario, mes anterior y última compra', () => {
+  const diario = filas.filter((x) => x.cliente === 'EXEL').map(({ cliente, cliente_key, ...r }) => r);
+  const u = r.ritmoDeUnCliente(diario, { cliente: '00676', hoy: HOY, nombre: 'Exel del Norte' });
+  assert.equal(u.ritmo.cadencia, 9); assert.equal(u.ritmo.lleva, 14); assert.equal(u.ritmo.estado, 'atrasado'); assert.equal(u.ritmo.nombre, 'Exel del Norte');
+  assert.equal(u.prevDias, 3); assert.equal(u.prevTotal, 540000); assert.equal(u.ticketPrev, 180000); assert.equal(u.ultimaMonto, 180000);
+  assert.equal(u.mesLbl, 'oct'); assert.equal(u.mesPrevLbl, 'sep'); assert.equal(u.dia, 8);
+  // sin compras en la ventana → ritmo null, sin tronar
+  assert.equal(r.ritmoDeUnCliente([], { cliente: 'X', hoy: HOY }).ritmo, null);
+  // último día con venta del año (para años cerrados)
+  const d = r.ultimoDiaConVentaAnio(diario, 2026);
+  assert.equal(d.getMonth(), 8); assert.equal(d.getDate(), 24);
+  assert.equal(r.ultimoDiaConVentaAnio(diario, 2024), null);
+});

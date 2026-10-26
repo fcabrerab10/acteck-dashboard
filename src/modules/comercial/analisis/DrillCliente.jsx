@@ -1,6 +1,6 @@
 // Drill-down por cliente (fila expandida de la tabla de Análisis por Cliente).
 // Bloque "Sell out" arriba (sólo si el cliente tiene fuente de sell out) ·
-// tendencia 12 meses (+ año anterior, + contribución si sensible) · 3 KPIs · top 10 SKUs del
+// 4 KPIs (la tendencia 12 m vive ahora en SiSoAnio, 3.96.0) · top 10 SKUs del
 // periodo con HeatCell SKU × últimos 6 meses · composición por categoría (roadmap_sku) ·
 // alertas activas si el cliente es propio. Detalle SKU: mv_analisis_cliente_sku_mes por código ERP.
 import React, { useMemo } from 'react';
@@ -146,13 +146,10 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
         <KpiCard eyebrow="Último mes con compra" big={cliente.ultimaCompra ? `${MESES[cliente.ultimaCompra.mes - 1]} ${cliente.ultimaCompra.anio}` : '—'} sub={cliente.ultimaCompra ? `${money(cliente.mensual.get(idxMes(cliente.ultimaCompra.anio, cliente.ultimaCompra.mes))?.fact_neta)} ese mes` : 'sin compras'} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: 10 }}>
-        <Panel titulo="Tendencia · últimos 12 meses" meta={`fact. neta${verSensible ? ' y contribución' : ''} · línea gris = mismo mes del año anterior`} padding="6px 8px 4px">
-          <GraficaLineas datos={serie.map((d) => ({ x: d.label, fact_neta: d.fact_neta, anterior: d.anterior, contribucion: d.contribucion }))}
-            series={[{ key: 'fact_neta', label: 'Fact. neta', tipo: 'principal' }, { key: 'anterior', label: 'Año anterior', tipo: 'anterior' }, ...(verSensible ? [{ key: 'contribucion', label: 'Contribución', tipo: 'linea', color: green }] : [])]}
-            formato={money} alto={190} />
-        </Panel>
-        <div style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
+      {/* 3.96.0 (2026-10-26): la «Tendencia · últimos 12 meses» salió de la vista completa: la sustituye SiSoAnio
+          (sell in vs sell out del año con la cuota) justo debajo, en PaginaCliente. */}
+      <div style={{ display: 'grid', gridTemplateColumns: cliente.propio ? 'repeat(2, minmax(0,1fr))' : 'minmax(0,1fr)', gap: 10 }}>
+        <div style={{ display: 'contents' }}>
           <Panel titulo="Composición por categoría" meta={`${periodoLbl} · roadmap_sku / ERP`}>
             {!categorias.length && <div style={{ fontSize: 11, color: theme.textMuted }}>Sin ventas en el periodo.</div>}
             <div style={{ display: 'grid', gap: 4 }}>

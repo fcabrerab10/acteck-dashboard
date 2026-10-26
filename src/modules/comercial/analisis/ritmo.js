@@ -125,3 +125,34 @@ export const fraseEstado = (c) => {
   return 'al ritmo';
 };
 export { fmtM };
+
+/** Último día con venta de un año en el diario del cliente (para calcular el ritmo de un año que no es el actual). */
+export function ultimoDiaConVentaAnio(filas = [], anio) {
+  let mejor = null;
+  for (const r of filas) {
+    if (N(r.anio) !== anio || N(r.fact_neta) <= 0) continue;
+    const d = fechaDe({ anio: N(r.anio), mes: N(r.mes), dia: N(r.dia) });
+    if (!mejor || d > mejor) mejor = d;
+  }
+  return mejor;
+}
+
+/**
+ * Ritmo de compra de UN cliente (bloque «Ritmo de compra de este cliente» de su página, 2026-10-26) sobre su diario
+ * (v_sellin_cliente_dia sin columna cliente): reutiliza ritmoCompra + lo del mes anterior (días con compra, ticket)
+ * y el monto del último día con compra. `ritmo` es null si no compró en la ventana.
+ */
+export function ritmoDeUnCliente(filas = [], { cliente, hoy = new Date(), nombre = null } = {}) {
+  const conC = filas.map((r) => ({ ...r, cliente: r.cliente || cliente, anio: N(r.anio), mes: N(r.mes), dia: N(r.dia) }));
+  const nombres = nombre ? new Map([[cliente, { nombre }]]) : new Map();
+  const { lista } = ritmoCompra(conC, { hoy, nombres, solo: new Set([cliente]) });
+  const ritmo = lista[0] || null;
+  const mes = hoy.getMonth() + 1, anio = hoy.getFullYear();
+  const prevAnio = mes === 1 ? anio - 1 : anio, prevMes = mes === 1 ? 12 : mes - 1;
+  const prev = conC.filter((r) => r.anio === prevAnio && r.mes === prevMes && N(r.fact_neta) > 0);
+  const prevDias = new Set(prev.map((r) => r.dia)).size;
+  const prevTotal = prev.reduce((s, r) => s + N(r.fact_neta), 0);
+  const ticketPrev = prevDias ? prevTotal / prevDias : null;
+  const ultimaMonto = ritmo ? conC.filter((r) => iso(fechaDe(r)) === ritmo.ultima).reduce((s, r) => s + N(r.fact_neta), 0) : null;
+  return { ritmo, prevDias, prevTotal, ticketPrev, ultimaMonto, mesLbl: mesLbl(mes), mesPrevLbl: mesLbl(prevMes), dia: hoy.getDate() };
+}
