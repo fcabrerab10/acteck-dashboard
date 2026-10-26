@@ -144,7 +144,7 @@ async function sellOutDeCliente(clienteKey, anio, anioPrev) {
       fetchAll('v_sellout_dicotech_sku_mes', 'sku,anio,mes,piezas,monto', (q) => q.in('anio', anios)),
       fetchAll('v_sellout_dicotech_sucursal_mes', 'sucursal,anio,mes,piezas,monto,tx,clientes_distintos', (q) => q.eq('anio', anio)),
       // sellout_general de Dicotech son ~2 años de renglones: es lo más pesado de la visita.
-      fetchAll('sellout_general', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe', (q) => q.ilike('mayorista', '%dicotech%').in('anio', anios)),
+      fetchAll('v_sellout_general_dicotech', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe', (q) => q.in('anio', anios)),
     ]);
   }
   if (clienteKey === 'pcel') {

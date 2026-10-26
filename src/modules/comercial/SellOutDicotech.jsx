@@ -157,11 +157,10 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
             (q) => q.eq('anio', anio)),
           fetchAll('v_inventario_cliente_sucursal_ultimo', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
             (q) => q.eq('cliente', clienteKey)),
-          // FIX audit #3: ilike en vez de eq strict. La columna 'mayorista' puede
-          // guardar 'DICOTECH', 'Dicotech', 'dicotech', 'DICO'… El eq('DICOTECH')
-          // dejaba la vista vacía si el schema no matcheaba mayúsculas exactas.
-          fetchAll('sellout_general', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
-            (q) => q.ilike('mayorista', '%dicotech%').in('anio', [anioPrev, anio])),
+          // 2026-10-26: la vista materializada de Dicotech (sin líneas repetidas del puente, 15 ms) en vez de la tabla cruda
+          // sellout_general (480 K filas con RLS: > 3 s y la pestaña se quedaba en blanco).
+          fetchAll('v_sellout_general_dicotech', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
+            (q) => q.in('anio', [anioPrev, anio])),
         ]);
         setMensual(mes);
         setSkuMesRaw(skuMes);
