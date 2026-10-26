@@ -56,6 +56,13 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] Análisis por cliente (3.95.1): fuera Pareto y Comparador; dentro «Quién se mueve» y «A quién llamar hoy» (eligió sólo esos dos del mockup b6c25d79). Siguiente: Sell In (quiere el sell in por día del mes).
 - [x] Página del cliente (3.96.0, 26-oct): bloques 1, 2 y 5 del mockup `pagina-cliente-web.html` — Resumen: «Sell in vs sell out del año, con la cuota» (sustituye a la Tendencia 12 m) y «Ritmo de compra de este cliente»; Sell Out: «Sucursales que suben, bajan y dejaron de vender» (sólo cuentas con sucursales). Bloques 3 y 4 descartados por Fernando; el Comparador de Sell In se queda. Pendiente: que Fernando lo vea en producción con su sesión.
 
+## Diagnóstico de cargas (26-oct-2026)
+- Puente OK (ventas/inventario/precios cada hora, cuotas y sell out mayoristas 06:30). **Master Embarques parado desde el 7-oct** (tarea de Claude en la Mac mini; vigilante avisó): arreglar en la Mac mini.
+- Manual al corriente: PCEL sem 43; Digitalife sell out/ensambles/inventario al 18-oct; Dicotech sell out e inventario al 25-oct (cargado por script con los parsers del importador).
+- Decisiones de Fernando: estados de cuenta los sube él (sem 40, 42, 43); Estado de resultados se trabaja la tarde del 26-oct (faltan abr–sep); guías ERP y órdenes de compra se dejan (no agregan valor hoy); roadmap sin cambios.
+- Dato raro: 18 líneas de Grupo Loma en sellout_general con fecha 2026-12-10 ($22K) — viene así de la base SELLOUT de la oficina.
+- Página del cliente 3.96.0 (bloques 1, 2, 5) publicada; falta verla con la sesión de Fernando.
+
 ## Pendientes de Fernando
 - [ ] Pasarme los celulares de Karolina y David (con lada) para capturarlos en Administración → Editar datos; así «WhatsApp» en Actividad del equipo abre directo su chat.
 - [ ] Semana de ensambles 31 ago–6 sep 2026 (está en el correo de Alejandro del 7-sep; Google pide verificación para bajarla desde Chrome).
