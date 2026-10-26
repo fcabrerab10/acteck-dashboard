@@ -3,15 +3,19 @@
 
 
 // ─── CARGA DINÁMICA DE SheetJS ───
+// SheetJS bajo demanda (2026-10-26): se usa la librería ya empaquetada (xlsx-js-style, chunk vendor-xlsx) en vez del CDN.
+// Antes se leía window.XLSX del CDN; pero el chunk empaquetado, por su envoltura UMD, deja window.XLSX = {} (vacío) en cuanto
+// se abre Propuestas, Inventario o una exportación, y el importador fallaba con «n.read is not a function».
+let _sheetjs = null;
 export function loadSheetJS() {
-  return new Promise((resolve, reject) => {
-    if (window.XLSX) return resolve(window.XLSX);
-    const s = document.createElement("script");
-    s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
-    s.onload = () => resolve(window.XLSX);
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
+  if (_sheetjs) return _sheetjs;
+  _sheetjs = import('xlsx-js-style').then((m) => {
+    const X = m.default && typeof m.default.read === 'function' ? m.default : m;
+    if (typeof X.read !== 'function') throw new Error('SheetJS no cargó (sin read)');
+    try { window.XLSX = X; } catch { /* sin window */ }
+    return X;
+  }).catch((e) => { _sheetjs = null; throw e; });
+  return _sheetjs;
 }
 
 

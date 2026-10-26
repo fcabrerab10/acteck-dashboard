@@ -4,7 +4,7 @@
 import { loadSheetJS } from '../utils';
 
 export const XLSX = () => {
-  if (typeof window === 'undefined' || !window.XLSX) throw new Error('SheetJS no está cargado: usa leerWorkbook() antes de parsear');
+  if (typeof window === 'undefined' || !window.XLSX || typeof window.XLSX.read !== 'function') throw new Error('SheetJS no está cargado: usa leerWorkbook() antes de parsear');
   return window.XLSX;
 };
 
