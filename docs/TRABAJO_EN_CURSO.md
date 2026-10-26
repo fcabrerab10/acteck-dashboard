@@ -54,6 +54,7 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 
 ## Siguiente en la web (pedido el 8-oct, noche)
 - [x] Análisis por cliente (3.95.1): fuera Pareto y Comparador; dentro «Quién se mueve» y «A quién llamar hoy» (eligió sólo esos dos del mockup b6c25d79). Siguiente: Sell In (quiere el sell in por día del mes).
+- [x] Página del cliente (3.96.0, 26-oct): bloques 1, 2 y 5 del mockup `pagina-cliente-web.html` — Resumen: «Sell in vs sell out del año, con la cuota» (sustituye a la Tendencia 12 m) y «Ritmo de compra de este cliente»; Sell Out: «Sucursales que suben, bajan y dejaron de vender» (sólo cuentas con sucursales). Bloques 3 y 4 descartados por Fernando; el Comparador de Sell In se queda. Pendiente: que Fernando lo vea en producción con su sesión.
 
 ## Pendientes de Fernando
 - [ ] Pasarme los celulares de Karolina y David (con lada) para capturarlos en Administración → Editar datos; así «WhatsApp» en Actividad del equipo abre directo su chat.
