@@ -33,6 +33,7 @@ import { mapaCuotas, cuotaPeriodo, alcanceCuota, yoyDe as yoyCalc, idxMes as idx
 import { useSkusDimension } from './datos';
 import { fraccionMes } from './calculo';
 import CuentaFrenteAlResto from './CuentaFrenteAlResto';
+import { SucursalesMovimientoM } from './RitmoM';
 
 const STALE = 5 * 60 * 1000;
 const fmtPz = (n) => Math.round(N(n)).toLocaleString('es-MX');
@@ -298,6 +299,7 @@ export function SellOutVista({ cuenta, nombre, fila, bloques, nota, anio, mes, d
         </ListaAgrupada>
       )}
       {bloques.includes('sucursales') && <DimensionM titulo="Sucursales" filas={sucursales} anio={anio} mes={mes} cargando={cargando.suc} vacio="Esta cuenta no reporta sucursales" sub={(x) => [x.vendedores ? `${int(x.vendedores)} vendedores` : null, x.top_vendedor || null].filter(Boolean).join(' · ') || undefined} onTocar={onDimension ? (x) => onDimension('sucursal', x) : undefined} />}
+      {bloques.includes('sucursales') && <SucursalesMovimientoM suc={suc} anio={anio} mes={mes} cargando={cargando.suc} />}
       {bloques.includes('vendedores') && <DimensionM titulo="Vendedores" filas={vendedores} anio={anio} mes={mes} cargando={cargando.ven} vacio="Esta cuenta no reporta vendedores" sub={(x) => [x.clientes ? `${int(x.clientes)} clientes` : null, x.skus ? `${int(x.skus)} SKUs` : null].filter(Boolean).join(' · ') || undefined} onTocar={onDimension ? (x) => onDimension('vendedor_nombre', x) : undefined} />}
       {bloques.includes('clientes') && (
         <ListaAgrupada titulo="Clientes finales" meta={`${int(clientes.activos)} en ${mesL.toLowerCase()} · ${int(clientes.nuevos)} nuevos · ${int(clientes.perdidos)} perdidos`} style={{ marginTop: 18 }} pie="Nuevos y perdidos contra el mes anterior; los 8 de más venta del mes.">

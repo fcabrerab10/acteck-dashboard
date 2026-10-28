@@ -33,21 +33,38 @@ export function Accion({ children, onClick, tone, title, style }) {
  * Fila rápida: palomita · título · cliente · persona · hora/fecha. Al pasar el mouse (o con la fila elegida por teclado)
  * salen Hoy · Mañana · Semana · Ya no · Mandar. Cada acción es optimista y deja «Deshacer» en el toast.
  */
+/** Pantalla táctil (iPad, iPhone plegable abierto): no hay hover, así que el primer toque «selecciona» la fila y muestra las acciones y el segundo la abre. */
+export const esTactil = () => { try { return typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches; } catch { return false; } };
+
 export function FilaRapida({ item, uid, personasPorId, personas = [], hoyIso, puedeEditar, onAbrir, seleccionada = false, mostrarFecha = false, acciones = ['hoy', 'manana', 'semana', 'yano', 'mandar'], extra = null, compacta = false }) {
   const { theme } = useTheme();
   const [hover, setHover] = useState(false);
   const [mandar, setMandar] = useState(false);
+  const [tocada, setTocada] = useState(false);
+  // Toque fuera de la fila → se cierran las acciones (sólo mientras está tocada).
+  useEffect(() => {
+    if (!tocada || typeof document === 'undefined') return;
+    const fuera = (e) => { if (!e.target?.closest?.(`[data-fila-rapida="${item.id}"]`)) { setTocada(false); setMandar(false); } };
+    document.addEventListener('pointerdown', fuera, true);
+    return () => document.removeEventListener('pointerdown', fuera, true);
+  }, [tocada, item.id]);
   const hecha = item.estado === 'hecha';
   const otros = (item.responsables || []).filter((u) => u !== uid).map((u) => personasPorId?.get(u)).filter(Boolean);
   const fecha = item.cuando || item.fecha_limite || null;
   const vencida = !hecha && fecha && hoyIso && fecha < hoyIso;
   const act = (a, extraOpts) => accionItem(item, a, { hoyIso, ...(extraOpts || {}) }).catch(() => {});
-  const visibles = (hover || seleccionada) && puedeEditar && !hecha;
+  const visibles = (hover || seleccionada || tocada) && puedeEditar && !hecha;
   const puedeHoy = acciones.includes('hoy') && item.cuando !== hoyIso;
+  const alTocar = () => {
+    // Táctil: primer toque muestra las acciones (como el hover del escritorio); segundo toque abre. Con el teclado o el mouse no cambia nada.
+    if (esTactil() && puedeEditar && !hecha && !tocada && !seleccionada) { setTocada(true); return; }
+    setTocada(false);
+    onAbrir?.(item);
+  };
   return (
-    <div onClick={() => onAbrir?.(item)} onMouseEnter={() => setHover(true)} onMouseLeave={() => { setHover(false); setMandar(false); }} data-fila-rapida={item.id}
+    <div onClick={alTocar} onMouseEnter={() => setHover(true)} onMouseLeave={() => { setHover(false); setMandar(false); }} data-fila-rapida={item.id}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compacta ? '5px 8px' : '7px 10px', borderRadius: 11, cursor: 'pointer', minHeight: compacta ? 34 : 40, position: 'relative',
-        background: seleccionada ? `${theme.accent}14` : hover ? (theme.surfaceHover || 'rgba(120,120,128,0.10)') : 'transparent', outline: seleccionada ? `1.5px solid ${theme.accent}` : 'none', outlineOffset: -1,
+        background: seleccionada || tocada ? `${theme.accent}14` : hover ? (theme.surfaceHover || 'rgba(120,120,128,0.10)') : 'transparent', outline: seleccionada ? `1.5px solid ${theme.accent}` : 'none', outlineOffset: -1,
         transition: `background ${DUR.state}ms ${EASE}`, opacity: hecha ? 0.6 : 1 }}>
       <Palomita hecha={hecha} size={compacta ? 18 : 20} onClick={() => { if (!puedeEditar) return; act(hecha ? 'reabrir' : 'hecha'); }} />
       <span style={{ flex: 1, minWidth: 0, fontSize: compacta ? 13 : 13.5, color: theme.text, textDecoration: hecha ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.titulo}</span>

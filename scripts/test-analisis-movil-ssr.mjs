@@ -286,3 +286,73 @@ test('rutas · analisisClientes es push y propuestas acepta extra.skus', () => {
   assert.equal(p.tipo, 'push'); assert.deepEqual(p.el.props.inicial, { skus: ['BR-942539'], clienteKey: 'digitalife' });
   assert.equal(destino({ pagina: 'propuestas' }).el.props.inicial, null);
 });
+
+// ── 3.97.0 · ritmo en el celular: «Quién se mueve», «A quién llamar hoy», ritmo del cliente y sucursales que suben/bajan ──
+test('vista · RitmoM: lista con quién se mueve y a quién llamar; ficha con ritmo del cliente; sell out con sucursales', async () => {
+  const { QuienSeMueveM, LlamarHoyM, RitmoClienteM, SucursalesMovimientoM } = await vite.ssrLoadModule('/src/movil/pestanas/analisis/RitmoM.jsx');
+  const { ritmoDeUnCliente, ritmoCompra } = await vite.ssrLoadModule('/src/modules/comercial/analisis/ritmo.js');
+  const { movimientoSucursales } = await vite.ssrLoadModule('/src/modules/comercial/sellout/sucursales.js');
+  // Diario de la cartera (v_sellin_cliente_dia con `cliente`): CVA compra cada ~10 d y ya compró en oct; CT compró en sep y en oct no.
+  const d = (cliente, mes, dia, f) => ({ cliente, cliente_key: 'mayoreo', anio: 2026, mes, dia, fact_neta: f, piezas: Math.round(f / 1000), facturas: 2 });
+  const CARTERA = [
+    d('00417', 7, 2, 900_000), d('00417', 7, 12, 950_000), d('00417', 7, 22, 800_000), d('00417', 8, 1, 1_000_000), d('00417', 8, 11, 900_000), d('00417', 8, 21, 950_000),
+    d('00417', 9, 1, 1_200_000), d('00417', 9, 11, 1_000_000), d('00417', 9, 21, 1_100_000), d('00417', 10, 1, 1_300_000), d('00417', 10, 6, 1_200_000),
+    d('00183', 7, 5, 600_000), d('00183', 7, 15, 500_000), d('00183', 8, 4, 650_000), d('00183', 8, 14, 600_000), d('00183', 9, 3, 700_000), d('00183', 9, 13, 650_000),
+    d('00999', 9, 20, 40_000), // ocasional: queda fuera con `solo`
+  ];
+  const nombres = new Map([['00417', { nombre: 'CVA' }], ['00183', { nombre: 'CT Internacional' }], ['00999', { nombre: 'Nuevo' }]]);
+  const solo = new Set(['00417', '00183']);
+  const rc = ritmoCompra(CARTERA, { hoy: HOY, nombres, solo });
+  assert.equal(rc.lista.length, 2, 'sólo recurrentes');
+  assert.equal(rc.lista[0].cliente, '00183', 'CT va primero: atrasado');
+  assert.equal(rc.lista[0].estado, 'atrasado');
+
+  let abierto = null;
+  const s1 = render(QuienSeMueveM, { diario: CARTERA, nombres, solo, hoy: HOY, onAbrir: (c) => { abierto = c; } });
+  sano(s1, 'QuienSeMueveM');
+  assert.match(s1, /Quién se mueve/); assert.match(s1, /oct al día 9 vs sep a mismo día/); assert.match(s1, /Suben/); assert.match(s1, /Bajan/);
+  assert.match(s1, /CVA/); assert.match(s1, /\+\$1\.3M|\+\$1\.[0-9]M/, 'CVA sube vs sep a mismo día');
+  assert.match(s1, /Compraron en sep y en oct no/); assert.match(s1, /CT Internacional/); assert.match(s1, /atrasado \d+ d/);
+  assert.ok(!/Nuevo</.test(s1), 'el ocasional no sale');
+
+  const s2 = render(LlamarHoyM, { diario: CARTERA, nombres, solo, hoy: HOY, onAbrir() {}, inicial: 1 });
+  sano(s2, 'LlamarHoyM');
+  assert.match(s2, /A quién llamar hoy/); assert.match(s2, /1 atrasados/); assert.match(s2, /compra cada 10 d/); assert.match(s2, /lleva 26 d/); assert.match(s2, /Mostrar más · 1 restantes/);
+  assert.match(s2, /ticket \$6[0-9]{2}K/);
+  const s2b = render(LlamarHoyM, { diario: [], nombres, solo, hoy: HOY }, 'claro');
+  sano(s2b, 'LlamarHoyM vacío'); assert.match(s2b, /Sin compras en los últimos 6 meses/);
+
+  // Lista completa con el diario: las dos secciones salen debajo de la lista; sin diario (null) no se pintan.
+  const r = calc.resumenLista({ rows: ROWS, cuotasRows: CUOTAS, anio: ANIO, mes: MES, modo: 'mes', hoy: HOY, etiqueta: (c) => c.nombre });
+  assert.ok(r.clientes.every((c) => typeof c.ocasional === 'boolean'), 'resumenLista expone ocasional');
+  const s3 = render(ListaVista, { r, anio: ANIO, mes: MES, modo: 'mes', chip: 'todos', q: '', onChip() {}, onQ() {}, onAbrir() {}, periodoLbl: 'Oct 2026', diario: CARTERA, hoy: HOY });
+  sano(s3, 'ListaVista con ritmo'); assert.match(s3, /Quién se mueve/); assert.match(s3, /A quién llamar hoy/);
+  const s3b = render(ListaVista, { r, anio: ANIO, mes: MES, modo: 'mes', chip: 'todos', q: '', onChip() {}, onQ() {}, onAbrir() {}, periodoLbl: 'Oct 2026' });
+  assert.ok(!/A quién llamar hoy/.test(s3b), 'sin diario no se pinta');
+
+  // Ficha: ritmo de UN cliente (el diario del cliente no trae `cliente`).
+  const rC = ritmoDeUnCliente(DIARIO, { cliente: '00417', hoy: HOY, nombre: 'CVA' });
+  const s4 = render(RitmoClienteM, { r: rC });
+  sano(s4, 'RitmoClienteM');
+  assert.match(s4, /Ritmo de compra/); assert.match(s4, /Compra cada/); assert.match(s4, /Lleva sin comprar/); assert.match(s4, /3 d</); assert.match(s4, /Ticket ⌀ por día/); assert.match(s4, /Oct vs sep · mismo día/);
+  assert.match(s4, /3 días con compra en sep/); assert.match(s4, /última 6 oct/);
+  const s4b = render(RitmoClienteM, { r: ritmoDeUnCliente([], { cliente: 'X', hoy: HOY }) }, 'claro');
+  sano(s4b, 'RitmoClienteM vacío'); assert.match(s4b, /no hay ritmo que medir/);
+  const s4c = render(ResumenVista, { nombre: 'CVA', anio: 2026, mes: 10, enCurso: true, mtd: 480_000, yoyMes: 18, cuotaMes: 4_400_000, so: null, ritmo: calc.ritmoCompras(DIARIO, HOY), ritmoC: rC, serie: calc.serieAnioSiSo({ mensual, cuenta: null, mapa: null, codigo: '00417', anio: 2026, hoy: HOY }), movs: movimientos({ grupos: [], anio: 2026, mes: 10 }), catSi: [], catSo: [], mensual, cuotasRows: CUOTAS, codigo: '00417' });
+  sano(s4c, 'ResumenVista con ritmo'); assert.match(s4c, /Ritmo de compra/); assert.match(s4c, /Lleva sin comprar/);
+
+  // Sell out: sucursales que suben, bajan y dejaron de vender (sólo cuando la receta trae sucursales).
+  const SUC2 = [...SUC, { anio: 2026, mes: 9, sucursal: 'LEON', importe: 300_000, cantidad: 300 }, { anio: 2026, mes: 8, sucursal: 'LEON', importe: 240_000 }, { anio: 2026, mes: 10, sucursal: 'MONTERREY', importe: 500_000 }, { anio: 2026, mes: 9, sucursal: 'MONTERREY', importe: 100_000 }];
+  const ms = movimientoSucursales(SUC2, { anio: 2026, mes: 10 });
+  assert.equal(ms.suben[0].sucursal, 'MONTERREY'); assert.equal(ms.bajan[0].sucursal, 'GUADALAJARA'); assert.equal(ms.sinVenta[0].sucursal, 'LEON');
+  const s5 = render(SucursalesMovimientoM, { suc: SUC2, anio: 2026, mes: 10 });
+  sano(s5, 'SucursalesMovimientoM');
+  assert.match(s5, /Sucursales que suben, bajan y dejaron de vender/); assert.match(s5, /MONTERREY/); assert.match(s5, /\+\$400K/); assert.match(s5, /GUADALAJARA/); assert.match(s5, /−\$1\.2M/); assert.match(s5, /LEON/); assert.match(s5, /dejó de vender/); assert.match(s5, /vendía \$/);
+  const filaCva = { ...filasSo.find((f) => f.cuenta === 'cva'), sucursales: 21, clientesFinales: 812, estados: 12, vendedores: null };
+  const { bloques, nota } = bloquesDe('cva', filaCva);
+  const s6 = render(SellOutVista, { cuenta: 'cva', nombre: 'CVA', fila: filaCva, bloques, nota, anio: 2026, mes: 10, dias: DIAS.filter((d2) => d2.cuenta === 'cva'), mensualCuenta: MENSUAL_SO.filter((r2) => r2.cuenta === 'cva'), skus: SKUS_SO, suc: SUC2, cf: CF, edo: EDO, rd: RD, hoy: HOY });
+  sano(s6, 'SellOutVista con sucursales'); assert.match(s6, /Sucursales que suben, bajan y dejaron de vender/);
+  const s7 = render(SellOutVista, { cuenta: 'ct', nombre: 'CT', fila: { ...filaCva, cuenta: 'ct', sucursales: null }, bloques: bloques.filter((b) => b !== 'sucursales'), nota: null, anio: 2026, mes: 10, dias: [], mensualCuenta: [], skus: [], rd: RD, hoy: HOY });
+  assert.ok(!/Sucursales que suben/.test(s7), 'sin receta de sucursales no se pinta');
+  assert.ok(!/margen|costo/i.test(s1 + s2 + s4 + s5), 'nada de margen ni costo en los bloques nuevos');
+});

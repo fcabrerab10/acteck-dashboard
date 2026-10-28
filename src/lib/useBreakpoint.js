@@ -18,7 +18,8 @@ export function useBreakpoint() {
   useEffect(() => {
     const onResize = () => setBp(compute(window.innerWidth));
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
   }, []);
 
   return bp;
@@ -52,21 +53,80 @@ export function useIsTouch() {
   return touch;
 }
 
-// Shell móvil SÓLO en el celular (2026-10-05, Fernando: «en el iPad quiero que se vea como en la laptop; el único con
-// estilo celular es el celular tal cual»). Regla pura: dispositivo táctil cuyo lado menor de pantalla mide menos de
-// 700 px (iPhone SE 375 … iPhone 17 Pro Max 440). iPad Pro y cualquier computadora —aunque la ventana sea angosta—
-// usan el shell de escritorio (dispositivo.js lo adapta: sidebar en iconos en tabletas).
-// Excepción pedida el mismo día, SÓLO para el iPad mini (pantalla 744 × 1133 o 768 × 1024): en vertical se ve como el
-// celular y en horizontal como la web. Se reconoce por el tamaño físico de la pantalla, no por la ventana.
+// ─── Shell móvil: ¿celular o web? ─────────────────────────────────────────────────────────────────────────────────
+// 2026-10-05 (Fernando): «en el iPad quiero que se vea como en la laptop; el único con estilo celular es el celular».
+// 2026-10-28 (iPhone plegable de Apple): pantalla exterior cerrado = app del celular; pantalla interior abierto = la web
+//   como en la computadora, y cambia en vivo al abrir/cerrar. En un plegable `screen.width/height` no cambia como el
+//   área visible, así que la regla decide por el VIEWPORT DE LAYOUT (innerWidth/innerHeight), no por la pantalla física:
+//     · táctil y lado menor del viewport < 700 px CSS → celular (iPhone SE 375 … 17 Pro Max 440 · plegable cerrado ≈ 430).
+//     · táctil y lado menor del viewport ≥ 700 → web (plegable abierto ≈ 700–900 por lado · iPad Air/Pro).
+//     · no táctil → siempre web, aunque la ventana sea angosta (dispositivo.js la adapta).
+//   Se decide con el viewport de layout, NUNCA con visualViewport.height: el teclado en pantalla encoge el visual
+//   viewport y no debe cambiar de shell. Y mientras un campo tiene el foco no se re-evalúa.
+//   Excepción iPad mini (pantalla física 744 × 1133 o 768 × 1024): vertical = celular, horizontal = web, decidido por la
+//   pantalla (en horizontal su viewport queda < 700 por el chrome de Safari y seguiría siendo web).
 export const esIpadMini = (ladoMenor, ladoMayor) => Number(ladoMenor) >= 700 && Number(ladoMenor) <= 768 && Number(ladoMayor) <= 1133;
-export const debeUsarShellMovil = (bp, touch, ladoMenor = Infinity, { ladoMayor = Infinity, vertical = false } = {}) =>
-  !!touch && (Number(ladoMenor) < 700 || (esIpadMini(ladoMenor, ladoMayor) && !!vertical));
+export const debeUsarShellMovil = (bp, touch, ladoMenor = Infinity, { ladoMayor = Infinity, vertical = false, viewportMenor = null } = {}) => {
+  if (!touch) return false;
+  if (esIpadMini(ladoMenor, ladoMayor)) return !!vertical;
+  const menor = Number.isFinite(Number(viewportMenor)) && Number(viewportMenor) > 0 ? Number(viewportMenor) : Number(ladoMenor);
+  return menor < 700;
+};
 
+/** Lee ventana + pantalla y aplica la regla. Puro salvo por `window`; `touch` se pasa desde useIsTouch. */
+export function medirShellMovil(touch, win = typeof window !== 'undefined' ? window : null) {
+  if (!win) return false;
+  const sw = win.screen?.width || Infinity, sh = win.screen?.height || Infinity;
+  const iw = Number(win.innerWidth) || 0, ih = Number(win.innerHeight) || 0;
+  const viewportMenor = iw > 0 && ih > 0 ? Math.min(iw, ih) : null;
+  const vertical = ih > iw;
+  return debeUsarShellMovil(null, touch, Math.min(sw, sh), { ladoMayor: Math.max(sw, sh), vertical, viewportMenor });
+}
+
+const DEBOUNCE_MS = 120;
+const editando = () => {
+  if (typeof document === 'undefined') return false;
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
+};
+
+/**
+ * ¿Montar la app del celular? Re-evalúa al instante (debounce 120 ms) con resize · orientationchange ·
+ * visualViewport.resize · matchMedia('(min-width: 700px)'), que es lo que dispara abrir/cerrar el plegable.
+ * Si hay un campo con el foco (teclado en pantalla) se espera al blur para no cambiar de shell a media captura.
+ */
 export const useMobileShell = () => {
-  useBreakpoint(); // re-render al cambiar de tamaño (orientación)
   const touch = useIsTouch();
-  const sw = typeof window !== 'undefined' && window.screen ? window.screen.width || Infinity : Infinity;
-  const sh = typeof window !== 'undefined' && window.screen ? window.screen.height || Infinity : Infinity;
-  const vertical = typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false;
-  return debeUsarShellMovil(null, touch, Math.min(sw, sh), { ladoMayor: Math.max(sw, sh), vertical });
+  const [movil, setMovil] = useState(() => medirShellMovil(touch));
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let timer = null, pendiente = false;
+    const medir = () => {
+      timer = null;
+      if (editando()) { pendiente = true; return; }
+      pendiente = false;
+      setMovil(medirShellMovil(touch));
+    };
+    const programar = () => { if (timer) clearTimeout(timer); timer = setTimeout(medir, DEBOUNCE_MS); };
+    const alSoltarFoco = () => { if (pendiente) programar(); };
+    window.addEventListener('resize', programar);
+    window.addEventListener('orientationchange', programar);
+    window.visualViewport?.addEventListener?.('resize', programar);
+    const doc = typeof document !== 'undefined' ? document : null;
+    doc?.addEventListener('focusout', alSoltarFoco);
+    const mq = window.matchMedia ? window.matchMedia('(min-width: 700px)') : null;
+    if (mq?.addEventListener) mq.addEventListener('change', programar); else mq?.addListener?.(programar);
+    medir();
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('resize', programar);
+      window.removeEventListener('orientationchange', programar);
+      window.visualViewport?.removeEventListener?.('resize', programar);
+      doc?.removeEventListener('focusout', alSoltarFoco);
+      if (mq?.removeEventListener) mq.removeEventListener('change', programar); else mq?.removeListener?.(programar);
+    };
+  }, [touch]);
+  return movil;
 };

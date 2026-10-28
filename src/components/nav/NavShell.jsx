@@ -108,17 +108,19 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
     </Suspense>
   );
 
+  // Recortes de pantalla (iPhone plegable abierto, iPad con notch): el shell web también respeta las safe-areas (2026-10-28).
+  const SAFE = { paddingTop: 'env(safe-area-inset-top, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)', boxSizing: 'border-box' };
   let cuerpo;
   if (modo === 'barra') {
     cuerpo = (
-      <div className="font-sans" style={{ ...fondo, display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div className="font-sans" style={{ ...fondo, ...SAFE, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
         <BarraApple {...comunNav} chrome={chrome} onAbrirAtajos={() => mostrarAtajos(true)} />
         <main style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>{children}</main>
       </div>
     );
   } else if (modo === 'iphone') {
     cuerpo = (
-      <div className="font-sans" style={{ ...fondo, display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div className="font-sans" style={{ ...fondo, ...SAFE, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
         <main style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: `calc(${IPHONE_PADDING_INFERIOR}px + env(safe-area-inset-bottom))` }}>
           <Topbar {...chrome} mostrarBuscar marca={<MarcaIphone theme={theme} titulo={tituloDe(arbol, estado)} />} />
           {/* Como una app de iPad: columna centrada con márgenes generosos */}
@@ -129,7 +131,7 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
     );
   } else {
     cuerpo = (
-      <div className="font-sans" style={{ ...fondo, display: 'flex', height: '100vh' }}>
+      <div className="font-sans" style={{ ...fondo, ...SAFE, display: 'flex', height: '100dvh' }}>
         <SidebarIpad {...comunNav} />
         <main style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
           <Topbar {...chrome} />

@@ -282,3 +282,33 @@ test('shell móvil sólo en teléfono o en táctil hasta 1439 px; una computador
   assert.equal(debeUsarShellMovil('laptop', true, 1024), false, 'iPad Pro: escritorio');
   assert.equal(debeUsarShellMovil('desktop', true, 1080), false);
 });
+
+test('iPhone plegable (2026-10-28): decide por el viewport de layout; cerrado = celular, abierto = web, en vivo', async () => {
+  const { debeUsarShellMovil, medirShellMovil } = await import('../src/lib/useBreakpoint.js');
+  const { modoDe } = await import('../src/lib/dispositivo.js');
+  // La pantalla física del plegable puede quedarse en la exterior (430 × 932) aunque esté abierto: manda el viewport.
+  assert.equal(debeUsarShellMovil(null, true, 430, { ladoMayor: 932, vertical: true, viewportMenor: 430 }), true, 'plegable cerrado 430×932: celular');
+  assert.equal(debeUsarShellMovil(null, true, 430, { ladoMayor: 932, vertical: true, viewportMenor: 780 }), false, 'plegable abierto 780×820 (pantalla aún dice 430): web');
+  assert.equal(debeUsarShellMovil(null, true, 800, { ladoMayor: 860, vertical: true, viewportMenor: 800 }), false, 'plegable abierto 800×860: web');
+  assert.equal(debeUsarShellMovil(null, true, 800, { ladoMayor: 860, vertical: false, viewportMenor: 800 }), false, 'plegable abierto girado 860×800: web');
+  assert.equal(debeUsarShellMovil(null, true, 430, { ladoMayor: 932, vertical: false, viewportMenor: 390 }), true, 'iPhone en horizontal (viewport 932×390): celular');
+  assert.equal(debeUsarShellMovil(null, true, 744, { ladoMayor: 1133, vertical: true, viewportMenor: 744 }), true, 'iPad mini vertical: celular (sigue la excepción)');
+  assert.equal(debeUsarShellMovil(null, true, 744, { ladoMayor: 1133, vertical: false, viewportMenor: 690 }), false, 'iPad mini horizontal (viewport 1133×690 por el chrome): web');
+  assert.equal(debeUsarShellMovil(null, true, 834, { ladoMayor: 1194, vertical: true, viewportMenor: 834 }), false, 'iPad Pro 11 vertical: web');
+  assert.equal(debeUsarShellMovil(null, true, 820, { ladoMayor: 1180, vertical: false, viewportMenor: 740 }), false, 'iPad Air horizontal: web');
+  assert.equal(debeUsarShellMovil(null, false, 900, { ladoMayor: 1440, vertical: true, viewportMenor: 600 }), false, 'laptop no táctil con ventana de 600 px: web');
+  // Con el teclado abierto el viewport de layout NO cambia en iOS (sólo visualViewport): el shell no debe moverse.
+  const win = (iw, ih, sw = 800, sh = 860) => ({ screen: { width: sw, height: sh }, innerWidth: iw, innerHeight: ih });
+  assert.equal(medirShellMovil(true, win(430, 932, 430, 932)), true, 'medir: cerrado');
+  assert.equal(medirShellMovil(true, win(800, 860)), false, 'medir: abierto');
+  assert.equal(medirShellMovil(true, win(860, 800)), false, 'medir: abierto girado');
+  assert.equal(medirShellMovil(false, win(600, 900, 1440, 900)), false, 'medir: computadora angosta');
+  assert.equal(medirShellMovil(true, { screen: { width: 430, height: 932 } }), true, 'medir: sin innerWidth cae a la pantalla');
+  assert.equal(medirShellMovil(true, null), false, 'medir: sin window (SSR) → web');
+  // Abierto, dispositivo.js lo trata como tableta táctil (sidebar en iconos, objetivos ≥ 44 px), nunca como laptop.
+  assert.equal(modoDe({ ancho: 780, alto: 820, touch: true }), 'tabletaCompacta');
+  assert.equal(modoDe({ ancho: 800, alto: 860, touch: true }), 'tabletaCompacta');
+  assert.equal(modoDe({ ancho: 860, alto: 800, touch: true }), 'tabletaCompacta');
+  assert.equal(modoDe({ ancho: 900, alto: 860, touch: true }), 'tableta');
+  assert.notEqual(modoDe({ ancho: 900, alto: 860, touch: true }), 'laptop');
+});

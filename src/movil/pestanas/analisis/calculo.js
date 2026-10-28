@@ -63,7 +63,7 @@ export function resumenLista({ rows = [], cuotasRows = [], anio, mes, modo = 'me
       // si no el ERP mete 1,700 clientes de mostrador y e-commerce de una sola compra (2026-10-05).
       relevante: ytd >= 50000 || (cuotaYtd != null && cuotaYtd > 0),
       trazo6, riesgo: prev > 0 && yoy != null && yoy < -30 && (ytd >= 50000 || (cuotaYtd != null && cuotaYtd > 0)), nuevo: ytd >= 50000 && prevAnioTotal <= 0,
-      sinCompraMes: comproMesAnterior && curMes <= 0, mesesCompra12: c.mesesCompra12, ultimaCompra: c.ultimaCompra,
+      sinCompraMes: comproMesAnterior && curMes <= 0, mesesCompra12: c.mesesCompra12, ultimaCompra: c.ultimaCompra, ocasional: !!c.ocasional,
     };
   });
 

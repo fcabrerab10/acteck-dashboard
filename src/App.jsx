@@ -275,6 +275,16 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const bp = useBreakpoint();
   const mobile = useMobileShell();
+  // iPhone plegable (2026-10-28): al abrirlo el celular se desmonta y entra la web; la web sigue en la pantalla que el
+  // celular tenía abierta (si existe), y al cerrarlo el celular arranca en la pestaña/cliente de la web (prop `inicial`).
+  const rutaMovil = useRef(null);
+  useEffect(() => {
+    if (mobile || !rutaMovil.current?.pagina) return;
+    const r = rutaMovil.current; rutaMovil.current = null;
+    if (r.pagina === 'inicio' || r.pagina === 'buscar' || r.pagina === 'alertas') return;
+    handleNavegar(r.clienteKey || null, r.pagina);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobile]);
   // Dispositivo + preferencias de esta máquina (localStorage, por modo).
   const disp = useDispositivo();
   const prefsDisp = usePrefsDispositivo();
@@ -567,13 +577,13 @@ export default function App() {
     <div className="font-sans" style={{
       background: 'var(--t-bg, #F5F5F7)',
       display: 'block',
-      height: '100vh',
+      height: '100dvh',
     }}>
 
       {/* MÓVIL · app V3 desde cero (src/movil) · Inicio · Clientes · Alertas · Buscar · Más */}
       {mobile ? (
         <Suspense fallback={<Cargando fullscreen label="Cargando…" />}>
-          <MovilApp perfil={perfil} onCerrarSesion={handleLogout} />
+          <MovilApp perfil={perfil} onCerrarSesion={handleLogout} inicial={{ pagina: paginaActiva, clienteKey: clienteActivo }} onRuta={(r) => { rutaMovil.current = r; }} />
           <ToastHost />
         </Suspense>
       ) : (

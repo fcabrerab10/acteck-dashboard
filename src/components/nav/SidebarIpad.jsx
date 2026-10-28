@@ -78,7 +78,7 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
 
   return (
     <aside data-entrada-lado style={{
-      width: ancho, minWidth: ancho, height: '100vh', display: 'flex', flexDirection: 'column', flexShrink: 0,
+      width: ancho, minWidth: ancho, height: '100dvh', display: 'flex', flexDirection: 'column', flexShrink: 0,
       ...vidrio(theme, 'chrome'), borderRight: `1px solid ${hairline(theme)}`,
       color: theme.text, fontFamily: TYPO.fontText, overflow: 'hidden',
       transition: `width ${DUR.content}ms ${EASE}, min-width ${DUR.content}ms ${EASE}`,

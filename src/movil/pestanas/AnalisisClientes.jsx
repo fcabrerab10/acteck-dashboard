@@ -17,6 +17,8 @@ import { PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { moneyCompact, deltaPct, tonoCuota, MESES } from '../util';
 import { useListaAnalisis } from './analisis/datos';
 import { resumenLista, filtrarLista, CANALES_CHIP } from './analisis/calculo';
+import { useSellInDiaCartera } from '../../modules/comercial/analisis/useAnalisisData';
+import { QuienSeMueveM, LlamarHoyM } from './analisis/RitmoM';
 import AnalisisFicha, { nombreBonito } from './AnalisisFicha';
 
 const etiquetaDe = (c) => (PROPIOS.includes(c.key) ? nombreCliente(c.key) : nombreBonito(c.nombre));
@@ -35,11 +37,16 @@ function ChipsCanal({ value, onChange, disponibles }) {
 }
 
 /** Vista pura de la lista (sin red): la prueba scripts/test-analisis-movil-ssr.mjs. */
-export function ListaVista({ r, anio, mes, modo, chip, q, onChip, onQ, onAbrir, periodoLbl }) {
+export function ListaVista({ r, anio, mes, modo, chip, q, onChip, onQ, onAbrir, periodoLbl, diario = null, cargandoDiario = false, hoy = new Date() }) {
   const { theme } = useTheme();
   const k = r.kpis;
   const grupos = useMemo(() => filtrarLista(r.canales, chip, q, canalLabel), [r.canales, chip, q]);
   const disponibles = useMemo(() => new Set(r.canales.map((g) => g.id)), [r.canales]);
+  // «Quién se mueve» y «A quién llamar hoy» (3.97.0): mismos motores que la web, sólo clientes recurrentes.
+  const nombres = useMemo(() => new Map(r.clientes.map((c) => [c.cliente, { nombre: c.label || c.nombre, canal: c.canal }])), [r.clientes]);
+  const recurrentes = useMemo(() => new Set(r.clientes.filter((c) => !c.ocasional).map((c) => c.cliente)), [r.clientes]);
+  const porCodigo = useMemo(() => new Map(r.clientes.map((c) => [c.cliente, c])), [r.clientes]);
+  const abrirCodigo = (codigo) => { const c = porCodigo.get(codigo); if (c) onAbrir(c); };
   const mesL = MESES[mes - 1];
   return (
     <>
@@ -70,6 +77,12 @@ export function ListaVista({ r, anio, mes, modo, chip, q, onChip, onQ, onAbrir, 
         </ListaAgrupada>
       ))}
       <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '8px 28px 0', lineHeight: 1.4 }}>Fact. neta del ERP por cliente · trazo = últimos 6 meses · % vs el año anterior a mismo día · cuota de RevkoBi. Toca un cliente para su página.</div>
+      {diario !== null && (
+        <>
+          <QuienSeMueveM diario={diario} cargando={cargandoDiario} nombres={nombres} solo={recurrentes} hoy={hoy} onAbrir={abrirCodigo} />
+          <LlamarHoyM diario={diario} cargando={cargandoDiario} nombres={nombres} solo={recurrentes} hoy={hoy} onAbrir={abrirCodigo} />
+        </>
+      )}
     </>
   );
 }
@@ -85,6 +98,7 @@ export default function AnalisisClientes() {
   const [chip, setChip] = useState('todos');
   const [q, setQ] = useState('');
   const { data, isLoading, error } = useListaAnalisis(anio);
+  const diario = useSellInDiaCartera(true); // una consulta chica (v_sellin_cliente_dia, 6 meses), ya filtrada por cliente visible
   const perfil = nav.perfil;
   const externo = perfil?.tipo === 'externo' && !perfil?.es_super_admin;
   const r = useMemo(() => (data ? resumenLista({ ...data, anio, mes, modo, hoy, etiqueta: etiquetaDe, filtro: externo ? (c) => PROPIOS.includes(c.key) && puedeVerCliente(perfil, c.key) : null }) : null), [data, anio, mes, modo, hoy, externo, perfil]);
@@ -111,7 +125,7 @@ export default function AnalisisClientes() {
           <Skeleton h={320} r={12} />
         </div>
       )}
-      {r && <ListaVista r={r} anio={anio} mes={mes} modo={modo} chip={chip} q={q} onChip={setChip} onQ={setQ} onAbrir={abrir} periodoLbl={periodoLbl} />}
+      {r && <ListaVista r={r} anio={anio} mes={mes} modo={modo} chip={chip} q={q} onChip={setChip} onQ={setQ} onAbrir={abrir} periodoLbl={periodoLbl} diario={diario.data || []} cargandoDiario={diario.isLoading} hoy={hoy} />}
     </div>
   );
 }

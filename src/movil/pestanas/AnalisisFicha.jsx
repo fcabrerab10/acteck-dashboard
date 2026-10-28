@@ -24,6 +24,8 @@ import { moneyCompact, int, deltaPct, MESES, MONO, N } from '../util';
 import { useCuotasClientes, useSellInDia, useDetalleCliente } from '../../modules/comercial/analisis/useAnalisisData';
 import { mapaCuotas, cuotaPeriodo, alcanceCuota, idxMes, yoyDe } from '../../modules/comercial/analisis/calc';
 import { movimientos } from '../../modules/comercial/analisis/movimiento';
+import { ritmoDeUnCliente } from '../../modules/comercial/analisis/ritmo';
+import { RitmoClienteM } from './analisis/RitmoM';
 import { useMensual, useDrillSkus, CUENTA_POR_ERP } from '../../modules/comercial/sellout/datos';
 import { useCodigoErp, useClienteMes, useVendedorCliente } from './analisis/datos';
 import { fraccionMes, ritmoCompras, sellOutMesCuenta, serieAnioSiSo, fraseCliente } from './analisis/calculo';
@@ -53,7 +55,7 @@ export function MiniLineas({ serie, fmt = moneyCompact, alto = 150, nombre = 'Mo
 const norm = (s) => String(s || 'Sin categoría').trim();
 
 /** Vista pura del Resumen (sin red): la prueba scripts/test-analisis-movil-ssr.mjs. */
-export function ResumenVista({ nombre, anio, mes, enCurso, mtd, yoyMes, cuotaMes, so, ritmo, serie, movs, catSi, catSo, mensual, cuotasRows, codigo, onCompartir }) {
+export function ResumenVista({ nombre, anio, mes, enCurso, mtd, yoyMes, cuotaMes, so, ritmo, ritmoC = null, cargandoRitmo = false, serie, movs, catSi, catSo, mensual, cuotasRows, codigo, onCompartir }) {
   const { theme } = useTheme();
   const [dimCat, setDimCat] = useState('si');
   const mesL = MESES[mes - 1];
@@ -90,6 +92,8 @@ export function ResumenVista({ nombre, anio, mes, enCurso, mtd, yoyMes, cuotaMes
         <LeyendaScrub items={[{ label: 'Sell in', color: theme.accent }, ...(so ? [{ label: 'Sell out', color: theme.purple || theme.indigo || theme.accent }] : []), ...(serie.some((f) => f.cuota) ? [{ label: 'Cuota', color: theme.orange, dash: true }] : [])]} />
       </div>
 
+      {(ritmoC || cargandoRitmo) && <RitmoClienteM r={ritmoC} cargando={cargandoRitmo} />}
+
       <MovimientoM titulo="Dónde está el movimiento" movs={movs} meta={`${movs.mesLbl || mesL.toLowerCase()} vs ${movs.mesPrevLbl} · en pesos`} nota="Lo que más subió y lo que más bajó en este cliente respecto al mes anterior, mezclando SKUs y categorías." />
 
       <div style={{ padding: '0 16px' }}>
@@ -119,7 +123,7 @@ export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal
   const { data: rows = [], isLoading: lMes, error } = useClienteMes(codigo, anio);
   const { data: cuotasRows = [] } = useCuotasClientes(anio);
   const { data: vendedor } = useVendedorCliente(codigo, anio);
-  const { data: diario = [] } = useSellInDia(codigo, anio, !!codigo);
+  const { data: diario = [], isLoading: lDia } = useSellInDia(codigo, anio, !!codigo);
   const { data: soMensual = [] } = useMensual(cuenta ? anio : null);
   const { data: detalle = [] } = useDetalleCliente(codigo, anio, !!codigo);
   const { data: skusSo = [] } = useDrillSkus(cuenta, anio, !!cuenta);
@@ -140,6 +144,8 @@ export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal
   }, [rows]);
   const mapa = useMemo(() => mapaCuotas(cuotasRows), [cuotasRows]);
   const ritmo = useMemo(() => ritmoCompras(diario, hoy), [diario, hoy]);
+  // «Ritmo de compra» (3.97.0): el mismo motor que la página del cliente en la web (ritmo.js#ritmoDeUnCliente).
+  const ritmoC = useMemo(() => (codigo ? ritmoDeUnCliente(diario, { cliente: codigo, hoy, nombre }) : null), [diario, codigo, hoy, nombre]);
 
   const r = useMemo(() => {
     if (!rows.length && !codigo) return null;
@@ -188,7 +194,7 @@ export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal
       {!error && !codigo && !lCod && <Vacio titulo="Cliente sin código en el ERP" sub="No hay ventas con ese nombre en los dos últimos años." />}
       {cargando && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /><Skeleton h={84} r={12} /></div><Skeleton h={200} r={12} /></div>}
       {!cargando && r && pestana === 'resumen' && (
-        <ResumenVista nombre={nombre} anio={anio} mes={mes} enCurso={r.enCurso} mtd={r.mtd} yoyMes={r.yoyMes} cuotaMes={r.cuotaMes} so={r.so} ritmo={ritmo} serie={r.serie} movs={r.movs}
+        <ResumenVista nombre={nombre} anio={anio} mes={mes} enCurso={r.enCurso} mtd={r.mtd} yoyMes={r.yoyMes} cuotaMes={r.cuotaMes} so={r.so} ritmo={ritmo} ritmoC={ritmoC} cargandoRitmo={lDia} serie={r.serie} movs={r.movs}
           catSi={r.catSi} catSo={r.catSo} mensual={mensual} cuotasRows={cuotasRows} codigo={codigo} onCompartir={() => setCompartiendo(true)} />
       )}
       {!cargando && r && pestana === 'sellin' && <SellInM codigo={codigo} mensual={mensual} detalle={detalle} diario={diario} cuotasRows={cuotasRows} anio={anio} mes={mes} sensible={sensible} rd={rd} />}

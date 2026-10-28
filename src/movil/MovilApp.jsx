@@ -57,7 +57,7 @@ function Cargando() {
 
 let seq = 0;
 
-export default function MovilApp({ perfil, onCerrarSesion }) {
+export default function MovilApp({ perfil, onCerrarSesion, inicial = null, onRuta = null }) {
   const { theme } = useTheme();
   const { menu } = usePreferencias();
   const modo = menu.modoMovil === 'barra' ? 'barra' : 'cajon';
@@ -152,14 +152,26 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
     if (d.tipo === 'push') { setActivoId(id); push(d.el, nodo.extra ? `${d.key}-${Date.now()}` : d.key, id); return; }
     abrirProximamente(d.label);
   }, [arbol, irATab, push, abrirProximamente]);
+  // Al cambiar de shell en vivo (iPhone plegable, 2026-10-28) la web sabe en qué pantalla iba el celular (onRuta) y el
+  // celular arranca en la pantalla que la web tenía abierta (inicial). Nada de location.reload: la caché es la misma.
+  const onRutaRef = useRef(onRuta); onRutaRef.current = onRuta;
+  const navegarYAvisar = useCallback((nodo) => { navegar(nodo); if (nodo?.pagina) onRutaRef.current?.({ pagina: nodo.pagina, clienteKey: nodo.clienteKey || null }); }, [navegar]);
+  const inicialRef = useRef(inicial);
+  useEffect(() => {
+    const n = inicialRef.current;
+    if (!n?.pagina || n.pagina === 'inicio') return;
+    if (destino({ pagina: n.pagina, clienteKey: n.clienteKey || null }).tipo === 'proximamente') return;
+    navegar({ pagina: n.pagina, clienteKey: n.clienteKey || null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // El celular también atiende el evento global `acteck:navegar` (lo disparan enlaces internos compartidos con la web,
   // p. ej. FrescuraPill → importador, y sirve para medir las pantallas desde el panel). 2026-10-02.
   useEffect(() => {
-    const h = (e) => { const d = e.detail || {}; if (d.pagina) navegar({ pagina: d.pagina, clienteKey: d.clienteKey || null, extra: d.extra, label: d.label }); };
+    const h = (e) => { const d = e.detail || {}; if (d.pagina) navegarYAvisar({ pagina: d.pagina, clienteKey: d.clienteKey || null, extra: d.extra, label: d.label }); };
     window.addEventListener('acteck:navegar', h);
     return () => window.removeEventListener('acteck:navegar', h);
-  }, [navegar]);
+  }, [navegarYAvisar]);
 
   const abrirGrupo = useCallback((id) => {
     const g = arbol.find((x) => x.id === id);
@@ -222,9 +234,9 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   useEffect(() => { setCajonAbierto(false); if (hoja?.grupo) cerrarHoja(); }, [modo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ctx = useMemo(() => ({
-    perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegar, abrirHoja, cerrarHoja, abrirProximamente, abrirPerfil: () => setPerfilAbierto(true),
+    perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegar: navegarYAvisar, abrirHoja, cerrarHoja, abrirProximamente, abrirPerfil: () => setPerfilAbierto(true),
     refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta,
-  }), [perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegar, abrirHoja, cerrarHoja, abrirProximamente, refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta]);
+  }), [perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegarYAvisar, abrirHoja, cerrarHoja, abrirProximamente, refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta]);
 
   // Barras tipo Instagram (3.69.0): al bajar, la superior se esconde y la inferior se encoge; al subir, o al
   // cambiar de pestaña / abrir otra pantalla, vuelven.

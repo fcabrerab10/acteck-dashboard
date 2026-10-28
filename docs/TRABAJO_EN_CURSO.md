@@ -56,6 +56,9 @@ Lista viva de todo lo acordado con Fernando. Se marca al publicar y verificar en
 - [x] Análisis por cliente (3.95.1): fuera Pareto y Comparador; dentro «Quién se mueve» y «A quién llamar hoy» (eligió sólo esos dos del mockup b6c25d79). Siguiente: Sell In (quiere el sell in por día del mes).
 - [x] Página del cliente (3.96.0, 26-oct): bloques 1, 2 y 5 del mockup `pagina-cliente-web.html` — Resumen: «Sell in vs sell out del año, con la cuota» (sustituye a la Tendencia 12 m) y «Ritmo de compra de este cliente»; Sell Out: «Sucursales que suben, bajan y dejaron de vender» (sólo cuentas con sucursales). Bloques 3 y 4 descartados por Fernando; el Comparador de Sell In se queda. Pendiente: que Fernando lo vea en producción con su sesión.
 
+- [x] iPhone plegable (3.97.0, 28-oct): cerrado = celular, abierto = web, cambia en vivo por el viewport; conserva la pantalla abierta; FilaRapida táctil; `100dvh` + safe-areas en los dos shells. Pendiente: probarlo en el aparato real de Fernando (DevTools 430×932 ↔ 800×860 ya cubierto por pruebas).
+- [x] Celular · ritmo (3.97.0, 28-oct): «Quién se mueve» y «A quién llamar hoy» en la lista de Análisis por cliente; «Ritmo de compra» (4 tarjetas) en el Resumen del cliente; «Sucursales que suben, bajan y dejaron de vender» en su Sell Out. Pendiente: verlo en el iPhone de Fernando.
+
 ## Diagnóstico de cargas (26-oct-2026)
 - Puente OK (ventas/inventario/precios cada hora, cuotas y sell out mayoristas 06:30). **Master Embarques parado desde el 7-oct** (tarea de Claude en la Mac mini; vigilante avisó): arreglar en la Mac mini.
 - Manual al corriente: PCEL sem 43; Digitalife sell out/ensambles/inventario al 18-oct; Dicotech sell out e inventario al 25-oct (cargado por script con los parsers del importador).
