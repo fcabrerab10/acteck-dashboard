@@ -7,6 +7,7 @@ import { useTheme } from '../../lib/themeContext';
 import { usePreferencias } from '../../lib/preferencias';
 import Topbar from '../Topbar';
 import { TYPO } from '../../lib/themeTokens';
+import { useDispositivo } from '../../lib/dispositivo';
 import { Logotipo } from './comun';
 import { construirArbol, resolverFavoritos, irANodo } from './arbol';
 import BarraApple from './BarraApple';
@@ -42,6 +43,7 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
   const { theme } = useTheme();
   const { menu, favoritos, toggleFavorito } = usePreferencias();
   const modo = ['barra', 'sidebar', 'iphone'].includes(menu.modo) ? menu.modo : 'sidebar';
+  const disp = useDispositivo();
   const [paleta, setPaleta] = useState(false);
   const [atajos, setAtajos] = useState(false);
   // Se montan la primera vez que se abren (cerrados, un frame antes de abrirse: ver
@@ -110,6 +112,12 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
 
   // Recortes de pantalla (iPhone plegable abierto, iPad con notch): el shell web también respeta las safe-areas (2026-10-28).
   const SAFE = { paddingTop: 'env(safe-area-inset-top, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)', boxSizing: 'border-box' };
+  // iPhone plegable abierto en horizontal (2026-10-30): la barra de estado de iOS vive en una franja derecha de ~100 px
+  // (safe-area-inset-right) pero sólo ocupa su parte alta. Como una app nativa, el contenido corre por debajo de esa
+  // franja y sólo la pastilla superior (Topbar) la respeta entera; el contenido deja 56 px de resguardo a la cámara.
+  const plegable = disp.modo === 'plegable';
+  const SAFE_LADO = plegable ? { ...SAFE, paddingRight: 0, '--safe-right-top': 'env(safe-area-inset-right, 0px)' } : SAFE;
+  const PAD_CONTENIDO = plegable ? { paddingRight: 'max(0px, calc(env(safe-area-inset-right, 0px) - 56px))' } : null;
   let cuerpo;
   if (modo === 'barra') {
     cuerpo = (
@@ -131,11 +139,11 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
     );
   } else {
     cuerpo = (
-      <div className="font-sans" style={{ ...fondo, ...SAFE, display: 'flex', height: '100dvh' }}>
-        <SidebarIpad {...comunNav} />
+      <div className="font-sans" style={{ ...fondo, ...SAFE_LADO, display: 'flex', height: '100dvh' }}>
+        <SidebarIpad {...comunNav} plegable={plegable} />
         <main style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
           <Topbar {...chrome} />
-          {children}
+          {PAD_CONTENIDO ? <div style={PAD_CONTENIDO}>{children}</div> : children}
         </main>
       </div>
     );

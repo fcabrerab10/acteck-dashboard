@@ -54,7 +54,7 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
   const { menu, favoritos, prefs, toggleFavorito, moverFavorito } = usePreferencias();
   const disp = useDispositivo();
   const prefsDisp = usePrefsDispositivo();
-  const ETIQUETA_MODO = { telefono: 'iPhone', tabletaCompacta: 'Tableta', tableta: 'iPad', laptop: 'Laptop', panoramico: 'Monitor panorámico' };
+  const ETIQUETA_MODO = { telefono: 'iPhone', plegable: 'iPhone abierto', tabletaCompacta: 'Tableta', tableta: 'iPad', laptop: 'Laptop', panoramico: 'Monitor panorámico' };
   const panelesHoy = panelesEfectivos(prefsDisp.paneles, { ancho: disp.ancho, alto: disp.alto });
   // prefers-reduced-transparency / prefers-reduced-motion mandan: el chrome se queda Opaco.
   const vidrioForzado = sistemaPideOpaco();

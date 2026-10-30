@@ -20,6 +20,7 @@ import { usePreferenciasNotif } from '../../lib/alertas';
 import { puedeActualizarDatos } from '../../lib/permisos';
 import { versionLabel } from '../../lib/version';
 import { shellForzado, forzarShell, medidasDispositivo } from '../../lib/useBreakpoint';
+import { modoDe } from '../../lib/dispositivo';
 import { AvatarImg, usePerfilVivo } from '../../lib/avatar';
 import { Segmented } from '../kit';
 import useContadorNotificaciones from '../notificaciones/useContadorNotificaciones';
@@ -270,7 +271,7 @@ function VistaDispositivo({ theme }) {
   );
   return (
     <span style={{ display: 'block', marginTop: 3 }} onClick={(e) => e.stopPropagation()}>
-      <span title="pantalla · visible · densidad">{m.pantalla[0]}×{m.pantalla[1]} · {m.visible[0]}×{m.visible[1]} · {m.dpr}x</span>
+      <span title="pantalla · visible · densidad · modo">{m.pantalla[0]}×{m.pantalla[1]} · {m.visible[0]}×{m.visible[1]} · {m.dpr}x · {modoDe({ ancho: m.visible[0], alto: m.visible[1], touch: true, pantalla: m.pantalla })}</span>
       <span style={{ display: 'inline-flex', gap: 4, marginLeft: 6 }}>{op(null, 'Auto')}{op('web', 'Web')}{op('celular', 'Celular')}</span>
     </span>
   );

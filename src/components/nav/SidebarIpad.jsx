@@ -23,7 +23,12 @@ export const SIDEBAR_COLAPSADA = 56;
 const LS_COLAPSO = 'nav_sidebar_colapsada_v1';
 const UMBRAL_AUTO = 1100;
 
-export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, onNavegar, onAbrirPaleta, densidad = 'comoda', modoPresent, perfil: perfilProp }) {
+export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, onNavegar: onNavegarProp, onAbrirPaleta, densidad = 'comoda', modoPresent, perfil: perfilProp, plegable = false }) {
+  // iPhone plegable abierto (2026-10-30): la barra es SIEMPRE un riel de 56 px y «expandir» la abre encima del
+  // contenido (como la sidebar de iPadOS), sin empujar nada; se cierra al navegar o al tocar fuera.
+  const [overlay, setOverlay] = useState(false);
+  const onNavegar = React.useCallback((...a) => { if (plegable) setOverlay(false); onNavegarProp?.(...a); }, [plegable, onNavegarProp]);
+  useEffect(() => { if (!plegable) setOverlay(false); }, [plegable]);
   const { theme } = useTheme();
   const dark = esMidnight(theme);
   const perfil = usePerfilVivo(perfilProp);
@@ -39,15 +44,16 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
   }, []);
   // Preferencia de esta máquina: en tableta el menú arranca en iconos; en laptop, completo (como siempre).
   const prefsDisp = usePrefsDispositivo();
-  const colapsada = manual == null ? (angosto || prefsDisp.sidebar === 'iconos') : manual;
+  const colapsada = plegable ? !overlay : (manual == null ? (angosto || prefsDisp.sidebar === 'iconos') : manual);
   const toggleColapso = React.useCallback(() => {
+    if (plegable) { setOverlay((o) => !o); return; }
     setManual((prev) => {
       const actual = prev == null ? (angosto || prefsDisp.sidebar === 'iconos') : prev;
       const v = !actual;
       try { localStorage.setItem(LS_COLAPSO, v ? '1' : '0'); } catch {}
       return v;
     });
-  }, [angosto, prefsDisp.sidebar]);
+  }, [angosto, prefsDisp.sidebar, plegable]);
   // ⌘\ (lo dispara NavShell) colapsa/expande el menú.
   useEffect(() => {
     const on = () => toggleColapso();
@@ -76,13 +82,19 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
   }, [activoNodo, favs]);
   const res = useResaltadoDeslizante(claveActiva, { theme, radio: 7, plano: true, deps: `${colapsada}-${compacta}-${clienteAbierto}-${favs.length}-${arbol.length}` });
 
+  const flotante = plegable && overlay;
   return (
+    <>
+    {plegable && <div aria-hidden style={{ width: SIDEBAR_COLAPSADA, minWidth: SIDEBAR_COLAPSADA, flexShrink: 0, display: flotante ? 'block' : 'none' }} />}
+    {flotante && <div onClick={() => setOverlay(false)} style={{ position: 'fixed', inset: 0, zIndex: 59, background: 'rgba(0,0,0,0.28)', animation: `fadeIn ${DUR.state}ms ${EASE} both` }} />}
     <aside data-entrada-lado style={{
       width: ancho, minWidth: ancho, height: '100dvh', display: 'flex', flexDirection: 'column', flexShrink: 0,
       ...vidrio(theme, 'chrome'), borderRight: `1px solid ${hairline(theme)}`,
       color: theme.text, fontFamily: TYPO.fontText, overflow: 'hidden',
       transition: `width ${DUR.content}ms ${EASE}, min-width ${DUR.content}ms ${EASE}`,
-      position: 'relative', zIndex: 30,
+      position: flotante ? 'fixed' : 'relative', top: flotante ? 0 : undefined, left: flotante ? 0 : undefined, zIndex: flotante ? 60 : 30,
+      boxShadow: flotante ? '12px 0 40px rgba(0,0,0,0.35)' : undefined,
+      paddingTop: flotante ? 'env(safe-area-inset-top, 0px)' : undefined, paddingLeft: flotante ? 'env(safe-area-inset-left, 0px)' : undefined, boxSizing: 'border-box',
     }}>
       {/* Tarjeta de perfil + colapso */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: colapsada ? '12px 0 6px' : '10px 8px 6px 8px', flexDirection: colapsada ? 'column' : 'row', justifyContent: colapsada ? 'center' : 'space-between', minHeight: 48 }}>
@@ -174,6 +186,7 @@ export default function SidebarIpad({ arbol, favoritos, toggleFavorito, estado, 
             </>}
       </div>
     </aside>
+    </>
   );
 }
 

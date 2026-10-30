@@ -37,8 +37,19 @@ function falso(inicial = {}) {
 test('el modo sale del ancho (y el táctil sólo desempata tabletas)', () => {
   assert.equal(modoDe({ ancho: 390, alto: 844, touch: true }), 'telefono');      // iPhone 14
   assert.equal(modoDe({ ancho: 430, alto: 932, touch: true }), 'telefono');      // iPhone 16 Pro Max
-  assert.equal(modoDe({ ancho: 699, alto: 900, touch: true }), 'telefono');
-  assert.equal(modoDe({ ancho: 700, alto: 1000, touch: true }), 'tabletaCompacta');
+  assert.equal(modoDe({ ancho: 699, alto: 900, touch: true }), 'plegable'); // 2026-10-30: 600–759 táctil en vertical ya es el plegable abierto (ningún teléfono mide eso); < 600 sigue telefono
+  assert.equal(modoDe({ ancho: 599, alto: 900, touch: true }), 'telefono');
+  assert.equal(modoDe({ ancho: 700, alto: 1000, touch: true }), 'plegable'); // 2026-10-30: táctil 600–760 de ancho en vertical = plegable abierto
+  assert.equal(modoDe({ ancho: 700, alto: 1000, touch: true, pantalla: [744, 1133] }), 'tabletaCompacta'); // iPad mini vertical (pantalla exacta) sigue siendo tableta
+  // iPhone plegable abierto (medidas de la captura de Fernando, 2026-10-30): ≈ 955 × 672 táctil, pantalla exterior 430 × 932
+  assert.equal(modoDe({ ancho: 955, alto: 672, touch: true, pantalla: [430, 932] }), 'plegable');
+  assert.equal(modoDe({ ancho: 955, alto: 672, touch: true, pantalla: [672, 955] }), 'plegable');
+  assert.equal(modoDe({ ancho: 672, alto: 955, touch: true, pantalla: [672, 955] }), 'plegable');
+  assert.equal(modoDe({ ancho: 955, alto: 672, touch: false }), 'laptop', 'misma ventana sin táctil = laptop');
+  assert.equal(modoDe({ ancho: 1133, alto: 744, touch: true, pantalla: [744, 1133] }), 'tableta', 'iPad mini horizontal no es plegable');
+  assert.equal(modoDe({ ancho: 1180, alto: 820, touch: true, pantalla: [820, 1180] }), 'tableta', 'iPad Air horizontal no es plegable');
+  assert.equal(modoDe({ ancho: 1024, alto: 768, touch: true, pantalla: [768, 1024] }), 'tableta', 'iPad 9 horizontal no es plegable');
+  assert.equal(modoDe({ ancho: 1024, alto: 700, touch: true, pantalla: [810, 1080] }), 'tableta', 'iPad con Safari recortado: la pantalla ≥ 800 manda');
   assert.equal(modoDe({ ancho: 834, alto: 1194, touch: true }), 'tabletaCompacta'); // iPad Pro 11 vertical
   assert.equal(modoDe({ ancho: 1024, alto: 1366, touch: true }), 'tabletaCompacta'); // iPad mini vertical
   assert.equal(modoDe({ ancho: 1194, alto: 834, touch: true }), 'tableta');        // iPad Pro 11 horizontal
@@ -318,7 +329,7 @@ test('iPhone plegable (2026-10-28): decide por el viewport de layout; cerrado = 
   // Abierto, dispositivo.js lo trata como tableta táctil (sidebar en iconos, objetivos ≥ 44 px), nunca como laptop.
   assert.equal(modoDe({ ancho: 780, alto: 820, touch: true }), 'tabletaCompacta');
   assert.equal(modoDe({ ancho: 800, alto: 860, touch: true }), 'tabletaCompacta');
-  assert.equal(modoDe({ ancho: 860, alto: 800, touch: true }), 'tabletaCompacta');
+  assert.equal(modoDe({ ancho: 860, alto: 800, touch: true }), 'plegable'); // 2026-10-30: abierto girado = modo plegable (riel + compacta)
   assert.equal(modoDe({ ancho: 900, alto: 860, touch: true }), 'tableta');
   assert.notEqual(modoDe({ ancho: 900, alto: 860, touch: true }), 'laptop');
 });

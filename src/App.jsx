@@ -326,7 +326,9 @@ export default function App() {
     return () => { vivo = false; limpiar(); };
   }, []);
   // Ancho máximo del contenido: 1600 de toda la vida; sólo el panorámico lo puede cambiar.
-  const anchoMax = disp.modo === 'panoramico' ? (Number(prefsDisp.anchoMax) || 0) : 1600;
+  const anchoMax = disp.modo === 'panoramico' ? (Number(prefsDisp.anchoMax) || 0) : disp.modo === 'plegable' ? 0 : 1600;
+  // Modo de pantalla en <html data-modo> para el CSS (plegable: paddings y safe-areas afinados).
+  useEffect(() => { try { document.documentElement.dataset.modo = disp.modo; } catch { /* sin DOM */ } }, [disp.modo]);
 
   // Arranque en frío (3.68.0): «acteck.» con el punto latiendo mientras se comprueba la sesión; se queda al menos
   // 1.1 s y, si hay sesión, se desvanece mientras las tarjetas ya entran (iniciarEntrada). Sin sesión → login.

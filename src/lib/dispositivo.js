@@ -15,13 +15,30 @@
 // OJO: este módulo NO decide si se monta la app móvil (eso sigue en useMobileShell,
 // con la misma semántica de siempre). Sólo adapta el shell web y las pantallas.
 import { useEffect, useSyncExternalStore } from 'react';
+import { esIpadMini } from './useBreakpoint.js';
 
-export const MODOS = ['telefono', 'tabletaCompacta', 'tableta', 'laptop', 'panoramico'];
+export const MODOS = ['telefono', 'plegable', 'tabletaCompacta', 'tableta', 'laptop', 'panoramico'];
+
+// iPhone plegable ABIERTO (2026-10-30): pantalla interior casi cuadrada, táctil, de 600–1200 px CSS por lado.
+// No es ningún iPad: los iPad tienen ≥ 800 px por su lado menor (mini: 744/768 exactos, excluidos aparte) y el
+// plegable cerrado es un teléfono (< 600). Decide con el viewport de layout (ancho/alto) y la pantalla física.
+export function esPlegableAbierto({ ancho, alto = 0, touch = false, pantalla = null } = {}) {
+  if (!touch) return false;
+  const w = Number(ancho) || 0, h = Number(alto) || 0;
+  if (Array.isArray(pantalla) && pantalla.length === 2) {
+    const pw = Number(pantalla[0]) || 0, ph = Number(pantalla[1]) || 0;
+    if (esIpadMini(Math.min(pw, ph), Math.max(pw, ph))) return false;
+    if (Math.min(pw, ph) >= 800) return false;
+  }
+  if (w >= h) return w >= 760 && w <= 1200 && h >= 540 && h <= 800;   // abierto en horizontal
+  return w >= 600 && w < 760;                                            // abierto en vertical
+}
 
 // ─── Detección (pura, testeable) ───
-export function modoDe({ ancho, alto = 0, touch = false } = {}) {
+export function modoDe({ ancho, alto = 0, touch = false, pantalla = null } = {}) {
   const w = Number(ancho);
   if (!Number.isFinite(w) || w <= 0) return 'laptop';
+  if (esPlegableAbierto({ ancho: w, alto, touch, pantalla })) return 'plegable';
   if (w < 700) return 'telefono';
   if (w < 900) return 'tabletaCompacta';
   if (w < 1100 && touch && alto > w) return 'tabletaCompacta'; // iPad mini en vertical
@@ -183,6 +200,7 @@ export function intercambiarSlots(slots, i, j) {
 export const NIVELES_VIDRIO_IDS = ['opaco', 'tintado', 'vidrio'];
 export const DEFAULTS_DISPOSITIVO = {
   telefono:        { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
+  plegable:        { densidad: 'compacta', sidebar: 'iconos',  anchoMax: 0,    paneles: PANELES_VACIO, vidrio: 'opaco' },
   tabletaCompacta: { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
   tableta:         { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
   laptop:          { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
@@ -256,10 +274,11 @@ export function normalizarPaneles(paneles, n, relleno = { pagina: 'inicio', clie
 
 // ─── Hooks ───
 const medir = () => {
-  if (typeof window === 'undefined') return { ancho: 1440, alto: 900, touch: false };
+  if (typeof window === 'undefined') return { ancho: 1440, alto: 900, touch: false, pantalla: null };
   let touch = false;
   try { touch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch { touch = false; }
-  return { ancho: window.innerWidth || 1440, alto: window.innerHeight || 900, touch };
+  const pantalla = window.screen ? [window.screen.width || 0, window.screen.height || 0] : null;
+  return { ancho: window.innerWidth || 1440, alto: window.innerHeight || 900, touch, pantalla };
 };
 
 let medida = medir();

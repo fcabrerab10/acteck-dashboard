@@ -93,7 +93,7 @@ export function HojaLateral({ abierto, onClose, titulo, sub, ancho = 440, childr
   const visible = useVisible(abierto);
   // En tableta (iPad) la hoja ocupa la mitad de la pantalla; en laptop y monitor, el ancho de siempre.
   const { modo } = useDispositivo();
-  const anchoCSS = (modo === 'tableta' || modo === 'tabletaCompacta')
+  const anchoCSS = (modo === 'tableta' || modo === 'tabletaCompacta' || modo === 'plegable')
     ? `min(100vw, max(${ancho}px, 50vw))`
     : `min(100vw, ${ancho}px)`;
   return (

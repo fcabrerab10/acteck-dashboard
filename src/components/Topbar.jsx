@@ -60,7 +60,7 @@ export default function Topbar(props) {
     <div style={{
       position: 'sticky', top: 0, zIndex: 40, pointerEvents: 'none',
       display: 'flex', alignItems: 'center', justifyContent: marca ? 'space-between' : 'flex-end', gap: 10,
-      padding: marca ? '10px 20px 0' : '8px 16px 0', maxWidth: marca ? 1040 : 1600, margin: '0 auto', width: '100%', fontFamily: TYPO.fontText,
+      padding: marca ? '10px 20px 0' : '8px 16px 0', paddingRight: `calc(${marca ? 20 : 16}px + var(--safe-right-top, 0px))`, maxWidth: marca ? 1040 : 1600, margin: '0 auto', width: '100%', fontFamily: TYPO.fontText,
     }}>
       {marca}
       {modoPresent && (
