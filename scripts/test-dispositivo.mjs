@@ -286,6 +286,11 @@ test('shell móvil sólo en teléfono o en táctil hasta 1439 px; una computador
   assert.equal(debeUsarShellMovil('tablet', true, 700, { ladoMayor: 1000, vertical: true, viewportMenor: 700 }), false, 'plegable abierto vertical: web');
   assert.equal(debeUsarShellMovil('mobile', true, 430, { ladoMayor: 932, vertical: true, viewportMenor: 430 }), true, 'plegable cerrado: celular');
   assert.equal(debeUsarShellMovil('mobile', true, 430, { ladoMayor: 932, vertical: false, viewportMenor: 380 }), true, 'plegable cerrado horizontal: celular');
+  // 2026-10-30 (2): la pantalla sigue reportando la exterior (430) y el viewport abierto en horizontal se queda en 600–699 → web
+  assert.equal(debeUsarShellMovil('tablet', true, 430, { ladoMayor: 932, vertical: false, viewportMenor: 620 }), false, 'plegable abierto horizontal, pantalla dice 430, viewport 620: web');
+  assert.equal(debeUsarShellMovil('tablet', true, 667, { ladoMayor: 1000, vertical: false, viewportMenor: 600 }), false, 'plegable abierto, pantalla 667, viewport 600: web');
+  assert.equal(debeUsarShellMovil('mobile', true, 440, { ladoMayor: 956, vertical: true, viewportMenor: 440 }), true, '17 Pro Max cerrado 440: celular');
+  assert.equal(debeUsarShellMovil('mobile', true, 440, { ladoMayor: 956, vertical: false, viewportMenor: 599 }), true, 'viewport 599 sigue celular');
 });
 
 test('iPhone plegable (2026-10-28): decide por el viewport de layout; cerrado = celular, abierto = web, en vivo', async () => {

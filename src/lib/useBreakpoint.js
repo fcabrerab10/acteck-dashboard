@@ -74,14 +74,30 @@ export const debeUsarShellMovil = (bp, touch, ladoMenor = Infinity, { ladoMayor 
   // 2026-10-30 · iPhone plegable abierto en horizontal: la pantalla mide ≥ 700 por lado pero el viewport de alto queda < 700
   // por las barras de Safari. Basta con que la PANTALLA o el VIEWPORT alcancen 700 en su lado menor para ser web; el
   // celular cerrado no llega a 700 en ninguno de los dos.
+  // 2026-10-30 (2): el umbral del VIEWPORT baja a 600: ningún celular cerrado pasa de 440 por su lado menor, y el plegable
+  // abierto en horizontal, con las barras de Safari, puede quedarse en 600–700 de alto. La pantalla sigue en 700.
   const vp = Number.isFinite(Number(viewportMenor)) && Number(viewportMenor) > 0 ? Number(viewportMenor) : 0;
   const pantalla = Number.isFinite(Number(ladoMenor)) ? Number(ladoMenor) : 0;
-  return Math.max(vp, pantalla) < 700;
+  if (vp >= UMBRAL_VIEWPORT_WEB) return false;
+  return pantalla < 700;
 };
+export const UMBRAL_VIEWPORT_WEB = 600;
 
 // Forzar el shell en ESTE dispositivo (localStorage): 'web' · 'celular' · null = automático. Lo cambia el usuario desde
 // el panel del avatar; sirve de red de seguridad para aparatos que reportan medidas raras (plegables nuevos).
 const LS_SHELL = 'acteck_shell_forzado_v1';
+// También por URL: `?shell=web` · `?shell=celular` · `?shell=auto` (se guarda en este aparato y se limpia de la barra).
+(function leerShellDeUrl() {
+  try {
+    if (typeof window === 'undefined') return;
+    const u = new URL(window.location.href);
+    const v = u.searchParams.get('shell');
+    if (!v) return;
+    if (v === 'web' || v === 'celular') localStorage.setItem(LS_SHELL, v); else if (v === 'auto') localStorage.removeItem(LS_SHELL);
+    u.searchParams.delete('shell');
+    window.history.replaceState(null, '', u.pathname + (u.search || '') + (u.hash || ''));
+  } catch { /* sin window o sin storage */ }
+})();
 export function shellForzado() { try { return localStorage.getItem(LS_SHELL) || null; } catch { return null; } }
 export function forzarShell(valor) {
   try { if (valor) localStorage.setItem(LS_SHELL, valor); else localStorage.removeItem(LS_SHELL); } catch { /* sin storage */ }
