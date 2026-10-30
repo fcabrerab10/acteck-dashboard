@@ -65,17 +65,40 @@ export function useIsTouch() {
 //   viewport y no debe cambiar de shell. Y mientras un campo tiene el foco no se re-evalúa.
 //   Excepción iPad mini (pantalla física 744 × 1133 o 768 × 1024): vertical = celular, horizontal = web, decidido por la
 //   pantalla (en horizontal su viewport queda < 700 por el chrome de Safari y seguiría siendo web).
-export const esIpadMini = (ladoMenor, ladoMayor) => Number(ladoMenor) >= 700 && Number(ladoMenor) <= 768 && Number(ladoMayor) <= 1133;
+// Sólo las medidas reales del iPad mini (744×1133 desde el mini 6 · 768×1024 los anteriores): antes era un rango 700–768 y
+// atrapaba al iPhone plegable abierto (≈700×1000) como si fuera un iPad mini (2026-10-30).
+export const esIpadMini = (ladoMenor, ladoMayor) => (Number(ladoMenor) === 744 && Number(ladoMayor) === 1133) || (Number(ladoMenor) === 768 && Number(ladoMayor) === 1024);
 export const debeUsarShellMovil = (bp, touch, ladoMenor = Infinity, { ladoMayor = Infinity, vertical = false, viewportMenor = null } = {}) => {
   if (!touch) return false;
   if (esIpadMini(ladoMenor, ladoMayor)) return !!vertical;
-  const menor = Number.isFinite(Number(viewportMenor)) && Number(viewportMenor) > 0 ? Number(viewportMenor) : Number(ladoMenor);
-  return menor < 700;
+  // 2026-10-30 · iPhone plegable abierto en horizontal: la pantalla mide ≥ 700 por lado pero el viewport de alto queda < 700
+  // por las barras de Safari. Basta con que la PANTALLA o el VIEWPORT alcancen 700 en su lado menor para ser web; el
+  // celular cerrado no llega a 700 en ninguno de los dos.
+  const vp = Number.isFinite(Number(viewportMenor)) && Number(viewportMenor) > 0 ? Number(viewportMenor) : 0;
+  const pantalla = Number.isFinite(Number(ladoMenor)) ? Number(ladoMenor) : 0;
+  return Math.max(vp, pantalla) < 700;
 };
+
+// Forzar el shell en ESTE dispositivo (localStorage): 'web' · 'celular' · null = automático. Lo cambia el usuario desde
+// el panel del avatar; sirve de red de seguridad para aparatos que reportan medidas raras (plegables nuevos).
+const LS_SHELL = 'acteck_shell_forzado_v1';
+export function shellForzado() { try { return localStorage.getItem(LS_SHELL) || null; } catch { return null; } }
+export function forzarShell(valor) {
+  try { if (valor) localStorage.setItem(LS_SHELL, valor); else localStorage.removeItem(LS_SHELL); } catch { /* sin storage */ }
+  try { window.dispatchEvent(new CustomEvent('acteck:shell')); } catch { /* sin window */ }
+}
+/** Medidas crudas para diagnóstico (avatar › Yo): pantalla y visible en px CSS, táctil, DPR. */
+export function medidasDispositivo(win = typeof window !== 'undefined' ? window : null) {
+  if (!win) return null;
+  return { pantalla: [win.screen?.width || 0, win.screen?.height || 0], visible: [win.innerWidth || 0, win.innerHeight || 0], dpr: win.devicePixelRatio || 1 };
+}
 
 /** Lee ventana + pantalla y aplica la regla. Puro salvo por `window`; `touch` se pasa desde useIsTouch. */
 export function medirShellMovil(touch, win = typeof window !== 'undefined' ? window : null) {
   if (!win) return false;
+  const forzado = shellForzado();
+  if (forzado === 'web') return false;
+  if (forzado === 'celular') return true;
   const sw = win.screen?.width || Infinity, sh = win.screen?.height || Infinity;
   const iw = Number(win.innerWidth) || 0, ih = Number(win.innerHeight) || 0;
   const viewportMenor = iw > 0 && ih > 0 ? Math.min(iw, ih) : null;
@@ -113,6 +136,7 @@ export const useMobileShell = () => {
     const alSoltarFoco = () => { if (pendiente) programar(); };
     window.addEventListener('resize', programar);
     window.addEventListener('orientationchange', programar);
+    window.addEventListener('acteck:shell', programar);
     window.visualViewport?.addEventListener?.('resize', programar);
     const doc = typeof document !== 'undefined' ? document : null;
     doc?.addEventListener('focusout', alSoltarFoco);
@@ -123,6 +147,7 @@ export const useMobileShell = () => {
       if (timer) clearTimeout(timer);
       window.removeEventListener('resize', programar);
       window.removeEventListener('orientationchange', programar);
+      window.removeEventListener('acteck:shell', programar);
       window.visualViewport?.removeEventListener?.('resize', programar);
       doc?.removeEventListener('focusout', alSoltarFoco);
       if (mq?.removeEventListener) mq.removeEventListener('change', programar); else mq?.removeListener?.(programar);

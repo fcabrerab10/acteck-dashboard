@@ -281,6 +281,11 @@ test('shell móvil sólo en teléfono o en táctil hasta 1439 px; una computador
   assert.equal(debeUsarShellMovil('tablet', true, 744, { ladoMayor: 1600, vertical: true }), false, 'pantalla 744 pero más larga que un iPad mini: web');
   assert.equal(debeUsarShellMovil('laptop', true, 1024), false, 'iPad Pro: escritorio');
   assert.equal(debeUsarShellMovil('desktop', true, 1080), false);
+  // iPhone plegable (2026-10-30): abierto en horizontal la pantalla mide 700×1000 pero el viewport de alto queda en 600 por Safari → web
+  assert.equal(debeUsarShellMovil('tablet', true, 700, { ladoMayor: 1000, vertical: false, viewportMenor: 600 }), false, 'plegable abierto horizontal: web');
+  assert.equal(debeUsarShellMovil('tablet', true, 700, { ladoMayor: 1000, vertical: true, viewportMenor: 700 }), false, 'plegable abierto vertical: web');
+  assert.equal(debeUsarShellMovil('mobile', true, 430, { ladoMayor: 932, vertical: true, viewportMenor: 430 }), true, 'plegable cerrado: celular');
+  assert.equal(debeUsarShellMovil('mobile', true, 430, { ladoMayor: 932, vertical: false, viewportMenor: 380 }), true, 'plegable cerrado horizontal: celular');
 });
 
 test('iPhone plegable (2026-10-28): decide por el viewport de layout; cerrado = celular, abierto = web, en vivo', async () => {

@@ -19,6 +19,7 @@ import { EASE, DUR, reduceMotion } from '../../lib/motion';
 import { usePreferenciasNotif } from '../../lib/alertas';
 import { puedeActualizarDatos } from '../../lib/permisos';
 import { versionLabel } from '../../lib/version';
+import { shellForzado, forzarShell, medidasDispositivo } from '../../lib/useBreakpoint';
 import { AvatarImg, usePerfilVivo } from '../../lib/avatar';
 import { Segmented } from '../kit';
 import useContadorNotificaciones from '../notificaciones/useContadorNotificaciones';
@@ -192,7 +193,7 @@ export default function PanelAvatar({ perfil: perfilProp, onNavegar, onCerrarSes
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombre}</div>
                   {cargo && <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cargo}</div>}
-                  <div title="Versión del dashboard" style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted, marginTop: 2, letterSpacing: '0.01em' }}>{versionLabel()}</div>
+                  <div title="Versión del dashboard" style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted, marginTop: 2, letterSpacing: '0.01em' }}>{versionLabel()}<VistaDispositivo theme={theme} /></div>
                 </div>
                 {tabActiva === 'avisos' && (
                   <button type="button" onClick={() => cuerpo.current?.marcarTodo()} disabled={!contador.nuevas}
@@ -254,5 +255,23 @@ function FilaPrefs({ theme, hora, onClick }) {
       <span style={{ flex: 1 }}>Preferencias de notificaciones <span style={{ color: theme.textMuted, fontWeight: 400 }}>· Resumen <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: theme.text }}>{hora}</span></span></span>
       <span style={{ color: theme.textSubtle || theme.textMuted }}>›</span>
     </button>
+  );
+}
+
+
+/** Medidas del aparato y selector Auto · Web · Celular para forzar el shell en este dispositivo (iPhone plegable, 2026-10-30). */
+function VistaDispositivo({ theme }) {
+  const [forzado, setForzado] = React.useState(() => shellForzado());
+  const m = medidasDispositivo();
+  if (!m || !(typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || window.matchMedia?.('(pointer: coarse)').matches))) return null;
+  const op = (v, label) => (
+    <button key={label} type="button" onClick={(e) => { e.stopPropagation(); setForzado(v); forzarShell(v); }}
+      style={{ border: 0, borderRadius: 999, padding: '1px 7px', fontSize: 9.5, fontFamily: 'inherit', cursor: 'pointer', background: forzado === v ? theme.accent : 'rgba(120,120,128,0.16)', color: forzado === v ? '#fff' : theme.textMuted }}>{label}</button>
+  );
+  return (
+    <span style={{ display: 'block', marginTop: 3 }} onClick={(e) => e.stopPropagation()}>
+      <span title="pantalla · visible · densidad">{m.pantalla[0]}×{m.pantalla[1]} · {m.visible[0]}×{m.visible[1]} · {m.dpr}x</span>
+      <span style={{ display: 'inline-flex', gap: 4, marginLeft: 6 }}>{op(null, 'Auto')}{op('web', 'Web')}{op('celular', 'Celular')}</span>
+    </span>
   );
 }
