@@ -42,6 +42,7 @@ const ALLOWED = {
   embarques_compras:     'po,codigo,arribo_cedis,shp_qty',
   facturacion_clientes:  'cliente_nombre,sku,anio,mes,canal',   // UNIQUE con canal desde 2026-09-21 (Ingram = 2 códigos)
   estados_resultados:    'razon_social,anio,mes,cuenta_norm',
+  libro_financiero:      'anio,mes,hoja,clave,columna',   // libro mensual de los consultores (2026-11-09)
   compras_oc:            'movid,articulo',
   promos_temporada:      'sku,anio,mes,campania',
   sellout_general:       'id',

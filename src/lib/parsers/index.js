@@ -9,6 +9,7 @@
 export { leerWorkbook } from './_util';
 export { default as roadmap } from './roadmap';
 export { default as estadosResultados } from './estadosResultados';
+export { default as libroFinanciero } from './libroFinanciero';
 export { selloutGeneral, revkoSellout } from './selloutGeneral';
 export { digitalifeSellout, digitalifeInv, digitalifeEnsambles } from './digitalife';
 export { default as pcelVentaMarca } from './pcel';

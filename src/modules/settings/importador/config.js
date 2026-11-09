@@ -70,6 +70,8 @@ export const FUENTES = [
   // ── Globales ──
   { id: 'roadmap', grupo: 'globales', statusKey: 'roadmap', tipo: 'updated', titulo: 'Roadmap', parser: 'roadmap', accept: EXCEL, kind: 'Excel',
     formato: ['Roadmap.xlsx · Hoja1', 'Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2 · replace completo'], cadencia: CAMBIO },
+  { id: 'libro-financiero', grupo: 'globales', statusKey: 'libro_financiero', tipo: 'mes', titulo: 'Libro financiero (consultores)', parser: 'libroFinanciero', accept: EXCEL, kind: 'Excel',
+    formato: ['REVKO LIBRO MM-MM-AA.xlsx · un libro por mes', 'consolidado, comparativo, gastos por cuenta, cartera, inventario, personal, balance y ROI · el libro más reciente actualiza los meses anteriores'], cadencia: { tipo: 'mensual', dia: 10, tolerancia: TOLERANCIA_MENSUAL } },
   { id: 'estados-resultados', grupo: 'globales', statusKey: 'estados_resultados', tipo: 'mes', titulo: 'Estado de Resultados (P&L)', parser: 'estadosResultados', accept: EXCEL, kind: 'Excel',
     formato: ['Cierre <período>.xlsx · hoja "Estado de Resultados"', 'sólo meses con valores · upsert por razón social, año, mes y cuenta'], cadencia: { tipo: 'mensual', dia: 10, tolerancia: TOLERANCIA_MENSUAL } },
   { id: 'revko-sellout', grupo: 'globales', statusKey: 'revko_sellout', tipo: 'sellout', titulo: 'Sellout Acteck (Revko)', parser: 'revkoSellout', accept: CSV, kind: 'CSV',
