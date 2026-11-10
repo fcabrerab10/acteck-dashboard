@@ -191,3 +191,25 @@ test('SSR: la vista pinta estado, mes a mes e indicadores sin red', () => {
   const m = renderToString(React.createElement(ThemeProvider, null, React.createElement(EstadoLibroVista, { datos: armar(idx, 2026, 2, 'mes', [2]), anio: 2026, anios: [2026], mes: 2, meses: [2], periodo: 'mes' })));
   assert.ok(m.includes('100,000'));
 });
+
+// ─── Digitalife: líneas idénticas = ventas distintas (2026-11-10) ───
+test('Digitalife: las líneas repetidas se numeran y resubir el archivo no duplica', async () => {
+  const D = await vite.ssrLoadModule('/src/lib/parsers/digitalife.js');
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['FECHA', 'MARCA', 'NO_PARTE', 'DESCRIPCION', 'CANTIDAD', 'PRECIO', 'DESCUENTO', 'IVA', 'SUBTOTAL', 'TOTAL'],
+    ['2026-11-02', 'ACTECK', 'AC-1', 'Mousepad', 1, 99.66, 0, 15.95, 99.66, 115.61],
+    ['2026-11-02', 'ACTECK', 'AC-1', 'Mousepad', 1, 99.66, 0, 15.95, 99.66, 115.61],
+    ['2026-11-02', 'ACTECK', 'AC-1', 'Mousepad', 1, 99.66, 0, 15.95, 99.66, 115.61],
+    ['2026-11-02', 'ACTECK', 'AC-2', 'Teclado', 2, 200, 0, 64, 400, 464],
+    ['2026-11-03', 'ACTECK', 'AC-1', 'Mousepad', 1, 99.66, 0, 15.95, 99.66, 115.61],
+  ]), 'Hoja40');
+  const a = D.digitalifeSellout(wb, 'x.xlsx', {});
+  const llave = (r) => a.onConflict.split(',').map((k) => r[k]).join('|');
+  assert.equal(new Set(a.rows.map(llave)).size, 5, 'cinco ventas, cinco llaves');
+  const h = a.rows.filter((r) => r.no_parte === 'AC-1' && r.fecha === '2026-11-02').map((r) => r.row_hash);
+  assert.ok(!h[0].includes('#'), 'la primera conserva el hash de siempre');
+  assert.equal(h[1], `${h[0]}#2`); assert.equal(h[2], `${h[0]}#3`);
+  const b = D.digitalifeSellout(wb, 'x.xlsx', {});
+  assert.deepEqual(b.rows.map(llave), a.rows.map(llave), 'resubir da las mismas llaves');
+});

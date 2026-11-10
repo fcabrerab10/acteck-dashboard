@@ -78,7 +78,7 @@ export const FUENTES = [
     formato: ['Reporte-SellOut_Ventas … Acteck_Revko.csv', 'semanal o mensual · mayorista DICOTECH · upsert por id determinista'], cadencia: MARTES },
   // ── Digitalife ──
   { id: 'digitalife-sellout', grupo: 'digitalife', statusKey: 'sellout_digitalife', tipo: 'sellout', titulo: 'Sell out histórico', parser: 'digitalifeSellout', accept: EXCEL, kind: 'Excel',
-    formato: ['Historico Sellout Digitalife.xlsx · hoja "Sellout Digitalife"', 'append con dedup por fecha + parte + cantidad + total'], cadencia: LUNES,
+    formato: ['Historico Sellout Digitalife.xlsx · hoja "Sellout Digitalife"', 'cada línea cuenta como una venta · resubir el mismo archivo no duplica'], cadencia: LUNES,
     casilla: { key: 'historico', label: 'es histórico completo (reemplaza el sell out de Digitalife)' } },
   { id: 'digitalife-inv', grupo: 'digitalife', statusKey: 'inv_digitalife', tipo: 'semana', titulo: 'Inventario semanal', parser: 'digitalifeInv', accept: EXCEL, kind: 'Excel',
     formato: ['Acteck_BalamRush_Inventario.xlsx · Hoja39', 'snapshot por (cliente, sku, año, semana)'], cadencia: LUNES },

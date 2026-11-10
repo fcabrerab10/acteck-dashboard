@@ -2,6 +2,22 @@
 // snapshot semanal de inventario (Hoja39) → inventario_cliente.
 import { XLSX, objSnake, toStr, toNum, toInt, toISODate, hash, primeraHoja, semanaDeCorte } from './_util';
 
+// Líneas idénticas = ventas distintas (2026-11-10). El archivo no trae folio: dos tickets del mismo producto, el mismo
+// día, con la misma cantidad y total son dos renglones iguales. Antes el hash los fundía en uno y el sell out quedaba
+// 5 % abajo en dinero y 8–10 % en piezas (comprobado contra la baja de inventario semanal). Ahora la 2ª, 3ª… repetición
+// lleva sufijo `#2`, `#3` en su `row_hash`: la primera conserva el hash de siempre (compatible con lo ya cargado) y
+// resubir el mismo archivo sigue sin duplicar. Requiere que cada archivo traiga los días completos.
+export function numerarRepetidas(filas, llave) {
+  const vistas = new Map();
+  for (const o of filas) {
+    const k = llave(o);
+    const n = (vistas.get(k) || 0) + 1;
+    vistas.set(k, n);
+    if (n > 1) o.row_hash = `${o.row_hash}#${n}`;
+  }
+  return filas;
+}
+
 // opts.historico = true → el archivo es el histórico completo: se reemplaza todo el
 // sell out del cliente (deleteCliente → import-central borra cliente=digitalife) antes de insertar.
 export function digitalifeSellout(wb, fileName, opts = {}) {
@@ -20,6 +36,7 @@ export function digitalifeSellout(wb, fileName, opts = {}) {
     o.row_hash = hash([o.fecha, o.no_parte, o.cantidad, o.total].join('|'));
     return o;
   }).filter(Boolean);
+  numerarRepetidas(out, (o) => `${o.fecha}|${o.no_parte}|${o.row_hash}`);
   const fechas = out.map((r) => r.fecha).sort();
   return {
     table: 'sellout_detalle', onConflict: 'cliente,fecha,no_parte,row_hash', rows: out,
@@ -76,6 +93,7 @@ export function digitalifeEnsambles(wb) {
     o.row_hash = hash([o.fecha, o.folio, o.ensamble, o.sku, o.cantidad].join('|'));
     return o;
   }).filter(Boolean);
+  numerarRepetidas(out, (o) => `${o.fecha}|${o.folio}|${o.sku}|${o.row_hash}`);
   const fechas = out.map((r) => r.fecha).sort();
   const folios = new Set(out.map((r) => r.folio));
   return {
