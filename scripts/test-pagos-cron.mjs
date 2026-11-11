@@ -18,7 +18,7 @@ const TABLAS = {
     { cliente: 'digitalife', anio: 2026, mes: 8, cuota_min: 3900000 },
   ],
   sellout_sku: [{ cliente: 'digitalife', anio: 2026, mes: 8, monto_pesos: 3600000 }],
-  v_sellout_general_vendedor_mes: [
+  v_sellout_dicotech_vendedor_mes: [   // 3.49.3: el cron lee la vista materializada de Dicotech
     { anio: 2026, mes: 8, vendedor_nombre: 'Jorge Peña', importe: 186400 },
     { anio: 2026, mes: 8, vendedor_nombre: 'Raúl Sosa', importe: 90000 },
   ],
