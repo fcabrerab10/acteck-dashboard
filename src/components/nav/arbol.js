@@ -51,7 +51,7 @@ const GRUPOS_BASE = [
     ],
   },
   {
-    id: 'direccionComercial', label: 'Dirección Comercial', icon: Briefcase, color: '#007AFF',
+    id: 'direccionComercial', label: 'Dirección Comercial', icon: Briefcase, color: '#00A3B4', // color por sección (2026-11-11)
     nodos: [
       // Visión General ya no es nodo (2026-10-01): es el modo «Año» de Inicio. `pagina: 'visionGeneral'` sigue abriéndolo.
       { pagina: 'analisisClientes', label: 'Análisis por Cliente', icon: PieChart },
@@ -94,6 +94,21 @@ const GRUPOS_BASE = [
     ],
   },
 ];
+
+/** Sección de una página: { titulo, grupo, color } para la cabecera común y el color por sección. Sin permisos: sólo etiquetas. */
+export function seccionDe(pagina, clienteKey) {
+  if (clienteKey && CLIENTES_NAV[clienteKey]) {
+    const c = CLIENTES_NAV[clienteKey];
+    const p = PESTANAS_CLIENTE.find((x) => x.pagina === pagina);
+    return { titulo: p?.label || c.label, grupo: c.label, color: c.color };
+  }
+  for (const g of GRUPOS_BASE) {
+    const n = g.nodos.find((x) => x.pagina === pagina);
+    if (n) return { titulo: n.label, grupo: g.label, color: g.color };
+  }
+  const OTRAS = { visionGeneral: 'Detalle del año', resumenClientes: 'Resumen de clientes', actualizacion: 'Actualización de datos', pagos: 'Pagos' };
+  return OTRAS[pagina] ? { titulo: OTRAS[pagina], grupo: '', color: '#007AFF' } : null;
+}
 
 export const idNodo = (clienteKey, pagina) => (clienteKey ? `${clienteKey}:${pagina}` : pagina);
 

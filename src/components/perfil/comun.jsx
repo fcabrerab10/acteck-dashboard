@@ -96,6 +96,32 @@ export function HojaLateral({ abierto, onClose, titulo, sub, ancho = 440, childr
   const anchoCSS = (modo === 'tableta' || modo === 'tabletaCompacta' || modo === 'plegable')
     ? `min(100vw, max(${ancho}px, 50vw))`
     : `min(100vw, ${ancho}px)`;
+  const fondoHoja = `var(--vidrio-bg, ${esOscuro(theme) ? 'rgba(30,30,32,0.97)' : theme?.key === 'marfil' ? 'rgba(252,249,243,0.98)' : 'rgba(250,250,252,0.98)'})`;
+  // iPhone Duo abierto (2026-11-11): la hoja sube desde abajo, centrada, con asa; se cierra tocando fuera o el asa.
+  if (modo === 'plegable') {
+    return (
+      <Overlay abierto={abierto} onClose={onClose} zIndex={zIndex} alinear="flex-end" justificar="center">
+        <div role="dialog" aria-modal="true" aria-label={titulo} style={{
+          ...vidrio(theme, 0), background: fondoHoja, borderRadius: '20px 20px 0 0', borderBottom: 0,
+          width: `min(100vw, max(${ancho}px, 72vw))`, maxHeight: 'calc(100dvh - 28px)', display: 'flex', flexDirection: 'column',
+          transform: visible ? 'translateY(0)' : 'translateY(100%)', transition: `transform ${DUR.page}ms ${EASE}`,
+        }}>
+          <button type="button" onClick={onClose} aria-label="Cerrar" style={{ border: 0, background: 'transparent', padding: '8px 0 2px', cursor: 'pointer', display: 'flex', justifyContent: 'center' }}>
+            <span style={{ width: 38, height: 5, borderRadius: 999, background: theme?.textMuted, opacity: 0.45 }} />
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 18px 10px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: theme?.text }}>{titulo}</div>
+              {sub && <div style={{ fontSize: 12, color: theme?.textMuted, marginTop: 2 }}>{sub}</div>}
+            </div>
+            {acciones}
+            <BotonIcono theme={theme} icon={X} onClick={onClose} title="Cerrar" size={36} />
+          </div>
+          <div style={{ overflowY: 'auto', padding: '0 14px calc(20px + env(safe-area-inset-bottom))', WebkitOverflowScrolling: 'touch', flex: 1 }}>{children}</div>
+        </div>
+      </Overlay>
+    );
+  }
   return (
     <Overlay abierto={abierto} onClose={onClose} zIndex={zIndex} alinear="stretch" justificar="flex-end">
       <div role="dialog" aria-modal="true" aria-label={titulo} style={{

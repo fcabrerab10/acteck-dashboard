@@ -7,12 +7,13 @@ import { useTheme } from '../../lib/themeContext';
 import { usePreferencias } from '../../lib/preferencias';
 import Topbar from '../Topbar';
 import { TYPO } from '../../lib/themeTokens';
-import { useDispositivo } from '../../lib/dispositivo';
+import { useDispositivo, usePrefsDispositivo } from '../../lib/dispositivo';
 import { Logotipo } from './comun';
 import { construirArbol, resolverFavoritos, irANodo } from './arbol';
 import BarraApple from './BarraApple';
 import SidebarIpad from './SidebarIpad';
 import BarraIphone, { IPHONE_PADDING_INFERIOR } from './BarraIphone';
+import BarraGruposWeb, { GRUPOS_PADDING_INFERIOR } from './BarraGruposWeb';
 
 // Flotantes y centro de avisos: perezosos (2026-09-12). Estaban montados siempre
 // (con `abierto={false}`), así que sus ~20 KB viajaban en el chunk de arranque para
@@ -42,8 +43,11 @@ const enCampoDeTexto = (el) => {
 export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onNavegar, onCerrarSesion, perfilUsuario, modoPresent, onToggleModoPresent, children }) {
   const { theme } = useTheme();
   const { menu, favoritos, toggleFavorito } = usePreferencias();
-  const modo = ['barra', 'sidebar', 'iphone'].includes(menu.modo) ? menu.modo : 'sidebar';
   const disp = useDispositivo();
+  const prefsDisp = usePrefsDispositivo();
+  const mainRef = useRef(null);
+  // En el dispositivo puede mandar la barra flotante por grupos (default del iPhone Duo abierto); si no, el menú de la cuenta.
+  const modo = prefsDisp.menu === 'grupos' ? 'grupos' : ['barra', 'sidebar', 'iphone'].includes(menu.modo) ? menu.modo : 'sidebar';
   const [paleta, setPaleta] = useState(false);
   const [atajos, setAtajos] = useState(false);
   // Se montan la primera vez que se abren (cerrados, un frame antes de abrirse: ver
@@ -124,6 +128,16 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
       <div className="font-sans" style={{ ...fondo, ...SAFE, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
         <BarraApple {...comunNav} chrome={chrome} onAbrirAtajos={() => mostrarAtajos(true)} />
         <main style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>{children}</main>
+      </div>
+    );
+  } else if (modo === 'grupos') {
+    cuerpo = (
+      <div className="font-sans" style={{ ...fondo, ...SAFE_LADO, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+        <main ref={mainRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: `calc(${GRUPOS_PADDING_INFERIOR}px + env(safe-area-inset-bottom))` }}>
+          <Topbar {...chrome} />
+          {PAD_CONTENIDO ? <div style={PAD_CONTENIDO}>{children}</div> : children}
+        </main>
+        <BarraGruposWeb arbol={arbol} estado={estado} onNavegar={comunNav.onNavegar} onAbrirPaleta={abrirPaleta} scrollRef={mainRef} />
       </div>
     );
   } else if (modo === 'iphone') {

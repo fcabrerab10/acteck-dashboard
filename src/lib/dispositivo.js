@@ -199,12 +199,12 @@ export function intercambiarSlots(slots, i, j) {
 // `vidrio` ∈ opaco | tintado | vidrio (ver src/lib/vidrio.js). 'opaco' = el chrome de siempre.
 export const NIVELES_VIDRIO_IDS = ['opaco', 'tintado', 'vidrio'];
 export const DEFAULTS_DISPOSITIVO = {
-  telefono:        { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
-  plegable:        { densidad: 'compacta', sidebar: 'iconos',  anchoMax: 0,    paneles: PANELES_VACIO, vidrio: 'opaco' },
-  tabletaCompacta: { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
-  tableta:         { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
-  laptop:          { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
-  panoramico:      { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco' },
+  telefono:        { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
+  plegable:        { densidad: 'compacta', sidebar: 'iconos',  anchoMax: 0,    paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'grupos', dividida: true, inicio: 'tarjetas' },
+  tabletaCompacta: { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
+  tableta:         { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
+  laptop:          { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
+  panoramico:      { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
 };
 
 export const ANCHOS_MAX = [
@@ -241,6 +241,11 @@ export function leerPrefsDispositivo(modo, st) {
   if (!['comoda', 'compacta'].includes(p.densidad)) p.densidad = base.densidad;
   if (!['completa', 'iconos'].includes(p.sidebar)) p.sidebar = base.sidebar;
   if (!NIVELES_VIDRIO_IDS.includes(p.vidrio)) p.vidrio = base.vidrio;
+  // Diseño 2026-11-11 (personalizable por dispositivo): menú ('cuenta' = el de Preferencias › Menú · 'grupos' = barra
+  // flotante abajo), vista dividida lista + detalle, e Inicio en página larga o en tarjetas.
+  if (!['cuenta', 'grupos'].includes(p.menu)) p.menu = base.menu || 'cuenta';
+  p.dividida = typeof p.dividida === 'boolean' ? p.dividida : !!base.dividida;
+  if (!['pagina', 'tarjetas'].includes(p.inicio)) p.inicio = base.inicio || 'pagina';
   if (!Number.isFinite(Number(p.anchoMax))) p.anchoMax = base.anchoMax;
   else p.anchoMax = Number(p.anchoMax);
   return p;

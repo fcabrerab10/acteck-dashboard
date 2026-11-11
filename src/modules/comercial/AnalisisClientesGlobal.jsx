@@ -11,7 +11,9 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { useAlertas } from '../../lib/alertas';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando } from '../../components/kit';
+import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando, ListaDetalle, Boton } from '../../components/kit';
+import { usePrefsDispositivo } from '../../lib/dispositivo';
+import { moneyCompact } from '../../lib/format';
 import { tooltip } from '../../lib/medidas';
 import { useAniosDisponibles, useAnalisisClientes, useCuotasClientes } from './analisis/useAnalisisData';
 import { MESES, PROPIOS, OTROS_KEY, OCASIONAL, agregarClientes, filaOtros, aplanar, ultimoMesConVenta, totalesMensuales, idxMes, yoyDe, mcDe, ajustesDe, sumarPeriodo, pctDe, vacio, mapaCuotas, cuotaPeriodo, alcanceCuota } from './analisis/calc';
@@ -39,6 +41,7 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
   const [origen, setOrigen] = useState('todos');
   const [orden, setOrden] = useState({ col: 'fact_neta', dir: 'desc' });
   const [abierto, setAbierto] = useState(null);
+  const prefsDisp = usePrefsDispositivo(); // vista dividida (diseño B · 2026-11-11)
   const [paginaCliente, setPaginaCliente] = useState(null); // código ERP del cliente abierto en página completa (2026-10-01)
 
   const { data: anios = [] } = useAniosDisponibles();
@@ -125,10 +128,22 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
   // Página completa de un cliente (vive dentro de esta pestaña; «‹ Análisis por cliente» regresa a la tabla).
   if (paginaCliente) {
     const c = filas.find((f) => f.cliente === paginaCliente) || agg.clientes.map(aplanar).find((f) => f.cliente === paginaCliente);
-    if (c) return (
+    const pagina = c && (
       <PaginaCliente cliente={c} anio={anio} mesMax={mesMax} modo={modo} verSensible={verSensible} alertas={alertas} cuotas={cuotas} onVolver={() => setPaginaCliente(null)}
         periodo={{ anios: anios.length ? anios : [anio], setAnio, mesAuto, setMes: setMesSel, setModo }} />
     );
+    if (c && prefsDisp.dividida) {
+      const items = filas.filter((f) => !f.esGrupo && f.cliente).map((f) => ({
+        id: f.cliente, titulo: f.nombre, sub: moneyCompact(f.fact_neta),
+        pill: f.pctCuota != null ? { l: `${Math.round(f.pctCuota)} %`, tone: f.pctCuota >= 100 ? 'green' : f.pctCuota >= 85 ? 'orange' : 'red' } : null,
+      }));
+      return (
+        <ListaDetalle titulo="Clientes" items={items} activo={paginaCliente} onElegir={setPaginaCliente} accionLista={<Boton onClick={() => setPaginaCliente(null)}>Tabla</Boton>}>
+          {pagina}
+        </ListaDetalle>
+      );
+    }
+    if (c) return pagina;
   }
 
   const mesLbl = MESES[mesMax - 1];

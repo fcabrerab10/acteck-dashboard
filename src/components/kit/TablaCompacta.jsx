@@ -8,6 +8,7 @@ import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { esTactil } from '../../lib/tactil';
+import Vacio from './Vacio';
 
 const GRUPO_H = 24;
 
@@ -77,7 +78,7 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
           </tr>
         </thead>
         <tbody>
-          {filas.length === 0 && <tr><td colSpan={columnas.length} style={{ ...td, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, padding: 18 }}>{vacio}</td></tr>}
+          {filas.length === 0 && <tr><td colSpan={columnas.length} style={{ ...td, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText, padding: 0, whiteSpace: 'normal' }}>{typeof vacio === 'string' ? (() => { const i = vacio.search(/[.:] /); return <Vacio compacto titulo={i > 0 ? vacio.slice(0, i) : vacio.replace(/\.$/, '')} sub={i > 0 ? vacio.slice(i + 2) : null} />; })() : vacio}</td></tr>}
           {virtual && ini > 0 && <tr aria-hidden="true"><td colSpan={columnas.length} style={{ padding: 0, height: ini * ALTO_FILA, border: 0 }} /></tr>}
           {visibles.map((r, j) => {
             const i = ini + j;

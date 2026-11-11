@@ -150,6 +150,16 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
               </div>
             </>
           )}
+          {/* Diseño 2026-11-11 · tres cosas que cada dispositivo elige por separado */}
+          <Fila theme={theme} icon={Layers} label="Menú en este dispositivo" sub={prefsDisp.menu === 'grupos' ? 'Barra flotante abajo, por grupos' : 'El menú elegido en Preferencias › Menú'}>
+            <Segmented value={prefsDisp.menu} onChange={(v) => setPrefDispositivo(disp.modo, 'menu', v)} options={[{ id: 'cuenta', label: 'De siempre' }, { id: 'grupos', label: 'Barra abajo' }]} />
+          </Fila>
+          <Fila theme={theme} icon={Layers} label="Vista dividida" sub="En Análisis por cliente: la lista se queda a la izquierda y el cliente se abre a la derecha">
+            <Segmented value={prefsDisp.dividida ? 'si' : 'no'} onChange={(v) => setPrefDispositivo(disp.modo, 'dividida', v === 'si')} options={[{ id: 'no', label: 'No' }, { id: 'si', label: 'Sí' }]} />
+          </Fila>
+          <Fila theme={theme} icon={Layers} label="Inicio" sub={prefsDisp.inicio === 'tarjetas' ? 'Tarjetas que tú eliges y acomodas' : 'La página completa'}>
+            <Segmented value={prefsDisp.inicio} onChange={(v) => setPrefDispositivo(disp.modo, 'inicio', v)} options={[{ id: 'pagina', label: 'Página' }, { id: 'tarjetas', label: 'Tarjetas' }]} />
+          </Fila>
           <Fila theme={theme} icon={Layers} label="Vidrio en barras y hojas"
             sub={vidrioForzado
               ? 'Tu sistema pide menos transparencia: se queda en Opaco.'

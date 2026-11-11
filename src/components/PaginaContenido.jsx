@@ -13,6 +13,8 @@ import { HandCoins } from 'lucide-react';
 import { supabase, DB_CONFIGURED } from '../lib/supabase';
 import { DIGITALIFE_REAL, NOMBRES_MES, clientes } from '../lib/constants';
 import SinAcceso from './SinAcceso';
+import CabeceraPantalla, { ProveedorCabecera } from './kit/CabeceraPantalla';
+import { seccionDe } from './nav/arbol';
 import {
   puedeConfigurar,
   puedeActualizarDatos,
@@ -125,6 +127,7 @@ export default function PaginaContenido({
   onCerrarSesion,
   pagosCliente = null,
   extra = null,
+  sinCabecera = false, // paneles múltiples: cada hueco ya trae su propia cabecera
 }) {
   const { c, recargar } = useClienteConVentas(clienteKey);
   const puedeActualizar = puedeActualizarDatos(perfil);
@@ -136,8 +139,11 @@ export default function PaginaContenido({
     return <Configuracion session={{ user: authUser, perfil }} />;
   }
 
+  const conCabecera = !sinCabecera && !['inicio', 'ciudad'].includes(pagina);
+  const Marco = conCabecera ? ProveedorCabecera : React.Fragment;
   return (
-    <>
+    <Marco>
+      {conCabecera && <CabeceraPantalla seccion={seccionDe(pagina, clienteKey)} />}
       {pagina === 'inicio' && !clienteKey && (
         puedeVerInicio(perfil)
           ? (<Inicio onNavegar={onNavegar} />)
@@ -299,6 +305,6 @@ export default function PaginaContenido({
 
       {pagina === 'actualizacion' && puedeActualizar && <ActualizacionDatos perfil={perfil} />}
       {pagina === 'actualizacion' && !puedeActualizar && <SinAcceso motivo="Solo el Super Admin puede actualizar datos." />}
-    </>
+    </Marco>
   );
 }

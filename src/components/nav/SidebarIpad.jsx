@@ -269,7 +269,7 @@ function Item({ theme, nodo, colapsada, compacta, activo, fav, onFav, onClick, e
   const Icon = nodo.icon;
   const leading = nodo.tipo === 'cliente' && !etiqueta && colapsada
     ? <PuntoCliente color={nodo.color} size={10} activo={activo} />
-    : Icon ? <Icon size={colapsada ? 17 : 15} strokeWidth={1.9} style={{ flexShrink: 0, opacity: activo ? 1 : 0.85 }} /> : null;
+    : Icon ? <Icon size={colapsada ? 17 : 15} strokeWidth={1.9} style={{ flexShrink: 0, opacity: activo ? 1 : 0.9, color: nodo.color || 'currentColor' }} /> : null;
   return (
     <FilaBase theme={theme} colapsada={colapsada} compacta={compacta} activo={activo} disabled={nodo.disabled} hint={nodo.hint} innerRef={innerRef}
       leading={leading} label={etiqueta || nodo.label} title={etiqueta || nodo.label} onClick={onClick}

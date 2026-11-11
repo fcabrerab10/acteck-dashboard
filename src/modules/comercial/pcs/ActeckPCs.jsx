@@ -9,7 +9,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { usePerfil } from '../../../lib/perfilContext';
 import { puedeVerSensible } from '../../../lib/permisos';
 import { money, moneyCompact, int, pct, fechaCorta, hoyISO } from '../../../lib/format.js';
-import { Hero, KpiCard, Panel, Pill, Segmented, TablaCompacta, Boton, Cargando } from '../../../components/kit';
+import { Hero, KpiCard, Panel, Pill, Segmented, TablaCompacta, Boton, Cargando, AccionesCabecera } from '../../../components/kit';
 import { usePcs } from './datos';
 import { pedidos as armarPedidos, resumen as armarResumen, frase, filasModelos, capacidad, ETAPAS, TARIMA } from './calculo.js';
 import HojaPedido from './HojaPedido';
@@ -70,6 +70,7 @@ export function ActeckPcsVista({ datos, hoy, sensible = false, movil = false, on
 
   return (
     <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 12, fontFamily: TYPO.fontText }}>
+      {!movil && onNuevo && <AccionesCabecera><Boton primario size="md" icon={Plus} onClick={onNuevo}>Nuevo pedido</Boton></AccionesCabecera>}
       <div style={{ padding: pad }}>
         <Hero eyebrow={r.diasPiloto ? `Piloto de 90 días · día ${r.diasPiloto}` : 'Acteck PCs · con Grupo DECME'} titulo={frase(r)} sub={sub || 'Tarima de 60 equipos · hasta 100 por día de producción · envío de 2 a 3 días.'}
           stats={movil ? [] : [{ k: 'Tarimas', v: r.tarimas ? (Number.isInteger(r.tarimas) ? r.tarimas : r.tarimas.toFixed(1)) : '0', sub: `${r.clientes} cliente${r.clientes === 1 ? '' : 's'}` }]} />
@@ -84,7 +85,7 @@ export function ActeckPcsVista({ datos, hoy, sensible = false, movil = false, on
 
       <div style={{ padding: pad }}>
         <Panel titulo="Pedidos" meta="de la orden de compra al cobro"
-          acciones={<><Segmented options={[{ id: 'abiertos', label: 'Abiertos' }, { id: 'todos', label: 'Todos' }]} value={filtro} onChange={(v) => { setFiltro(v); setEtapa(null); }} />{onNuevo && <Boton primario icon={Plus} onClick={onNuevo}>{movil ? 'Pedido' : 'Nuevo pedido'}</Boton>}</>}>
+          acciones={<><Segmented options={[{ id: 'abiertos', label: 'Abiertos' }, { id: 'todos', label: 'Todos' }]} value={filtro} onChange={(v) => { setFiltro(v); setEtapa(null); }} />{movil && onNuevo && <Boton primario icon={Plus} onClick={onNuevo}>Pedido</Boton>}</>}>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${movil ? 3 : 6}, minmax(0, 1fr))`, gap: 6, marginBottom: 10 }}>
             {ETAPAS.map((e) => {
               const on = etapa === e.id;

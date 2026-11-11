@@ -200,7 +200,7 @@ function PanelPagina({
         {/* La transición de página sólo en el principal: en los demás distrae más de lo que ayuda. */}
         <Envoltura principal={principal} claveTransicion={`${columna.clienteKey || 'g'}-${columna.pagina}`}>
           <Suspense fallback={<Cargando pantalla={columna.pagina} />}>
-            <PaginaContenido {...paginaProps} onNavegar={onNavegar} pagina={columna.pagina} clienteKey={columna.clienteKey || null} />
+            <PaginaContenido {...paginaProps} sinCabecera onNavegar={onNavegar} pagina={columna.pagina} clienteKey={columna.clienteKey || null} />
           </Suspense>
         </Envoltura>
       </div>

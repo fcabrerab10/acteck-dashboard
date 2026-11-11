@@ -143,6 +143,24 @@
       "bloque": "Semana, Ideas y Equipo",
       "falta": "movil",
       "estado": "pendiente"
+    },
+    {
+      "pantalla": "Inicio",
+      "bloque": "Inicio en tarjetas que se eligen y acomodan",
+      "falta": "movil",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Análisis por cliente",
+      "bloque": "Vista dividida lista + detalle",
+      "falta": "movil",
+      "estado": "decision · 2026-11-11: sólo en pantallas anchas (Duo abierto, iPad, computadora)"
+    },
+    {
+      "pantalla": "Todas",
+      "bloque": "Cabecera común con color por sección",
+      "falta": "movil",
+      "estado": "pendiente · el celular usa TituloGrande; falta el color de sección"
     }
   ],
   "importsModulesAMovil": [

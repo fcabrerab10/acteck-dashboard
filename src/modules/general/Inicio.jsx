@@ -21,7 +21,7 @@ import { moneyCompact as $c, int, pct, pp, fecha } from '../../lib/format';
 import { tooltip } from '../../lib/medidas';
 import SinAcceso from '../../components/SinAcceso';
 import FrescuraPill from '../../components/FrescuraPill';
-import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, Cargando } from '../../components/kit';
+import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, Cargando, Boton } from '../../components/kit';
 const VisionGeneral = lazy(() => import('../comercial/VisionGeneral'));
 const RentabilidadBloque = lazy(() => import('../comercial/RentabilidadBloque'));
 import { FUENTES_INICIO, PAGINAS, MAX_ALERTAS, MESES, abrirNotificaciones, CLIENTE_NOMBRE as CLIENTE_NOMBRE_LOCAL } from './inicio/config';
@@ -29,6 +29,8 @@ import { useInicioData } from './inicio/useInicioData';
 import { calcular } from './inicio/calc';
 import { DecisionPanel, ClientesGrid, AgendaPanel, HoyPanel, ComparativoAnual, SelectorPeriodo, BarraCuota, SellOutPanel, MixPanel, InventarioPanel, SeccionTitulo, TarjetaNarrativa } from './inicio/bloques';
 import MovimientoNegocio from './inicio/MovimientoNegocio';
+import InicioTarjetas from './inicio/InicioTarjetas';
+import { usePrefsDispositivo } from '../../lib/dispositivo';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAll } from '../../lib/queries';
 
@@ -44,6 +46,9 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
   const [anio, setAnio] = useState(anioHoy);
   const [mes, setMes] = useState(vistaInicial === 'anio' ? 'anio' : mesHoy);   // 1..12 | 'anio'
   const [verDetalleAnio, setVerDetalleAnio] = useState(vistaInicial === 'anio');
+  // Diseño C (2026-11-11): Inicio en tarjetas si este dispositivo lo eligió; «Ver todo» abre la página completa.
+  const prefsDisp = usePrefsDispositivo();
+  const [verTodo, setVerTodo] = useState(vistaInicial === 'anio');
   const modo = mes === 'anio' ? 'anio' : 'mes';
   const { loading, error, data } = useInicioData(anio);
   // Mes de cálculo: el elegido; en modo Año, el último mes con ventas de ese año (o el mes en curso).
@@ -122,9 +127,19 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
     { k: enCurso ? 'Margen al momento' : 'Margen', medida: tooltip('pct_mc'), v: c.mc != null ? pct(c.mc) : '—', sub: r.dMc != null ? `${pp(r.dMc)} vs ${anio - 1}` : 'MC sobre Fact Neta' },
   ];
 
+  if (prefsDisp.inicio === 'tarjetas' && !verTodo) {
+    return (
+      <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
+        {barra}
+        <InicioTarjetas r={r} ve={ve} anio={anio} labelPeriodo={labelPeriodo} onNavegar={onNavegar} onVerTodo={() => setVerTodo(true)} />
+      </div>
+    );
+  }
+
   return (
     <div data-stagger style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
       {barra}
+      {prefsDisp.inicio === 'tarjetas' && <div><Boton onClick={() => setVerTodo(false)}>‹ Volver a mis tarjetas</Boton></div>}
 
       <Hero
         eyebrow={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>Inicio · {esMes ? `${r.mesL} ${anio}` : `Año ${anio}`}{enCurso ? ` · ${diaTxt}` : ''}<span style={{ textTransform: 'none', letterSpacing: 0 }}><FrescuraPill fuentes={FUENTES_INICIO} inverso /></span></span>}

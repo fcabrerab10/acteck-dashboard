@@ -6,11 +6,11 @@ import { SILUETAS } from './siluetas';
 export default function Skeleton({ w = '100%', h = 12, r = 6, style }) {
   const { theme } = useTheme();
   const dark = theme.mode === 'dark';
-  const a = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', b = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+  const a = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', b = dark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.85)';
   return (
     <>
       <style>{`@keyframes kitShimmer{to{background-position:-200% 0}}`}</style>
-      <span style={{ display: 'block', width: w, height: h, borderRadius: r, background: `linear-gradient(90deg, ${a} 25%, ${b} 50%, ${a} 75%)`, backgroundSize: '200% 100%', animation: 'kitShimmer 1.3s linear infinite', ...style }} />
+      <span style={{ display: 'block', width: w, height: h, borderRadius: r, background: `linear-gradient(100deg, ${a} 38%, ${b} 50%, ${a} 62%) ${dark ? '' : 'rgba(0,0,0,0.06)'}`, backgroundSize: '200% 100%', animation: 'kitShimmer 1.5s ease-in-out infinite', ...style }} />
     </>
   );
 }

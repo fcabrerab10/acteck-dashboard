@@ -210,8 +210,10 @@ export default function GraficaLineas({
     if (cx == null || cy == null || value == null || Number.isNaN(cy)) return <g key={`p-${index}`} />;
     const grande = index === ultimo || index === mesActivo;
     return (
-      <circle key={`p-${index}`} cx={cx} cy={cy} r={grande ? 5 : 3.5} fill={color} stroke={theme.surface} strokeWidth={grande ? 2 : 1.5}
-        opacity={atenuados.has(index) ? OPACIDAD_ATENUADO : 1} />
+      <g key={`p-${index}`} opacity={atenuados.has(index) ? OPACIDAD_ATENUADO : 1}>
+        {index === ultimo && <circle cx={cx} cy={cy} r={10} fill={color} opacity={0.16} />}
+        <circle cx={cx} cy={cy} r={grande ? 5.5 : 3.5} fill={color} stroke={theme.surface} strokeWidth={grande ? 2.5 : 1.5} />
+      </g>
     );
   };
 
@@ -252,7 +254,7 @@ export default function GraficaLineas({
               const { color } = estiloSerie(theme, s, i);
               return (
                 <linearGradient key={s.key} id={`gl-${uid}-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+                  <stop offset="0%" stopColor={color} stopOpacity={0.34} />
                   <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               );
