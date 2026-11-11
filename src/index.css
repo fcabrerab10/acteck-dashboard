@@ -197,3 +197,14 @@ html[data-entrada] [data-entrada-abajo]  { animation: entradaSube 600ms cubic-be
 
 /* Escrim del menú flotante (iPhone plegable abierto) */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Objetivos táctiles (2026-11-11 · iPhone Duo abierto e iPad): con dedo, botones y selectores miden al menos 40 px. */
+:root { --tap-min: 0px; }
+@media (pointer: coarse) { :root { --tap-min: 40px; } }
+
+/* Rejillas que se reacomodan en el iPhone Duo abierto y tabletas angostas (<html data-modo> lo pone dispositivo.js). */
+.rej-2-1 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.rej-hoy { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 250px; }
+html[data-modo="plegable"] .rej-2-1, html[data-modo="tabletaCompacta"] .rej-2-1 { grid-template-columns: minmax(0, 1fr); }
+html[data-modo="plegable"] .rej-hoy, html[data-modo="tabletaCompacta"] .rej-hoy { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+html[data-modo="plegable"] .rej-hoy > :nth-child(3), html[data-modo="tabletaCompacta"] .rej-hoy > :nth-child(3) { grid-column: 1 / -1; }

@@ -218,7 +218,7 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
 
       {/* KPI strip */}
       <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '10px 4px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' }}>
           <MiniKpi label="Inventario" value={fmtInt(r.inv)} u="pz" sub="stock comercial" />
           <MiniKpi label="Tránsito" value={fmtInt(r.traCant)} u="pz" sub={r.traCant > 0 ? 'en camino' : 'sin POs'} borderLeft />
           <MiniKpi label="Próximo arribo" value={r.traEta ? fmtFechaC(r.traEta).split(' ').slice(0, 2).join(' ') : '—'} sub={r.traEta ? 'próxima OC' : 'sin OC'} borderLeft dim={!r.traEta} />

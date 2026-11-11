@@ -336,7 +336,7 @@ export default function PagosUnificados({ clienteKey = null, extra = null }) {
       </Hero>
 
       {/* 2 · Flujo del mes · cuenta en pagos (el hero cuenta en dinero) · cada etapa filtra la tabla */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 6 }}>
         {flujo.map((e) => {
           const activo = filtroEtapa === e.id;
           return (
@@ -354,7 +354,7 @@ export default function PagosUnificados({ clienteKey = null, extra = null }) {
       </div>
 
       {/* 3 · Pagos del mes + calendario, lado a lado */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 8, alignItems: 'start' }}>
+      <div className="rej-2-1" style={{ display: 'grid', gap: 8, alignItems: 'start' }}>
         <Panel titulo={`Pagos de ${nombreSel}`} meta="clic en una fila abre el cálculo, la evidencia y el flujo">
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             <FiltroPill activo={!filtroOrigen && !filtroTipo && !soloVencidos && !filtroEtapa} onClick={() => { setFiltroOrigen(null); setFiltroTipo(null); setSoloVencidos(false); setFiltroEtapa(null); }}>Todos</FiltroPill>

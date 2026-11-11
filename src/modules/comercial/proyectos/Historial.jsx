@@ -30,7 +30,7 @@ export default function Historial({ filas, cargando }) {
 
   return (
     <Panel titulo="Historial de cambios" meta={`${lista.length} movimiento${lista.length === 1 ? '' : 's'}`} padding="0">
-      <div style={{ maxHeight: 560, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 'min(560px, calc(100dvh - 200px))', overflowY: 'auto' }}>
         {lista.map((f, i) => (
           <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 12px', borderTop: i === 0 ? 0 : `1px solid ${theme.border}` }}>
             <Pill tone={OP[f.operacion]?.tone || 'gray'} size="xs" style={{ marginTop: 1 }}>{OP[f.operacion]?.label || f.operacion}</Pill>

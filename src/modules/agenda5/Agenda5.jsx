@@ -98,7 +98,7 @@ export default function Agenda5({ onNavegar, inicial = null }) {
   const nav = { borderRadius: 9, padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, cursor: 'pointer', color: theme.text, transition: `background ${DUR.state}ms ${EASE}`, border: 0, background: 'transparent', width: '100%', textAlign: 'left', fontFamily: TYPO.fontText };
   let grupoAnt = null;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '208px minmax(0, 1fr)', gap: 0, minHeight: 640, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', fontFamily: TYPO.fontText, color: theme.text }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '208px minmax(0, 1fr)', gap: 0, minHeight: 'min(640px, calc(100dvh - 140px))', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', fontFamily: TYPO.fontText, color: theme.text }}>
       <aside style={{ background: theme.surface2 || theme.surfaceHover || 'rgba(120,120,128,0.06)', borderRight: `1px solid ${theme.border}`, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div style={{ position: 'relative', marginBottom: 8 }}>
           <button type="button" onClick={() => setMenuPersona((v) => !v)} style={{ ...nav, background: theme.surface, border: `1px solid ${theme.border}`, padding: '8px 10px' }}>

@@ -185,7 +185,7 @@ export default function Hoy({ d, uid, propietario, personasPorId, puedeEditar, o
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Titulo meta={frase} acciones={<div style={{ display: 'flex', gap: 8 }}>{!esHoy && <Boton onClick={() => { setDia(hoyIso); setMes(new Date(hoy.getFullYear(), hoy.getMonth(), 1)); }}>Volver a hoy</Boton>}{esHoy && puedeEditar && h.deHoy.length + h.deAyer.length > 0 && <Boton icon={Compass} onClick={() => setGuia(true)}>Guíame</Boton>}{puedeEditar && <Boton primario icon={CalendarCheck} onClick={onCapturar}>Capturar (N)</Boton>}</div>}>{titulo}{esHoy ? <span style={{ fontWeight: 500, color: theme.textMuted, fontSize: 14 }}> · {DIAS_LARGO[hoy.getDay()]} {hoy.getDate()} de {MESES[hoy.getMonth()].toLowerCase()}</span> : null}</Titulo>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 1fr) 250px', gap: 12, alignItems: 'start' }}>
+      <div className="rej-hoy" style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {esHoy && <div style={{ marginBottom: 10 }}><Ahora h={h} hoyIso={hoyIso} puedeEditar={puedeEditar} onAbrirItem={onAbrirItem} onAbrirReunion={onAbrirReunion} onToggle={toggle} onCrono={crono} /></div>}
           <Guiame abierto={guia} onClose={() => setGuia(false)} d={d} propietario={propietario} hoy={hoy} puedeEditar={puedeEditar} onAbrirItem={onAbrirItem} />

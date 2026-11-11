@@ -15,7 +15,7 @@ export default function Boton({ children, primario = false, peligro = false, ico
     <button type={type} onClick={onClick} disabled={disabled} title={title}
       onMouseDown={() => setDown(true)} onMouseUp={() => setDown(false)} onMouseLeave={() => { setDown(false); setHover(false); }} onMouseEnter={() => setHover(true)}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, height: h, padding: size === 'md' ? '0 16px' : '0 12px', borderRadius: 999,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: `max(${h}px, var(--tap-min, 0px))`, minWidth: 'var(--tap-min, 0px)', padding: size === 'md' ? '0 16px' : '0 12px', borderRadius: 999,
         border: `1px solid ${primario ? accent : theme.border}`, background: primario ? accent : hover ? (theme.surfaceHover || 'rgba(0,0,0,0.03)') : theme.surface,
         color: primario ? '#FFF' : peligro ? accent : theme.text, fontFamily: TYPO.fontText, fontSize: size === 'md' ? 13 : 12, fontWeight: 500,
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap',

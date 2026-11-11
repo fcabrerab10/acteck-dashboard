@@ -70,7 +70,7 @@ export function Modal({ abierto, onClose, titulo, sub, ancho = 480, children, pi
   return (
     <Overlay abierto={abierto} onClose={onClose} zIndex={zIndex}>
       <div role="dialog" aria-modal="true" aria-label={titulo} style={{
-        ...vidrio(theme, 18), width: `min(calc(100vw - 24px), ${ancho}px)`, maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column',
+        ...vidrio(theme, 18), width: `min(calc(100vw - 24px), ${ancho}px)`, maxHeight: 'calc(100dvh - 32px)', display: 'flex', flexDirection: 'column',
         transform: visible || rm ? 'scale(1) translateY(0)' : 'scale(0.96) translateY(8px)', opacity: visible ? 1 : 0,
         transition: `transform ${DUR.content}ms ${EASE}, opacity ${DUR.state}ms ${EASE}`,
       }}>

@@ -19,7 +19,7 @@ export default function Segmented({ options, value, onChange, size = 'sm', style
   return (
     <div ref={ref} role="tablist" style={{
       position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 2, padding: 2,
-      background: dark ? 'rgba(120,120,128,0.24)' : 'rgba(120,120,128,0.12)', borderRadius: 999, height: h, ...style,
+      background: dark ? 'rgba(120,120,128,0.24)' : 'rgba(120,120,128,0.12)', borderRadius: 999, height: `max(${h}px, var(--tap-min, 0px))`, ...style,
     }}>
       {thumb.width > 0 && (
         <span aria-hidden style={{
@@ -35,7 +35,7 @@ export default function Segmented({ options, value, onChange, size = 'sm', style
           <button key={o.id} data-seg-id={o.id} role="tab" aria-selected={on} disabled={o.disabled} title={o.title}
             onClick={() => !o.disabled && onChange?.(o.id)}
             style={{
-              position: 'relative', zIndex: 1, padding: size === 'md' ? '5px 14px' : '4px 12px', borderRadius: 999, border: 0, background: 'transparent',
+              position: 'relative', zIndex: 1, alignSelf: 'stretch', padding: size === 'md' ? '0 14px' : '0 12px', borderRadius: 999, border: 0, background: 'transparent',
               cursor: o.disabled ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
               color: on ? theme.text : o.disabled ? (theme.textSubtle || theme.textMuted) : (dark ? 'rgba(235,235,245,0.60)' : 'rgba(60,60,67,0.60)'),
               fontFamily: TYPO.fontDisplay, fontSize: size === 'md' ? 12.5 : 12, fontWeight: on ? 700 : 500, letterSpacing: '-0.01em',

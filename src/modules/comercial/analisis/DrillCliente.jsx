@@ -99,7 +99,7 @@ export default function DrillCliente({ cliente, anio, mesMax, modo, verSensible,
     );
     const tono = (v) => (v == null ? undefined : v >= 0 ? green : theme.red);
     return (
-      <div style={{ padding: '10px 14px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr)) 120px auto', gap: 12, alignItems: 'center', fontFamily: TYPO.fontText }}>
+      <div style={{ padding: '10px 14px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(104px, 1fr))', gap: 12, alignItems: 'center', fontFamily: TYPO.fontText }}>
         <Cifra k={`Fact Neta ${periodo}`} v={money(cliente.cur.fact_neta)} s={yoyCur != null ? `${signo(yoyCur, 0)} vs ${anio - 1}` : `sin ${anio - 1}`} color={tono(yoyCur)} />
         <Cifra k={`YTD ${anio}`} v={money(cliente.ytd.fact_neta)} s={yoyYtd != null ? `${signo(yoyYtd, 0)} vs ${anio - 1}` : `sin ${anio - 1}`} color={tono(yoyYtd)} />
         <Cifra k={`Cuota ${modo === 'mes' ? MESES[mesMax - 1] : 'YTD'}`} v={cliente.cuota == null ? '—' : pct(cliente.pctCuota, 0)} s={cliente.cuota != null ? `de ${moneyFull(cliente.cuota)}` : 'sin cuota cargada'} />

@@ -20,6 +20,9 @@ import Hilo from './Comentarios';
 import ReunionAnterior from './ReunionAnterior';
 import EnviarMinuta from './EnviarMinuta';
 import { relativo } from '../../../lib/format';
+import { esTactil } from '../../../lib/tactil';
+
+const tactil = esTactil();
 
 const DEBOUNCE_MS = 600;
 
@@ -224,7 +227,7 @@ function LineaPunto({ p, theme, editable, personas, personasPorId, porId, hoy, h
           style={{ border: 0, background: 'transparent', color: nComentarios || verHilo ? theme.accent : theme.textMuted, cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', gap: 3, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, opacity: nComentarios || verHilo || hover ? 1 : 0.35 }}>
           <MessageSquare size={13} />{nComentarios > 0 && nComentarios}
         </button>
-        {editable && <span style={{ display: 'inline-flex', opacity: hover ? 1 : 0 }}>
+        {editable && <span style={{ display: 'inline-flex', opacity: hover || tactil ? 1 : 0 }}>
           <button type="button" onClick={() => onMover?.(-1)} disabled={!puedeSubir} title="Subir" style={flecha(theme, puedeSubir)}><ChevronUp size={12} /></button>
           <button type="button" onClick={() => onMover?.(1)} disabled={!puedeBajar} title="Bajar" style={flecha(theme, puedeBajar)}><ChevronDown size={12} /></button>
           <button type="button" onClick={onBorrar} title="Eliminar punto" style={{ border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', padding: 2, display: 'inline-flex' }}><Trash2 size={12} /></button>

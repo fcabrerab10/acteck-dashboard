@@ -111,7 +111,7 @@ export default function UltimasComprasCard({ embarques, sensible }) {
   return (
     <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Barras 6 meses */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 6 }}>
         {barrasMes.map((m) => {
           const active = filtroMes === m.key;
           const isCurr = m.key === mesActualKey;

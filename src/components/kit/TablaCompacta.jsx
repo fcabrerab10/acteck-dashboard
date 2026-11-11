@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
+import { esTactil } from '../../lib/tactil';
 
 const GRUPO_H = 24;
 
@@ -20,7 +21,9 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
   // 2026-10-02 · Ventana de filas (fluidez): con muchas filas (p. ej. 500 SKUs × 12 HeatCells) el navegador pintaba
   // miles de celdas en cada orden/filtro. Con maxHeight y > UMBRAL filas sólo se montan las visibles (+ margen) y el
   // resto se reserva con dos filas espaciadoras; el drill abierto y los totales no cambian.
-  const UMBRAL = 120, ALTO_FILA = dense ? 27 : 33, MARGEN = 12;
+  // Con dedo (iPhone Duo, iPad) las filas crecen para que se puedan tocar; la ventana de filas usa ese alto.
+  const tactil = esTactil();
+  const UMBRAL = 120, ALTO_FILA = tactil ? (dense ? 33 : 39) : (dense ? 27 : 33), MARGEN = 12;
   const virtual = !!maxHeight && filas.length > UMBRAL;
   const [scrollTop, setScrollTop] = useState(0);
   const rafRef = useRef(0);
@@ -40,13 +43,13 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
     return () => ro.disconnect();
   }, [renderExpandido]);
   const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, backgroundColor: theme.surface, background: `color-mix(in srgb, ${theme.surface} 82%, transparent)`, backdropFilter: 'saturate(160%) blur(12px)', WebkitBackdropFilter: 'saturate(160%) blur(12px)', zIndex: 1, whiteSpace: 'nowrap' };
-  const td = { padding: dense ? '3px 6px' : 'var(--dens-fila-pad, 5px 8px)', borderBottom: '1px solid transparent', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
+  const td = { padding: tactil ? (dense ? '6px 6px' : '8px 8px') : dense ? '3px 6px' : 'var(--dens-fila-pad, 5px 8px)', borderBottom: '1px solid transparent', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
   const alignOf = (c) => c.align || 'right';
   const tot = totales === undefined && columnas.some((c) => c.sum)
     ? Object.fromEntries(columnas.filter((c) => c.sum).map((c) => [c.key, filas.reduce((s, r) => s + (Number(r[c.key]) || 0), 0)]))
     : totales;
   return (
-    <div ref={scrollRef} onScroll={onScroll} style={{ overflow: 'auto', maxHeight, borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface }}>
+    <div ref={scrollRef} onScroll={onScroll} style={{ overflow: 'auto', maxHeight: typeof maxHeight === 'number' ? `min(${maxHeight}px, max(320px, calc(100dvh - 170px)))` : maxHeight, WebkitOverflowScrolling: 'touch', borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
           {grupos && (

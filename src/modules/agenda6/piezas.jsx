@@ -34,7 +34,8 @@ export function Accion({ children, onClick, tone, title, style }) {
  * salen Hoy · Mañana · Semana · Ya no · Mandar. Cada acción es optimista y deja «Deshacer» en el toast.
  */
 /** Pantalla táctil (iPad, iPhone plegable abierto): no hay hover, así que el primer toque «selecciona» la fila y muestra las acciones y el segundo la abre. */
-export const esTactil = () => { try { return typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches; } catch { return false; } };
+export { esTactil } from '../../lib/tactil';
+import { esTactil } from '../../lib/tactil';
 
 export function FilaRapida({ item, uid, personasPorId, personas = [], hoyIso, puedeEditar, onAbrir, seleccionada = false, mostrarFecha = false, acciones = ['hoy', 'manana', 'semana', 'yano', 'mandar'], extra = null, compacta = false }) {
   const { theme } = useTheme();

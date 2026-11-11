@@ -51,7 +51,7 @@ export default function ZoomDiario({ titulo = 'Evolución por día del mes', fil
             <span>{lectura}</span>
           </div>
           {cur.total > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6, padding: '8px 4px 0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 6, padding: '8px 4px 0' }}>
               {cur.semanas.map((s) => (
                 <div key={s.semana} style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: theme.textMuted }}><span>{s.semana === 5 ? 'Días 29+' : `Sem ${s.semana}`}</span><span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>{pct(s.pct, 0)}</span></div>
