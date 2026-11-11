@@ -1,0 +1,168 @@
+{
+  "_nota": "Congruencia web ↔ celular (2026-11-11). Cada bloque que existe en un solo lado se anota aquí con su motivo. `decision` = Fernando lo excluyó a propósito; `pendiente` = falta llevarlo al otro lado. La prueba scripts/test-paridad.mjs falla si una página del menú no tiene ruta en el celular sin estar aquí, o si aparece un import nuevo de modules → movil.",
+  "paginasSoloWeb": {
+    "estadoResultados": "decision · Fernando: no relevante en el celular",
+    "ciudad": "decision · visor 3D sólo en computadora",
+    "axonMexico": "pendiente · sin pantalla móvil"
+  },
+  "bloques": [
+    {
+      "pantalla": "Sell In consolidado",
+      "bloque": "Selector de período Mes · YTD",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Sell In consolidado",
+      "bloque": "Columna Δ vs año anterior en la tabla por SKU",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Sell In consolidado",
+      "bloque": "Comparador de periodos",
+      "falta": "movil",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Sell In consolidado",
+      "bloque": "Apoyo comercial y Equipo comercial",
+      "falta": "movil",
+      "estado": "decision · 3.80: fuera del celular"
+    },
+    {
+      "pantalla": "Sell Out consolidado",
+      "bloque": "Detalle por SKU × 12 meses de la empresa",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Sell Out consolidado",
+      "bloque": "SKUs activos / sin movimiento",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Sell Out consolidado",
+      "bloque": "Tabla de cuentas con drill y mapa",
+      "falta": "movil",
+      "estado": "decision · 3.80: viven en Análisis por cliente; mapa sólo en computadora"
+    },
+    {
+      "pantalla": "Inventario",
+      "bloque": "Vueltas de inventario del año",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Inventario",
+      "bloque": "Inventario vs venta 12 meses y pay Categoría · Marca · Almacén",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Inventario",
+      "bloque": "Próximos arribos, apartado, fuera de venta, sobre-stock",
+      "falta": "movil",
+      "estado": "decision · 3.81: sólo información de valor"
+    },
+    {
+      "pantalla": "S&OP",
+      "bloque": "Demanda vs stock 6 meses y «Comprar ahora»",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "S&OP",
+      "bloque": "Ficha de PO con «Compartir arribo»",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Cobranza general",
+      "bloque": "Vence esta semana y aging tocable",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Análisis por cliente",
+      "bloque": "KPIs en riesgo y nuevos del año",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Página del cliente",
+      "bloque": "Comparador de periodos y Exportar",
+      "falta": "movil",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Propuestas",
+      "bloque": "Propuesto vs facturado 12 meses",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Propuestas",
+      "bloque": "Todos los precios de lista del SKU al revisar",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Proyectos y forecast",
+      "bloque": "Vista «Los tres» con reparto por cliente",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Proyectos y forecast",
+      "bloque": "Tablero arrastrable y matriz SKU × mes",
+      "falta": "movil",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Tracking",
+      "bloque": "Alta de pedidos (OC, desde factura, cotización)",
+      "falta": "movil",
+      "estado": "decision · 3.74: celular sólo consulta"
+    },
+    {
+      "pantalla": "Pagos",
+      "bloque": "Paneles Cálculo · Marketing · Fondo · Reglas y pago manual",
+      "falta": "movil",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Producto 360",
+      "bloque": "Ficha única por SKU (venta, inventario, abasto, precio)",
+      "falta": "web",
+      "estado": "pendiente"
+    },
+    {
+      "pantalla": "Agenda",
+      "bloque": "Semana, Ideas y Equipo",
+      "falta": "movil",
+      "estado": "pendiente"
+    }
+  ],
+  "importsModulesAMovil": [
+    "src/modules/comercial/InventarioGlobal.jsx → movil/pestanas/inventario/calculo",
+    "src/modules/comercial/analisis/MovimientoPanel.jsx → movil/util",
+    "src/modules/comercial/forecast/MisClientesPanel.jsx → movil/pestanas/sop/calculo",
+    "src/modules/comercial/forecast/MisClientesPanel.jsx → movil/pestanas/sop/datos",
+    "src/modules/comercial/forecast/porQue.js → movil/pestanas/sop/calculo",
+    "src/modules/comercial/forecast/porQue.js → movil/util",
+    "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/calculo",
+    "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/datos",
+    "src/modules/comercial/inventario/StockCierrePanel.jsx → movil/pestanas/inventario/calculo",
+    "src/modules/comercial/inventario/StockCierrePanel.jsx → movil/pestanas/sellout/skuAnual",
+    "src/modules/comercial/precios/CalculadoraPanel.jsx → movil/pestanas/precios/calculo",
+    "src/modules/comercial/precios/CalculadoraPanel.jsx → movil/pestanas/precios/propuesta",
+    "src/modules/comercial/sellout/FrenteAlRestoPanel.jsx → movil/pestanas/analisis/calculo",
+    "src/modules/comercial/sellout/FrenteAlRestoPanel.jsx → movil/pestanas/analisis/datos",
+    "src/modules/comercial/sellout/FrenteAlRestoPanel.jsx → movil/util",
+    "src/modules/interno/TelemetriaPanel.jsx → movil/pestanas/equipo/calculo",
+    "src/modules/interno/equipo/HojaPersona.jsx → movil/pestanas/equipo/calculo",
+    "src/modules/interno/equipo/TarjetaPersona.jsx → movil/pestanas/equipo/calculo"
+  ]
+}

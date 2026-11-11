@@ -6,6 +6,7 @@
 import { agregarClientes, mapaCuotas, cuotaPeriodo, alcanceCuota, idxMes, yoyDe, MESES } from '../../../modules/comercial/analisis/calc';
 import { semanasInventario, sumaUltimosMeses, idxMes as idxSo } from '../../../modules/comercial/sellout/calculo';
 import { moneyCompact } from '../../../lib/format';
+import { cadenciaDe } from '../../../modules/comercial/analisis/ritmo';
 
 export const N = (v) => Number(v) || 0;
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -119,7 +120,7 @@ export function filtrarLista(canales, chip, q, canalLabel = (c) => c) {
 
 /**
  * Ritmo de compras del cliente desde mv_sellin_cliente_dia (anio, mes, dia, fact_neta, facturas).
- * @returns { ultima: Date|null, diasDesde, cadaDias (promedio de días entre compras en 180 d), facturasMes, mesFacturas: {anio,mes} }
+ * @returns { ultima: Date|null, diasDesde, cadaDias (mediana de días entre compras en 180 d, regla de la web), facturasMes, mesFacturas: {anio,mes} }
  */
 export function ritmoCompras(diario = [], hoy = new Date()) {
   const fechas = [];
@@ -133,11 +134,8 @@ export function ritmoCompras(diario = [], hoy = new Date()) {
   const diasDesde = ultima ? Math.floor((hoy - ultima) / 86400000) : null;
   const desde = new Date(hoy.getTime() - 180 * 86400000);
   const recientes = fechas.filter((d) => d >= desde);
-  let cadaDias = null;
-  if (recientes.length >= 2) {
-    let s = 0; for (let i = 1; i < recientes.length; i += 1) s += (recientes[i] - recientes[i - 1]) / 86400000;
-    cadaDias = Math.round(s / (recientes.length - 1));
-  }
+  // Misma regla que la web (analisis/ritmo.js#cadenciaDe): mediana de huecos, mínimo 3 compras. Antes era el promedio.
+  const cadaDias = cadenciaDe(recientes);
   // Facturas del último mes con facturas (el mes en curso si ya tiene).
   let mesFacturas = null, facturasMes = 0;
   const porMes = new Map();

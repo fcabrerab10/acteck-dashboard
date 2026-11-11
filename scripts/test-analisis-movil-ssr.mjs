@@ -120,7 +120,7 @@ for (let m = 1; m <= 10; m += 1) SO_MENSUAL.push({ cuenta: 'cva', nombre: 'COMER
 test('calculo · ritmoCompras, sellOutMesCuenta, serieAnioSiSo y frases', () => {
   const r = calc.ritmoCompras(DIARIO, HOY);
   assert.equal(r.diasDesde, 3, 'última compra el 6 de octubre');
-  assert.equal(r.cadaDias, 11, 'promedio de días entre compras en 180 d');
+  assert.equal(r.cadaDias, 9, 'mediana de días entre compras en 180 d (regla de la web)');
   assert.deepEqual(r.mesFacturas, { anio: 2026, mes: 10 }); assert.equal(r.facturasMes, 2);
   assert.equal(calc.ritmoCompras([], HOY).diasDesde, null);
   const so = calc.sellOutMesCuenta(SO_MENSUAL, 'cva', 2026, 10, HOY);
@@ -160,7 +160,7 @@ test('vista · ResumenVista renderiza hero, 4 KPIs, gráfica, movimiento, catego
     catSi: [{ label: 'Monitores', v: 14_200_000 }, { label: 'Fuentes', v: 6_100_000 }], catSo: [{ label: 'Monitores', v: 10_000_000 }], mensual, cuotasRows: CUOTAS, codigo: '00417', onCompartir() {} });
   sano(s, 'ResumenVista');
   assert.match(s, /CVA va al 11 % de su cuota/); assert.match(s, /a mismo día/);
-  assert.match(s, /Sell in · oct/); assert.match(s, /Sell out · oct/); assert.match(s, /SO\/SI 1\.29/); assert.match(s, /Inventario en CVA/); assert.match(s, /hace 3 d/); assert.match(s, /cada 11 días/);
+  assert.match(s, /Sell in · oct/); assert.match(s, /Sell out · oct/); assert.match(s, /SO\/SI 1\.29/); assert.match(s, /Inventario en CVA/); assert.match(s, /hace 3 d/); assert.match(s, /cada 9 días/);
   assert.match(s, /Sell in vs sell out · 2026/); assert.match(s, /Dónde está el movimiento/);
   assert.match(s, /Monitor Vivid 27 \(AC-943154\)/); assert.match(s, /150 pz · por primera vez/); assert.match(s, /en sep \$58K · en oct nada/);
   assert.match(s, /Categorías/); assert.match(s, /Monitores/); assert.match(s, /Cuotas por trimestre/); assert.match(s, /Q4 · en curso/);

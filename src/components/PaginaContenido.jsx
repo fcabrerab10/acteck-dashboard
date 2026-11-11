@@ -61,28 +61,7 @@ const ActualizacionDatos     = lazy(() => import('../modules/settings/Actualizac
 const Agenda                 = lazy(() => import('../modules/agenda5/Agenda5')); // V5 (2026-10-04); la V4 quedó archivada en src/_archivo/agenda-v4 (2026-10-05)
 const Ciudad                 = lazy(() => import('../modules/ciudad/Ciudad')); // Acteck Ciudad · three.js sólo aquí
 const BandejaAlertas         = lazy(() => import('./BandejaAlertas'));
-// Pantallas mobile (sólo se descargan en iPhone/iPad).
-const MobileEquipo            = lazy(() => import('./MobileEquipo'));
-const MobileYo                = lazy(() => import('./MobileYo'));
-const MobileSellIn            = lazy(() => import('./MobileSellIn'));
-const MobileSellOut           = lazy(() => import('./MobileSellOut'));
-const MobileCartera           = lazy(() => import('./MobileCartera'));
-const MobileMarketing         = lazy(() => import('./MobileMarketing'));
-const MobileHome              = lazy(() => import('./MobileHome'));
-const MobileHomeCliente       = lazy(() => import('./MobileHomeCliente'));
-const MobileBuscar            = lazy(() => import('./MobileBuscar'));
-const MobileEdR               = lazy(() => import('./MobileEdR'));
-const MobileVisionGeneral     = lazy(() => import('./MobileVisionGeneral'));
-const MobileAnalisisClientes  = lazy(() => import('./MobileAnalisisClientes'));
-const MobileSellInGlobal      = lazy(() => import('./MobileSellInGlobal'));
-const MobileSellOutGlobal     = lazy(() => import('./MobileSellOutGlobal'));
-const MobileInventarioGlobal  = lazy(() => import('./MobileInventarioGlobal'));
-const MobileCobranzaGlobal    = lazy(() => import('./MobileCobranzaGlobal'));
 const CobranzaGlobal          = lazy(() => import('../modules/comercial/CobranzaGlobal')); // 2026-10-04
-const MobileSOP               = lazy(() => import('./MobileSOP'));
-const MobilePropuestas        = lazy(() => import('./MobilePropuestas'));
-const MobileEstrategiaPrecios = lazy(() => import('./MobileEstrategiaPrecios'));
-const MobileTrackingPedidos   = lazy(() => import('./MobileTrackingPedidos'));
 
 function ResumenCuentas() {
   return React.createElement('div', { className: 'p-8' },
@@ -154,18 +133,14 @@ export default function PaginaContenido({
 
   if (pagina === 'configuracion') {
     if (!puedeVerConfig) return <SinAcceso motivo="Solo el Super Admin puede ver Administración." />;
-    return mobile
-      ? <MobileYo perfil={perfil} onCerrarSesion={onCerrarSesion} onOpenConfig={() => {}} />
-      : <Configuracion session={{ user: authUser, perfil }} />;
+    return <Configuracion session={{ user: authUser, perfil }} />;
   }
 
   return (
     <>
       {pagina === 'inicio' && !clienteKey && (
         puedeVerInicio(perfil)
-          ? (mobile
-              ? <MobileHome perfil={perfil} onNavegar={onNavegar} />
-              : <Inicio onNavegar={onNavegar} />)
+          ? (<Inicio onNavegar={onNavegar} />)
           : <SinAcceso motivo="No tienes acceso a Inicio. Pídele a Fernando que te habilite Visión General o Resumen de Clientes." />
       )}
       {pagina === 'resumen' && (
@@ -178,9 +153,6 @@ export default function PaginaContenido({
             </>
           : <SinAcceso motivo="No tienes acceso al Resumen general." />
       )}
-      {pagina === 'buscar' && mobile && (
-        <MobileBuscar perfil={perfil} onNavegar={onNavegar} />
-      )}
       {pagina === 'reporte' && (
         perfil?.es_super_admin
           ? <ReporteTab />
@@ -188,80 +160,58 @@ export default function PaginaContenido({
       )}
       {pagina === 'resumenClientes' && (
         puedeVerPestanaGlobal(perfil, 'resumen_clientes')
-          ? (mobile
-              ? <MobileHome perfil={perfil} onNavegar={onNavegar} />
-              : <ResumenClientesTab onDrillDown={(k) => onNavegar(k, 'home')} />)
+          ? (<ResumenClientesTab onDrillDown={(k) => onNavegar(k, 'home')} />)
           : <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />
       )}
       {pagina === 'propuestas' && (
         puedeVerPestanaGlobal(perfil, 'propuestas')
-          ? (mobile
-              ? <MobilePropuestas onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <PropuestasTab />)
+          ? (<PropuestasTab />)
           : <SinAcceso motivo="No tienes acceso a Propuestas." />
       )}
       {pagina === 'estadoResultados' && (
         puedeVerPestanaGlobal(perfil, 'estado_resultados')
-          ? (mobile
-              ? <MobileEdR onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <EstadoResultados />)
+          ? (<EstadoResultados />)
           : <SinAcceso motivo="No tienes acceso a Estado de Resultados." />
       )}
       {pagina === 'visionGeneral' && (
         puedeVerPestanaGlobal(perfil, 'vision_general')
-          ? (mobile
-              ? <MobileVisionGeneral onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : (puedeVerInicio(perfil) ? <Inicio onNavegar={onNavegar} vistaInicial="anio" /> : <VisionGeneral />))
+          ? ((puedeVerInicio(perfil) ? <Inicio onNavegar={onNavegar} vistaInicial="anio" /> : <VisionGeneral />))
           : <SinAcceso motivo="No tienes acceso a Visión General." />
       )}
       {pagina === 'analisisClientes' && (
         puedeVerPestanaGlobal(perfil, 'analisis_clientes')
-          ? (mobile
-              ? <MobileAnalisisClientes onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <AnalisisClientesGlobal inicial={extra} />)
+          ? (<AnalisisClientesGlobal inicial={extra} />)
           : <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />
       )}
       {!clienteKey && pagina === 'sellIn' && (
         puedeVerPestanaGlobal(perfil, 'sell_in')
-          ? (mobile
-              ? <MobileSellInGlobal onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <SellInCliente clienteKey={null} />)
+          ? (<SellInCliente clienteKey={null} />)
           : <SinAcceso motivo="No tienes acceso a Sell In." />
       )}
       {pagina === 'sellOut' && (
         puedeVerPestanaGlobal(perfil, 'sell_out')
-          ? (mobile
-              ? <MobileSellOutGlobal onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <SellOutGlobal />)
+          ? (<SellOutGlobal />)
           : <SinAcceso motivo="No tienes acceso a Sell Out." />
       )}
       {pagina === 'inventarioGlobal' && (
         puedeVerPestanaGlobal(perfil, 'inventario_global')
-          ? (mobile
-              ? <MobileInventarioGlobal onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <InventarioGlobal />)
+          ? (<InventarioGlobal />)
           : <SinAcceso motivo="No tienes acceso a Inventario." />
       )}
       {pagina === 'pagos' && !clienteKey && <PagosUnificados clienteKey={pagosCliente} extra={extra} />}
       {pagina === 'cobranzaGlobal' && (
         puedeVerPestanaGlobal(perfil, 'cobranza_global')
-          ? (mobile
-              ? <MobileCobranzaGlobal onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <CobranzaGlobal onNavegar={onNavegar} />)
+          ? (<CobranzaGlobal onNavegar={onNavegar} />)
           : <SinAcceso motivo="No tienes acceso a Cobranza." />
       )}
       {pagina === 'forecastClientes' && (
         puedeVerPestanaGlobal(perfil, 'forecast_clientes')
-          ? (mobile
-              ? <MobileSOP onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <ForecastClientesTab />)
+          ? (<ForecastClientesTab />)
           : <SinAcceso motivo="No tienes acceso a Forecast / S&OP." />
       )}
       {pagina === 'estrategiaPrecios' && (
         puedeVerPestanaGlobal(perfil, 'estrategia_precios')
-          ? (mobile
-              ? <MobileEstrategiaPrecios onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <EstrategiaPrecios />)
+          ? (<EstrategiaPrecios />)
           : <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />
       )}
       {pagina === 'acteckPcs' && (
@@ -276,9 +226,7 @@ export default function PaginaContenido({
       )}
       {pagina === 'ordenesCompra' && (
         puedeVerPestanaGlobal(perfil, 'ordenes_compra')
-          ? (mobile
-              ? <MobileTrackingPedidos onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <TrackingPedidos />)
+          ? (<TrackingPedidos />)
           : <SinAcceso motivo="No tienes acceso a Tracking Pedidos." />
       )}
       {pagina === 'ciudad' && (perfil?.es_super_admin ? <Ciudad onNavegar={onNavegar} /> : <SinAcceso motivo="Acteck Ciudad está en construcción." />)}
@@ -289,9 +237,7 @@ export default function PaginaContenido({
       )}
       {pagina === 'telemetria' && (
         perfil?.es_super_admin
-          ? (mobile
-              ? <MobileEquipo perfil={perfil} onNavegar={onNavegar} />
-              : <TelemetriaPanel />)
+          ? (<TelemetriaPanel />)
           : <SinAcceso motivo="Sólo el super admin puede ver la actividad del equipo." />
       )}
       {pagina === 'historialCambios' && (
@@ -313,9 +259,7 @@ export default function PaginaContenido({
       ) : (
         <>
           {pagina === 'home' && (
-            mobile
-              ? <MobileHomeCliente clienteKey={clienteKey} onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
-              : <>
+            <>
                   <div style={{ marginBottom: 16 }}>
                     <Suspense fallback={null}><BandejaAlertas clienteKey={clienteKey} compacto onNavegar={onNavegar} /></Suspense>
                   </div>
@@ -323,9 +267,7 @@ export default function PaginaContenido({
                 </>
           )}
           {clienteKey && pagina === 'sellIn' && (
-            mobile
-              ? <MobileSellIn clienteKey={clienteKey} onBack={() => onNavegar(clienteKey, 'home')} onNavegar={onNavegar} />
-              : clienteKey === 'digitalife'
+            clienteKey === 'digitalife'
                 ? <SellInClienteV2 clienteKey={clienteKey} />
                 : clienteKey === 'dicotech'
                   ? <SellInDicotech clienteKey={clienteKey} />
@@ -334,17 +276,13 @@ export default function PaginaContenido({
                     : <SellInCliente clienteKey={clienteKey} />
           )}
           {pagina === 'cartera' && (
-            mobile
-              ? <MobileCartera clienteKey={clienteKey} onBack={() => onNavegar(clienteKey, 'home')} onNavegar={onNavegar} />
-              : (clienteKey === 'digitalife' || clienteKey === 'dicotech' || clienteKey === 'pcel')
+            (clienteKey === 'digitalife' || clienteKey === 'dicotech' || clienteKey === 'pcel')
                 ? <CreditoCobranzaV2 cliente={c?.nombre || clienteKey} clienteKey={clienteKey} />
                 : <CreditoCobranza cliente={c} clienteKey={clienteKey} />
           )}
           {pagina === 'analisis' && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteKey] ? clientesDinamicos[clienteKey].nombre : clienteKey, clienteKey })}
           {pagina === 'estrategia' && (
-            mobile
-              ? <MobileSellOut clienteKey={clienteKey} onBack={() => onNavegar(clienteKey, 'home')} onNavegar={onNavegar} />
-              : clienteKey === 'digitalife'
+            clienteKey === 'digitalife'
                 ? <SellOutClienteV2 clienteKey={clienteKey} />
                 : clienteKey === 'dicotech'
                   ? <SellOutDicotech clienteKey={clienteKey} />
@@ -353,9 +291,7 @@ export default function PaginaContenido({
                     : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteKey} />
           )}
           {pagina === 'marketing' && (
-            mobile
-              ? <MobileMarketing clienteKey={clienteKey} onBack={() => onNavegar(clienteKey, 'home')} onNavegar={onNavegar} />
-              : React.createElement(MarketingCliente, { cliente: clienteKey, clienteKey })
+            React.createElement(MarketingCliente, { cliente: clienteKey, clienteKey })
           )}
           {pagina === 'forecast' && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey })}
         </>

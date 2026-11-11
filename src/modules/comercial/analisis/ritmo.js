@@ -9,6 +9,14 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 const fechaDe = (r) => new Date(r.anio, r.mes - 1, r.dia, 12);
 const diasEntre = (a, b) => Math.round((b - a) / 86400000);
 const mesLbl = (m) => MESES[m - 1].toLowerCase();
+// Regla ÚNICA de «compra cada N días» (web y celular): mediana de los huecos entre días con compra; con menos de
+// `minCompras` compras no hay cadencia. `fechas` = Date de los días con compra dentro de la ventana, en orden.
+export function cadenciaDe(fechas = [], minCompras = 3) {
+  if (fechas.length < minCompras) return null;
+  const huecos = fechas.slice(1).map((d, i) => Math.round((d - fechas[i]) / 86400000)).filter((h) => h > 0);
+  const m = mediana(huecos);
+  return m == null ? null : Math.max(1, Math.round(m));
+}
 const mediana = (xs) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const fmtM = (n) => { const a = Math.abs(n); const s = a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${Math.round(a / 1e3)}K` : `$${Math.round(a)}`; return (n < 0 ? '−' : '') + s; };
 
