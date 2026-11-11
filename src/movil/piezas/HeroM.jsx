@@ -13,7 +13,7 @@ export default function HeroM({ eyebrow, frase, sub, stats = [], children, onCli
   const hair = theme.mode === 'dark' ? 'rgba(29,29,31,0.12)' : 'rgba(245,245,247,0.14)';
   return (
     <div onClick={onClick} role={onClick ? 'button' : undefined}
-      style={{ background: bg, color: text, borderRadius: 12, padding: '16px 18px 14px', margin: '0 16px', fontFamily: TYPO.fontText, position: 'relative', cursor: onClick ? 'pointer' : 'default', transition: `transform ${DUR.tap}ms ${EASE}`, ...style }}>
+      style={{ backgroundColor: bg, backgroundImage: `radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, ${bg} 86%, #8A90A8), ${bg} 62%)`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)', color: text, borderRadius: 18, padding: '16px 18px 14px', margin: '0 16px', fontFamily: TYPO.fontText, position: 'relative', cursor: onClick ? 'pointer' : 'default', transition: `transform ${DUR.tap}ms ${EASE}`, ...style }}>
       {eyebrow && (
         <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: muted, display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 6, height: 6, borderRadius: 999, background: theme.red, display: 'inline-block' }} />{eyebrow}
@@ -27,7 +27,7 @@ export default function HeroM({ eyebrow, frase, sub, stats = [], children, onCli
           {stats.map((s, i) => (
             <div key={i} style={{ minWidth: 0 }}>
               <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.k}</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: s.color || text, lineHeight: 1.15, whiteSpace: 'nowrap' }}>{s.v}</div>
+              <div style={{ fontFamily: TYPO.fontRounded, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: s.color || text, lineHeight: 1.15, whiteSpace: 'nowrap' }}>{s.v}</div>
               {s.sub != null && <div style={{ fontSize: 10.5, color: muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sub}</div>}
             </div>
           ))}

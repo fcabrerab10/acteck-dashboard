@@ -10,6 +10,8 @@
 export const TYPO = {
   // Stack CSS exacto que sirve apple.com/mx
   fontText:    '"SF Pro Text", -apple-system, BlinkMacSystemFont, "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  // Cifras grandes (KPI, hero): SF Rounded como Salud/Fitness; cae a SF Pro Display donde no existe.
+  fontRounded: 'ui-rounded, "SF Pro Rounded", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
   fontDisplay: '"SF Pro Display", -apple-system, BlinkMacSystemFont, "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
 
   // Cifras y títulos hero — responsive vía clamp

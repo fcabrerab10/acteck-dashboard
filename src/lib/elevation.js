@@ -7,6 +7,7 @@
 //   const s = elevation(theme, 'flotante');  → en Midnight además conviene border: theme.borderStrong.
 export const ELEV = {
   reposo: 'none',
+  tarjeta: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px -12px rgba(0,0,0,0.12)', // tarjetas en reposo (2026-11-11): profundidad suave
   hover: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08)',
   flotante: '0 2px 6px rgba(0,0,0,0.08), 0 16px 48px rgba(0,0,0,0.16)',
 };
@@ -14,6 +15,7 @@ export const ELEV = {
 // Midnight: el fondo es negro, la sombra debe ser más densa para leerse.
 export const ELEV_DARK = {
   reposo: 'none',
+  tarjeta: 'none', // en oscuro la sombra no se lee: separa el hairline
   hover: '0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.5)',
   flotante: '0 2px 6px rgba(0,0,0,0.5), 0 16px 48px rgba(0,0,0,0.7)',
 };

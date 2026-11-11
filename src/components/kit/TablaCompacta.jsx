@@ -39,14 +39,14 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
     ro.observe(el);
     return () => ro.disconnect();
   }, [renderExpandido]);
-  const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, background: theme.surface, zIndex: 1, whiteSpace: 'nowrap' };
-  const td = { padding: dense ? '3px 6px' : 'var(--dens-fila-pad, 5px 8px)', borderBottom: `1px solid ${theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
+  const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, backgroundColor: theme.surface, background: `color-mix(in srgb, ${theme.surface} 82%, transparent)`, backdropFilter: 'saturate(160%) blur(12px)', WebkitBackdropFilter: 'saturate(160%) blur(12px)', zIndex: 1, whiteSpace: 'nowrap' };
+  const td = { padding: dense ? '3px 6px' : 'var(--dens-fila-pad, 5px 8px)', borderBottom: '1px solid transparent', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
   const alignOf = (c) => c.align || 'right';
   const tot = totales === undefined && columnas.some((c) => c.sum)
     ? Object.fromEntries(columnas.filter((c) => c.sum).map((c) => [c.key, filas.reduce((s, r) => s + (Number(r[c.key]) || 0), 0)]))
     : totales;
   return (
-    <div ref={scrollRef} onScroll={onScroll} style={{ overflow: 'auto', maxHeight, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface }}>
+    <div ref={scrollRef} onScroll={onScroll} style={{ overflow: 'auto', maxHeight, borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
           {grupos && (
@@ -84,7 +84,7 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
             return (
               <React.Fragment key={k}>
                 <tr onClick={onRowClick ? () => onRowClick(r) : undefined}
-                  onMouseEnter={(e) => { if (onRowClick && !extra.background) e.currentTarget.style.background = theme.surfaceHover || 'rgba(0,0,0,0.02)'; }}
+                  onMouseEnter={(e) => { if (!extra.background) e.currentTarget.style.background = theme.surfaceHover || 'rgba(0,0,0,0.02)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = bgReposo; }}
                   style={{ cursor: onRowClick ? 'pointer' : 'default', transition: 'background 160ms', ...extra, background: bgReposo }}>
                   {columnas.map((c) => (

@@ -5,20 +5,24 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
 import { Pill } from '../../components/kit';
+import Trazo from '../../components/kit/Trazo';
+import { useCuenta } from '../../components/kit/cuenta';
+import { elevation } from '../../lib/elevation';
 
 export function KpiGrid({ children, cols = 2, style, ...rest }) {
   return <div {...rest} style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: 10, padding: '0 16px', ...style }}>{children}</div>;
 }
 
-export default function KpiM({ eyebrow, big, bigColor, sub, pill, progress, onClick, style }) {
+export default function KpiM({ eyebrow, big, bigColor, sub, pill, progress, onClick, style, trazo, trazoColor }) {
   const { theme } = useTheme();
   const [down, setDown] = useState(false);
+  const bigAnimado = useCuenta(big);
   const progCol = progress == null ? theme.textMuted : progress >= 100 ? theme.green : progress >= 85 ? theme.text : theme.orange;
   return (
     <div onClick={onClick} role={onClick ? 'button' : undefined}
       onTouchStart={() => onClick && setDown(true)} onTouchEnd={() => setDown(false)} onTouchCancel={() => setDown(false)}
       style={{
-        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px', minWidth: 0, position: 'relative',
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 14px', minWidth: 0, position: 'relative', boxShadow: elevation(theme, 'tarjeta'),
         fontFamily: TYPO.fontText, cursor: onClick ? 'pointer' : 'default',
         transform: down ? 'scale(0.97)' : 'scale(1)', transition: `transform ${DUR.tap}ms ${EASE}`, ...style,
       }}>
@@ -27,8 +31,9 @@ export default function KpiM({ eyebrow, big, bigColor, sub, pill, progress, onCl
         {pill && <Pill tone={pill.tone || 'gray'} size="xs">{pill.label}</Pill>}
         {!pill && onClick && <ChevronRight size={13} style={{ color: theme.textSubtle || theme.textMuted, flexShrink: 0 }} />}
       </div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1, color: bigColor || theme.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{big}</div>
+      <div style={{ fontFamily: TYPO.fontRounded, fontSize: 23, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1, color: bigColor || theme.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bigAnimado}</div>
       {sub != null && <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+      {trazo && trazo.length > 1 && <Trazo puntos={trazo} color={trazoColor} h={22} style={{ marginTop: 8 }} />}
       {progress != null && (
         <div style={{ marginTop: 8, height: 3, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
           <div style={{ height: 3, width: `${Math.min(100, Math.max(0, progress))}%`, background: progCol, borderRadius: 999, transition: `width 600ms ${EASE}` }} />

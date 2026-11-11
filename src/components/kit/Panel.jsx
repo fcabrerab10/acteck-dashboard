@@ -16,8 +16,8 @@ export default function Panel({ titulo, meta, acciones, children, plegable = fal
   const alternar = () => { const n = !abierto; setAbierto(n); onToggle?.(n); };
   return (
     <div id={id} onMouseEnter={elevable ? () => setHover(true) : undefined} onMouseLeave={elevable ? () => setHover(false) : undefined}
-      style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: TYPO.fontText,
-        boxShadow: elevation(theme, elevable && hover ? 'hover' : 'reposo'), transition: `box-shadow ${DUR.state}ms ${EASE}`, ...style }}>
+      style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, fontFamily: TYPO.fontText,
+        boxShadow: elevation(theme, elevable && hover ? 'hover' : 'tarjeta'), transition: `box-shadow ${DUR.state}ms ${EASE}`, ...style }}>
       {(titulo || acciones) && (
         <div onClick={plegable ? alternar : undefined}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', cursor: plegable ? 'pointer' : 'default', borderBottom: open && children ? `1px solid ${theme.border}` : 'none' }}>

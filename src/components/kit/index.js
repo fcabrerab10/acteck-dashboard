@@ -1,6 +1,7 @@
 // Kit V3 · piezas base + utilidades. Toda pantalla nueva o migrada se arma sólo con esto.
 export { default as Hero, HeroStat } from './Hero';
 export { default as KpiCard } from './KpiCard';
+export { default as Trazo } from './Trazo';
 export { default as Pill, DeltaPill, toneColors } from './Pill';
 export { default as Segmented } from './Segmented';
 export { default as TablaCompacta } from './TablaCompacta';

@@ -11,7 +11,7 @@ export function HeroStat({ k, v, sub, color, medida }) {
   return (
     <div title={medida || undefined} style={{ textAlign: 'right', minWidth: 0 }}>
       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: muted, fontWeight: 600, whiteSpace: 'nowrap' }}>{k}</div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: color || (theme.textOnInverse || '#F5F5F7'), lineHeight: 1.15, whiteSpace: 'nowrap' }}>{v}</div>
+      <div style={{ fontFamily: TYPO.fontRounded, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: color || (theme.textOnInverse || '#F5F5F7'), lineHeight: 1.15, whiteSpace: 'nowrap' }}>{v}</div>
       {sub != null && <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: muted, whiteSpace: 'nowrap' }}>{sub}</div>}
     </div>
   );
@@ -24,7 +24,7 @@ export default function Hero({ eyebrow, titulo, sub, dot = true, stats = [], chi
   const muted = theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)';
   return (
     <div style={{
-      background: bg, color: text, borderRadius: 12, padding: '14px 18px',
+      backgroundColor: bg, backgroundImage: `radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, ${bg} 86%, #8A90A8), ${bg} 62%)`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)', color: text, borderRadius: 18, padding: '14px 18px',
       display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${stats.length}, auto)`, gap: 20, alignItems: 'center',
       fontFamily: TYPO.fontText, ...style,
     }}>
