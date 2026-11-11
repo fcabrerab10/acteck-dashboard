@@ -104,7 +104,7 @@ export function pasosDeVisita(clienteKey, { anio = new Date().getFullYear() } = 
     run: () => Promise.all([
       fetchAll('v_estrategia_precios_lista', LISTAS_PRECIOS_SELECT),
       fetchPreciosLista(),
-      queryClient.fetchQuery({ queryKey: ['precios_sku'], queryFn: () => fetchAll('precios_sku', '*'), gcTime: SIETE_DIAS }),
+      // 2026-11-11: ya no se baja precios_sku completa (29 K filas, 4 MB): ninguna pantalla la lee; las listas vigentes van arriba.
     ]),
   });
 

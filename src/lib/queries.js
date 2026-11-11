@@ -248,12 +248,8 @@ export function useRoadmap() {
 }
 
 // ─── Precios SKU ───
-export function usePrecios() {
-  return useQuery({
-    queryKey: ['precios_sku'],
-    queryFn: () => fetchAll('precios_sku', '*'),
-  });
-}
+// usePrecios() se retiró el 2026-11-11: nadie la usaba y bajaba precios_sku completa (29 K filas). Usar
+// fetchPreciosLista() o v_estrategia_precios_lista (precio vigente por sku + lista).
 
 // ─── Facturación clientes ───
 // anios: array de años (ej [2025, 2026]) o null para todo
