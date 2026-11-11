@@ -14,7 +14,7 @@ import { guardarOrden, eliminarOrden } from './datos';
 
 const VACIO = { folio: '', fecha: '', cliente: '', oc_cliente: '', estado: 'recibida', direct_order: false, fecha_entrega: '', guia: '', factura_cliente: '', factura_cliente_vence: '', cobrado_at: '', factura_decme: '', factura_decme_monto: '', factura_decme_vence: '', pagado_decme_at: '', notas: '' };
 
-export default function HojaPedido({ pedido, datos, sensible, perfil, onClose }) {
+export default function HojaPedido({ pedido, datos, sensible, perfil, onClose, enLinea = false }) {
   const { theme } = useTheme();
   const nuevo = !pedido;
   const [c, setC] = useState(() => (pedido ? Object.fromEntries(Object.keys(VACIO).map((k) => [k, pedido[k] ?? VACIO[k]])) : { ...VACIO, fecha: hoyISO() }));
@@ -50,8 +50,13 @@ export default function HojaPedido({ pedido, datos, sensible, perfil, onClose })
   const g2 = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, padding: '0 4px' };
   const inputAlto = { height: 40, fontSize: 14 };
 
-  return (
-    <HojaLateral abierto onClose={onClose} theme={theme} ancho={560} titulo={nuevo ? 'Nuevo pedido' : `Pedido ${pedido.folio || pedido.oc_cliente || ''}`.trim()} sub={nuevo ? 'OC interna a DECME para surtir a un cliente' : `${pedido.cliente} · ${int(pedido.equipos)} equipos`}>
+  const titulo = nuevo ? 'Nuevo pedido' : `Pedido ${pedido.folio || pedido.oc_cliente || ''}`.trim();
+  const subt = nuevo ? 'OC interna a DECME para surtir a un cliente' : `${pedido.cliente} · ${int(pedido.equipos)} equipos`;
+  // Vista dividida: el mismo formulario, pintado a la derecha de la lista en vez de en una hoja.
+  const Marco = enLinea
+    ? ({ children }) => (<div style={{ padding: '14px 12px 18px', fontFamily: TYPO.fontText }}><div style={{ padding: '0 4px 10px' }}><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{titulo}</div><div style={{ fontSize: 12, color: theme.textMuted }}>{subt}</div></div>{children}</div>)
+    : ({ children }) => (<HojaLateral abierto onClose={onClose} theme={theme} ancho={560} titulo={titulo} sub={subt}>{children}</HojaLateral>);
+  return Marco({ children: (<>
       <div style={g2}>
         <Campo label="Cliente"><Entrada valor={c.cliente} onChange={set('cliente')} placeholder="CVA, CT, PCH…" style={inputAlto} /></Campo>
         <Campo label="Fecha de la orden"><Entrada tipo="date" valor={c.fecha} onChange={set('fecha')} style={inputAlto} /></Campo>
@@ -112,6 +117,5 @@ export default function HojaPedido({ pedido, datos, sensible, perfil, onClose })
         {nuevo ? <span /> : <Boton peligro size="md" icon={Trash2} disabled={ocupado} onClick={borrar} style={{ height: 44 }}>Eliminar</Boton>}
         <Boton primario size="md" disabled={ocupado} onClick={guardar} style={{ height: 44, padding: '0 24px' }}>{ocupado ? 'Guardando…' : 'Guardar'}</Boton>
       </div>
-    </HojaLateral>
-  );
+  </>) });
 }

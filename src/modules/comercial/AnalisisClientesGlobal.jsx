@@ -261,7 +261,7 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
         <span style={{ fontSize: 10.5, color: theme.textMuted, ...mono }}>{filas.length - (ocasionales.length ? 1 : 0)} recurrentes · {ocasionales.length} ocasionales</span>
       </div>
 
-      <TablaCompacta columnas={columnas} filas={filas} rowKey={(r) => r.cliente} orden={orden} onSort={onSort} totales={totalesFila} maxHeight={640}
+      <TablaCompacta columnas={columnas} filas={filas} rowKey={(r) => r.cliente} orden={orden} onSort={onSort} totales={totalesFila} maxHeight={640} dividir={false}
         vacio="Ningún cliente coincide con el filtro."
         onRowClick={(r) => setAbierto((k) => (k === r.cliente ? null : r.cliente))}
         expandidoKey={abierto}

@@ -9,10 +9,13 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { esTactil } from '../../lib/tactil';
 import Vacio from './Vacio';
+import { X } from 'lucide-react';
+import { usePrefsDispositivo } from '../../lib/dispositivo';
 
 const GRUPO_H = 24;
 
-export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id ?? i, onRowClick, orden, onSort, totales, maxHeight, vacio = 'Sin datos.', dense = false, renderExpandido, expandidoKey, grupos, rowStyle }) {
+export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id ?? i, onRowClick, orden, onSort, totales, maxHeight, vacio = 'Sin datos.', dense = false, renderExpandido, expandidoKey, grupos, rowStyle, dividir = true, columnasLista }) {
+  const props = arguments[0];
   const { theme } = useTheme();
   const hair = `1px solid ${theme.divider || theme.border}`;
   // Ancho visible del contenedor: el drill de una fila (renderExpandido) se pinta sticky a ese ancho,
@@ -33,6 +36,23 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
   const ini = virtual ? Math.max(0, Math.floor(scrollTop / ALTO_FILA) - MARGEN) : 0;
   const fin = virtual ? Math.min(filas.length, Math.ceil((scrollTop + altoMax) / ALTO_FILA) + MARGEN) : filas.length;
   const visibles = virtual ? filas.slice(ini, fin) : filas;
+  // Vista dividida (diseño B · 2026-11-11): si el dispositivo la tiene prendida y hay una fila abierta, la tabla se
+  // queda a la izquierda como lista (sus primeras columnas, o `columnasLista`) y el detalle se pinta a la derecha.
+  const prefsDisp = usePrefsDispositivo();
+  const contRef = useRef(null);
+  const [anchoCont, setAnchoCont] = useState(0);
+  const idxAbierta = renderExpandido && expandidoKey != null ? filas.findIndex((r, i) => rowKey(r, i) === expandidoKey) : -1;
+  const partir = !!renderExpandido && dividir && !!prefsDisp.dividida && idxAbierta >= 0 && anchoCont >= 700;
+  useEffect(() => {
+    if (!renderExpandido || !dividir) return undefined;
+    const el = contRef.current || scrollRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const medir = () => setAnchoCont(el.clientWidth);
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [renderExpandido, dividir, partir]);
   useEffect(() => {
     if (!renderExpandido) return undefined;
     const el = scrollRef.current;
@@ -49,6 +69,24 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
   const tot = totales === undefined && columnas.some((c) => c.sum)
     ? Object.fromEntries(columnas.filter((c) => c.sum).map((c) => [c.key, filas.reduce((s, r) => s + (Number(r[c.key]) || 0), 0)]))
     : totales;
+  if (partir) {
+    const fila = filas[idxAbierta];
+    const clavesLista = columnasLista || columnas.slice(0, 2).map((c) => c.key);
+    const resalte = theme.mode === 'dark' ? 'rgba(10,132,255,0.16)' : 'rgba(0,122,255,0.09)';
+    return (
+      <div ref={contRef} style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 32%) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
+        <TablaCompacta {...props} columnas={columnas.filter((c) => clavesLista.includes(c.key)).map((c) => ({ ...c, width: undefined }))} renderExpandido={undefined} expandidoKey={undefined} grupos={undefined} totales={null} dividir={false}
+          maxHeight={typeof maxHeight === 'number' ? maxHeight : 'calc(100dvh - 170px)'}
+          rowStyle={(r) => (r === fila ? { background: resalte } : (rowStyle ? rowStyle(r) : null))} />
+        <div style={{ position: 'sticky', top: 8, maxHeight: 'calc(100dvh - 150px)', overflow: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface, minWidth: 0 }}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 2, display: 'flex', justifyContent: 'flex-end', height: 0 }}>
+            <button type="button" title="Cerrar el detalle" onClick={() => onRowClick?.(fila)} style={{ margin: 6, width: 30, height: 30, borderRadius: 999, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={15} /></button>
+          </div>
+          {renderExpandido(fila)}
+        </div>
+      </div>
+    );
+  }
   return (
     <div ref={scrollRef} onScroll={onScroll} style={{ overflow: 'auto', maxHeight: typeof maxHeight === 'number' ? `min(${maxHeight}px, max(320px, calc(100dvh - 170px)))` : maxHeight, WebkitOverflowScrolling: 'touch', borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>

@@ -11,6 +11,7 @@ import { puedeVerSensible } from '../../../lib/permisos';
 import { money, moneyCompact, int, pct, fechaCorta, hoyISO } from '../../../lib/format.js';
 import { Hero, KpiCard, Panel, Pill, Segmented, TablaCompacta, Boton, Cargando, AccionesCabecera } from '../../../components/kit';
 import { usePcs } from './datos';
+import { usePrefsDispositivo } from '../../../lib/dispositivo';
 import { pedidos as armarPedidos, resumen as armarResumen, frase, filasModelos, capacidad, ETAPAS, TARIMA } from './calculo.js';
 import HojaPedido from './HojaPedido';
 import HojaModelo from './HojaModelo';
@@ -28,7 +29,7 @@ const modelosDe = (p) => p.lineas.map((l) => l.sku_modelo).join(' · ') || '—'
 const cobroDe = (p) => (p.etapa === 'cobrada' ? `pagó ${fechaCorta(p.cobrado_at)}` : p.etapa === 'facturada' && p.factura_cliente_vence ? `vence ${fechaCorta(p.factura_cliente_vence)}` : '—');
 
 /** Vista pura (sin red): la usan la pantalla y las pruebas SSR. */
-export function ActeckPcsVista({ datos, hoy, sensible = false, movil = false, onPedido, onModelo, onNuevo }) {
+export function ActeckPcsVista({ datos, hoy, sensible = false, movil = false, onPedido, onModelo, onNuevo, pedidoAbierto = null, renderPedido }) {
   const { theme } = useTheme();
   const [filtro, setFiltro] = useState('abiertos');
   const [etapa, setEtapa] = useState(null);
@@ -110,7 +111,7 @@ export function ActeckPcsVista({ datos, hoy, sensible = false, movil = false, on
               ))}
             </div>
           ) : (
-            <TablaCompacta columnas={colPedidos} filas={lista} onRowClick={onPedido} vacio="Sin pedidos en esta vista. Registra el primero con «Nuevo pedido»." />
+            <TablaCompacta columnas={colPedidos} filas={lista} onRowClick={onPedido} expandidoKey={renderPedido ? pedidoAbierto : undefined} renderExpandido={renderPedido} columnasLista={['cliente', 'etapa']} vacio="Sin pedidos en esta vista. Registra el primero con «Nuevo pedido»." />
           )}
         </Panel>
       </div>
@@ -165,12 +166,16 @@ export default function ActeckPCs({ movil = false }) {
   const [pedido, setPedido] = useState(null); // objeto del pedido | 'nuevo'
   const [modeloSku, setModeloSku] = useState(null);
   const sensible = puedeVerSensible(perfil);
+  // Vista dividida: el pedido se abre a la derecha de la lista; «Nuevo pedido» sigue en hoja.
+  const dividida = usePrefsDispositivo().dividida && !movil;
   if (isLoading) return <Cargando pantalla="forecastReservas" />;
   if (error || !data) return <div style={{ padding: 24, color: theme.textMuted, fontFamily: TYPO.fontText }}>No se pudo cargar Acteck PCs. {String(error?.message || '')}</div>;
   return (
     <>
-      <ActeckPcsVista datos={data} hoy={hoyISO()} sensible={sensible} movil={movil} onPedido={setPedido} onModelo={(m) => setModeloSku(m.sku)} onNuevo={() => setPedido('nuevo')} />
-      {pedido && <HojaPedido pedido={pedido === 'nuevo' ? null : pedido} datos={data} sensible={sensible} perfil={perfil} onClose={() => setPedido(null)} />}
+      <ActeckPcsVista datos={data} hoy={hoyISO()} sensible={sensible} movil={movil} onPedido={(p) => setPedido((a) => (dividida && a && a !== 'nuevo' && a.id === p.id ? null : p))} onModelo={(m) => setModeloSku(m.sku)} onNuevo={() => setPedido('nuevo')}
+        pedidoAbierto={dividida && pedido && pedido !== 'nuevo' ? pedido.id : null}
+        renderPedido={dividida ? (p) => <HojaPedido key={p.id} enLinea pedido={p} datos={data} sensible={sensible} perfil={perfil} onClose={() => setPedido(null)} /> : undefined} />
+      {pedido && (pedido === 'nuevo' || !dividida) && <HojaPedido pedido={pedido === 'nuevo' ? null : pedido} datos={data} sensible={sensible} perfil={perfil} onClose={() => setPedido(null)} />}
       {modeloSku && <HojaModelo sku={modeloSku} datos={data} sensible={sensible} perfil={perfil} onClose={() => setModeloSku(null)} />}
     </>
   );
