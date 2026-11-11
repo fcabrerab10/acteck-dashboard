@@ -123,6 +123,7 @@ export const PAGINA_A_PERMISO_GLOBAL = {
   forecastClientes: "forecast_clientes",
   estrategiaPrecios:"estrategia_precios",
   forecastReservas: "forecast_reservas",
+  acteckPcs:        "acteck_pcs",        // Acteck PCs (2026-11-11)
   ordenesCompra:    "ordenes_compra",
   agenda:           "agenda",         // Agenda (V3) · migrado de admin_interna
   ciudad:           "__super_admin_only__", // Acteck Ciudad (2026-10-05): en construcción, sólo super admin
@@ -239,6 +240,7 @@ export const PESTANAS_GLOBALES = [
   { id: "forecast_clientes",  label: "S&OP",                  desc: "Planeación de compras cross-cliente (Sales & Operations Planning)" },
   { id: "estrategia_precios", label: "Estrategia de Precios", desc: "Pricing por cliente y por SKU" },
   { id: "forecast_reservas",  label: "Proyectos y forecast", desc: "Proyectos por mes en dinero, reserva de inventario y compras sugeridas" },
+  { id: "acteck_pcs",         label: "Acteck PCs",            desc: "Proyecto de computadoras ensambladas: pedidos, modelos, costos de DECME y cobranza" },
   { id: "ordenes_compra",     label: "Tracking Pedidos",      desc: "Gestión de OCs, fill rate y cruce con ERP" },
   { id: "agenda",             label: "Agenda",                 desc: "Tareas, reuniones con minuta, calendario y avisos del dashboard (antes Pendientes & Calendario)" },
   { id: "historial_cambios",  label: "Historial de cambios",   desc: "Quién cambió qué y cuándo en lo que la app escribe" },

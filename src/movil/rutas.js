@@ -27,6 +27,7 @@ const Proyectos        = lazy(() => import('./pestanas/Proyectos'));
 const ClientePropioM   = lazy(() => import('./pestanas/cliente/ClientePropioM')); // cliente propio (3.84.0 · 2026-10-06)
 const ForecastM        = lazy(() => import('./pestanas/forecast/ForecastM')); // Proyectos y forecast (3.83.0 · 2026-10-05)
 const InventarioM      = lazy(() => import('./pestanas/inventario/InventarioM')); // 2026-10-05 · Inventario global
+const ActeckPcsM        = lazy(() => import('./pestanas/ActeckPcsM')); // 2026-11-11 · la MISMA pantalla que la web
 const EstrategiaPreciosM = lazy(() => import('./pestanas/precios/EstrategiaPreciosM')); // 2026-10-05 · calculadora de margen y propuesta
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Sólo `inicio` y `agenda` son nodos del árbol. */
@@ -47,6 +48,7 @@ const GLOBALES = {
   // Estrategia de precios (3.82.0): calculadora de margen/descuento + propuesta real; `extra.sku` abre la calculadora con ese SKU.
   // La Ficha de producto («Compartir disponibilidad») se abre desde la calculadora.
   estrategiaPrecios: (extra) => ({ tipo: 'push', key: 'precios', el: h(EstrategiaPreciosM, { inicial: extra || null }) }),
+  acteckPcs:         () => ({ tipo: 'push', key: 'acteck-pcs', el: h(ActeckPcsM) }),
   historialCambios:  () => ({ tipo: 'push', key: 'historial', el: h(Historial) }),
   telemetria:        () => ({ tipo: 'push', key: 'equipo', el: h(Equipo) }),   // Actividad del equipo (sólo super admin)
   actualizacion:     () => ({ tipo: 'push', key: 'fuentes', el: h(Fuentes) }), // Importador (sólo lectura)

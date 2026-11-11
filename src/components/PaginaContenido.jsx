@@ -37,6 +37,7 @@ const InventarioGlobal       = lazy(() => import('../modules/comercial/Inventari
 const EstrategiaPrecios      = lazy(() => import('../modules/comercial/EstrategiaPrecios'));
 const ForecastCliente        = lazy(() => import('../modules/comercial/ForecastCliente'));
 const ProyectosAbasto        = lazy(() => import('../modules/comercial/ProyectosAbasto'));
+const ActeckPCs              = lazy(() => import('../modules/comercial/pcs/ActeckPCs')); // 2026-11-11
 const SellInCliente          = lazy(() => import('../modules/comercial/SellInCliente'));
 const SellInClienteV2        = lazy(() => import('../modules/comercial/SellInClienteV2'));
 const SellInDicotech         = lazy(() => import('../modules/comercial/SellInDicotech'));
@@ -262,6 +263,11 @@ export default function PaginaContenido({
               ? <MobileEstrategiaPrecios onBack={() => onNavegar(null, 'resumenClientes')} onNavegar={onNavegar} />
               : <EstrategiaPrecios />)
           : <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />
+      )}
+      {pagina === 'acteckPcs' && (
+        puedeVerPestanaGlobal(perfil, 'acteck_pcs')
+          ? <ActeckPCs />
+          : <SinAcceso motivo="No tienes acceso a Acteck PCs." />
       )}
       {pagina === 'forecastReservas' && (
         puedeVerPestanaGlobal(perfil, 'forecast_reservas')

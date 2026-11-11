@@ -10,7 +10,7 @@
 import {
   Home, LayoutGrid, Calculator, Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Target,
   BarChart3, ClipboardList, TrendingUp, FileCheck, Megaphone, Wallet, CreditCard, History, Building2,
-  Shield, Users, Briefcase, Landmark, Store, CalendarCheck,
+  Shield, Users, Briefcase, Landmark, Store, CalendarCheck, MonitorSmartphone,
 } from 'lucide-react';
 import { puedeVerPaginaGlobal, puedeVerCliente, puedeVerPestanaCliente } from '../../lib/permisos';
 import { MARCAS_CASA_LABEL } from '../../lib/marcas';
@@ -60,6 +60,7 @@ const GRUPOS_BASE = [
       { pagina: 'inventarioGlobal', label: 'Inventario',           icon: Boxes },
       { pagina: 'cobranzaGlobal',   label: 'Cobranza',             icon: HandCoins },
       { pagina: 'forecastClientes', label: 'S&OP',                 icon: Target },
+      { pagina: 'acteckPcs',        label: 'Acteck PCs',           icon: MonitorSmartphone }, // 2026-11-11 · proyecto de PCs ensambladas con DECME
     ],
   },
   {

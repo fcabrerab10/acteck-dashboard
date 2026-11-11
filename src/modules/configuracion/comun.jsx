@@ -15,7 +15,7 @@ export const NIVEL_TONE = { oculto: 'gray', ver: 'blue', edit: 'green' };
 /** Pestañas globales agrupadas en el orden del menú (src/components/nav/arbol.js). Lo que no esté aquí cae en "Otras". */
 const GRUPOS_MENU = [
   { id: 'direccionGeneral',  label: 'Dirección General',  ids: ['estado_resultados'] },
-  { id: 'direccionComercial', label: 'Dirección Comercial', ids: ['vision_general', 'analisis_clientes', 'sell_in', 'sell_out', 'inventario_global', 'cobranza_global', 'forecast_clientes', 'forecast_solicitudes'] },
+  { id: 'direccionComercial', label: 'Dirección Comercial', ids: ['vision_general', 'analisis_clientes', 'sell_in', 'sell_out', 'inventario_global', 'cobranza_global', 'forecast_clientes', 'forecast_solicitudes', 'acteck_pcs'] },
   { id: 'clientesPropios',   label: 'Clientes propios',   ids: ['resumen_clientes', 'propuestas', 'estrategia_precios', 'forecast_reservas', 'ordenes_compra'] },
   { id: 'interno',           label: 'Interno',            ids: ['agenda', 'historial_cambios', 'configuracion'] },
   { id: 'axon',              label: 'Axon',               ids: ['axon_mexico'] },
