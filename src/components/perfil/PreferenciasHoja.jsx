@@ -151,8 +151,8 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
             </>
           )}
           {/* Diseño 2026-11-11 · tres cosas que cada dispositivo elige por separado */}
-          <Fila theme={theme} icon={Layers} label="Menú en este dispositivo" sub={prefsDisp.menu === 'grupos' ? 'Barra flotante abajo, por grupos' : 'El menú elegido en Preferencias › Menú'}>
-            <Segmented value={prefsDisp.menu} onChange={(v) => setPrefDispositivo(disp.modo, 'menu', v)} options={[{ id: 'cuenta', label: 'De siempre' }, { id: 'grupos', label: 'Barra abajo' }]} />
+          <Fila theme={theme} icon={Layers} label="Menú en este dispositivo" sub={prefsDisp.menu === 'grupos' ? 'Barra flotante abajo, por grupos' : prefsDisp.menu === 'auto' ? 'Lateral en horizontal, barra abajo en vertical' : 'El menú lateral de siempre'}>
+            <Segmented value={prefsDisp.menu} onChange={(v) => setPrefDispositivo(disp.modo, 'menu', v)} options={[{ id: 'auto', label: 'Automático' }, { id: 'cuenta', label: 'Lateral' }, { id: 'grupos', label: 'Barra abajo' }]} />
           </Fila>
           <Fila theme={theme} icon={Layers} label="Vista dividida" sub="En Análisis por cliente: la lista se queda a la izquierda y el cliente se abre a la derecha">
             <Segmented value={prefsDisp.dividida ? 'si' : 'no'} onChange={(v) => setPrefDispositivo(disp.modo, 'dividida', v === 'si')} options={[{ id: 'no', label: 'No' }, { id: 'si', label: 'Sí' }]} />

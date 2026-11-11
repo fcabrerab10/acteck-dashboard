@@ -130,8 +130,9 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
   if (prefsDisp.inicio === 'tarjetas' && !verTodo) {
     return (
       <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
-        {barra}
-        <InicioTarjetas r={r} ve={ve} anio={anio} labelPeriodo={labelPeriodo} onNavegar={onNavegar} onVerTodo={() => setVerTodo(true)} />
+        <InicioTarjetas r={r} ve={ve} anio={anio} labelPeriodo={labelPeriodo} onNavegar={onNavegar} onVerTodo={() => setVerTodo(true)}
+          izquierda={<span style={{ fontSize: 12, color: theme.textMuted }}>{fmtDia.format(hoy).replace(',', '')}{enCurso ? '' : ` · viendo ${esMes ? `${MESES[mesActual - 1]} ${anio}` : anio}`}</span>}
+          derecha={<SelectorPeriodo anio={anio} mes={mes} anioHoy={anioHoy} mesHoy={mesHoy} anios={anios} onChange={(a, m) => { setAnio(a); setMes(m); }} />} />
       </div>
     );
   }

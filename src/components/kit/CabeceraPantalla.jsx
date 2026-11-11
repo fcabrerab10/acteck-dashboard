@@ -37,7 +37,7 @@ export default function CabeceraPantalla({ seccion }) {
           {seccion.grupo && <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: seccion.color }}>{seccion.grupo}</div>}
           <h1 style={{ margin: 0, fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, color: theme.text }}>{seccion.titulo}</h1>
         </div>
-        <div ref={setAcc} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }} />
+        <div ref={setAcc} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', paddingRight: 'var(--hueco-avatar, 0px)' }} />
       </div>
       <div ref={setCon} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 3 }} />
     </div>

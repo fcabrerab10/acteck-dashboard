@@ -47,7 +47,8 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
   const prefsDisp = usePrefsDispositivo();
   const mainRef = useRef(null);
   // En el dispositivo puede mandar la barra flotante por grupos (default del iPhone Duo abierto); si no, el menú de la cuenta.
-  const modo = prefsDisp.menu === 'grupos' ? 'grupos' : ['barra', 'sidebar', 'iphone'].includes(menu.modo) ? menu.modo : 'sidebar';
+  const barraAbajo = prefsDisp.menu === 'grupos' || (prefsDisp.menu === 'auto' && disp.alto > disp.ancho);
+  const modo = barraAbajo ? 'grupos' : ['barra', 'sidebar', 'iphone'].includes(menu.modo) ? menu.modo : 'sidebar';
   const [paleta, setPaleta] = useState(false);
   const [atajos, setAtajos] = useState(false);
   // Se montan la primera vez que se abren (cerrados, un frame antes de abrirse: ver
@@ -134,8 +135,8 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
     cuerpo = (
       <div className="font-sans" style={{ ...fondo, ...SAFE_LADO, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
         <main ref={mainRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: `calc(${GRUPOS_PADDING_INFERIOR}px + env(safe-area-inset-bottom))` }}>
-          <Topbar {...chrome} />
-          {PAD_CONTENIDO ? <div style={PAD_CONTENIDO}>{children}</div> : children}
+          <div style={{ height: 0, position: 'sticky', top: 0, zIndex: 40 }}><Topbar {...chrome} franja /></div>
+          <div style={{ ...(PAD_CONTENIDO || null), paddingTop: 8, '--hueco-avatar': 'max(0px, calc(60px - env(safe-area-inset-right, 0px)))' }}>{children}</div>
         </main>
         <BarraGruposWeb arbol={arbol} estado={estado} onNavegar={comunNav.onNavegar} onAbrirPaleta={abrirPaleta} scrollRef={mainRef} />
       </div>
@@ -156,8 +157,12 @@ export default function NavShell({ clienteActivo, paginaActiva, vistaActual, onN
       <div className="font-sans" style={{ ...fondo, ...SAFE_LADO, display: 'flex', height: '100dvh' }}>
         <SidebarIpad {...comunNav} plegable={plegable} />
         <main style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
-          <Topbar {...chrome} />
-          {PAD_CONTENIDO ? <div style={PAD_CONTENIDO}>{children}</div> : children}
+          {plegable
+            ? <div style={{ height: 0, position: 'sticky', top: 0, zIndex: 40 }}><Topbar {...chrome} franja /></div>
+            : <Topbar {...chrome} />}
+          {plegable
+            ? <div style={{ ...PAD_CONTENIDO, paddingTop: 8, '--hueco-avatar': 'max(0px, calc(60px - env(safe-area-inset-right, 0px)))' }}>{children}</div>
+            : children}
         </main>
       </div>
     );

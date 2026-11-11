@@ -55,12 +55,14 @@ export function ChromeDerecho({ onNavegar, onCerrarSesion, perfilUsuario, modoPr
 // ═════════ Topbar (fila sticky) · modos Sidebar e iPhone ═════════
 export default function Topbar(props) {
   const { theme } = useTheme();
-  const { modoPresent, marca } = props;
+  const { modoPresent, marca, franja } = props;
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 40, pointerEvents: 'none',
       display: 'flex', alignItems: 'center', justifyContent: marca ? 'space-between' : 'flex-end', gap: 10,
       padding: marca ? '10px 20px 0' : '8px 16px 0', paddingRight: `calc(${marca ? 20 : 16}px + var(--safe-right-top, 0px))`, maxWidth: marca ? 1040 : 1600, margin: '0 auto', width: '100%', fontFamily: TYPO.fontText,
+      // iPhone Duo con barra abajo (2026-11-11): el avatar vive en la franja derecha, debajo del reloj, y no gasta renglón.
+      ...(franja ? { maxWidth: 'none', padding: 'calc(min(108px, env(safe-area-inset-right, 0px) * 10) + 8px) max(12px, calc(env(safe-area-inset-right, 0px) - 88px)) 0 0' } : null),
     }}>
       {marca}
       {modoPresent && (

@@ -1,8 +1,8 @@
 // Inicio en tarjetas (2026-11-11 · diseño C): las cifras del negocio como tarjetas chicas, medianas y grandes que cada
 // quien elige y ordena («Editar»), al estilo de los widgets del iPhone. Mismo cálculo que la página (`calcular`).
 // La selección se guarda en la cuenta (`preferencias.inicio.tarjetas`); tocar una tarjeta abre su pantalla.
-import React, { useState } from 'react';
-import { ChevronUp, ChevronDown, Plus, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Plus, Minus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { elevation } from '../../../lib/elevation';
@@ -42,39 +42,95 @@ export function catalogo({ r, ve, anio, labelPeriodo }) {
 
 export const ORDEN_DEFAULT = ['cuota', 'sellin', 'sellout', 'inventario', 'camino', 'cartera', 'margen', 'anio', 'decidir', 'agenda'];
 
-export default function InicioTarjetas({ r, ve, anio, labelPeriodo, onNavegar, onVerTodo }) {
+export default function InicioTarjetas({ r, ve, anio, labelPeriodo, onNavegar, onVerTodo, izquierda, derecha }) {
   const { theme } = useTheme();
   const { prefs, setPreferencia } = usePreferencias();
   const [editando, setEditando] = useState(false);
+  const [orden, setOrden] = useState(null);      // orden local mientras se arrastra
+  const [arrastre, setArrastre] = useState(null); // { id, x, y, gx, gy }
+  const rejilla = useRef(null), elems = useRef({}), pulso = useRef(null), ultimoCambio = useRef(0), seMovio = useRef(false);
   const todas = catalogo({ r, ve, anio, labelPeriodo });
   const guardadas = Array.isArray(prefs?.inicio?.tarjetas) ? prefs.inicio.tarjetas : null;
-  const ids = (guardadas || ORDEN_DEFAULT).filter((id) => todas.some((t) => t.id === id));
+  const ids = (orden || guardadas || ORDEN_DEFAULT).filter((id) => todas.some((t) => t.id === id));
   const visibles = ids.map((id) => todas.find((t) => t.id === id));
   const fuera = todas.filter((t) => !ids.includes(t.id));
-  const guardar = (lista) => setPreferencia('inicio.tarjetas', lista);
-  const mover = (id, d) => { const i = ids.indexOf(id), j = i + d; if (j < 0 || j >= ids.length) return; const l = [...ids]; [l[i], l[j]] = [l[j], l[i]]; guardar(l); };
-  const mini = { width: 30, height: 30, borderRadius: 999, border: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(120,120,128,0.22)', color: 'inherit' };
+  const guardar = (lista) => { setOrden(null); setPreferencia('inicio.tarjetas', lista); };
+
+  // Estilo iPhone: mantener presionada una tarjeta entra a editar (tiemblan); se arrastran para acomodarlas y la
+  // «−» de la esquina las quita. «Listo» o tocar el fondo termina.
+  const alBajar = (e, id) => {
+    seMovio.current = false;
+    if (editando) {
+      const el = elems.current[id]; if (!el) return;
+      const rc = el.getBoundingClientRect();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      setOrden(ids);
+      setArrastre({ id, x: e.clientX, y: e.clientY, gx: e.clientX - rc.left, gy: e.clientY - rc.top });
+      return;
+    }
+    const x0 = e.clientX, y0 = e.clientY;
+    clearTimeout(pulso.current);
+    pulso.current = setTimeout(() => { seMovio.current = true; setEditando(true); try { navigator.vibrate?.(8); } catch { /* sin vibración */ } }, 450);
+    pulso.x = x0; pulso.y = y0;
+  };
+  const alMover = (e) => {
+    if (!arrastre) { if (pulso.current && Math.hypot(e.clientX - pulso.x, e.clientY - pulso.y) > 8) { clearTimeout(pulso.current); pulso.current = null; } return; }
+    seMovio.current = true;
+    setArrastre((a) => (a ? { ...a, x: e.clientX, y: e.clientY } : a));
+    const ahora = Date.now();
+    if (ahora - ultimoCambio.current < 160) return;
+    for (const id of ids) {
+      if (id === arrastre.id) continue;
+      const rc = elems.current[id]?.getBoundingClientRect(); if (!rc) continue;
+      if (e.clientX > rc.left + rc.width * 0.2 && e.clientX < rc.right - rc.width * 0.2 && e.clientY > rc.top + rc.height * 0.2 && e.clientY < rc.bottom - rc.height * 0.2) {
+        const l = ids.filter((x) => x !== arrastre.id); l.splice(ids.indexOf(id), 0, arrastre.id);
+        ultimoCambio.current = ahora; setOrden(l); break;
+      }
+    }
+  };
+  const alSoltar = () => {
+    clearTimeout(pulso.current); pulso.current = null;
+    if (arrastre) { setArrastre(null); if (orden) guardar(orden); }
+  };
+  useEffect(() => () => clearTimeout(pulso.current), []);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <Boton onClick={onVerTodo}>Ver todo</Boton>
-        <Boton primario={editando} onClick={() => setEditando((v) => !v)}>{editando ? 'Listo' : 'Editar'}</Boton>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontFamily: TYPO.fontText }} onClick={(e) => { if (editando && e.target === e.currentTarget) setEditando(false); }}>
+      <style>{'@keyframes tarjetaTiembla{0%{transform:rotate(-0.7deg)}50%{transform:rotate(0.7deg)}100%{transform:rotate(-0.7deg)}}@media (prefers-reduced-motion: reduce){.tarjeta-tiembla{animation:none!important}}'}</style>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', paddingRight: 'var(--hueco-avatar, 0px)' }}>
+        <span style={{ minWidth: 0 }}>{editando ? <span style={{ fontSize: 12, color: theme.textMuted }}>Arrastra para acomodar · «−» quita la tarjeta</span> : izquierda}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {!editando && derecha}
+          {!editando && <Boton onClick={onVerTodo}>Ver todo</Boton>}
+          <Boton primario={editando} onClick={() => setEditando((v) => !v)}>{editando ? 'Listo' : 'Editar'}</Boton>
+        </span>
       </div>
-      <div data-entrada-kpis style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gridAutoRows: 'minmax(112px, auto)', gridAutoFlow: 'dense', gap: 10 }}>
-        {visibles.map((t) => {
+      <div ref={rejilla} data-entrada-kpis onPointerMove={alMover} onPointerUp={alSoltar} onPointerCancel={alSoltar}
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gridAutoRows: 'minmax(100px, 1fr)', gridAutoFlow: 'dense', gap: 10, minHeight: 'calc(100dvh - 150px - env(safe-area-inset-bottom, 0px))' }}>
+        {visibles.map((t, n) => {
           const inv = t.inversa;
           const fg = inv ? (theme.textOnInverse || '#F5F5F7') : theme.text;
           const mut = inv ? (theme.mode === 'dark' ? 'rgba(29,29,31,0.62)' : 'rgba(245,245,247,0.66)') : theme.textMuted;
           const bg = inv ? (theme.surfaceInverse || '#000') : theme.surface;
-          const clic = !editando && t.pagina ? () => onNavegar?.(null, t.pagina) : undefined;
+          const mio = arrastre?.id === t.id;
+          let transform;
+          if (mio) {
+            const el = elems.current[t.id], g = rejilla.current?.getBoundingClientRect();
+            if (el && g) transform = `translate(${arrastre.x - (g.left + el.offsetLeft) - arrastre.gx}px, ${arrastre.y - (g.top + el.offsetTop) - arrastre.gy}px) scale(1.04)`;
+          }
           return (
-            <div key={t.id} role={clic ? 'button' : undefined} onClick={clic}
+            <div key={t.id} ref={(el) => { elems.current[t.id] = el; }} role={t.pagina && !editando ? 'button' : undefined} className={editando && !mio ? 'tarjeta-tiembla' : undefined}
+              onPointerDown={(e) => alBajar(e, t.id)} onContextMenu={(e) => e.preventDefault()}
+              onClick={() => { if (!editando && !seMovio.current && t.pagina) onNavegar?.(null, t.pagina); }}
               style={{
                 gridColumn: t.tam === 'c' ? 'span 1' : 'span 2', gridRow: t.tam === 'g' ? 'span 2' : 'span 1', minWidth: 0, position: 'relative',
                 backgroundColor: bg, backgroundImage: inv ? `radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, ${bg} 86%, #8A90A8), ${bg} 62%)` : 'none', color: fg,
-                border: inv ? 0 : `1px solid ${theme.border}`, borderRadius: 18, padding: 14, boxShadow: elevation(theme, 'tarjeta'),
-                display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 8, cursor: clic ? 'pointer' : 'default',
+                border: inv ? 0 : `1px solid ${theme.border}`, borderRadius: 18, padding: 14, boxShadow: mio ? elevation(theme, 'flotante') : elevation(theme, 'tarjeta'),
+                display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 8, cursor: editando ? 'grab' : t.pagina ? 'pointer' : 'default',
+                userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: editando ? 'none' : 'manipulation',
+                transform, zIndex: mio ? 5 : 1, opacity: mio ? 0.96 : 1,
+                animation: editando && !mio ? `tarjetaTiembla ${0.26 + (n % 3) * 0.03}s ease-in-out ${(n % 4) * -0.07}s infinite` : 'none',
+                transition: mio ? 'box-shadow 160ms' : 'box-shadow 160ms, opacity 160ms',
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: mut, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.eyebrow}</span>
@@ -97,12 +153,11 @@ export default function InicioTarjetas({ r, ve, anio, labelPeriodo, onNavegar, o
                   {t.progreso != null && <div style={{ marginTop: 10, height: 6, borderRadius: 999, background: 'rgba(127,127,140,0.3)', overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, Math.max(0, t.progreso))}%`, borderRadius: 999, background: t.progreso >= 100 ? theme.green : t.progreso >= 85 ? theme.accent : t.progreso >= 60 ? theme.orange : theme.red }} /></div>}
                 </div>
               )}
-              {editando && (
-                <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
-                  <button type="button" style={mini} title="Antes" onClick={() => mover(t.id, -1)}><ChevronUp size={15} /></button>
-                  <button type="button" style={mini} title="Después" onClick={() => mover(t.id, 1)}><ChevronDown size={15} /></button>
-                  <button type="button" style={mini} title="Quitar" onClick={() => guardar(ids.filter((x) => x !== t.id))}><X size={15} /></button>
-                </div>
+              {editando && !mio && (
+                <button type="button" title="Quitar" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); guardar(ids.filter((x) => x !== t.id)); }}
+                  style={{ position: 'absolute', top: -8, left: -8, width: 26, height: 26, borderRadius: 999, border: `1px solid ${theme.border}`, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: theme.mode === 'dark' ? '#3A3A3C' : '#E5E5EA', color: theme.text, boxShadow: elevation(theme, 'hover') }}>
+                  <Minus size={15} strokeWidth={2.6} />
+                </button>
               )}
             </div>
           );
