@@ -2,7 +2,7 @@
 // Silenciadas, sección "Resumen programado {hora}" y filas que se deslizan a la izquierda para Posponer 3 d / Resolver.
 // Alertas de Agenda (agenda_vencida · agenda_asignado, meta.item_id): la acción abre el ítem o su minuta en la Agenda
 // móvil (rutas.js → extra { itemId }) y al deslizar aparece "Hecho" (marca la tarea hecha y resuelve la alerta).
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, lazy } from 'react';
 import { Clock, Check, ChevronDown, ChevronRight, BellOff } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -18,9 +18,9 @@ import { useNav } from '../nav';
 import { TituloGrande, Segmented, FilaDeslizable, Fila, Vacio, Skeleton, Pill, TituloSeccionM, toast } from '../piezas';
 import { idNodo } from '../../components/nav/arbol';
 import { nombreCliente } from '../datos';
-import FichaCliente from './FichaCliente';
-import FichaProducto from '../FichaProducto';
 
+const FichaProducto = lazy(() => import('../FichaProducto')); // se descarga al abrirla (2026-11-11)
+const FichaCliente = lazy(() => import('./FichaCliente')); // se descarga al abrirla (2026-11-11)
 const TABS = [{ id: 'hoy', label: 'Hoy' }, { id: 'semana', label: 'Semana' }, { id: 'silenciadas', label: 'Silenciadas' }];
 
 function inicioHoyCDMX() {

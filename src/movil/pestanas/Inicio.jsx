@@ -5,7 +5,7 @@
 // (sell out global, sell in del año, inventario, llega en <mes>) → mix de sell in como pay (inicio/PayMix).
 // Fuera a propósito: agenda, «requiere decisión», sell out por cuenta, tabla de meses, detalle de inventario:
 // cada uno tiene su pestaña. Quien no tiene permiso sensible ve sus clientes y sus avisos.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, lazy } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -22,8 +22,8 @@ import { idNodo } from '../../components/nav/arbol';
 import { colorCliente } from '../datos';
 import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente, puedeVerInicio } from '../../lib/permisos';
 import { saludo, diaLargo, nombreCorto, moneyCompact, money, pct, deltaPct, tonoCuota, MESES, N } from '../util';
-import FichaCliente from './FichaCliente';
 
+const FichaCliente = lazy(() => import('./FichaCliente')); // se descarga al abrirla (2026-11-11)
 const fmtM = (n) => moneyCompact(n);
 // El hero de escritorio termina con «N asuntos requieren decisión hoy»; en el celular esa frase sobra (Fernando: nada de «requiere decisión»).
 const sinDecision = (t) => String(t || '').replace(/\s*(Sin asuntos críticos pendientes\.|[^.]*requieren? decisión hoy\.)/g, '').trim();

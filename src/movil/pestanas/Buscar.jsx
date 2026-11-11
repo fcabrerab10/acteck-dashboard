@@ -1,6 +1,6 @@
 // Pestaña Buscar · campo con foco automático; resultados: SKUs (roadmap_sku + disponible comercial),
 // clientes (propios y del ERP) y pestañas (árbol de navegación). Recientes en localStorage. SKU → Ficha de producto.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, lazy } from 'react';
 import { puedeVerCliente, puedeVerPestanaGlobal } from '../../lib/permisos';
 import { Package, Users, LayoutGrid, Clock } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -11,14 +11,14 @@ import { useNav } from '../nav';
 import { TituloGrande, CampoBusqueda, ListaAgrupada, Fila, Vacio, Skeleton } from '../piezas';
 import { useCatalogoBusqueda, colorCliente } from '../datos';
 import { leerLS, guardarLS, int, MONO } from '../util';
-import FichaCliente from './FichaCliente';
 import AnalisisFicha from './AnalisisFicha';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAll } from '../../lib/queries';
-import FichaProducto from '../FichaProducto';
 import RespuestaM, { SugerenciasM } from './buscar/RespuestaM';
 import { interpretar, pareceP, responder, SUGERENCIAS } from '../../lib/preguntas';
 
+const FichaProducto = lazy(() => import('../FichaProducto')); // se descarga al abrirla (2026-11-11)
+const FichaCliente = lazy(() => import('./FichaCliente')); // se descarga al abrirla (2026-11-11)
 const LS_RECIENTES = 'movil_buscar_recientes_v1';
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 

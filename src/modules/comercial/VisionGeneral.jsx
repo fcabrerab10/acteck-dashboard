@@ -396,7 +396,7 @@ export default function VisionGeneral() {
   useEffect(() => {
     (async () => {
       const { data } = await supabase
-        .from('v_vision_canal_mensual').select('anio').order('anio', { ascending: false });
+        .from('v_fact_anios').select('anio').order('anio', { ascending: false }); // 2026-11-11: antes agregaba todas las ventas (2.7 s) sólo para listar años
       const unique = Array.from(new Set((data || []).map((r) => r.anio))).sort((a, b) => b - a);
       setAniosDisponibles(unique);
       if (unique.length > 0 && !unique.includes(anio)) setAnio(unique[0]);

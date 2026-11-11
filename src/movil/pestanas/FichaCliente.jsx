@@ -1,6 +1,6 @@
 // Ficha de cliente (push) · hero MTD vs cuota · YTD · sell-out último mes cerrado + pestañas del cliente.
 // Consultas directas por vistas (v_fact_cliente_mes, cuotas_mensuales, v_sellout_*_mensual); no carga el Home completo.
-import React, { useMemo } from 'react';
+import React, { useMemo, lazy } from 'react';
 import { ShoppingCart, ShoppingBag, Megaphone, Wallet, CreditCard, Home } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { canalLabel } from '../../modules/general/inicio/config';
@@ -10,8 +10,8 @@ import { useClientesMes, useSelloutMensual, PROPIOS, nombreCliente, colorCliente
 import { money, moneyCompact, deltaPct, tonoCuota, MESES, N } from '../util';
 import SellInCliente from './SellInCliente';
 import BotonPrepararVisita from '../../components/BotonPrepararVisita';
-import ClientePropioM from './cliente/ClientePropioM';
 
+const ClientePropioM = lazy(() => import('./cliente/ClientePropioM')); // se descarga al abrirla (2026-11-11)
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
 

@@ -8,7 +8,7 @@
 // Regla del mes en curso: si el mes elegido aún no tiene sell out, todo usa el ÚLTIMO mes con sell out y lo dice.
 // Datos (5 consultas): v_sellout_cuentas · mv_sellout_cuenta_dia · v_sellout_cuenta_mes (sellout/datos.js, las de la
 // web) · v_sellout_sku_anio (3 años pivotados) · roadmap_sku. Cálculo puro en ./calculo.js. Nada sensible.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, lazy } from 'react';
 import Producto360 from '../producto/Producto360';
 import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -22,8 +22,8 @@ import { useCuentas, useDias, useMensual, useSkuAnio } from '../../../modules/co
 import { resumenSellOut } from './calculo';
 import { categoriasDe } from '../sellout/skuAnual';
 import DetalleSkuAnual from '../sellout/DetalleSkuAnual';
-import FichaProducto from '../../FichaProducto';
 
+const FichaProducto = lazy(() => import('../../FichaProducto')); // se descarga al abrirla (2026-11-11)
 const DIMS = [['canal', 'Canal'], ['marca', 'Marca'], ['categoria', 'Categoría']];
 const SEG_MODO = [{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD' }];
 

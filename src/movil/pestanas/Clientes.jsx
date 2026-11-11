@@ -1,5 +1,5 @@
 // Pestaña Clientes · lista agrupada Propios / Canales del ERP / Otros del ERP con pill de cuota o YoY (MTD a mismo día).
-import React, { useMemo } from 'react';
+import React, { useMemo, lazy } from 'react';
 import { puedeVerCliente, puedeVerPestanaGlobal } from '../../lib/permisos';
 import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
@@ -9,8 +9,8 @@ import { TituloGrande, ListaAgrupada, Fila, Skeleton, Vacio } from '../piezas';
 import { idNodo } from '../../components/nav/arbol';
 import { useClientesMes, PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { money, moneyCompact, deltaPct, tonoCuota, tonoDelta, MESES, N } from '../util';
-import FichaCliente from './FichaCliente';
 
+const FichaCliente = lazy(() => import('./FichaCliente')); // se descarga al abrirla (2026-11-11)
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
 

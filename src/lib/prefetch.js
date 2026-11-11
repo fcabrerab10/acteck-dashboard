@@ -60,12 +60,12 @@ const GLOBALES = {
   sellIn:            [() => import('../modules/comercial/SellOutGlobal'), () => import('../modules/comercial/VisionGeneral')],
   sellOut:           [() => import('../modules/comercial/SellInCliente'), () => import('../modules/comercial/VisionGeneral')],
   inventarioGlobal:  [() => import('../modules/comercial/TrackingPedidos'), () => import('../modules/comercial/ForecastClientesTab')],
-  cobranzaGlobal:    [() => import('../modules/comercial/PagosCliente')],
+  cobranzaGlobal:    [() => import('../modules/comercial/PagosUnificados')],
   forecastClientes:  [() => import('../modules/comercial/PropuestasTab'), () => import('../modules/comercial/ProyectosAbasto')],
   forecastReservas:  [() => import('../modules/comercial/ForecastClientesTab'), () => import('../modules/comercial/InventarioGlobal')],
   resumenClientes:   [HOME_CLIENTE, () => import('../modules/comercial/AnalisisClientesGlobal')],
   propuestas:        [() => import('../modules/comercial/ForecastClientesTab')],
-  estrategiaPrecios: [() => import('../modules/comercial/EstrategiaProducto')],
+  estrategiaPrecios: [() => import('../modules/comercial/PropuestasTab')],
   ordenesCompra:     [() => import('../modules/comercial/InventarioGlobal')],
   estadoResultados:  [() => import('../modules/comercial/VisionGeneral')],
 };
@@ -77,8 +77,8 @@ const DE_CLIENTE = (pagina, cliente) => {
     case 'home':       return [si, so];
     case 'sellIn':     return [so, HOME_CLIENTE];
     case 'estrategia': return [si, HOME_CLIENTE];
-    case 'pagos':      return [() => import('../modules/comercial/CreditoCobranzaV2')];
-    case 'cartera':    return [() => import('../modules/comercial/PagosCliente')];
+    case 'pagos':      return [() => import('../modules/comercial/PagosUnificados')];
+    case 'cartera':    return [() => import('../modules/comercial/PagosUnificados')];
     case 'marketing':  return [HOME_CLIENTE];
     default:           return [HOME_CLIENTE, si];
   }

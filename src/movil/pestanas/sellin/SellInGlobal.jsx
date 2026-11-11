@@ -7,7 +7,7 @@
 //   Categoría → Detalle por SKU × 12 meses (DetalleSkuAnual). Tocar un SKU → FichaProducto.
 // Datos: sellin/datos.js#useSellInEmpresa (6 consultas) + useRoadmap. Cálculo puro en ./calculo.js.
 // ApoyoM.jsx y EquipoM.jsx (3.24) quedan en la carpeta sin uso desde esta pantalla.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, lazy } from 'react';
 import Producto360 from '../producto/Producto360';
 import { AlertTriangle } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -22,8 +22,8 @@ import { useSellInEmpresa } from './datos';
 import { resumenSellIn } from './calculo';
 import { categoriasDe } from '../sellout/skuAnual';
 import DetalleSkuAnual from '../sellout/DetalleSkuAnual';
-import FichaProducto from '../../FichaProducto';
 
+const FichaProducto = lazy(() => import('../../FichaProducto')); // se descarga al abrirla (2026-11-11)
 const DIMS = [['canal', 'Canal'], ['marca', 'Marca'], ['categoria', 'Categoría']];
 const SEG_MODO = [{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD' }];
 
