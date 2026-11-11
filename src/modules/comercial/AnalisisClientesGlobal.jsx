@@ -13,6 +13,7 @@ import { useAlertas } from '../../lib/alertas';
 import ExportMenu from '../../components/ExportMenu';
 import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando, ListaDetalle, Boton } from '../../components/kit';
 import { usePrefsDispositivo } from '../../lib/dispositivo';
+import { resumenLista } from './analisis/calculoLista'; // mismo motor que el celular (en riesgo · nuevos del año)
 import { moneyCompact } from '../../lib/format';
 import { tooltip } from '../../lib/medidas';
 import { useAniosDisponibles, useAnalisisClientes, useCuotasClientes } from './analisis/useAnalisisData';
@@ -122,6 +123,7 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
 
   const onSort = (col) => setOrden((o) => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: col === 'nombre' || col === 'cliente' || col === 'canal' ? 'asc' : 'desc' }));
 
+  const cartera = useMemo(() => (rows ? resumenLista({ rows, cuotasRows, anio, mes: mesMax, modo, hoy }).kpis : null), [rows, cuotasRows, anio, mesMax, modo]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!puedeVerPestanaGlobal(perfil, 'analisis_clientes')) return <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />;
   if (isLoading || !rows) return <Cargando pantalla="analisisClientes" minHeight={520} />;
 
@@ -245,6 +247,9 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
           ? <KpiCard medida={tooltip('pct_mc')} eyebrow={`% MC · YTD ${anio}`} badge={global.mcYtd != null && global.mcYtdPrev != null ? { l: `${signo(global.mcYtd - global.mcYtdPrev)} pp`, tone: toneDe(global.mcYtd - global.mcYtdPrev) } : undefined}
               big={pct(global.mcYtd)} bigSmall={`contribución ${money(global.ytd.contribucion)}`} sub={`MC ${anio - 1}: ${pct(global.mcYtdPrev)}`} />
           : <KpiCard eyebrow="MC % · YTD" big="—" bigSmall="sensible" sub={sensibleTip} />}
+        {cartera && <KpiCard eyebrow="En riesgo" badge={{ l: 'bajan más de 30 %', tone: cartera.riesgo > 0 ? 'red' : 'green' }} big={int(cartera.riesgo)} bigColor={cartera.riesgo > 0 ? theme.red : undefined}
+          sub={`de ${int(cartera.conVentaAnio)} clientes con venta en el año · contra ${anio - 1} a mismo día`} />}
+        {cartera && <KpiCard eyebrow={`Nuevos en ${anio}`} badge={{ l: 'sin compra el año anterior', tone: 'blue' }} big={int(cartera.nuevos)} sub={cartera.nuevos ? `${money(cartera.nuevosMonto)} acumulado` : 'ninguno todavía'} />}
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

@@ -34,13 +34,13 @@
       "pantalla": "Sell Out consolidado",
       "bloque": "Detalle por SKU × 12 meses de la empresa",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 3.108.0: panel «Sell out por SKU · 12 meses» en la web"
     },
     {
       "pantalla": "Sell Out consolidado",
       "bloque": "SKUs activos / sin movimiento",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 3.108.0: panel «Sell out por SKU · 12 meses» en la web"
     },
     {
       "pantalla": "Sell Out consolidado",
@@ -52,7 +52,7 @@
       "pantalla": "Inventario",
       "bloque": "Vueltas de inventario del año",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 3.108.0"
     },
     {
       "pantalla": "Inventario",
@@ -82,13 +82,13 @@
       "pantalla": "Cobranza general",
       "bloque": "Vence esta semana y aging tocable",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · ya existía en la web (hero «Vence en 7 días» y tramos tocables)"
     },
     {
       "pantalla": "Análisis por cliente",
       "bloque": "KPIs en riesgo y nuevos del año",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 3.108.0: tarjetas «En riesgo» y «Nuevos» en la web con el motor del celular"
     },
     {
       "pantalla": "Página del cliente",
@@ -173,7 +173,6 @@
     "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/calculo",
     "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/datos",
     "src/modules/comercial/inventario/StockCierrePanel.jsx → movil/pestanas/inventario/calculo",
-    "src/modules/comercial/inventario/StockCierrePanel.jsx → movil/pestanas/sellout/skuAnual",
     "src/modules/comercial/precios/CalculadoraPanel.jsx → movil/pestanas/precios/calculo",
     "src/modules/comercial/precios/CalculadoraPanel.jsx → movil/pestanas/precios/propuesta",
     "src/modules/comercial/sellout/FrenteAlRestoPanel.jsx → movil/pestanas/analisis/calculo",

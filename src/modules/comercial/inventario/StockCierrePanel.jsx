@@ -11,7 +11,7 @@ import { interpretarBusqueda, coincideSku, indiceSku } from '../../../lib/buscar
 import { Panel, TablaCompacta, HeatCell, Segmented, Boton, Pill } from '../../../components/kit';
 import BuscadorEntiende from '../sellin/BuscadorEntiende';
 import { filasStockAnual } from '../../../movil/pestanas/inventario/calculo';
-import { columnasVentana } from '../../../movil/pestanas/sellout/skuAnual';
+import { columnasVentana } from '../sellout/skuAnual';
 import { fmtCompact, fmtInt } from './constantes';
 
 export default function StockCierrePanel({ sensible = false }) {

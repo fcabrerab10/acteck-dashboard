@@ -47,7 +47,7 @@ test('no hay imports nuevos de modules → movil', () => {
 test('cada bloque del registro tiene estado', () => {
   for (const b of reg.bloques) {
     assert.ok(['web', 'movil'].includes(b.falta), `${b.pantalla} · ${b.bloque}: «falta» debe ser web o movil`);
-    assert.match(String(b.estado), /^(pendiente|decision)/, `${b.pantalla} · ${b.bloque}`);
+    assert.match(String(b.estado), /^(pendiente|decision|hecho)/, `${b.pantalla} · ${b.bloque}`);
   }
   const pend = reg.bloques.filter((b) => b.estado.startsWith('pendiente'));
   console.log(`  paridad: ${pend.length} bloques pendientes de emparejar (${pend.filter((b) => b.falta === 'web').length} faltan en web, ${pend.filter((b) => b.falta === 'movil').length} en celular)`);

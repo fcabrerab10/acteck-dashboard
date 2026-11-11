@@ -26,7 +26,8 @@ import Filtros from './sellin/Filtros';
 import DrillCuenta from './sellout/DrillCuenta';
 // El mapa trae 82 KB de geometría: el panel entero (mapa + los tres modos) se carga sólo al abrirlo.
 const PanelMapa = lazy(() => import('./sellout/PanelMapa'));
-import { useCuentas, useAnios, useDias, useMensual, useSkuMes, useEstadoMes, useCuotas } from './sellout/datos';
+const SkuAnualPanel = lazy(() => import('./sellout/SkuAnualPanel')); // 2026-11-11 · venía sólo en el celular
+import { useCuentas, useAnios, useDias, useMensual, useSkuMes, useEstadoMes, useCuotas, useSkuAnio } from './sellout/datos';
 import {
   MESES, CANALES, canalLabel, canalTone, construirFilas, totalesDeFilas, porCanal, composicion,
   serie12, ultimoDiaConVenta, ultimoMesConVenta, ultimosMeses, toneCuota, N,
@@ -364,6 +365,8 @@ export default function SellOutGlobal() {
         onRowClick={(f) => { if (f.sinFuente) return; setAbierto((k) => (k === f.cuenta ? null : f.cuenta)); }}
         expandidoKey={abierto}
         renderExpandido={(f) => <DrillCuenta fila={f} anio={anio} mes={mes} corteDia={corteDia} estadoSel={estadoSel} onEstado={setEstadoSel} />} />
+
+      <Suspense fallback={null}><SkuAnualPanel titulo="Sell out por SKU · 12 meses" usar={useSkuAnio} anio={anio} mes={mes} nota="Todas las cuentas que reportan sell out · montos sin IVA." /></Suspense>
 
       <Panel titulo="Mapa · dónde se vende" meta={`${MESES[mes - 1]} ${anio} · Medir · Cuentas · Tiempo · sólo las fuentes que traen estado del cliente final`} plegable abiertoInicial={false} onToggle={setMapaAbierto}>
         {(mapaAbierto || estadoSel) && (

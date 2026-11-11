@@ -439,6 +439,8 @@ function InventarioGlobalPantalla({ sensible }) {
           big={cambioMes.valor == null ? '—' : `${cambioMes.valor > 0 ? '+' : '−'}${sensible ? fmtCompact(Math.abs(cambioMes.valor)) : fmtInt(Math.abs(cambioMes.valor))}`} bigSmall={cambioMes.pct == null ? '' : `${cambioMes.pct > 0 ? '+' : ''}${cambioMes.pct.toFixed(1)} %`}
           bigColor={cambioMes.valor == null ? theme.textMuted : cambioMes.valor > 0 ? theme.orange : theme.green}
           sub={cambioMes.fechaCierre ? `Inv Actual de hoy contra la foto del ${fmtFechaCorta(cambioMes.fechaCierre)}` : 'aún no hay foto del cierre del mes pasado'} />
+        <KpiCard eyebrow="Vueltas de inventario del año" medida={tooltip('vueltas_inv')} big={medidas?.vueltas_inv != null ? `${Number(medidas.vueltas_inv).toFixed(1)}×` : '—'}
+          sub="costo de venta del año entre el inventario promedio" />
         <KpiCard eyebrow="Lead time" badge={{ tone: 'gray', l: `${fmtInt(resumen.nLt)} SKUs` }}
           big={resumen.leadTime != null ? fmtDias(resumen.leadTime) : '—'} bigSmall="promedio"
           sub={resumen.leadTime != null ? `${fmtInt(resumen.ltMin)}–${fmtInt(resumen.ltMax)} d de emisión a CEDIS · embarques concluidos` : 'sin historial de embarques'} />
