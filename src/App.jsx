@@ -54,6 +54,8 @@ const Paneles = lazy(() => import('./components/nav/Paneles'));
 const MovilApp = lazy(() => import('./movil/MovilApp'));
 // Agenda V6 (2026-10-08): pop-up «Organiza tu día» la primera vez que entras en el día, en cualquier pestaña (web y celular).
 const OrganizaGlobal = lazy(() => import('./modules/agenda6/OrganizaGlobal'));
+// Producto 360 en la web (2026-11-18): hoja lateral de un SKU; se abre desde ⌘K o `acteck:navegar { pagina: 'producto360', extra: { sku } }`.
+const Producto360Hoja = lazy(() => import('./modules/comercial/producto360/Producto360Web'));
 import { ToastHost, toast as toastKit } from './components/kit';
 
 
@@ -471,7 +473,11 @@ export default function App() {
   // `extra` viaja a la pantalla destino como prop `inicial` (hoy sólo lo usa Agenda: abrir una
   // minuta concreta desde el Resumen del cliente → "Últimas minutas y acuerdos").
   const [paginaExtra, setPaginaExtra] = React.useState(null);
+  const [sku360, setSku360] = React.useState(null);
   const handleNavegar = (clienteId, paginaId, extra = null) => {
+    // Producto 360 no es una página: es una hoja sobre la pantalla en la que estés (no cambia la pestaña activa).
+    if (paginaId === 'producto360') { if (extra?.sku) setSku360(String(extra.sku).toUpperCase()); return; }
+    setSku360(null);
     setPaginaExtra(extra);
     if (paginaId === 'adminInterna') paginaId = 'agenda'; // página vieja "Pendientes & Calendario" → Agenda
     // Pagos ya no es pestaña de cliente: cualquier enlace "cliente › Pagos" abre la pestaña global con ese cliente elegido.
@@ -605,6 +611,7 @@ export default function App() {
 
       {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
       {perfil && !arranque && <Suspense fallback={null}><OrganizaGlobal movil={!!mobile} /></Suspense>}
+      {perfil && !mobile && sku360 && <Suspense fallback={null}><Producto360Hoja sku={sku360} onClose={() => setSku360(null)} /></Suspense>}
 
       <Toaster />
       <OfflineBadge />

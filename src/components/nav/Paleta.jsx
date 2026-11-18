@@ -1,4 +1,4 @@
-// Paleta ⌘K · busca pestañas, clientes propios, SKUs (roadmap_sku) y clientes finales del ERP.
+// Paleta ⌘K · busca pestañas, clientes propios, SKUs (v_skus_producto → abre Producto 360) y clientes finales del ERP.
 // Desde 2026-09-24 también PREGUNTA: «cuánto va Digitalife de cuota», «pendientes de hoy», «stock de AC-943253»…
 // (src/lib/preguntas): la respuesta sale arriba con la cifra y el botón para ir; nada se manda fuera.
 // Flotante 520 px, radio 12, ELEV.flotante. Teclado ↑↓ ↵ Esc.
@@ -139,9 +139,9 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
     if (it.tipo === 'pestana') { irANodo(it.nodo, onNavegar); return; }
     if (it.tipo === 'cliente') { onNavegar?.(it.cliente.key, 'home'); return; }
     if (it.tipo === 'sku') {
-      // Sell In global con búsqueda prellenada: la pantalla aún no lee este valor; queda disponible en sessionStorage.
+      // 2026-11-18: abre la ficha Producto 360 del SKU (hoja lateral sobre la pantalla actual).
       try { sessionStorage.setItem('nav_busqueda_sku', it.sku.sku); } catch {}
-      onNavegar?.(null, 'sellIn'); return;
+      onNavegar?.(null, 'producto360', { sku: it.sku.sku }); return;
     }
     if (it.tipo === 'final') {
       const propio = ERP_A_CLIENTE[String(it.final.nombre).toUpperCase()];
