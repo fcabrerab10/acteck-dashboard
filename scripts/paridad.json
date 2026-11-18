@@ -130,7 +130,7 @@
       "pantalla": "Pagos",
       "bloque": "Paneles Cálculo · Marketing · Fondo · Reglas y pago manual",
       "falta": "movil",
-      "estado": "pendiente"
+      "estado": "hecho · 4.3.0"
     },
     {
       "pantalla": "Producto 360",
@@ -142,13 +142,13 @@
       "pantalla": "Agenda",
       "bloque": "Semana, Ideas y Equipo",
       "falta": "movil",
-      "estado": "pendiente"
+      "estado": "hecho · 4.3.0"
     },
     {
       "pantalla": "Inicio",
       "bloque": "Inicio en tarjetas que se eligen y acomodan",
       "falta": "movil",
-      "estado": "pendiente"
+      "estado": "hecho · 4.3.0"
     },
     {
       "pantalla": "Análisis por cliente",
