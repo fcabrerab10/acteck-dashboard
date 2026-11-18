@@ -182,6 +182,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.90.85) `cuotaRitmo()` aguanta fecha inválida (usa hoy) y venta faltante (0): ya no sale «NaN %» en rojo en la capa/tarjeta de cuota.
   - [x] (3.90.86) Barra de recursos: `recursosBarra()` ya no muestra «NaN d» / «Infinity d» cuando la cobertura de inventario viene sin ritmo; redondea los días.
   - [x] (3.90.87) `cuotasPorCuenta()` empata clientes aunque traigan espacios (` 10 ` = `10`), para que la venta no se pierda en la capa de cuota.
+  - [x] (3.110.3) `racksPorMarca()` / `demanda3Meses()` limpian el SKU (espacios y minúsculas): un SKU ya no cuenta doble en los racks del CEDIS y encuentra su marca y su demanda (días de inventario).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -198,6 +199,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-11-18 15:15 · v3.110.3 · Racks del CEDIS: SKU limpio (espacios/minúsculas) en `racksPorMarca()` y `demanda3Meses()`, con prueba.
 - 2026-10-08 02:57 · v3.90.87 · Pulido: `cuotasPorCuenta()` empata clientes con espacios.
 - 2026-10-08 02:55 · v3.90.86 · Pulido: `recursosBarra()` sin «NaN d»/«Infinity d» en la cobertura de inventario.
 - 2026-10-08 02:37 · v3.90.85 · Pulido: `cuotaRitmo()` sin «NaN %» con fecha inválida o venta faltante.
