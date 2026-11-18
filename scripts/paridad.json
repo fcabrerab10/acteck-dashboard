@@ -70,13 +70,13 @@
       "pantalla": "S&OP",
       "bloque": "Demanda vs stock 6 meses y «Comprar ahora»",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.2.0"
     },
     {
       "pantalla": "S&OP",
       "bloque": "Ficha de PO con «Compartir arribo»",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.2.0"
     },
     {
       "pantalla": "Cobranza general",
@@ -112,7 +112,7 @@
       "pantalla": "Proyectos y forecast",
       "bloque": "Vista «Los tres» con reparto por cliente",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.2.0"
     },
     {
       "pantalla": "Proyectos y forecast",
@@ -136,7 +136,7 @@
       "pantalla": "Producto 360",
       "bloque": "Ficha única por SKU (venta, inventario, abasto, precio)",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.2.0"
     },
     {
       "pantalla": "Agenda",
@@ -165,10 +165,6 @@
   ],
   "importsModulesAMovil": [
     "src/modules/comercial/analisis/MovimientoPanel.jsx → movil/util",
-    "src/modules/comercial/forecast/MisClientesPanel.jsx → movil/pestanas/sop/calculo",
-    "src/modules/comercial/forecast/MisClientesPanel.jsx → movil/pestanas/sop/datos",
-    "src/modules/comercial/forecast/porQue.js → movil/pestanas/sop/calculo",
-    "src/modules/comercial/forecast/porQue.js → movil/util",
     "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/calculo",
     "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/datos",
     "src/modules/comercial/precios/CalculadoraPanel.jsx → movil/pestanas/precios/calculo",
