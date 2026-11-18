@@ -147,9 +147,16 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   useEffect(() => {
     setLoading(true);
     setFetchError(null);
+    setSelloutGeneral([]);
+    let vivo = true;
     (async () => {
       try {
-        const [mes, skuMes, sucMes, invSuc, general] = await Promise.all([
+        // 2026-11-18 (rendimiento): el detalle por renglón (≈ 49 K filas, sólo lo usan rankings, mapa de calor y
+        // drills) baja en segundo plano; la pantalla pinta con las cuatro consultas chicas.
+        const pGeneral = fetchAll('v_sellout_general_dicotech', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
+          (q) => q.in('anio', [anioPrev, anio]));
+        pGeneral.then((g) => { if (vivo) setSelloutGeneral(g); }).catch((e) => console.error('[SellOutDicotech] detalle:', e));
+        const [mes, skuMes, sucMes, invSuc] = await Promise.all([
           fetchAll('v_sellout_dicotech_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
           fetchAll('v_sellout_dicotech_sku_mes', 'sku,anio,mes,piezas,monto',
             (q) => q.in('anio', [anioPrev, anio])),
@@ -157,16 +164,11 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
             (q) => q.eq('anio', anio)),
           fetchAll('v_inventario_cliente_sucursal_ultimo', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
             (q) => q.eq('cliente', clienteKey)),
-          // 2026-10-26: la vista materializada de Dicotech (sin líneas repetidas del puente, 15 ms) en vez de la tabla cruda
-          // sellout_general (480 K filas con RLS: > 3 s y la pestaña se quedaba en blanco).
-          fetchAll('v_sellout_general_dicotech', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
-            (q) => q.in('anio', [anioPrev, anio])),
         ]);
         setMensual(mes);
         setSkuMesRaw(skuMes);
         setSucursalMes(sucMes);
         setInventarioSucursal(invSuc);
-        setSelloutGeneral(general);
         setLoading(false);
       } catch (err) {
         // fetchAll ahora throwea si algún chunk queda sin data tras retries.
@@ -177,6 +179,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         setLoading(false);
       }
     })();
+    return () => { vivo = false; };
   }, [clienteKey, anio, anioPrev]);
 
   const mesActual = useMemo(() => {
@@ -1497,6 +1500,7 @@ function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSu
 
 // ═══════════════ Tabla SKU (sin marca column · single-brand Acteck) + drill inline ═══════════════
 function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, selloutGeneral, inventarioSucursalMap }) {
+  const [tope, setTope] = useState(120); // rendimiento: se montan 120 filas y «Mostrar más» añade de 200 en 200
   const fmtU = fmtUnidad(unidad);
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
@@ -1551,7 +1555,7 @@ function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, rows, busqueda, onC
             {rows.length === 0 && (
               <tr><td colSpan={3 + MESES.length + 3} style={{ padding: '32px', textAlign: 'center', color: theme.textMuted }}>Sin SKUs para los filtros seleccionados.</td></tr>
             )}
-            {rows.slice(0, 500).map((r) => {
+            {rows.slice(0, tope).map((r) => {
               const rmpStyle = r.rdmp ? roadmapChipStyle(r.rdmp, P, theme) : null;
               const clickable = typeof onToggleSku === 'function';
               const isOpen = skuOpen === r.sku;
@@ -1626,9 +1630,9 @@ function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, rows, busqueda, onC
             })}
           </tbody>
         </table>
-        {rows.length > 500 && (
+        {rows.length > tope && (
           <div style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.divider || theme.border}` }}>
-            Mostrando 500 de {rows.length} · usa el buscador para filtrar
+            Mostrando {tope} de {rows.length} · <button type="button" onClick={() => setTope((t) => t + 200)} style={{ border: 'none', background: 'none', color: theme.accent || '#007AFF', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '6px 4px' }}>Mostrar 200 más</button>
           </div>
         )}
       </div>

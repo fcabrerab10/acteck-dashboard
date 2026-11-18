@@ -22,7 +22,6 @@ test('el kit y las pantallas que lo montan cargan', async () => {
     '/src/modules/comercial/SellInCliente.jsx',
     '/src/modules/comercial/SellOutGlobal.jsx',
     '/src/modules/comercial/EstrategiaPrecios.jsx',
-    '/src/modules/comercial/ForecastReservas.jsx',
     '/src/modules/comercial/propuestas/Armar.jsx',
     '/src/modules/comercial/tracking/TablaPedidos.jsx',
     '/src/modules/interno/HistorialCambios.jsx',

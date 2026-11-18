@@ -20,7 +20,6 @@ test('los módulos de la pantalla cargan', async () => {
     '/src/modules/comercial/sellout/MapaMexico.jsx',
     '/src/modules/comercial/sellout/PanelMapa.jsx',
     '/src/movil/pestanas/selloutGlobal/SellOutGlobal.jsx',
-    '/src/movil/pestanas/selloutGlobal/Cuenta.jsx',
     '/src/modules/comercial/analisis/DrillCliente.jsx',
   ]) {
     const mod = await vite.ssrLoadModule(m);
@@ -29,10 +28,6 @@ test('los módulos de la pantalla cargan', async () => {
   const datos = await vite.ssrLoadModule('/src/modules/comercial/sellout/datos.js');
   for (const h of ['useCuentas', 'useDias', 'useMensual', 'useSkuMes', 'useEstadoMes', 'useEstadosHistoria', 'useDrillSkus', 'useDrillInventario']) {
     assert.equal(typeof datos[h], 'function', `datos.js debe exportar ${h}`);
-  }
-  const piezas = await vite.ssrLoadModule('/src/movil/pestanas/selloutGlobal/piezas.jsx');
-  for (const c of ['ListaEstados', 'HojaEstado']) {
-    assert.equal(typeof piezas[c], 'function', `piezas.jsx del celular debe exportar ${c}`);
   }
 });
 

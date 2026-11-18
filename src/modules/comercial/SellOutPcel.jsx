@@ -857,6 +857,7 @@ function MarcaCard({ theme, P, marcas, totalYTD, selected, onSelect }) {
 
 // ═══════════════ Tabla SKU ═══════════════
 function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, unidad = 'piezas', onUnidad = () => {}, marcaFilter, onClearMarca, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, inventarioSucursalMap, skuMesRaw }) {
+  const [tope, setTope] = useState(120); // rendimiento: se montan 120 filas y «Mostrar más» añade de 200 en 200
   const fmtU = fmtUnidad(unidad);
   // Heat pill · idéntico a SI V2 (4 niveles Apple iOS blue)
   const heatCell = (v) => {
@@ -918,7 +919,7 @@ function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, rows, busqueda, onC
             {rows.length === 0 && (
               <tr><td colSpan={4 + MESES.length + 3} style={{ padding: '32px', textAlign: 'center', color: theme.textMuted }}>Sin SKUs para los filtros seleccionados.</td></tr>
             )}
-            {rows.slice(0, 500).map((r) => {
+            {rows.slice(0, tope).map((r) => {
               const rmpStyle = r.rdmp ? roadmapChipStyle(r.rdmp, P, theme) : null;
               const clickable = typeof onToggleSku === 'function';
               const isOpen = skuOpen === r.sku;
@@ -983,9 +984,9 @@ function TablaSKU({ clienteKey, theme, P, isDark, apoyosSku, rows, busqueda, onC
             })}
           </tbody>
         </table>
-        {rows.length > 500 && (
+        {rows.length > tope && (
           <div style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.divider || theme.border}` }}>
-            Mostrando 500 de {rows.length} · usa el buscador para filtrar
+            Mostrando {tope} de {rows.length} · <button type="button" onClick={() => setTope((t) => t + 200)} style={{ border: 'none', background: 'none', color: theme.accent || '#007AFF', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '6px 4px' }}>Mostrar 200 más</button>
           </div>
         )}
       </div>

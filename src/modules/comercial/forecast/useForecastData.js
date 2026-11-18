@@ -23,6 +23,7 @@ const ESTADO_INICIAL = {
   // Facturación por cliente (facturacion_clientes, reconstruida del ERP): 12 meses para el drill
   // (demanda real vs forecast); el motor sólo usa los últimos 6.
   facturacion: [],
+  facturacionMes: [],
   // Logística por contenedor (Master Embarques · "Programación Arribos").
   progArribos: [],
   // Catálogo maestro de artículos (fallback de descripción).
@@ -49,6 +50,10 @@ export function useForecastData() {
     // Ventana de 12 meses (mes actual incluido) para la demanda real del drill.
     const ini12 = new Date(hoy.getFullYear(), hoy.getMonth() - 11, 1);
     const filtro12m = `anio.gt.${ini12.getFullYear()},and(anio.eq.${ini12.getFullYear()},mes.gte.${ini12.getMonth() + 1})`;
+    // 2026-11-18 (rendimiento): por cliente sólo los 6 meses que usa el motor; el total mensual de 12 meses del
+    // drill sale de v_facturacion_sku_mes (≈ 9 K filas angostas en vez de 30 K con nombre de cliente).
+    const ini6 = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
+    const filtro6m = `anio.gt.${ini6.getFullYear()},and(anio.eq.${ini6.getFullYear()},mes.gte.${ini6.getMonth() + 1})`;
 
     // 2026-10-02 (rendimiento, auditoría campo por campo): sólo las columnas que leen calculo.js y los paneles;
     // v_demanda_sku sólo digitalife/pcel (los demás se descartaban en calculo.js:264); embarques_compras acotado a
@@ -77,7 +82,7 @@ export function useForecastData() {
       vacio, // cuotas_mensuales: sólo las leía NecesidadCard (sin uso)
       fetchAll(() => supabase.from('facturacion_clientes')
         .select('sku, cliente_nombre, canal, anio, mes, piezas')
-        .or(filtro12m)),
+        .or(filtro6m)),
       supabase.from('programacion_arribos')
         .select('contenedor, terminal, cita, arribo_almacen, linea_transportista, dias_demoras'),
       fetchAll(() => supabase.from('catalogo_articulos').select('articulo, descripcion')),
@@ -88,9 +93,10 @@ export function useForecastData() {
         .then((r) => r, () => []),
       supabase.from('v_compras_pendientes_proveedor').select('proveedor,pos,skus,piezas_pendientes,usd_pendiente,po_mas_antigua,dias_po_mas_antigua,eta_mas_cercana,renglones_sin_embarque').order('usd_pendiente', { ascending: false })
         .then((r) => r, () => ({ data: [] })),
+      fetchAll(() => supabase.from('v_facturacion_sku_mes').select('sku, anio, mes, piezas').or(filtro12m)).then((r) => r, () => []),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData, paRes, catArtData, skuCfgRes, cpData, cpProvRes] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData, paRes, catArtData, skuCfgRes, cpData, cpProvRes, facMesData] = queries;
 
     setState({
       loading: false,
@@ -107,6 +113,7 @@ export function useForecastData() {
       reporteSkus: rsRes.data || [],
       cuotas: cmRes.data || [],
       facturacion: facData || [],
+      facturacionMes: facMesData || [],
       progArribos: (paRes && paRes.data) || [],
       catalogoArticulos: catArtData || [],
       skuConfig: (skuCfgRes && skuCfgRes.data) || [],

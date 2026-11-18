@@ -627,6 +627,7 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
 
 // ═══════════════ Tabla SKU ═══════════════
 function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, unidad = 'piezas', onUnidad = () => {} }) {
+  const [tope, setTope] = useState(120); // rendimiento: se montan 120 filas y «Mostrar más» añade de 200 en 200
   const fmtU = fmtUnidad(unidad);
   const isDark = theme.mode === 'dark';
   const maxCelda = useMemo(() => {
@@ -720,7 +721,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 500).map((r) => {
+            {rows.slice(0, tope).map((r) => {
               return (
                 <tr key={r.sku} style={{ borderTop: `1px solid ${theme.divider || theme.border}` }}>
                   <td style={{ ...cellStyle(theme, 'left'), display: 'flex', alignItems: 'center', gap: 6 }}>{r.sku}{r.marca && <span title={r.marca} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: theme.textMuted, textTransform: 'uppercase' }}>{String(r.marca).slice(0, 2)}</span>}</td>
@@ -750,9 +751,9 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             })}
           </tbody>
         </table>
-        {rows.length > 500 && (
+        {rows.length > tope && (
           <div style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.divider || theme.border}` }}>
-            Mostrando 500 de {rows.length} · usa el buscador para filtrar
+            Mostrando {tope} de {rows.length} · <button type="button" onClick={() => setTope((t) => t + 200)} style={{ border: 'none', background: 'none', color: theme.accent || '#007AFF', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '6px 4px' }}>Mostrar 200 más</button>
           </div>
         )}
       </div>

@@ -461,7 +461,7 @@ function ForecastPantalla({ perfil, sensible }) {
         <TablaForecast rows={rowsOrdenados} expandedSku={expandedSku} setExpandedSku={setExpandedSku}
           sortCol={sortCol} sortDir={sortDir} onSort={onSort}
           onAgregarSolicitud={onAgregarSolicitud} skusEnBorrador={skusEnBorrador} lineasBorrador={lineasBorrador}
-          puedeEditar={puedeEditarSol} sensible={sensible} facturacion={data.facturacion} metaBySku={metaBySku}
+          puedeEditar={puedeEditarSol} sensible={sensible} facturacion={data.facturacion} facturacionMes={data.facturacionMes} metaBySku={metaBySku}
           vacio={busqueda || nActivos ? 'Ningún SKU coincide con la búsqueda y los filtros.' : 'Sin SKUs en el Reporte.'} />
       </Panel>
 

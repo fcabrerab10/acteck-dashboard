@@ -113,7 +113,7 @@ function Tarjeta({ titulo, meta, aside, children, style }) {
   );
 }
 
-export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolicitud, puedeEditar, sensible, facturacion, metaBySku }) {
+export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolicitud, puedeEditar, sensible, facturacion, facturacionMes, metaBySku }) {
   const { theme } = useTheme();
   const dark = theme.mode === 'dark';
   const hair = `1px solid ${theme.divider || theme.border}`;
@@ -151,7 +151,7 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
   const serieDemanda = useMemo(() => {
     const m12 = meses12();
     const porMes = new Map(m12.map((m) => [m.key, 0]));
-    (facturacion || []).forEach((f) => {
+    ((facturacionMes && facturacionMes.length ? facturacionMes : facturacion) || []).forEach((f) => {
       if (String(f.sku || '').trim() !== r.sku) return;
       const k = `${f.anio}-${Number(f.mes)}`;
       if (porMes.has(k)) porMes.set(k, porMes.get(k) + Number(f.piezas || 0));
@@ -159,7 +159,7 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
     const reales = m12.map((m, i) => ({ label: m.label, real: Math.round(porMes.get(m.key)), motor: i >= 9 ? Math.round(ritmo3m) : null, futuro: false }));
     const futuros = mesesFuturos(3).map((m) => ({ label: m.label, real: null, motor: Math.round(demProy), futuro: true }));
     return [...reales, ...futuros];
-  }, [facturacion, r.sku, ritmo3m, demProy]);
+  }, [facturacion, facturacionMes, r.sku, ritmo3m, demProy]);
   const total12m = serieDemanda.reduce((a, p) => a + (p.real || 0), 0);
 
   // ── (b) Cobertura proyectada 6 meses: stock + tránsito por ETA (+ compra simulada al lead time) − demanda proyectada ──

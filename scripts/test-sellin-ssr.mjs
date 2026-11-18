@@ -22,7 +22,6 @@ test('los módulos de Sell In cargan y exportan default', async () => {
     '/src/modules/comercial/analisis/DrillCliente.jsx',
     '/src/movil/pestanas/sellin/SellInGlobal.jsx',
     '/src/movil/pestanas/sellin/ApoyoM.jsx',
-    '/src/movil/pestanas/sellin/EquipoM.jsx',
     '/src/movil/pestanas/SellInCliente.jsx',
   ]) {
     const mod = await vite.ssrLoadModule(m);

@@ -764,6 +764,7 @@ function anioColor(y, aniosSel, P) {
 }
 
 function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, unidad = 'piezas', onUnidad = () => {}, consolidado = false, onToggleConsolidado = () => {}, facturacion = [], facturacionAll = [], pdfRef, clienteKey }) {
+  const [tope, setTope] = useState(120); // rendimiento: se montan 120 filas y «Mostrar más» añade de 200 en 200
   const [skuAbierto, setSkuAbierto] = useState(null);
   // Regla de ancho: las columnas de mes se reparten el espacio del contenedor (ver sellin/ajuste.js).
   const contRef = useRef(null);
@@ -972,7 +973,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 500).map((r) => {
+            {rows.slice(0, tope).map((r) => {
               const abierto = skuAbierto === r.sku;
               const totalCols = 3 + aniosSel.length * 12 + 2;
               return (
@@ -1033,9 +1034,9 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             })}
           </tbody>
         </table>
-        {rows.length > 500 && (
+        {rows.length > tope && (
           <div style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.divider || theme.border}` }}>
-            Mostrando 500 de {rows.length} · usa el buscador para filtrar
+            Mostrando {tope} de {rows.length} · <button type="button" onClick={() => setTope((t) => t + 200)} style={{ border: 'none', background: 'none', color: theme.accent || '#007AFF', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '6px 4px' }}>Mostrar 200 más</button>
           </div>
         )}
       </div>
