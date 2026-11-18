@@ -6,7 +6,7 @@
 //   → «Qué hay que comprar» (S&OP · Mis clientes) → «Exportar plantilla del CRM».
 // Datos: forecast/datos.js (las mismas fuentes que la vista Forecast de la web). Proyectos: Proyectos.jsx (push).
 import React, { useMemo, useState } from 'react';
-import { Lock, Plus, FileText, FileSpreadsheet, CheckCircle2, ShoppingCart, Package } from 'lucide-react';
+import { Lock, Plus, FileText, FileSpreadsheet, CheckCircle2, ShoppingCart, Package, LayoutGrid, Table2 } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { usePerfil } from '../../../lib/perfilContext';
@@ -28,7 +28,7 @@ const FILTROS = [{ id: 'capturado', label: 'Capturado' }, { id: 'sugerido', labe
 const N = (v) => Number(v) || 0;
 
 /** Vista pura (SSR en pruebas). */
-export function ForecastVista({ estado, clienteSel = 'todos', onCliente, ventana = [], proyectos = [], filtro = 'capturado', onFiltro, puedeEditar = false, onCapturar, onProyecto, onNuevoProyecto, onExportar, onMarcarCargado, onSop, exportando = false, sugeridoTotal = null }) {
+export function ForecastVista({ estado, clienteSel = 'todos', onCliente, ventana = [], proyectos = [], filtro = 'capturado', onFiltro, puedeEditar = false, onCapturar, onProyecto, onNuevoProyecto, onExportar, onMarcarCargado, onSop, onTablero, onMatriz, exportando = false, sugeridoTotal = null }) {
   const { theme } = useTheme();
   const [todas, setTodas] = useState(false);
   const r = estado.resumen;
@@ -84,6 +84,8 @@ export function ForecastVista({ estado, clienteSel = 'todos', onCliente, ventana
       )}
 
       <ListaAgrupada style={{ marginTop: 18 }}>
+        {onTablero && <Fila icon={LayoutGrid} color={theme.accent} titulo="Tablero por mes" sub="Proyectos de cada mes con su monto y cobertura · mover de mes" onClick={onTablero} />}
+        {onMatriz && <Fila icon={Table2} color={theme.accent} titulo="Matriz SKU × mes" sub="Necesidad · faltante · reservado, coloreado por cobertura" onClick={onMatriz} />}
         <Fila icon={ShoppingCart} color={theme.accent} titulo="Qué hay que comprar" sub="S&OP · Mis clientes: forecast − inventario del cliente − nuestro stock − tránsito" onClick={onSop} />
       </ListaAgrupada>
       {puedeEditar && r.borrador.skus > 0 && (
@@ -151,6 +153,7 @@ export default function ForecastM({ inicial = null }) {
       {loading ? <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><Skeleton h={120} r={12} /><Skeleton h={220} r={12} /></div> : (
         <ForecastVista estado={estado} clienteSel={clienteSel} ventana={ventana} proyectos={proyectos} filtro={filtro} onFiltro={setFiltro} puedeEditar={puedeEditar} exportando={exportando} sugeridoTotal={sugeridoTotal}
           onCapturar={capturar} onProyecto={(id) => nav.push(<Proyectos inicial={{ proyectoId: id }} />, `proyectos-${id}`)} onNuevoProyecto={() => nav.push(<Proyectos inicial={{ nuevo: true }} />, 'proyectos-nuevo')}
+          onTablero={() => nav.push(<Proyectos inicial={{ vista: 'tablero' }} />, 'proyectos-tablero')} onMatriz={() => nav.push(<Proyectos inicial={{ vista: 'matriz' }} />, 'proyectos-matriz')}
           onExportar={() => exportar(null)} onMarcarCargado={marcar} onSop={() => nav.navegar({ pagina: 'forecastClientes', extra: { vista: 'clientes' } })} />
       )}
       <HojaM abierto={elegirCliente} onClose={() => setElegirCliente(false)} titulo="Exportar plantilla del CRM" sub="La plantilla se arma por cliente. ¿Cuál?" alto="40vh">

@@ -9,12 +9,13 @@ import { EASE, DUR } from '../../../lib/motion';
 import { int } from '../../../lib/format';
 import { TONOS } from './textos';
 
-const FONDO = {
+// FONDO y TINTA se exportan para la Matriz del celular (src/movil/pestanas/forecast/TableroMatrizM.jsx · 2026-11-18).
+export const FONDO = {
   verde:   (t) => (t.mode === 'dark' ? 'rgba(48,209,88,0.16)' : 'rgba(52,199,89,0.13)'),
   naranja: (t) => (t.mode === 'dark' ? 'rgba(255,159,10,0.18)' : 'rgba(255,149,0,0.16)'),
   rojo:    (t) => (t.mode === 'dark' ? 'rgba(255,69,58,0.18)' : 'rgba(255,59,48,0.13)'),
 };
-const TINTA = {
+export const TINTA = {
   verde:   (t) => (t.mode === 'dark' ? '#30D158' : '#1F7A3D'),
   naranja: (t) => (t.mode === 'dark' ? '#FF9F0A' : '#9A5500'),
   rojo:    (t) => (t.mode === 'dark' ? '#FF6961' : '#B00020'),

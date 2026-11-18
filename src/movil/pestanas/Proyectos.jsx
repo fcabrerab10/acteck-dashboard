@@ -14,7 +14,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeEditarPestanaGlobal } from '../../lib/permisos';
 import {
-  calcular, mesesHorizonte, arribosDeTransito,
+  calcular, mesesHorizonte, arribosDeTransito, tablero as construirTablero, matriz as construirMatriz, detalleSku,
   CLIENTES, CLIENTE_LABEL, PROBABILIDADES, PROB_LABEL, PROB_TONE, etiquetaMesLarga,
 } from '../../modules/comercial/proyectos/calculo';
 import { fraseHero, subHero, pctCorto, fechaCortaISO, textoCompartir } from '../../modules/comercial/proyectos/textos';
@@ -25,8 +25,10 @@ import { Cargando } from '../../components/kit';
 import { int, MONO } from '../util';
 import { moneyCompact } from '../../lib/format';
 import { compartir } from '../../lib/whatsapp';
+import { TableroVista, MatrizVista, HojaMover, HojaSkuM } from './forecast/TableroMatrizM';
 
-const VISTAS = [{ id: 'proyectos', label: 'Proyectos' }, { id: 'faltantes', label: 'Faltantes' }];
+// 2026-11-18: «Tablero» y «Matriz» son las dos vistas de la web (forecast/TableroMatrizM.jsx), con el mismo motor.
+const VISTAS = [{ id: 'proyectos', label: 'Lista' }, { id: 'tablero', label: 'Tablero' }, { id: 'matriz', label: 'Matriz' }, { id: 'faltantes', label: 'Faltantes' }];
 const colorCliente = (k) => CLIENTES.find((c) => c.key === k)?.color || '#8E8E93';
 const tonoPct = (p) => (p == null ? 'gray' : p >= 99.5 ? 'green' : p >= 70 ? 'orange' : 'red');
 
@@ -39,7 +41,13 @@ export default function Proyectos({ inicial = null }) {
   const hoy = useMemo(() => new Date(), []);
   const horizonte = useMemo(() => mesesHorizonte(hoy, 6), [hoy]);
 
-  const [vista, setVista] = useState('proyectos');
+  const [vista, setVista] = useState(VISTAS.some((v) => v.id === inicial?.vista) ? inicial.vista : 'proyectos');
+  const [medida, setMedida] = useState('necesidad');
+  const [soloFaltante, setSoloFaltante] = useState(false);
+  const [moviendo, setMoviendo] = useState(null);   // proyecto en la hoja «Mover a…»
+  const [moverAbierto, setMoverAbierto] = useState(false);
+  const [skuAbierto, setSkuAbierto] = useState(null);
+  const [skuHoja, setSkuHoja] = useState(false);
   const [mesSel, setMesSel] = useState(null);     // null = todos
   const [abierto, setAbierto] = useState(inicial?.proyectoId || null);   // id del proyecto (una alerta de arribo lo trae en `inicial`)
   const [nuevo, setNuevo] = useState(!!inicial?.nuevo);   // ForecastM abre «Nuevo proyecto» directo
@@ -60,6 +68,10 @@ export default function Proyectos({ inicial = null }) {
     return m;
   }, [ab.data]);
   const arribos = useMemo(() => arribosDeTransito(ab.data?.transito || []), [ab.data]);
+
+  const columnas = useMemo(() => (vista === 'tablero' ? construirTablero(res) : []), [res, vista]);
+  const filasMatriz = useMemo(() => (vista === 'matriz' ? construirMatriz(res, { medida, soloFaltante }) : []), [res, vista, medida, soloFaltante]);
+  const detalle = useMemo(() => (skuAbierto ? detalleSku(res, skuAbierto) : null), [res, skuAbierto]);
 
   const proyecto = abierto ? res.porProyecto.find((p) => p.id === abierto) || null : null;
   const cargando = pr.isLoading || ab.isLoading;
@@ -142,6 +154,20 @@ export default function Proyectos({ inicial = null }) {
             </>
           )}
 
+          {vista === 'tablero' && (
+            <div style={{ marginTop: 12 }}>
+              <TableroVista columnas={columnas} puedeEditar={puedeEditar} onAbrir={(p) => setAbierto(p.id)}
+                onMover={(p) => { setMoviendo(p); setMoverAbierto(true); }} onNuevo={() => setNuevo(true)} />
+            </div>
+          )}
+
+          {vista === 'matriz' && (
+            <div style={{ marginTop: 12 }}>
+              <MatrizVista filas={filasMatriz} horizonte={horizonte} medida={medida} onMedida={setMedida} soloFaltante={soloFaltante} onSoloFaltante={setSoloFaltante}
+                onSku={(sku) => { setSkuAbierto(sku); setSkuHoja(true); }} />
+            </div>
+          )}
+
           {vista === 'faltantes' && res.comprasSugeridas.length > 0 && (
             <div style={{ padding: '12px 16px 0' }}>
               <BotonGrande icon={Share2} onClick={async () => { if (await compartir(textoCompartir(r, res.comprasSugeridas), { titulo: 'Proyectos y forecast' }) === 'share') toast.ok('Compartido'); }}>Compartir faltantes</BotonGrande>
@@ -173,6 +199,11 @@ export default function Proyectos({ inicial = null }) {
         onPiezas={(l, pz) => guardar(() => guardarLinea(proyecto.id, { sku: l.sku, piezas: pz, reservado: l.reservado }))}
         onQuitar={(l) => guardar(() => eliminarLinea(l.id), 'SKU quitado')}
         onEliminar={() => guardar(async () => { await eliminarProyecto(proyecto.id); setAbierto(null); }, 'Proyecto eliminado')} />
+
+      <HojaMover abierto={moverAbierto} proyecto={moviendo} horizonte={horizonte} onClose={() => setMoverAbierto(false)}
+        onMover={(p, m) => { setMoverAbierto(false); guardar(() => actualizarProyecto(p.id, { anio: m.anio, mes: m.mes }), `«${p.nombre}» se movió a ${m.labelLargo || m.label}`); }} />
+      <HojaSkuM abierto={skuHoja} detalle={detalle} horizonte={horizonte} onClose={() => setSkuHoja(false)}
+        onProyecto={(p) => { setSkuHoja(false); setAbierto(p.id); }} />
 
       <FormNuevo abierto={nuevo} horizonte={horizonte} catalogoSkus={ab.data?.catalogoSkus || []}
         onCerrar={() => setNuevo(false)}

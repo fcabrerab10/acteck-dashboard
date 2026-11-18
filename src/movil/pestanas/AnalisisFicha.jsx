@@ -9,7 +9,7 @@
 // mv_sellin_cliente_dia · v_sellout_cuenta_mes (cuenta ligada por CUENTA_POR_ERP) · mv_analisis_cliente_sku_mes ·
 // mv_sellout_cuenta_sku_mes de la cuenta · roadmap_sku (descripciones, ya en cache).
 import React, { useMemo, useState } from 'react';
-import { Share2, Copy } from 'lucide-react';
+import { Share2, Copy, FileSpreadsheet } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { useRoadmap } from '../../lib/queries';
@@ -22,7 +22,9 @@ import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, HojaM, B
 import { PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { moneyCompact, int, deltaPct, MESES, MONO, N } from '../util';
 import { useCuotasClientes, useSellInDia, useDetalleCliente } from '../../modules/comercial/analisis/useAnalisisData';
-import { mapaCuotas, cuotaPeriodo, alcanceCuota, idxMes, yoyDe } from '../../modules/comercial/analisis/calc';
+import { mapaCuotas, cuotaPeriodo, alcanceCuota, idxMes, yoyDe, agregarClientes } from '../../modules/comercial/analisis/calc';
+import { libroCliente } from '../../modules/comercial/analisis/excelCliente';
+import { compartirArchivo } from '../../lib/compartirArchivo';
 import { movimientos } from '../../modules/comercial/analisis/movimiento';
 import { ritmoDeUnCliente } from '../../modules/comercial/analisis/ritmo';
 import { RitmoClienteM } from './analisis/RitmoM';
@@ -115,6 +117,7 @@ export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const [pestana, setPestana] = useState('resumen');
   const [compartiendo, setCompartiendo] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const { data: codigoBuscado, isLoading: lCod } = useCodigoErp(clienteNombre, anio, !codigoProp);
   const codigo = codigoProp || codigoBuscado || null;
   const cuenta = codigo ? (CUENTA_POR_ERP[codigo] || null) : null;
@@ -182,6 +185,21 @@ export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal
   const onCompartir = async () => { const res = await compartir(texto, { titulo: `Ficha ${nombre}` }); if (res === 'share') toast.ok('Compartido'); };
   const onCopiar = async () => { if (await copiar(texto)) toast.ok('Texto copiado'); else toast.error('No se pudo copiar'); };
 
+  // «Exportar Excel» (2026-11-18): el MISMO libro que la página del cliente en la web (analisis/excelCliente.js), armado
+  // con las consultas que la ficha ya bajó, y compartido con la hoja del sistema (o descargado si no se puede).
+  const exportar = async () => {
+    const cliente = agregarClientes(rows, anio, mes, 'ytd').clientes.find((c) => c.cliente === String(codigo));
+    if (!cliente) { toast.info('Este cliente no tiene ventas que exportar'); return; }
+    setExportando(true);
+    try {
+      const { exportarExcelBlob } = await import('../../lib/exportar');
+      const { blob, nombre: archivo } = await exportarExcelBlob(libroCliente({ cliente, anio, mesMax: mes, verSensible: sensible, cuotas: mapa, detalleSku: detalle, skuSellOut: skusSo, roadmap }));
+      const res = await compartirArchivo(blob, archivo, { titulo: archivo, texto: `${nombre} · ${anio}` });
+      if (res === 'share') toast.ok('Excel compartido'); else if (res === 'descarga') toast.ok(`${archivo} descargado`);
+    } catch (e) { toast.error(`No se pudo exportar: ${e?.message || e}`); }
+    finally { setExportando(false); }
+  };
+
   const color = info.propio ? colorCliente(info.ck, theme) : theme.textMuted;
   const sub = [canalLabel(info.canal || 'otros'), codigo ? `código ${codigo}` : null, vendedor ? `atiende ${nombreBonito(vendedor)}` : null, ritmo.cadaDias ? `compra cada ${ritmo.cadaDias} días` : null].filter(Boolean).join(' · ');
   const cargando = lCod || (lMes && !rows.length);
@@ -197,8 +215,14 @@ export default function AnalisisFicha({ codigo: codigoProp, clienteNombre, canal
         <ResumenVista nombre={nombre} anio={anio} mes={mes} enCurso={r.enCurso} mtd={r.mtd} yoyMes={r.yoyMes} cuotaMes={r.cuotaMes} so={r.so} ritmo={ritmo} ritmoC={ritmoC} cargandoRitmo={lDia} serie={r.serie} movs={r.movs}
           catSi={r.catSi} catSo={r.catSo} mensual={mensual} cuotasRows={cuotasRows} codigo={codigo} onCompartir={() => setCompartiendo(true)} />
       )}
-      {!cargando && r && pestana === 'sellin' && <SellInM codigo={codigo} mensual={mensual} detalle={detalle} diario={diario} cuotasRows={cuotasRows} anio={anio} mes={mes} sensible={sensible} rd={rd} />}
+      {!cargando && r && pestana === 'sellin' && <SellInM codigo={codigo} nombre={clienteNombre || rows[0]?.cliente_nombre || nombre} mensual={mensual} detalle={detalle} diario={diario} cuotasRows={cuotasRows} anio={anio} mes={mes} sensible={sensible} rd={rd} />}
       {!cargando && r && pestana === 'sellout' && <SellOutM codigo={codigo} nombre={nombre} anio={anio} propio={info.propio} clienteKey={info.ck} />}
+      {!cargando && r && codigo && (
+        <div style={{ padding: '14px 16px 0' }}>
+          <BotonGrande icon={FileSpreadsheet} disabled={exportando} onClick={exportar}>{exportando ? 'Generando…' : 'Exportar Excel'}</BotonGrande>
+          <div style={{ fontSize: 11.5, color: theme.textSubtle || theme.textMuted, padding: '6px 4px 0', lineHeight: 1.4 }}>El mismo libro que en la computadora: Resumen, Sell In por SKU y Sell Out por SKU (12 meses).</div>
+        </div>
+      )}
 
       <HojaM abierto={compartiendo} onClose={() => setCompartiendo(false)} titulo="Compartir ficha" sub="Texto limpio · sin alertas, márgenes ni cartera" alto="70vh">
         <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>

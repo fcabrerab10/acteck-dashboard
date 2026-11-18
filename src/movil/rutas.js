@@ -6,7 +6,7 @@
 // `extra` (opcional) llega desde nav.navegar({ pagina, extra }) y lo reciben las páginas globales (p. ej. Agenda).
 // Las pantallas empujadas son React.lazy: sólo se descarga la que se abre. (Archivo .js: sin JSX, createElement.)
 import { createElement as h, lazy } from 'react';
-import { CLIENTES_NAV } from '../components/nav/arbol';
+import { CLIENTES_NAV, seccionDe } from '../components/nav/arbol';
 
 const FichaCliente  = lazy(() => import('./pestanas/FichaCliente'));
 const Historial     = lazy(() => import('./pestanas/Historial'));
@@ -104,3 +104,16 @@ export function destino({ pagina, clienteKey, label, extra } = {}) {
 
 /** ¿El nodo ya tiene pantalla en el celular? (para atenuar/etiquetar en los menús). */
 export const tieneVersionMovil = (nodo) => destino(nodo).tipo !== 'proximamente';
+
+// Sección (grupo y color) de un id de nodo ('sellIn' · 'digitalife:sellIn'): la hereda la pantalla empujada desde un nodo
+// y las que ella empuje encima (ficha de producto, detalle…). Cache por id: el objeto no cambia entre renders.
+const SECCIONES = new Map();
+export function seccionDeId(id) {
+  if (!id) return null;
+  if (!SECCIONES.has(id)) {
+    const [a, b] = String(id).split(':');
+    const s = b ? seccionDe(b, a) : seccionDe(a, null);
+    SECCIONES.set(id, s && s.grupo ? s : null);
+  }
+  return SECCIONES.get(id);
+}

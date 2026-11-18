@@ -24,7 +24,7 @@ import { useContadorAgenda } from '../modules/agenda5/base/datos';
 import { NavContext, Pantalla } from './nav';
 import { HojaM, Skeleton, Proximamente } from './piezas';
 import { leerLS, guardarLS } from './util';
-import { destino, TABS_RAIZ } from './rutas';
+import { destino, TABS_RAIZ, seccionDeId } from './rutas';
 import BarraSuperior from './menu/BarraSuperior';
 import BarraGrupos from './menu/BarraGrupos';
 import Cajon, { anchoCajon } from './menu/Cajon';
@@ -283,13 +283,14 @@ export default function MovilApp({ perfil, onCerrarSesion, inicial = null, onRut
           const topIdx = pila.length - 1;
           return (
             <div key={id} data-tab={id} style={{ position: 'absolute', inset: 0, display: activa ? 'block' : 'none' }}>
-              <Pantalla id="raiz" cubierta={pila.some((e) => e.fase !== 'saliendo')} onRefrescar={id === 'agenda' ? undefined : refrescar} sinBarraInferior={sinBarra}>
+              <Pantalla id="raiz" seccion={seccionDeId(TAB_A_NODO[id])} cubierta={pila.some((e) => e.fase !== 'saliendo')} onRefrescar={id === 'agenda' ? undefined : refrescar} sinBarraInferior={sinBarra}>
                 <Suspense fallback={<Cargando />}>
                   <Comp key={claveRaiz} {...propsRaiz} />
                 </Suspense>
               </Pantalla>
               {pila.map((e, i) => (
-                <Pantalla key={e.key} id={e.key} fase={e.fase} puedeVolver onPop={pop} onRefrescar={refrescar} sinBarraInferior={sinBarra}
+                <Pantalla key={e.key} id={e.key} fase={e.fase} puedeVolver
+                  seccion={seccionDeId([...pila.slice(0, i + 1)].reverse().find((x) => x.activo)?.activo || TAB_A_NODO[id])} onPop={pop} onRefrescar={refrescar} sinBarraInferior={sinBarra}
                   cubierta={i < topIdx && pila.slice(i + 1).some((x) => x.fase !== 'saliendo')}>
                   <Suspense fallback={<Cargando />}>{e.el}</Suspense>
                 </Pantalla>

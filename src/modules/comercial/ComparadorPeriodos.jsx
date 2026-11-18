@@ -5,24 +5,17 @@
 // Cliente del ERP (clienteNombre / clienteCodigo, Análisis por Cliente 2026-09-11):
 // v_analisis_cliente_mes (fact_neta como monto) · movers desde mv_analisis_cliente_sku_mes por código.
 // ocultarSensible: esconde Contribución/MC (permiso `sensible`).
+// 2026-11-18: el cálculo vive en comparador/calculo.js y las consultas en comparador/datos.js (los comparte el celular:
+// src/movil/pestanas/comparador/ComparadorM.jsx). Aquí sólo queda el layout de escritorio.
 import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../../lib/supabase';
-import { cachedQuery, fetchAllQ } from '../../lib/queries';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { ArrowLeftRight, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react';
+import { PRESETS, MESES, deltaPct, labelPeriodo, sumar, periodosPreset, ultimoConDatos, aniosDe, libreInicial, ajustarLibre, esMesParcial, moversDe, serieComparada, textoResumen } from './comparador/calculo';
+import { useComparadorBase, useComparadorSkus } from './comparador/datos';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-const PRESETS = [
-  { k: 'ytd', l: 'YTD vs YTD ant.' },
-  { k: 'qvq', l: 'Trimestre vs trim. ant.' },
-  { k: 'qyoy', l: 'Trimestre vs mismo trim. año ant.' },
-  { k: 'm3', l: 'Mes vs mismo mes (3 años)' },
-  { k: 'libre', l: 'Libre' },
-];
-const N = (v) => Number(v) || 0;
 const money = (n) => {
   if (n == null || isNaN(n)) return '—';
   const a = Math.abs(n); const s = n < 0 ? '−' : '';
@@ -32,45 +25,11 @@ const money = (n) => {
 };
 const int = (n) => (n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('es-MX'));
 const pctTxt = (n, d = 1) => (n == null || isNaN(n) ? '—' : `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(d)}%`);
-const deltaPct = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
-const labelPeriodo = (p) => (p.desde === p.hasta ? `${MESES[p.desde - 1]} ${p.anio}` : `${MESES[p.desde - 1]}–${MESES[p.hasta - 1]} ${p.anio}`);
-const enPeriodo = (r, p) => N(r.anio) === p.anio && N(r.mes) >= p.desde && N(r.mes) <= p.hasta;
 const Sel = ({ value, opts, onChange, style }) => (
   <select value={value} onChange={(e) => onChange(Number(e.target.value))} style={style}>
     {opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
   </select>
 );
-
-// Suma filas mensuales dentro de un periodo. Devuelve totales + serie por posición.
-function sumar(fact, med, p) {
-  const t = { monto: 0, piezas: 0, factNeta: 0, contribucion: 0, meses: [] };
-  for (let m = p.desde; m <= p.hasta; m++) {
-    const f = fact.find((r) => N(r.anio) === p.anio && N(r.mes) === m);
-    t.meses.push({ mes: m, monto: N(f?.monto), piezas: N(f?.piezas) });
-    t.monto += N(f?.monto); t.piezas += N(f?.piezas);
-  }
-  med.forEach((r) => { if (enPeriodo(r, p)) { t.factNeta += N(r.fact_neta); t.contribucion += N(r.contribucion); } });
-  t.ticket = t.piezas ? t.monto / t.piezas : null;
-  t.mc = t.factNeta ? (t.contribucion / t.factNeta) * 100 : null;
-  t.hayMedidas = t.factNeta !== 0;
-  return t;
-}
-
-// Periodos según preset, anclados al último mes con datos (anio, mes).
-function periodosPreset(preset, anio, mes, libre) {
-  const q0 = Math.floor((mes - 1) / 3) * 3 + 1; // primer mes del trimestre
-  const len = mes - q0 + 1;
-  switch (preset) {
-    case 'ytd': return [{ id: 'A', anio, desde: 1, hasta: mes }, { id: 'B', anio: anio - 1, desde: 1, hasta: mes }];
-    case 'qvq': {
-      const pq = q0 === 1 ? { anio: anio - 1, desde: 10 } : { anio, desde: q0 - 3 };
-      return [{ id: 'A', anio, desde: q0, hasta: mes }, { id: 'B', anio: pq.anio, desde: pq.desde, hasta: pq.desde + len - 1 }];
-    }
-    case 'qyoy': return [{ id: 'A', anio, desde: q0, hasta: mes }, { id: 'B', anio: anio - 1, desde: q0, hasta: mes }];
-    case 'm3': return [0, 1, 2].map((i) => ({ id: 'ABC'[i], anio: anio - i, desde: mes, hasta: mes }));
-    default: return [{ id: 'A', ...libre.A }, { id: 'B', ...libre.B }];
-  }
-}
 
 export default function ComparadorPeriodos({ clienteKey = null, clienteNombre = null, clienteCodigo = null, ocultarSensible = false }) {
   const erpCliente = clienteNombre || clienteCodigo ? { nombre: clienteNombre, codigo: clienteCodigo } : null;
@@ -80,128 +39,47 @@ export default function ComparadorPeriodos({ clienteKey = null, clienteNombre = 
   const border = `1px solid ${theme.border}`;
   const mono = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums' };
 
-  const [fact, setFact] = useState(null);
-  const [med, setMed] = useState([]);
+  const alcance = { clienteKey, clienteNombre, clienteCodigo };
+  const { fact, med } = useComparadorBase(alcance);
   const [preset, setPreset] = useState('ytd');
   const [libre, setLibre] = useState(null);
   const [moversOpen, setMoversOpen] = useState(false);
-  const [sku, setSku] = useState(null); // { key: años, rows }
-  const [skuLoading, setSkuLoading] = useState(false);
   const [copiado, setCopiado] = useState(false);
 
-  useEffect(() => {
-    let cancel = false;
-    setFact(null); setSku(null); setMoversOpen(false);
-    const qFact = clienteKey
-      ? supabase.from('v_fact_cliente_mes').select('anio,mes,monto,piezas').eq('cliente_key', clienteKey)
-      : supabase.from('v_facturacion_global_mensual').select('anio,mes,monto,piezas');
-    let qMed = supabase.from(clienteKey ? 'v_erp_medidas_cliente_mes' : 'v_erp_medidas_mes').select('anio,mes,fact_neta,contribucion');
-    if (clienteKey) qMed = qMed.eq('cliente_key', clienteKey);
-    if (erpCliente) {
-      // Cliente del ERP: una sola vista; se agrega por (anio, mes) por si el nombre tiene dos códigos.
-      let q = supabase.from('v_analisis_cliente_mes').select('anio,mes,fact_neta,piezas_venta_neta,contribucion');
-      q = erpCliente.codigo ? q.eq('cliente', erpCliente.codigo) : q.eq('cliente_nombre', erpCliente.nombre);
-      cachedQuery(q.order('anio').order('mes'))
-        .then(({ data }) => {
-          if (cancel) return;
-          const by = new Map();
-          (data || []).forEach((r) => { const k = `${r.anio}-${r.mes}`; const a = by.get(k) || { anio: N(r.anio), mes: N(r.mes), monto: 0, piezas: 0, fact_neta: 0, contribucion: 0 }; a.monto += N(r.fact_neta); a.fact_neta += N(r.fact_neta); a.piezas += N(r.piezas_venta_neta); a.contribucion += N(r.contribucion); by.set(k, a); });
-          const rows = Array.from(by.values());
-          setFact(rows); setMed(rows);
-        })
-        .catch(() => { if (!cancel) { setFact([]); setMed([]); } });
-      return () => { cancel = true; };
-    }
-    Promise.all([cachedQuery(qFact.order('anio').order('mes')), cachedQuery(qMed.order('anio').order('mes'))])
-      .then(([f, m]) => { if (!cancel) { setFact(f.data || []); setMed(m.data || []); } })
-      .catch(() => { if (!cancel) { setFact([]); setMed([]); } });
-    return () => { cancel = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteKey, clienteNombre, clienteCodigo]);
+  useEffect(() => { setMoversOpen(false); }, [clienteKey, clienteNombre, clienteCodigo]);
 
-  const ultimo = useMemo(() => {
-    let best = null;
-    (fact || []).forEach((r) => { if (N(r.monto) > 0 && (!best || N(r.anio) > best.anio || (N(r.anio) === best.anio && N(r.mes) > best.mes))) best = { anio: N(r.anio), mes: N(r.mes) }; });
-    return best;
-  }, [fact]);
-  const anios = useMemo(() => Array.from(new Set((fact || []).map((r) => N(r.anio)))).sort((a, b) => b - a), [fact]);
+  const ultimo = useMemo(() => ultimoConDatos(fact), [fact]);
+  const anios = useMemo(() => aniosDe(fact), [fact]);
 
   useEffect(() => {
-    if (ultimo && !libre) setLibre({ A: { anio: ultimo.anio, desde: 1, hasta: ultimo.mes }, B: { anio: ultimo.anio - 1, desde: 1, hasta: ultimo.mes } });
+    if (ultimo && !libre) setLibre(libreInicial(ultimo));
   }, [ultimo, libre]);
 
   const periodos = useMemo(() => (ultimo && libre ? periodosPreset(preset, ultimo.anio, ultimo.mes, libre) : []), [preset, ultimo, libre]);
   const totales = useMemo(() => periodos.map((p) => sumar(fact || [], med, p)), [periodos, fact, med]);
   const A = totales[0], B = totales[1];
   const esM3 = preset === 'm3';
-  const hoy = new Date();
-  const mesParcial = ultimo && ultimo.anio === hoy.getFullYear() && ultimo.mes === hoy.getMonth() + 1 && periodos.some((p) => p.anio === ultimo.anio && p.hasta === ultimo.mes);
+  const mesParcial = esMesParcial(ultimo, periodos);
 
   // Movers · carga lazy al abrir la sección; se re-pide si cambian los años involucrados
   const yearsKey = useMemo(() => Array.from(new Set(periodos.map((p) => p.anio))).sort().join(','), [periodos]);
-  useEffect(() => {
-    if (!moversOpen || !yearsKey || (sku && sku.key === yearsKey)) return;
-    let cancel = false;
-    setSkuLoading(true);
-    const years = yearsKey.split(',').map(Number);
-    const q = erpCliente
-      ? () => { let b = supabase.from('v_analisis_cliente_sku_mes').select('articulo,anio,mes,piezas_venta_neta,fact_neta').in('anio', years); return erpCliente.codigo ? b.eq('cliente', erpCliente.codigo) : b.eq('cliente_nombre', erpCliente.nombre); }
-      : clienteKey
-        ? () => supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).in('anio', years)
-        : () => supabase.from('v_facturacion_global_sku_mes').select('sku,anio,mes,piezas,monto').in('anio', years);
-    fetchAllQ(q, { pageSize: clienteKey ? 500 : 1000, orderCol: erpCliente ? 'articulo' : 'sku', label: 'comparador-sku' })
-      .then((rows) => { if (!cancel) setSku({ key: yearsKey, rows: erpCliente ? rows.map((r) => ({ sku: r.articulo, anio: r.anio, mes: r.mes, piezas: r.piezas_venta_neta, monto: r.fact_neta })) : rows }); })
-      .catch(() => { if (!cancel) setSku({ key: yearsKey, rows: [] }); })
-      .finally(() => { if (!cancel) setSkuLoading(false); });
-    return () => { cancel = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moversOpen, yearsKey, clienteKey, clienteNombre, clienteCodigo, sku]);
+  const { rows: skuRows, cargando: skuLoading } = useComparadorSkus(alcance, yearsKey, moversOpen);
+  const movers = useMemo(() => moversDe(skuRows, periodos), [skuRows, periodos]);
 
-  const movers = useMemo(() => {
-    if (!sku || periodos.length < 2) return null;
-    const pA = periodos[0], pB = periodos[1];
-    const by = new Map();
-    sku.rows.forEach((r) => {
-      const inA = enPeriodo(r, pA), inB = enPeriodo(r, pB);
-      if (!inA && !inB) return;
-      const s = by.get(r.sku) || { sku: r.sku, mA: 0, pA: 0, mB: 0, pB: 0 };
-      if (inA) { s.mA += N(r.monto); s.pA += N(r.piezas); }
-      if (inB) { s.mB += N(r.monto); s.pB += N(r.piezas); }
-      by.set(r.sku, s);
-    });
-    const all = Array.from(by.values()).map((s) => ({ ...s, d: s.mA - s.mB })).filter((s) => s.d !== 0);
-    all.sort((a, b) => b.d - a.d);
-    return { up: all.filter((s) => s.d > 0).slice(0, 8), down: all.filter((s) => s.d < 0).reverse().slice(0, 8) };
-  }, [sku, periodos]);
-
-  const chartData = useMemo(() => {
-    const len = Math.max(0, ...totales.map((t) => t.meses.length));
-    return Array.from({ length: len }, (_, i) => {
-      const row = { pos: i };
-      totales.forEach((t, k) => { const m = t.meses[i]; row[periodos[k].id] = m?.monto ?? null; row[`${periodos[k].id}_lbl`] = m ? `${MESES[m.mes - 1]} ${periodos[k].anio}` : ''; });
-      row.label = row.A_lbl ? row.A_lbl.split(' ')[0] : '';
-      return row;
-    });
-  }, [totales, periodos]);
+  const chartData = useMemo(() => serieComparada(totales, periodos), [totales, periodos]);
 
   const copiar = () => {
     if (!A || !B) return;
     const nombre = erpCliente ? (erpCliente.nombre || erpCliente.codigo) : clienteKey ? clienteKey.charAt(0).toUpperCase() + clienteKey.slice(1) : 'Global';
-    const l1 = `Sell In ${nombre} · ${labelPeriodo(periodos[0])} vs ${labelPeriodo(periodos[1])}${esM3 ? ` vs ${labelPeriodo(periodos[2])}` : ''}`;
-    const l2 = `Facturación ${formatMXN(A.monto)} vs ${formatMXN(B.monto)} (${pctTxt(deltaPct(A.monto, B.monto))}) · Piezas ${int(A.piezas)} vs ${int(B.piezas)} (${pctTxt(deltaPct(A.piezas, B.piezas))})`;
-    const l3 = `Ticket promedio ${formatMXN(A.ticket || 0)} vs ${formatMXN(B.ticket || 0)}${!ocultarSensible && A.hayMedidas && B.hayMedidas ? ` · Contribución ${formatMXN(A.contribucion)} vs ${formatMXN(B.contribucion)} (MC ${A.mc?.toFixed(1)}% vs ${B.mc?.toFixed(1)}%)` : ''}`;
-    navigator.clipboard?.writeText([l1, l2, l3].join('\n')).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1600); });
+    const texto = textoResumen({ nombre, periodos, totales, ocultarSensible, fmt: formatMXN });
+    navigator.clipboard?.writeText(texto).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1600); });
   };
 
   const segBg = isDark ? 'rgba(120,120,128,0.24)' : 'rgba(120,120,128,0.12)';
   const segOn = isDark ? 'rgba(99,99,102,0.9)' : '#FFFFFF';
   const segOff = isDark ? 'rgba(235,235,245,0.60)' : 'rgba(60,60,67,0.60)';
   const selStyle = { ...mono, fontSize: 11, fontWeight: 600, color: theme.text, background: theme.surface, border, borderRadius: 7, padding: '3px 6px', height: 26, cursor: 'pointer' };
-  const setLibreP = (id, patch) => setLibre((s) => {
-    const p = { ...s[id], ...patch };
-    if (p.hasta < p.desde) p[patch.desde != null ? 'hasta' : 'desde'] = patch.desde ?? patch.hasta;
-    return { ...s, [id]: p };
-  });
+  const setLibreP = (id, patch) => setLibre((s) => ajustarLibre(s, id, patch));
   const mesOpts = MESES.map((m, i) => ({ v: i + 1, l: m }));
   const anioOpts = anios.map((y) => ({ v: y, l: String(y) }));
 

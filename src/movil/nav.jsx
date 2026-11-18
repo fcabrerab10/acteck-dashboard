@@ -12,6 +12,11 @@ import { EASE, DUR, reduceMotion } from '../lib/motion';
 export const NavContext = createContext(null);
 export const useNav = () => useContext(NavContext);
 
+// Sección de la pantalla (color por sección, como CabeceraPantalla de la web · 2026-11-18): { titulo, grupo, color } de
+// arbol.js#seccionDe. La pone <Pantalla seccion> y la lee TituloGrande para pintar el nombre de la sección en su color.
+export const SeccionContext = createContext(null);
+export const useSeccion = () => useContext(SeccionContext);
+
 export const ALTO_BARRA = 56;
 export const ALTO_BARRA_SUP = 44;
 export const PADDING_INFERIOR = `calc(${ALTO_BARRA + 34}px + env(safe-area-inset-bottom))`;
@@ -40,7 +45,7 @@ function vigilarScroll(el) {
 
 const UMBRAL_REFRESCO = 72;
 
-export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = false, onPop, onRefrescar, sinBarraInferior = false, children, style, id }) {
+export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = false, onPop, onRefrescar, sinBarraInferior = false, children, style, id, seccion = null }) {
   const { theme } = useTheme();
   const ref = useRef(null);
   const scroll = useRef(null);
@@ -143,7 +148,7 @@ export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = fals
         paddingTop: PADDING_SUPERIOR, paddingBottom: sinBarraInferior ? PADDING_INFERIOR_SIN_BARRA : PADDING_INFERIOR, boxSizing: 'border-box',
         transform: pull > 0 ? `translateY(${pull}px)` : 'none', transition: pull === 0 ? `transform ${DUR.content}ms ${EASE}` : 'none',
       }}>
-        {children}
+        <SeccionContext.Provider value={seccion}>{children}</SeccionContext.Provider>
       </div>
     </div>
   );
