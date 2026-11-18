@@ -85,7 +85,7 @@ export function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSol
 
 export default function TablaForecast({
   rows, expandedSku, setExpandedSku, sortCol, sortDir, onSort,
-  onAgregarSolicitud, skusEnBorrador, lineasBorrador, puedeEditar, sensible, facturacion, facturacionMes, metaBySku, maxHeight = '72vh', vacio,
+  onAgregarSolicitud, skusEnBorrador, lineasBorrador, puedeEditar, sensible, facturacion, facturacionMes, metaBySku, maxHeight = '72vh', vacio, onPo,
 }) {
   const { theme } = useTheme();
   const dash = <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>;
@@ -147,7 +147,7 @@ export default function TablaForecast({
       renderExpandido={(r) => {
         const l = lineaDe(r.sku);
         return (
-          <DrillSku r={r} enExport={!!l} cantidadEnExport={l?.cantidad || 0} onAgregarSolicitud={onAgregarSolicitud}
+          <DrillSku r={r} onPo={onPo} enExport={!!l} cantidadEnExport={l?.cantidad || 0} onAgregarSolicitud={onAgregarSolicitud}
             puedeEditar={puedeEditar} sensible={sensible} facturacion={facturacion} facturacionMes={facturacionMes} metaBySku={metaBySku} />
         );
       }}

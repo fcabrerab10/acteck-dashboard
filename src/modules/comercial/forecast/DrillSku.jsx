@@ -113,7 +113,7 @@ function Tarjeta({ titulo, meta, aside, children, style }) {
   );
 }
 
-export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolicitud, puedeEditar, sensible, facturacion, facturacionMes, metaBySku }) {
+export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolicitud, puedeEditar, sensible, facturacion, facturacionMes, metaBySku, onPo }) {
   const { theme } = useTheme();
   const dark = theme.mode === 'dark';
   const hair = `1px solid ${theme.divider || theme.border}`;
@@ -432,7 +432,7 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
                     <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center', fontSize: 11 }}>
                       <Pill tone={pill.tone} size="xs">{pill.label}</Pill>
                       <span style={{ fontFamily: MONO, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {e.po ? `PO-${e.po}` : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700 }}>{fmtInt(e.cantidad)}</strong> pz
+                        {e.po ? (onPo ? <button type="button" onClick={(ev) => { ev.stopPropagation(); onPo(e.po); }} title="Abrir la ficha de la PO" style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', color: theme.accent, fontFamily: MONO, fontSize: 10.5, fontWeight: 600 }}>PO-{e.po}</button> : `PO-${e.po}`) : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700 }}>{fmtInt(e.cantidad)}</strong> pz
                         {e.contenedor && <> · <span style={{ color: theme.textSubtle || theme.textMuted }}>{e.contenedor}</span></>}
                       </span>
                       <span style={{ fontFamily: MONO, fontSize: 10.5, color: theme.textMuted }}>{fmtFechaC(e.eta)}</span>
