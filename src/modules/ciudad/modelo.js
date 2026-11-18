@@ -515,6 +515,7 @@ export function listaCorta(lista, n = 3) {
 // Interior de la oficina (paso 1, 3.90.37): reuniones de hoy (`agenda_reuniones`, sin viajes) en orden, con hora local y si ya
 // pasó, está en curso o viene. Duración por omisión 60 min. Fechas inválidas se omiten.
 export function reunionesDelDia(reuniones = [], hoy = new Date()) {
+  if (!(hoy instanceof Date) || Number.isNaN(hoy.getTime())) hoy = new Date();
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   return (reuniones || []).map((r) => {
     const t = new Date(r?.fecha); if (Number.isNaN(t.getTime())) return null;
@@ -533,7 +534,9 @@ export function acomodoEscritorios(n, { ancho = 7, largo = 5.2, cols = 4, max = 
 // Presencia en la oficina (3.90.40, como Gather): pone `presencia` = { estado: 'viaje' | 'reunion' | 'disponible', titulo } en cada
 // persona. Viaje = reunión tipo 'viaje' vigente hoy (fecha … fecha_fin); reunión = una que está en curso ahora. Cuenta si la persona
 // es asistente (`asistentes[].user_id`) o quien la creó (`creado_por`). El viaje gana a la reunión.
+// (3.111.1) Personas nulas se saltan y una fecha `hoy` inválida usa ahora (antes lanzaba error / dejaba todos «disponible»).
 export function presenciaPersonas(personas = [], reuniones = [], viajes = [], hoy = new Date()) {
+  if (!(hoy instanceof Date) || Number.isNaN(hoy.getTime())) hoy = new Date();
   const dia = (x) => { const t = new Date(x); return Number.isNaN(t.getTime()) ? null : `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
   const hoyD = dia(hoy), ahora = hoy.getTime();
   const de = (r, id) => r && id && (r.creado_por === id || (Array.isArray(r.asistentes) && r.asistentes.some((a) => a && (a.user_id === id || a === id))));
@@ -542,6 +545,7 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
   const viajeHoy = unicas.filter((r) => r.tipo === 'viaje' && dia(r.fecha) && dia(r.fecha) <= hoyD && (dia(r.fecha_fin || r.fecha) || dia(r.fecha)) >= hoyD);
   const enCurso = unicas.filter((r) => { if (r.tipo === 'viaje') return false; const t = new Date(r.fecha).getTime(); return !Number.isNaN(t) && t <= ahora && ahora < t + (Number(r.duracion_min) || 60) * 60000; });
   for (const p of personas || []) {
+    if (!p || typeof p !== 'object') continue;
     const v = viajeHoy.find((r) => de(r, p.id)); const r = !v && enCurso.find((x) => de(x, p.id));
     p.presencia = v ? { estado: 'viaje', titulo: v.titulo || 'Viaje' } : r ? { estado: 'reunion', titulo: r.titulo || 'Reunión' } : { estado: 'disponible', titulo: null };
   }
