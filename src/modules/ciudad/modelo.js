@@ -597,12 +597,15 @@ export function burbujasAtencion(m, hoy = new Date()) {
 }
 
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
-  const marcaDe = (sku) => norm(marcas instanceof Map ? marcas.get(sku) : marcas?.[sku]) || 'SIN MARCA';
+  // SKU limpio (3.110.3): « abc» y «ABC» son el mismo SKU (cuenta una vez y encuentra su marca y su demanda).
+  const get = (k) => (marcas instanceof Map ? marcas.get(k) : marcas?.[k]);
+  const marcaDe = (raw, k) => norm(get(raw) ?? get(String(raw).trim()) ?? get(k)) || 'SIN MARCA';
   const por = new Map();
   for (const r of filas || []) {
-    if (!r?.articulo || !(N(r.inventario) > 0)) continue;
-    const m = marcaDe(r.articulo); const g = por.get(m) || { marca: m, valor: 0, piezas: 0, skus: new Set() };
-    g.valor += N(r.costoinventario); g.piezas += N(r.inventario); g.skus.add(r.articulo); por.set(m, g);
+    const k = String(r?.articulo ?? '').trim().toUpperCase();
+    if (!k || !(N(r.inventario) > 0)) continue;
+    const m = marcaDe(r.articulo, k); const g = por.get(m) || { marca: m, valor: 0, piezas: 0, skus: new Set() };
+    g.valor += N(r.costoinventario); g.piezas += N(r.inventario); g.skus.add(k); por.set(m, g);
   }
   // Días de inventario por marca (3.90.32): piezas / demanda en piezas de los 3 meses cerrados × 90 (la medida del director, en
   // piezas porque el pivote de sell in las trae); sin demanda → null. `demanda`: Map SKU (mayúsculas) → piezas de los 3 meses.
@@ -620,7 +623,7 @@ export function demanda3Meses(rows = [], hoy = new Date()) {
   const cerrados = [1, 2, 3].map((i) => { const f = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1); return { anio: f.getFullYear(), mes: f.getMonth() + 1 }; });
   const m = new Map();
   for (const r of rows || []) {
-    const sku = String(r?.sku || '').toUpperCase(); if (!sku) continue;
+    const sku = String(r?.sku || '').trim().toUpperCase(); if (!sku) continue;
     let s2 = 0; for (const c of cerrados) if (N(r.anio) === c.anio) s2 += N((r.piezas || [])[c.mes - 1]);
     if (s2) m.set(sku, (m.get(sku) || 0) + s2);
   }

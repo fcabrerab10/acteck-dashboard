@@ -751,3 +751,13 @@ test('cifraCorta / pesosCorto: redondeo en el borde K→M y negativos', () => {
   assert.equal(cifraCorta(-15400), '-15 K'); assert.equal(cifraCorta(-0.2), '0'); assert.equal(cifraCorta(NaN), '0'); assert.equal(cifraCorta(undefined), '0');
   assert.equal(pesosCorto(999600), '$1.0 M'); assert.equal(pesosCorto(-2500), '-$3 K'); assert.equal(pesosCorto(15000), '$15 K');
 });
+
+test('racksPorMarca / demanda3Meses: SKU con espacios o minúsculas cuenta una vez y encuentra su demanda', () => {
+  const h = new Date(2026, 4, 15);
+  const dem = demanda3Meses([{ sku: ' ab1 ', anio: 2026, piezas: [0, 30, 30, 30] }], h);
+  assert.equal(dem.get('AB1'), 90, 'el pivote con espacios empata');
+  const filas = [{ articulo: 'AB1', inventario: 30, costoinventario: 300 }, { articulo: ' ab1', inventario: 15, costoinventario: 150 }];
+  const r = racksPorMarca(filas, new Map([['AB1', 'Acteck']]), 8, dem);
+  assert.deepEqual(r.map((g) => [g.marca, g.skus, g.piezas, g.dias]), [['ACTECK', 1, 45, 45]]);
+  assert.equal(racksPorMarca([{ articulo: '  ', inventario: 5 }], null).length, 0, 'SKU en blanco no cuenta');
+});
