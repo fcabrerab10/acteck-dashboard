@@ -5,7 +5,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, Settings2, RefreshCw } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
-import { Hero, KpiCard, Panel, Segmented, Boton, Cargando } from '../../../components/kit';
+import { Hero, KpiCard, Panel, Segmented, Boton, Cargando, GraficaLineas } from '../../../components/kit';
+import { resumenPropuestas } from './resumen';
 import { moneyCompact, int, pct } from '../../../lib/format';
 import Buscador from '../sellin/Buscador';
 import { normalizar, tokens as aTokens, coincide } from '../sellin/textos';
@@ -62,6 +63,11 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
   const convProm = conEf.length ? conEf.reduce((s, e) => s + e.montoProp, 0) > 0
     ? (conEf.reduce((s, e) => s + Math.min(e.montoFact, e.montoProp), 0) / conEf.reduce((s, e) => s + e.montoProp, 0)) * 100 : null : null;
   const totalMes = delMes.reduce((s, p) => s + (Number(p.resumen?.total) || 0), 0);
+  // Propuesto vs facturado · 12 meses (2026-11-18, la misma serie del celular: propuestas/resumen.js#resumenPropuestas).
+  // Por mes objetivo: propuesto = enviadas + cerradas; facturado = lo que el cliente facturó en la ventana de cada una.
+  const serie12 = useMemo(() => resumenPropuestas({ propuestas, efectividades, anio: MES_ACTUAL.anio, mes: MES_ACTUAL.mes }).serie
+    .map((d) => ({ x: d.label, propuesto: d.propuesto || null, facturado: d.facturado, conv: d.propuesto > 0 && d.facturado != null ? (d.facturado / d.propuesto) * 100 : null })), [propuestas, efectividades]);
+  const prop12 = serie12.reduce((s, d) => s + (d.propuesto || 0), 0), fact12 = serie12.reduce((s, d) => s + (d.facturado || 0), 0);
 
   return (
     <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -94,6 +100,17 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
         <KpiCard eyebrow="Cerradas" badge={{ l: 'facturaron', tone: 'green' }} big={int(porEstado.cerrada)} sub="el cliente facturó ≥ 1 SKU en la ventana" onClick={() => setFiltroEst('cerrada')} />
         <KpiCard eyebrow="Conversión ⌀" big={convProm != null ? pct(convProm, 0) : '—'} bigColor={convProm != null ? (convProm >= 60 ? (theme.green || '#34C759') : (theme.orange || '#FF9500')) : undefined} sub="Σ min(vendido, propuesto) / Σ propuesto · mes siguiente al envío" progress={convProm ?? undefined} />
       </div>
+
+      {prop12 > 0 && (
+        <Panel titulo="Propuesto vs facturado · 12 meses" meta={`por mes objetivo · ${moneyCompact(prop12)} propuestos · ${moneyCompact(fact12)} facturados en su ventana (${pct((fact12 / prop12) * 100, 0)})`} plegable padding="10px 12px">
+          <GraficaLineas datos={serie12} formato={moneyCompact} alto={190} mostrarMinMax={false}
+            series={[
+              { key: 'propuesto', label: 'Propuesto (enviadas + cerradas)', tipo: 'principal' },
+              { key: 'facturado', label: 'Facturado en la ventana', tipo: 'linea', color: theme.green },
+              { key: 'conv', label: 'Convertido', tipo: 'lectura', formato: (v) => (v == null ? '—' : pct(v, 0)) },
+            ]} />
+        </Panel>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Segmented value={filtroEst} onChange={setFiltroEst} options={[{ id: 'todas', label: 'Todas', badge: propuestas.length }, ...ESTADOS.map((e) => ({ id: e.id, label: e.label, badge: porEstado[e.id] }))]} />

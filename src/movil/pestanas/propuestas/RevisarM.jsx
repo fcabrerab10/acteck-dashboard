@@ -7,6 +7,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { HeroM, ListaAgrupada, Fila, BotonGrande, Pill, HojaM, Vacio } from '../../piezas';
 import { listaShort, listaColor } from '../../../modules/comercial/propuestas/constantes';
 import { vigenciaTexto } from '../../../modules/comercial/propuestas/textos';
+import { preciosDeLinea } from '../../../modules/comercial/propuestas/resumen';
 import { money, int, MONO, N } from '../../util';
 
 const fmtPrecio = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -17,7 +18,7 @@ export default function RevisarM({ cli, nombre, mes, vigencia, lineas = [], prec
   const sinPrecio = lineas.filter((l) => !(l.precio > 0)).length;
   const faltaStock = lineas.filter((l) => inventario.has(l.sku) && N(l.piezas) > N(inventario.get(l.sku))).length;
   const sel = sku ? lineas.find((l) => l.sku === sku) : null;
-  const preciosSel = sku ? Object.entries(precios.get(sku) || {}).sort((a, b) => b[1] - a[1]) : [];
+  const preciosSel = sel ? preciosDeLinea(precios.get(sku), { precio: sel.precio, listaSel: sel.listaSel }) : [];
   return (
     <>
       <HeroM eyebrow={`Propuesta ${cli.label} · ${nombre || 'Cierre'} · vigente al ${vigenciaTexto(vigencia)}`} frase={money(total)}
@@ -50,8 +51,8 @@ export default function RevisarM({ cli, nombre, mes, vigencia, lineas = [], prec
       <HojaM abierto={!!sel} onClose={() => setSku(null)} titulo={sel ? sel.sku : ''} sub={sel ? `${sel.descripcion || ''} · precios de lista sin IVA` : ''} alto="70vh">
         {sel && (
           <ListaAgrupada pie="Los mismos precios de Estrategia de precios y del armador de escritorio. La lista de esta línea cambia sólo para este SKU.">
-            {preciosSel.map(([l, p]) => <Fila key={l} icon={Tag} color={listaColor(l)} titulo={l} sub={N(sel.precio) > 0 && p !== N(sel.precio) ? `${p > N(sel.precio) ? '+' : ''}${Math.round(((p - N(sel.precio)) / N(sel.precio)) * 100)} % vs el precio actual` : 'precio actual'} valor={fmtPrecio(p)} chevron={false}
-              trailing={sel.listaSel === l ? <Pill tone="blue">Elegida</Pill> : null} onClick={() => { onLinea?.(sel.sku, { listaSel: l, precio: p }); setSku(null); }} />)}
+            {preciosSel.map(({ lista: l, precio: p, delta, elegida }) => <Fila key={l} icon={Tag} color={listaColor(l)} titulo={l} sub={delta != null ? `${delta > 0 ? '+' : ''}${Math.round(delta)} % vs el precio actual` : 'precio actual'} valor={fmtPrecio(p)} chevron={false}
+              trailing={elegida ? <Pill tone="blue">Elegida</Pill> : null} onClick={() => { onLinea?.(sel.sku, { listaSel: l, precio: p }); setSku(null); }} />)}
             {!preciosSel.length && <Vacio icon={null} titulo="Sin precios de lista" sub="Este SKU no tiene precio en las listas; queda el personalizado." style={{ padding: 16 }} />}
             <Fila icon={Pencil} color={theme.orange} titulo="Personalizado" sub={`hoy ${fmtPrecio(sel.precio)} · se edita en el armador`} chevron={false} trailing={sel.listaSel === '__custom' ? <Pill tone="orange">Actual</Pill> : null} />
           </ListaAgrupada>

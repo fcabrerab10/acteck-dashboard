@@ -30,7 +30,8 @@ import BuscadorEntiende from './sellin/BuscadorEntiende';
 import StockCierrePanel from './inventario/StockCierrePanel';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAll } from '../../lib/queries';
-import { cambioMesPasado } from '../../movil/pestanas/inventario/calculo';
+import { cambioMesPasado, serieInventario, mixesInventario } from './inventario/calculoEmpresa';
+import { InventarioVsVentaPanel, ComposicionPanel } from './inventario/InventarioVentaPanel';
 import { interpretarBusqueda } from '../../lib/buscarSku';
 import CompartirHoja from './inventario/CompartirHoja';
 import ApartadoPanel from './inventario/ApartadoPanel';
@@ -62,8 +63,10 @@ function InventarioGlobalPantalla({ sensible }) {
   // regla (`en_inv_actual`), así que la suma cuadra al peso.
   const med = useMemo(() => inventarioDesdeVista(medidas), [medidas]);
   // 2026-10-06 (del celular): cambio contra el cierre del mes pasado (v_inventario_cv_mes: inventario al cierre por mes).
-  const { data: cvMes = [] } = useQuery({ queryKey: ['inventario', 'cv_mes'], staleTime: 5 * 60 * 1000, queryFn: () => fetchAll('v_inventario_cv_mes', 'anio,mes,fecha_cierre,inv_cierre_mes,inv_cierre_mes_piezas', (q) => q.gte('anio', new Date().getFullYear() - 1)).catch(() => []) });
+  const { data: cvMes = [] } = useQuery({ queryKey: ['inventario', 'cv_mes', 'serie'], staleTime: 5 * 60 * 1000, queryFn: () => fetchAll('v_inventario_cv_mes', 'anio,mes,fecha_cierre,inv_cierre_mes,inv_cierre_mes_piezas,cv_ultimos_3_meses,costo_venta_neta,piezas_venta_neta', (q) => q.gte('anio', new Date().getFullYear() - 2)).catch(() => []) });
   const cambioMes = useMemo(() => cambioMesPasado({ medidas, meses: cvMes, sensible }), [medidas, cvMes, sensible]);
+  // 2026-11-18 (del celular): inventario al cierre vs venta promedio 3 m, 12 meses (misma consulta, mismo motor).
+  const serieInvVenta = useMemo(() => serieInventario({ meses: cvMes, sensible }), [cvMes, sensible]);
 
   // Alcance
   const [soloComerciales, setSoloComerciales] = useState(true);
@@ -99,6 +102,9 @@ function InventarioGlobalPantalla({ sensible }) {
     });
     return { valor, piezas, skus: skus.size, almacenes: almacenes.size, nCEDIS: cedis.size };
   }, [filasEfectivas]);
+
+  // 2026-11-18 (del celular): composición por categoría · marca · almacén del alcance elegido (mismo motor).
+  const mixes = useMemo(() => mixesInventario(filasEfectivas.map((r) => ({ ...r, almacen_nombre: r.almacen_nombre || shortAlmacen(Number(r.no_almacen)) })), descripciones, { sensible }), [filasEfectivas, descripciones, sensible]);
 
   const porCedis = useMemo(() => {
     const m = new Map();
@@ -493,6 +499,12 @@ function InventarioGlobalPantalla({ sensible }) {
       <ApartadoPanel skuRows={universo} sensible={sensible}
         onVerSku={(sku) => { setFiltros(FILTROS_VACIOS()); setBusqueda(sku); setSkuAbierto(sku); }} />
       <FueraDeVenta filas={filas} descripciones={descripciones} sensible={sensible} onAbrir={cargarTodas} />
+
+      {/* Inventario vs venta (cierres de mes) y composición · los dos bloques que sólo tenía el celular */}
+      <div className="rej-2-1" style={{ display: 'grid', gap: 10 }}>
+        <InventarioVsVentaPanel serie={serieInvVenta} sensible={sensible} />
+        <ComposicionPanel mixes={mixes} sensible={sensible} />
+      </div>
 
       {/* Tendencia (histórico diario) */}
       <HistoricoPanel historico={historico} demandaDia={resumen.demDia} sensible={sensible} />

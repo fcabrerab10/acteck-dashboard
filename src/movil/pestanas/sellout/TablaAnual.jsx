@@ -21,6 +21,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { HeatCell } from '../../../components/kit';
 import { MONO, N } from '../../util';
+import { deltaVentana } from '../../../modules/comercial/sellout/skuAnual';
 
 const prom = (valores, promMeses) => {
   const vals = (valores || []).map((v) => N(v));
@@ -31,10 +32,8 @@ const prom = (valores, promMeses) => {
 const suma = (valores) => (valores || []).reduce((s, v) => s + N(v), 0);
 /** Δ % de la fila contra su año anterior; null si no hay con qué comparar. */
 export const deltaFila = (fila) => {
-  if (!fila || !Array.isArray(fila.prev)) return null;
-  const p = suma(fila.prev);
-  if (!p) return null;
-  return ((suma(fila.valores) - p) / Math.abs(p)) * 100;
+  if (!fila) return null;
+  return deltaVentana(fila.valores, fila.prev);
 };
 
 /** Ordena las filas por una columna ('total' · 'delta' · índice de mes); puro, lo prueba el SSR. */

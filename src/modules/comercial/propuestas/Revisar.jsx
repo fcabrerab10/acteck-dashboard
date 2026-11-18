@@ -21,6 +21,7 @@ import { mapaEan } from '../../../lib/ean';
 import { IndicadorGuardado } from './MiPropuesta';
 import PrecioPicker from './PrecioPicker';
 import CampoNumero from './CampoNumero';
+import PreciosLinea from './PreciosLinea';
 
 const N = (v) => Number(v) || 0;
 
@@ -28,6 +29,7 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
   const { theme } = useTheme();
   const rootRef = useRef(null);
   const [ocupado, setOcupado] = useState(false);
+  const [skuPrecios, setSkuPrecios] = useState(null); // línea abierta: todos sus precios de lista (como RevisarM en el celular)
   const cliCol = clienteColor(theme, cliente.key);
   const green = theme.green || '#34C759', orange = theme.orange || '#FF9500', red = theme.red || '#FF3B30', accent = theme.accent || '#007AFF', purple = theme.purple || '#AF52DE';
   const nombreOk = !!(nombre || '').trim();
@@ -123,7 +125,7 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
     { key: 'ultimaCompra', label: 'Últ. compra', width: 92, render: (r) => (r.ultimaCompra ? <span title={`${int(r.ultimaCompra.piezas)} pz · ${money(r.ultimaCompra.monto)}`} style={{ ...th, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{MES_LABEL[r.ultimaCompra.mes - 1]} {String(r.ultimaCompra.anio).slice(2)} · <span style={{ color: theme.text, fontWeight: 600 }}>{int(r.ultimaCompra.piezas)}</span></span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>nunca</span>) },
     { key: 'arribo', label: 'Llega', width: 92, render: (r) => (r.arribo?.fecha ? <span title={`${r.arribo.po ? `${r.arribo.po} · ` : ''}${int(r.arribo.total)} pz en camino`} style={{ ...th, fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap' }}>{fechaCorta(r.arribo.fecha)} · {int(r.arribo.piezas)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'piezas', label: 'Piezas', width: 72, sum: true, render: (r) => (
-      <CampoNumero value={r.piezas} onChange={(n) => editarSku(r.sku, { piezas: n ?? 0 })} ancho={60} invalido={!(N(r.piezas) > 0)} ariaLabel={`Piezas de ${r.sku}`} />
+      <span onClick={(e) => e.stopPropagation()}><CampoNumero value={r.piezas} onChange={(n) => editarSku(r.sku, { piezas: n ?? 0 })} ancho={60} invalido={!(N(r.piezas) > 0)} ariaLabel={`Piezas de ${r.sku}`} /></span>
     ) },
     { key: 'precio', label: 'Precio propuesta', align: 'left', width: 150, render: (r) => <PrecioPicker r={r} val={r} onChange={(patch) => editarSku(r.sku, patch)} /> },
     { key: 'maaa', label: 'vs MAAA', width: 80, render: (r) => { const m = N(r.precios?.['Mayoreo AAA']); return m > 0 ? <span style={{ color: theme.textMuted }}>{money(m)}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>; } },
@@ -132,7 +134,7 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
     { key: 'spiffCol', label: 'SPIFF', width: 64, render: (r) => (N(r.spiff) > 0 ? <Pill tone="yellow" size="xs" title={`${money(N(r.spiff))} por pieza`}>{money(N(r.spiff) * N(r.piezas))}</Pill> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>) },
     { key: 'total', label: 'Total', width: 96, bold: true, sum: true, render: (r) => money(N(r.piezas) * N(r.precio)), fmt: money },
     { key: 'quitar', label: '', align: 'center', width: 30, render: (r) => (
-      <button type="button" title={`Quitar ${r.sku} de la propuesta`} aria-label={`Quitar ${r.sku}`} onClick={() => quitarSku(r.sku)}
+      <button type="button" title={`Quitar ${r.sku} de la propuesta`} aria-label={`Quitar ${r.sku}`} onClick={(e) => { e.stopPropagation(); quitarSku(r.sku); }}
         style={{ width: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 0, borderRadius: 6, cursor: 'pointer', color: theme.textMuted, padding: 0 }}
         onMouseEnter={(e) => { e.currentTarget.style.color = red; }} onMouseLeave={(e) => { e.currentTarget.style.color = theme.textMuted; }}>
         <X size={13} />
@@ -225,8 +227,10 @@ export default function Revisar({ cliente, contexto, skus, propuesta, setPropues
         const totalGrupo = filas.reduce((s, r) => s + N(r.piezas) * N(r.precio), 0);
         const piezasGrupo = filas.reduce((s, r) => s + N(r.piezas), 0);
         return (
-          <Panel key={nombreGrupo} titulo={nombreGrupo} meta={`${filas.length} SKUs · ${int(piezasGrupo)} pz · piezas y precio editables`} acciones={<Pill tone="inverse">{money(totalGrupo)}</Pill>} padding="0">
-            <TablaCompacta dense columnas={columnas} filas={filasGrupo(filas)} rowKey={(r) => r.sku} totales={{ piezas: piezasGrupo, total: totalGrupo }} />
+          <Panel key={nombreGrupo} titulo={nombreGrupo} meta={`${filas.length} SKUs · ${int(piezasGrupo)} pz · toca una línea para ver todos sus precios de lista`} acciones={<Pill tone="inverse">{money(totalGrupo)}</Pill>} padding="0">
+            <TablaCompacta dense columnas={columnas} filas={filasGrupo(filas)} rowKey={(r) => r.sku} totales={{ piezas: piezasGrupo, total: totalGrupo }} dividir={false}
+              onRowClick={(r) => setSkuPrecios((s) => (s === r.sku ? null : r.sku))} expandidoKey={skuPrecios}
+              renderExpandido={(r) => <PreciosLinea r={r} onElegir={(patch) => { editarSku(r.sku, patch); setSkuPrecios(null); }} />} />
           </Panel>
         );
       })}

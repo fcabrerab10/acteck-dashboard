@@ -32,6 +32,8 @@ import DrillSku from './sellin/DrillSku';
 import { marcaDeSku, normalizarMarca } from '../../lib/marcas';
 import ApoyoComercial from './sellin/ApoyoComercial';
 import EquipoComercial from './sellin/EquipoComercial';
+import { resumenSellIn } from './sellin/resumen';
+import { ventanasDesdeAnios, columnasVentana } from './sellout/skuAnual';
 import { MESES, MESES_LARGO, normalizar, tokens, coincide, capitalizar, canalLabel, canalTone, N, fmtInt, fmtPct, fmtMoneyShort, pctDelta, anioColor, roadmapTone, CAT_COLORS } from './sellin/textos';
 
 // ─── Datos ───
@@ -108,9 +110,14 @@ function SellInGlobal({ sensible }) {
   const { theme } = useTheme();
   const rootRef = useRef(null);
   const hoy = new Date();
-  const anio = hoy.getFullYear(), anioPrev = anio - 1, mesActual = hoy.getMonth() + 1;
+  const anio = hoy.getFullYear(), anioPrev = anio - 1, mesHoy = hoy.getMonth() + 1;
+  // Período (2026-11-18, congruencia con el celular): Mes · YTD + mes elegido mandan en hero, KPIs, mix y tabla.
+  // `mesActual` = mes ELEGIDO (por defecto el mes en curso); `mesHoy` = el del calendario.
+  const [mesActual, setMesActual] = useState(mesHoy);
+  const [modo, setModo] = useState('mes'); // 'mes' | 'ytd'
+  const enCurso = mesActual === mesHoy;
   const diasMes = new Date(anio, mesActual, 0).getDate();
-  const diasRestantes = Math.max(0, diasMes - hoy.getDate());
+  const diasRestantes = enCurso ? Math.max(0, diasMes - hoy.getDate()) : 0;
 
   // ── Estado ──
   const [aniosSel, setAniosSel] = useState(() => new Set([anioPrev, anio]));
@@ -123,7 +130,9 @@ function SellInGlobal({ sensible }) {
   const [familiaSel, setFamiliaSel] = useState(null);
 
   const aniosSelOrd = useMemo(() => Array.from(aniosSel).sort((a, b) => a - b), [aniosSel]);
-  const aniosFetch = useMemo(() => Array.from(new Set([...aniosSel, anio, anioPrev])).sort((a, b) => a - b), [aniosSel, anio, anioPrev]);
+  // anio − 2 entra para la columna Δ 12 m (la ventana anterior de 12 meses cruza dos años naturales).
+  const aniosFetch = useMemo(() => Array.from(new Set([...aniosSel, anio, anioPrev, anio - 2])).sort((a, b) => a - b), [aniosSel, anio, anioPrev]);
+  const aniosErp = useMemo(() => Array.from(new Set([...aniosSel, anio, anioPrev])).sort((a, b) => a - b), [aniosSel, anio, anioPrev]);
   const { data: anioMin } = useAnioMinimo();
   const aniosDisponibles = useMemo(() => { const desde = Math.max(anioMin || anio - 1, anio - 3); const out = []; for (let y = desde; y <= anio; y++) out.push(y); return out; }, [anioMin, anio]);
   const toggleAnio = (y) => setAniosSel((prev) => { const n = new Set(prev); if (n.has(y)) { if (n.size === 1) return prev; n.delete(y); } else n.add(y); return n; });
@@ -132,7 +141,7 @@ function SellInGlobal({ sensible }) {
   const { data: fact = [], isLoading: lFact, error: eFact } = useFacturacionGlobal(aniosFetch);
   const { data: roadmap = [], isLoading: lRoad } = useRoadmap();
   const { data: cuotasData, isLoading: lCuotas } = useCuotasGlobal(anio);
-  const { data: erp = [], isFetching: lErp } = useErpSkuAnio(aniosFetch, sensible);
+  const { data: erp = [], isFetching: lErp } = useErpSkuAnio(aniosErp, sensible);
   const { data: stock = [] } = useStockSku();
   const loading = lFact || lRoad || lCuotas;
 
@@ -185,14 +194,26 @@ function SellInGlobal({ sensible }) {
   const mom = pctDelta(mtd, momPrev);
   const momLabel = momIdx < 0 ? `${MESES_LARGO[11]} ${anioPrev}` : `${MESES_LARGO[momIdx]} ${anio}`;
   const mesLargo = MESES_LARGO[mesActual - 1];
+  // Resumen del período con el MISMO motor del celular (sellin/resumen.js#resumenSellIn), alimentado con la
+  // facturación que ya baja esta pantalla (monto = Fact Neta oficial): cuota del período, YoY a mismo día si
+  // el mes está en curso, y el «otro» período (YTD cuando se ve el mes y al revés). Sin consultas nuevas.
+  const r = useMemo(() => {
+    const medidas = [];
+    for (const y of aniosFetch) for (let i = 0; i < 12; i++) medidas.push({ anio: y, mes: i + 1, fact_neta: global.monto[y][i], piezas_venta_neta: global.piezas[y][i] });
+    return resumenSellIn({ medidas, cuotaCanales: cuotasData?.canales || [], cuotaMensual: cuotasData?.mensual || [] }, { anio, mes: mesActual, modo, hoy, sensible: false });
+  }, [global, cuotasData, aniosFetch, anio, mesActual, modo]); // eslint-disable-line react-hooks/exhaustive-deps
+  const etqPeriodo = modo === 'mes' ? `${MESES[mesActual - 1]}${enCurso ? ' MTD' : ''}` : `YTD ${anio} · ene–${MESES[mesActual - 1]}`;
+  const etqOtro = modo === 'mes' ? `YTD ${anio} · ene–${MESES[mesActual - 1]}` : `${MESES[mesActual - 1]}${enCurso ? ' MTD' : ''}`;
+  const yoyLbl = `vs ${anioPrev}${enCurso ? ' a mismo día' : ''}`;
   const green = theme.green || '#34C759', red = theme.red || '#FF3B30', orange = theme.orange || '#FF9500', blue = theme.accent || '#007AFF';
   const tonoPct = (p) => (p == null ? 'gray' : p >= 100 ? 'green' : p >= 85 ? 'blue' : p >= 60 ? 'orange' : 'red');
 
-  const frase = pctMTD != null
+  const fraseEnCurso = pctMTD != null
     ? (pctMTD >= 100
       ? `${mesLargo} ya cumplió la cuota: ${fmtMoneyShort(mtd)} facturados, ${pctMTD.toFixed(0)} % del objetivo${diasRestantes ? ` con ${diasRestantes} días por delante` : ''}.`
       : `${mesLargo} va al ${pctMTD.toFixed(0)} % de la cuota; faltan ${fmtMoneyShort(cuotaMes - mtd)}${diasRestantes ? ` con ${diasRestantes} día${diasRestantes === 1 ? '' : 's'} por delante` : ' y el mes cerró'}.`)
     : `${mesLargo} lleva ${fmtMoneyShort(mtd)} facturados${yoyMes != null ? `, ${yoyMes >= 0 ? 'arriba' : 'abajo'} ${Math.abs(yoyMes).toFixed(0)} % de ${mesLargo} ${anioPrev}` : ''}.`;
+  const frase = modo === 'mes' && enCurso ? fraseEnCurso : r.frase;
 
   // ── Por canal (hero → compartir) ──
   const canales = useMemo(() => Array.from(global.canal.entries()).map(([c, m]) => ({
@@ -204,11 +225,11 @@ function SellInGlobal({ sensible }) {
   const onCopiarResumen = async () => { if (await copiar(textoResumen())) toast.ok('Resumen copiado'); else toast.error('No se pudo copiar'); };
 
   // ── Chart + familias ──
-  const chartData = useMemo(() => MESES.map((label, i) => ({ mes: label, prev: Math.round(global.montoFam[anioPrev][i]), act: i < mesActual ? Math.round(global.montoFam[anio][i]) : null, cuota: cuotas.mes(i + 1) || null })), [global, anio, anioPrev, mesActual, cuotas]);
+  const chartData = useMemo(() => MESES.map((label, i) => ({ mes: label, prev: Math.round(global.montoFam[anioPrev][i]), act: i < mesHoy ? Math.round(global.montoFam[anio][i]) : null, cuota: cuotas.mes(i + 1) || null })), [global, anio, anioPrev, mesHoy, cuotas]);
   const familias = useMemo(() => {
     const map = new Map();
     for (const r of fact) {
-      if (r.anio !== anio || r.mes > mesActual) continue;
+      if (r.anio !== anio || r.mes > mesActual || (modo === 'mes' && r.mes !== mesActual)) continue;
       const f = familiaDe(r.sku);
       if (!map.has(f)) map.set(f, { name: f, monto: 0, skus: new Set() });
       const it = map.get(f); it.monto += N(r.monto); it.skus.add(r.sku);
@@ -216,7 +237,7 @@ function SellInGlobal({ sensible }) {
     const arr = Array.from(map.values()).map((v) => ({ ...v, skus: v.skus.size })).sort((a, b) => b.monto - a.monto);
     const tot = arr.reduce((s, x) => s + x.monto, 0);
     return arr.map((v, i) => ({ ...v, pct: tot ? (v.monto / tot) * 100 : 0, color: CAT_COLORS[i % CAT_COLORS.length] }));
-  }, [fact, anio, mesActual, roadmapMap]);
+  }, [fact, anio, mesActual, modo, roadmapMap]);
 
   // ── Tabla por SKU: piezas por sku × año × mes según consolidado / canal ──
   const porSku = useMemo(() => {
@@ -297,6 +318,9 @@ function SellInGlobal({ sensible }) {
       row.total = total;
       const ytdA = (pz[anio] || []).slice(0, mesActual).reduce((a, b) => a + b, 0), ytdP = (pz[anioPrev] || []).slice(0, mesActual).reduce((a, b) => a + b, 0);
       row.ytdPz = ytdA; row.ytdPzPrev = ytdP; row.yoy = pctDelta(ytdA, ytdP);
+      // Δ 12 m: los 12 meses que terminan en el mes elegido contra los mismos 12 del año anterior (piezas).
+      const v12 = ventanasDesdeAnios(pz, anio, mesActual);
+      row.pz12 = v12.actual.reduce((a, b) => a + b, 0); row.pz12Prev = v12.prev ? v12.prev.reduce((a, b) => a + b, 0) : 0; row.d12 = v12.delta;
       const e = erpMap.get(`${r.sku}|${anio}`);
       row.mc = e && e.pct_mc != null ? Number(e.pct_mc) * 100 : null; row.factNeta = e ? N(e.fact_neta) : 0; row.contrib = e ? N(e.contribucion) : 0;
       rows.push(row);
@@ -310,18 +334,20 @@ function SellInGlobal({ sensible }) {
   }, [candidatos, sel, flags, aniosSelOrd, aniosFetch, anio, anioPrev, mesActual, erpMap, orden]);
 
   const totales = useMemo(() => {
-    const t = { promedio: 0, total: 0, ytdPz: 0, ytdPzPrev: 0, factNeta: 0, contrib: 0 };
+    const t = { promedio: 0, total: 0, ytdPz: 0, ytdPzPrev: 0, pz12: 0, pz12Prev: 0, factNeta: 0, contrib: 0 };
     for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) t[`m_${y}_${i}`] = 0;
-    for (const r of filas) { for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) t[`m_${y}_${i}`] += r[`m_${y}_${i}`]; t.total += r.total; t.ytdPz += r.ytdPz; t.ytdPzPrev += r.ytdPzPrev; t.factNeta += r.factNeta; t.contrib += r.contrib; }
+    for (const r of filas) { for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) t[`m_${y}_${i}`] += r[`m_${y}_${i}`]; t.total += r.total; t.ytdPz += r.ytdPz; t.ytdPzPrev += r.ytdPzPrev; t.pz12 += r.pz12; t.pz12Prev += r.pz12Prev; t.factNeta += r.factNeta; t.contrib += r.contrib; }
     const cerr = aniosSelOrd.includes(anio) ? Array.from({ length: Math.max(0, mesActual - 1) }, (_, i) => t[`m_${anio}_${i}`]).filter((v) => v > 0) : [];
     t.promedio = cerr.length ? cerr.reduce((a, b) => a + b, 0) / cerr.length : 0;
     t.yoy = pctDelta(t.ytdPz, t.ytdPzPrev);
+    t.d12 = t.pz12Prev ? pctDelta(t.pz12, t.pz12Prev) : null;
     t.mc = t.factNeta ? (t.contrib / t.factNeta) * 100 : null;
     return t;
   }, [filas, aniosSelOrd, anio, mesActual]);
   const maxCelda = useMemo(() => { let m = 0; for (const r of filas) for (const y of aniosSelOrd) for (let i = 0; i < 12; i++) if (r[`m_${y}_${i}`] > m) m = r[`m_${y}_${i}`]; return m || 1; }, [filas, aniosSelOrd]);
 
   const onSort = (col) => setOrden((p) => (p?.col !== col ? { col, dir: 'desc' } : p.dir === 'desc' ? { col, dir: 'asc' } : null));
+  const ventana12 = useMemo(() => { const c = columnasVentana(anio, mesActual); return `${c[0]}–${c[11]}`; }, [anio, mesActual]);
   const columnas = useMemo(() => {
     const cols = [
       { key: 'marca', label: 'Marca', align: 'left', width: 70, sort: true, maxWidth: 80, render: (r) => r.marca || '—' },
@@ -336,13 +362,16 @@ function SellInGlobal({ sensible }) {
     cols.push({ key: 'promedio', label: `Prom ${String(anio).slice(2)}`, align: 'right', width: 58, sort: true, render: (r) => (r.promedio ? fmtInt(r.promedio) : '—'), renderTotal: (v) => (v ? fmtInt(v) : '—') });
     cols.push({ key: 'total', label: 'Total', align: 'right', width: 64, sort: true, bold: true, render: (r) => fmtInt(r.total), renderTotal: (v) => fmtInt(v) });
     cols.push({ key: 'yoy', label: 'Δ YoY', align: 'right', width: 70, sort: true, render: (r) => (r.ytdPz || r.ytdPzPrev ? <span title={`ene–${MESES[mesActual - 1]}: ${fmtInt(r.ytdPz)} vs ${fmtInt(r.ytdPzPrev)} pz`}><DeltaPill value={r.yoy} /></span> : <span style={{ color: theme.textSubtle }}>—</span>), renderTotal: (v) => <DeltaPill value={v} /> });
+    cols.push({ key: 'd12', label: 'Δ 12 m', align: 'right', width: 70, sort: true,
+      render: (r) => (r.d12 == null ? <span style={{ color: theme.textSubtle }}>—</span> : <span title={`${ventana12}: ${fmtInt(r.pz12)} vs ${fmtInt(r.pz12Prev)} pz un año antes`}><DeltaPill value={r.d12} /></span>),
+      renderTotal: (v) => (v == null ? '—' : <DeltaPill value={v} />) });
     if (sensible) cols.push({ key: 'mc', label: `MC % ${String(anio).slice(2)}`, align: 'right', width: 62, sort: true, render: (r) => (r.mc == null ? <span style={{ color: theme.textSubtle }}>{lErp ? '…' : '—'}</span> : <span style={{ color: r.mc >= 25 ? green : r.mc >= 15 ? theme.text : orange, fontWeight: 600 }}>{fmtPct(r.mc, 1)}</span>), renderTotal: (v) => (v == null ? '—' : fmtPct(v, 1)) });
     return cols;
-  }, [aniosSelOrd, maxCelda, sensible, anio, mesActual, theme, lErp]);
+  }, [aniosSelOrd, maxCelda, sensible, anio, mesActual, theme, lErp, ventana12]);
   const grupos2 = useMemo(() => [
     { label: '', colSpan: 4 },
     ...aniosSelOrd.map((y) => ({ label: y === anio ? `${y} · en curso` : y, colSpan: 12, color: anioColor(y, aniosSelOrd, theme) })),
-    { label: '', colSpan: 3 + (sensible ? 1 : 0) },
+    { label: '', colSpan: 4 + (sensible ? 1 : 0) },
   ], [aniosSelOrd, anio, theme, sensible]);
 
   // ── Excel ──
@@ -351,11 +380,11 @@ function SellInGlobal({ sensible }) {
       { label: 'Marca', key: 'marca', tipo: 'texto', ancho: 10 }, { label: 'SKU', key: 'sku', tipo: 'texto', ancho: 14 }, { label: 'Descripción', key: 'descripcion', tipo: 'texto', ancho: 50 },
       { label: 'Categoría', key: 'categoriaCap', tipo: 'texto', ancho: 16 }, { label: 'Roadmap', key: 'rdmp', tipo: 'texto', ancho: 9 },
       ...aniosSelOrd.flatMap((y) => MESES.map((m, i) => ({ label: `${m} ${y}`, key: `m_${y}_${i}`, tipo: 'numero', ancho: 8 }))),
-      { label: `Prom ${anio}`, key: 'promedio', tipo: 'numero', ancho: 10 }, { label: 'Total', key: 'total', tipo: 'numero', ancho: 10 }, { label: 'Δ YoY %', key: 'yoy', tipo: 'numero', ancho: 9 },
+      { label: `Prom ${anio}`, key: 'promedio', tipo: 'numero', ancho: 10 }, { label: 'Total', key: 'total', tipo: 'numero', ancho: 10 }, { label: 'Δ YoY %', key: 'yoy', tipo: 'numero', ancho: 9 }, { label: 'Δ 12 m %', key: 'd12', tipo: 'numero', ancho: 9 },
       ...(sensible ? [{ label: `MC % ${anio}`, key: 'mc', tipo: 'numero', ancho: 9 }] : []),
     ];
-    const filasX = filas.map((r) => { const o = { marca: r.marca || '', sku: r.sku, descripcion: r.descripcion || '', categoriaCap: r.categoriaCap || '', rdmp: r.rdmp || '', promedio: Math.round(r.promedio) || null, total: r.total || null, yoy: r.yoy != null ? Math.round(r.yoy) : null, mc: r.mc != null ? Math.round(r.mc * 10) / 10 : null }; aniosSelOrd.forEach((y) => MESES.forEach((_, i) => { o[`m_${y}_${i}`] = r[`m_${y}_${i}`] || null; })); return o; });
-    const totalesX = { marca: 'TOTAL', sku: `${filas.length} SKUs`, promedio: Math.round(totales.promedio) || null, total: totales.total, yoy: totales.yoy != null ? Math.round(totales.yoy) : null, mc: totales.mc != null ? Math.round(totales.mc * 10) / 10 : null };
+    const filasX = filas.map((r) => { const o = { marca: r.marca || '', sku: r.sku, descripcion: r.descripcion || '', categoriaCap: r.categoriaCap || '', rdmp: r.rdmp || '', promedio: Math.round(r.promedio) || null, total: r.total || null, yoy: r.yoy != null ? Math.round(r.yoy) : null, d12: r.d12 != null ? Math.round(r.d12) : null, mc: r.mc != null ? Math.round(r.mc * 10) / 10 : null }; aniosSelOrd.forEach((y) => MESES.forEach((_, i) => { o[`m_${y}_${i}`] = r[`m_${y}_${i}`] || null; })); return o; });
+    const totalesX = { marca: 'TOTAL', sku: `${filas.length} SKUs`, promedio: Math.round(totales.promedio) || null, total: totales.total, yoy: totales.yoy != null ? Math.round(totales.yoy) : null, d12: totales.d12 != null ? Math.round(totales.d12) : null, mc: totales.mc != null ? Math.round(totales.mc * 10) / 10 : null };
     aniosSelOrd.forEach((y) => MESES.forEach((_, i) => { totalesX[`m_${y}_${i}`] = totales[`m_${y}_${i}`] || null; }));
     return { titulo: `Sell In consolidado${consolidado ? '' : ' · Clientes clave'}`, archivo: `Sell In consolidado ${aniosSelOrd.join('-')}`, hojas: [{ nombre: 'Detalle por SKU', subtitulo: `${aniosSelOrd.join(' · ')}${activos ? ` · ${activos} filtro${activos === 1 ? '' : 's'}` : ''}${busqueda ? ` · "${busqueda}"` : ''}`, columnas: columnasX, filas: filasX, totales: totalesX }] };
   };
@@ -374,33 +403,41 @@ function SellInGlobal({ sensible }) {
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
+      {/* Período: Mes · YTD + mes (manda en hero, KPIs, composición y columnas de comparación) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '0 2px' }}>
+        <Segmented value={modo} onChange={setModo} options={[{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD', title: 'Acumulado de enero al mes elegido' }]} />
+        <Segmented value={mesActual} onChange={(m) => setMesActual(Number(m))} style={{ maxWidth: '100%', overflowX: 'auto' }}
+          options={MESES.slice(0, mesHoy).map((l, i) => ({ id: i + 1, label: l, title: `${MESES_LARGO[i]} ${anio}${i + 1 === mesHoy ? ' · en curso' : ''}` }))} />
+      </div>
+
       {/* Hero */}
-      <Hero eyebrow={`Dirección Comercial · Sell In consolidado · ${mesLargo} ${anio}`} titulo={frase}
+      <Hero eyebrow={`Dirección Comercial · Sell In consolidado · ${r.periodoLbl}`} titulo={frase}
         sub={`Facturación de todos los clientes y canales (ERP) · cuota ${cuotas.fuente === 'cuotas_canales' ? 'anual TOTAL / 12' : 'Σ cuota ideal de los clientes'} · ${fmtInt(global.skusAnio)} SKUs con venta en ${anio}`}
         stats={[
-          { k: `${MESES[mesActual - 1]} MTD`, medida: tooltip('fact_neta', 'MTD'), v: fmtMoneyShort(mtd), sub: cuotaMes ? `${pctMTD.toFixed(0)} % de ${fmtMoneyShort(cuotaMes)}` : `${fmtInt(mtdPz)} pz`, color: pctMTD == null ? undefined : pctMTD >= 100 ? green : pctMTD < 60 ? orange : undefined },
-          { k: `YTD ${anio}`, medida: tooltip('fact_neta', `YTD ${anio}`), v: fmtMoneyShort(ytd), sub: yoyYtd != null ? `${yoyYtd >= 0 ? '↑' : '↓'} ${Math.abs(yoyYtd).toFixed(1)} % vs ${anioPrev}` : `${fmtInt(ytdPz)} pz`, color: yoyYtd == null ? undefined : yoyYtd >= 0 ? green : red },
-          { k: 'Cuota del mes', medida: tooltip('cuota_venta'), v: cuotaMes ? fmtMoneyShort(cuotaMes) : '—', sub: cuotaMes ? `faltan ${fmtMoneyShort(Math.max(0, cuotaMes - mtd))}` : 'sin cuota cargada' },
+          { k: etqPeriodo, medida: tooltip('fact_neta', modo === 'mes' ? 'mes' : `YTD ${anio}`), v: fmtMoneyShort(r.cur.fact_neta), sub: r.cuotaPeriodo ? `${r.pctCuota.toFixed(0)} % de ${fmtMoneyShort(r.cuotaPeriodo)}` : `${fmtInt(r.cur.piezas)} pz`, color: r.pctCuota == null ? undefined : r.pctCuota >= 100 ? green : r.pctCuota < 60 ? orange : undefined },
+          { k: etqOtro, medida: tooltip('fact_neta', modo === 'mes' ? `YTD ${anio}` : 'mes'), v: fmtMoneyShort(r.otro.fact_neta), sub: r.yoyOtro != null ? `${r.yoyOtro >= 0 ? '↑' : '↓'} ${Math.abs(r.yoyOtro).toFixed(1)} % vs ${anioPrev}` : `${fmtInt(r.otro.piezas)} pz`, color: r.yoyOtro == null ? undefined : r.yoyOtro >= 0 ? green : red },
+          { k: modo === 'mes' ? 'Cuota del mes' : 'Cuota a la fecha', medida: tooltip('cuota_venta'), v: r.cuotaPeriodo ? fmtMoneyShort(r.cuotaPeriodo) : '—', sub: r.cuotaPeriodo ? (r.cur.fact_neta >= r.cuotaPeriodo ? `superada por ${fmtMoneyShort(r.cur.fact_neta - r.cuotaPeriodo)}` : `faltan ${fmtMoneyShort(r.cuotaPeriodo - r.cur.fact_neta)}`) : 'sin cuota cargada' },
         ]}>
         <div style={{ marginTop: 10, maxWidth: 460 }}>
           <div style={{ position: 'relative', height: 5, borderRadius: 999, background: theme.mode === 'dark' ? 'rgba(29,29,31,0.16)' : 'rgba(245,245,247,0.18)', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${Math.min(100, Math.max(0, pctMTD ?? 0))}%`, background: pctMTD == null ? theme.textMuted : pctMTD >= 100 ? green : pctMTD >= 85 ? blue : pctMTD >= 60 ? orange : red, borderRadius: 999, transition: 'width 600ms cubic-bezier(0.32,0.72,0,1)' }} />
-            {pctMTD != null && <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(100, (hoy.getDate() / diasMes) * 100)}%`, width: 1, background: theme.mode === 'dark' ? 'rgba(29,29,31,0.6)' : 'rgba(245,245,247,0.7)' }} title="Avance del calendario" />}
+            <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${Math.min(100, Math.max(0, r.pctCuota ?? 0))}%`, background: r.pctCuota == null ? theme.textMuted : r.pctCuota >= 100 ? green : r.pctCuota >= 85 ? blue : r.pctCuota >= 60 ? orange : red, borderRadius: 999, transition: 'width 600ms cubic-bezier(0.32,0.72,0,1)' }} />
+            {r.pctCuota != null && modo === 'mes' && enCurso && <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(100, (hoy.getDate() / diasMes) * 100)}%`, width: 1, background: theme.mode === 'dark' ? 'rgba(29,29,31,0.6)' : 'rgba(245,245,247,0.7)' }} title="Avance del calendario" />}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-            <Boton primario icon={Share2} onClick={onCompartirResumen} title="WhatsApp / compartir · sin datos sensibles">Compartir resumen del mes por canal</Boton>
+            <Boton primario icon={Share2} onClick={onCompartirResumen} title="WhatsApp / compartir · sin datos sensibles">Compartir resumen de {MESES[mesActual - 1].toLowerCase()} por canal</Boton>
             <Boton icon={Copy} onClick={onCopiarResumen} title="Copiar el resumen">Copiar</Boton>
-            <span style={{ fontSize: 10.5, color: theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)' }}>{canales.length} canales · día {hoy.getDate()} de {diasMes}</span>
+            <span style={{ fontSize: 10.5, color: theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)' }}>{canales.length} canales · {enCurso ? `día ${hoy.getDate()} de ${diasMes}` : 'mes cerrado'}</span>
           </div>
         </div>
       </Hero>
 
-      {/* KPIs */}
+      {/* KPIs del período */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
-        <KpiCard medida={tooltip('pct_alcance_venta')} eyebrow={`${mesLargo} MTD`} badge={{ l: pctMTD != null ? `${pctMTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctMTD) }} big={fmtMoneyShort(mtd)} bigSmall={cuotaMes ? `/ ${fmtMoneyShort(cuotaMes)}` : undefined} sub={`${fmtInt(mtdPz)} piezas`} progress={pctMTD ?? undefined} />
-        <KpiCard medida={tooltip('pct_alcance_venta', 'YTD')} eyebrow={`YTD ${anio} · ene–${MESES[mesActual - 1]}`} badge={{ l: pctYTD != null ? `${pctYTD.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(pctYTD) }} big={fmtMoneyShort(ytd)} bigSmall={cuotas.ytd ? `/ ${fmtMoneyShort(cuotas.ytd)}` : undefined} sub={`${fmtInt(ytdPz)} piezas · ${fmtInt(global.skusAnio)} SKUs`} progress={pctYTD ?? undefined} />
-        <KpiCard eyebrow={`${mesLargo} vs ${anioPrev} · YoY`} badge={yoyMes != null ? { l: `${yoyMes >= 0 ? '↑' : '↓'} ${Math.abs(yoyMes).toFixed(1)} %`, tone: yoyMes >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(mtd)} bigSmall={`vs ${fmtMoneyShort(mtdPrev)}`} bigColor={yoyMes == null ? undefined : yoyMes >= 0 ? green : red} sub={mtdPzPrev ? `${mtdPz >= mtdPzPrev ? '↑' : '↓'} ${fmtInt(Math.abs(mtdPz - mtdPzPrev))} pz vs ${MESES[mesActual - 1]} ${anioPrev}` : `${fmtInt(mtdPz)} pz`} />
-        <KpiCard eyebrow={`vs ${momLabel} · MoM`} badge={mom != null ? { l: `${mom >= 0 ? '↑' : '↓'} ${Math.abs(mom).toFixed(1)} %`, tone: mom >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(mtd)} bigSmall={`vs ${fmtMoneyShort(momPrev)}`} bigColor={mom == null ? undefined : mom >= 0 ? green : red} sub={momPzPrev ? `${mtdPz >= momPzPrev ? '↑' : '↓'} ${fmtInt(Math.abs(mtdPz - momPzPrev))} pz · mes completo vs parcial` : `${fmtInt(mtdPz)} pz`} />
+        <KpiCard medida={tooltip('pct_alcance_venta', modo === 'mes' ? undefined : 'YTD')} eyebrow={etqPeriodo} badge={{ l: r.pctCuota != null ? `${r.pctCuota.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(r.pctCuota) }} big={fmtMoneyShort(r.cur.fact_neta)} bigSmall={r.cuotaPeriodo ? `/ ${fmtMoneyShort(r.cuotaPeriodo)}` : undefined} sub={`${fmtInt(r.cur.piezas)} piezas`} progress={r.pctCuota ?? undefined} />
+        <KpiCard medida={tooltip('pct_alcance_venta', modo === 'mes' ? 'YTD' : undefined)} eyebrow={etqOtro} badge={{ l: r.pctOtro != null ? `${r.pctOtro.toFixed(0)} % cuota` : 'sin cuota', tone: tonoPct(r.pctOtro) }} big={fmtMoneyShort(r.otro.fact_neta)} bigSmall={r.cuotaOtro ? `/ ${fmtMoneyShort(r.cuotaOtro)}` : undefined} sub={`${fmtInt(r.otro.piezas)} piezas${modo === 'mes' ? ` · ${fmtInt(global.skusAnio)} SKUs` : ''}`} progress={r.pctOtro ?? undefined} />
+        <KpiCard eyebrow={`${modo === 'mes' ? mesLargo : `YTD ${anio}`} ${yoyLbl} · YoY`} badge={r.yoy != null ? { l: `${r.yoy >= 0 ? '↑' : '↓'} ${Math.abs(r.yoy).toFixed(1)} %`, tone: r.yoy >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(r.cur.fact_neta)} bigSmall={`vs ${fmtMoneyShort(r.prevComparable)}`} bigColor={r.yoy == null ? undefined : r.yoy >= 0 ? green : red}
+          sub={r.piezasPrevComparable ? `${r.cur.piezas >= r.piezasPrevComparable ? '↑' : '↓'} ${fmtInt(Math.abs(r.cur.piezas - r.piezasPrevComparable))} pz ${yoyLbl}` : `${fmtInt(r.cur.piezas)} pz`} />
+        <KpiCard eyebrow={`${MESES[mesActual - 1]} vs ${momLabel} · MoM`} badge={mom != null ? { l: `${mom >= 0 ? '↑' : '↓'} ${Math.abs(mom).toFixed(1)} %`, tone: mom >= 0 ? 'green' : 'red' } : undefined} big={fmtMoneyShort(mtd)} bigSmall={`vs ${fmtMoneyShort(momPrev)}`} bigColor={mom == null ? undefined : mom >= 0 ? green : red} sub={momPzPrev ? `${mtdPz >= momPzPrev ? '↑' : '↓'} ${fmtInt(Math.abs(mtdPz - momPzPrev))} pz${enCurso ? ' · mes completo vs parcial' : ''}` : `${fmtInt(mtdPz)} pz`} />
       </div>
 
       {/* Comparador de periodos */}
@@ -415,7 +452,7 @@ function SellInGlobal({ sensible }) {
             formato={fmtMoneyShort} alto={210} mesActivo={mesActual - 1} />
           <div style={{ borderLeft: `1px solid ${theme.divider || theme.border}`, paddingLeft: 18, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text }}>Composición por familia · YTD</span>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text }}>Composición por familia · {modo === 'mes' ? MESES[mesActual - 1] : 'YTD'}</span>
               <span style={{ fontSize: 10, color: theme.textMuted }}>{familias.length} · clic filtra</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '108px minmax(0, 1fr)', gap: 12, alignItems: 'center' }}>
@@ -430,7 +467,7 @@ function SellInGlobal({ sensible }) {
                 </ResponsiveContainer>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{familiaSel || 'Total'}</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{fmtMoneyShort(familiaSel ? familias.find((f) => f.name === familiaSel)?.monto || 0 : ytd)}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{fmtMoneyShort(familiaSel ? familias.find((f) => f.name === familiaSel)?.monto || 0 : r.cur.fact_neta)}</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gap: 2 }}>

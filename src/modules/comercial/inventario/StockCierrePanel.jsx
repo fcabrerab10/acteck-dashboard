@@ -10,7 +10,7 @@ import { fetchAllQ, useSkusProducto } from '../../../lib/queries';
 import { interpretarBusqueda, coincideSku, indiceSku } from '../../../lib/buscarSku';
 import { Panel, TablaCompacta, HeatCell, Segmented, Boton, Pill } from '../../../components/kit';
 import BuscadorEntiende from '../sellin/BuscadorEntiende';
-import { filasStockAnual } from '../../../movil/pestanas/inventario/calculo';
+import { filasStockAnual } from './calculoEmpresa';
 import { columnasVentana } from '../sellout/skuAnual';
 import { fmtCompact, fmtInt } from './constantes';
 

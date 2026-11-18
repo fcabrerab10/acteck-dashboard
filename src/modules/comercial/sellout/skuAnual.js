@@ -61,6 +61,30 @@ export function filasSkuAnual({ rows = [], anio, mes, roadmap = [] }) {
   return out.sort((a, b) => b.total - a.total);
 }
 
+/**
+ * Δ % de una ventana de 12 meses contra los mismos 12 del año anterior. null («—») si no hay año anterior
+ * o su suma es 0. Lo usan TablaAnual (celular) y la tabla por SKU del Sell In consolidado (web).
+ */
+export function deltaVentana(valores, prev) {
+  if (!Array.isArray(prev)) return null;
+  const p = prev.reduce((s, v) => s + N(v), 0);
+  if (!p) return null;
+  const t = (valores || []).reduce((s, v) => s + N(v), 0);
+  return ((t - p) / Math.abs(p)) * 100;
+}
+
+/**
+ * Ventana de 12 meses que termina en (anio, mes) y la misma un año antes, desde arrays por año natural
+ * ({ [anio]: number[12] }). prev = null si no hay ningún año cargado de la ventana anterior.
+ */
+export function ventanasDesdeAnios(porAnio = {}, anio, mes) {
+  const v = ultimosMeses(anio, mes, 12);
+  const actual = v.map((m) => N(porAnio[m.anio]?.[m.mes - 1]));
+  const hayPrev = v.some((m) => Array.isArray(porAnio[m.anio - 1]));
+  const prev = hayPrev ? v.map((m) => N(porAnio[m.anio - 1]?.[m.mes - 1])) : null;
+  return { actual, prev, delta: deltaVentana(actual, prev) };
+}
+
 /** Categorías distintas del roadmap (para que el buscador las reconozca). */
 export const categoriasDe = (roadmap = []) => [...new Set(roadmap.map((r) => String(r.categoria || '').trim()).filter(Boolean))].sort();
 
