@@ -764,3 +764,12 @@ test('racksPorMarca / demanda3Meses: SKU con espacios o minúsculas cuenta una v
   assert.deepEqual(r.map((g) => [g.marca, g.skus, g.piezas, g.dias]), [['ACTECK', 1, 45, 45]]);
   assert.equal(racksPorMarca([{ articulo: '  ', inventario: 5 }], null).length, 0, 'SKU en blanco no cuenta');
 });
+
+test('presenciaPersonas / reunionesDelDia aguantan persona nula y fecha inválida (3.111.1)', () => {
+  const gente = [null, { id: 'u1' }, 'x'];
+  const reu = [{ id: 'r1', titulo: 'Junta', fecha: new Date(Date.now() - 10 * 60000).toISOString(), duracion_min: 60, creado_por: 'u1' }];
+  assert.doesNotThrow(() => presenciaPersonas(gente, reu, [], new Date('mal')));
+  assert.equal(gente[1].presencia.estado, 'reunion', 'fecha inválida usa ahora');
+  const ag = reunionesDelDia(reu, new Date('mal'));
+  assert.equal(ag.length, 1); assert.equal(ag[0].estado, 'en curso');
+});
