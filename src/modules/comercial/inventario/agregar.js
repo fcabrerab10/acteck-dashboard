@@ -6,6 +6,7 @@ import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
 import { estadoDe } from './filtros';
 import { COBERTURA_CRITICA, COBERTURA_SOBRESTOCK, N, diasHasta, normalizar } from './constantes';
 
+import { esSkuProducto } from '../../../lib/sku.js';
 // SKU × almacén enriquecido (descripción, tránsito, lead time, demanda, cobertura, estado, índice de búsqueda)
 export function agregarSkus(filas, { descripciones, transito, leadTime, demanda }) {
   const m = new Map();
@@ -25,7 +26,9 @@ export function agregarSkus(filas, { descripciones, transito, leadTime, demanda 
     it.costoRef = Math.max(it.costoRef, N(r.costopromedio));
     if (pz > 0 && r.cedis) it.cedisSet.add(r.cedis);
   });
-  return Array.from(m.values()).map((it) => {
+  // Sólo productos (2026-11-18): lo que está en el roadmap o tiene forma de SKU de producto (AC-935777).
+  // Refacciones, cajas y material del ERP no se listan; los SKUs nuevos fuera del roadmap sí.
+  return Array.from(m.values()).filter((it) => descripciones.has(it.sku) || esSkuProducto(it.sku)).map((it) => {
     const d = descripciones.get(it.sku) || {};
     const tr = transito.get(it.sku) || null;
     const lt = leadTime.get(it.sku) || null;

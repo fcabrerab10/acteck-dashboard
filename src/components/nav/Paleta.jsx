@@ -81,7 +81,7 @@ export default function Paleta({ abierto, onClose, arbol, onNavegar, perfil }) {
       try {
         const patron = `%${q.trim().replace(/[%_]/g, '')}%`;
         const { data } = await cachedQuery(
-          supabase.from('roadmap_sku').select('sku,descripcion,marca').or(`sku.ilike.${patron},descripcion.ilike.${patron}`).limit(8)
+          supabase.from('v_skus_producto').select('sku,descripcion,marca,en_roadmap').or(`sku.ilike.${patron},descripcion.ilike.${patron}`).order('en_roadmap', { ascending: false }).limit(8) // roadmap + SKUs nuevos con inventario o en camino (2026-11-18)
         );
         if (!cancel) setSkus(data || []);
       } catch { if (!cancel) setSkus([]); }

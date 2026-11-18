@@ -9,6 +9,7 @@ import { CLIENTES_NAV, CLIENTES_ORDEN } from '../components/nav/arbol';
 import { NOMBRE_CLIENTE } from '../lib/alertas';
 import { N, hoyISO } from './util';
 
+import { esSkuProducto } from '../lib/sku';
 const STALE = 5 * 60 * 1000;
 const opcional = async (p, vacio = []) => { try { const r = await p; return r?.error ? vacio : (r?.data ?? vacio); } catch { return vacio; } };
 
@@ -63,7 +64,7 @@ export async function descripciones(skus) {
   if (!skus.length) return m;
   const chunks = Array.from({ length: Math.ceil(skus.length / 200) }, (_, i) => skus.slice(i * 200, (i + 1) * 200));
   for (const ch of chunks) {
-    const { data } = await cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca').in('sku', ch));
+    const { data } = await cachedQuery(supabase.from('v_skus_producto').select('sku,descripcion,marca').in('sku', ch));
     (data || []).forEach((r) => { if (!m.has(r.sku)) m.set(r.sku, { descripcion: r.descripcion || '', marca: r.marca || '' }); });
     const faltan = ch.filter((s) => !m.has(s));
     if (faltan.length) {
@@ -80,7 +81,8 @@ export function useCatalogoBusqueda(enabled = true) {
     queryKey: ['movil', 'catalogo'], staleTime: STALE, enabled,
     queryFn: async () => {
       const [rm, inv] = await Promise.all([
-        cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca,categoria').order('sku').limit(5000)),
+        // v_skus_producto = roadmap + SKUs nuevos con forma de producto que ya tienen inventario o vienen en camino (2026-11-18).
+        cachedQuery(supabase.from('v_skus_producto').select('sku,descripcion,marca,categoria').order('sku').limit(5000)),
         // Inventario = medida [Inv Actual] del director (v_medidas_inventario_sku),
         // la misma que Inventario global, Visión General e Inicio. Antes:
         // v_inventario_comercial (almacenes_config, sin filtro de Rama).
@@ -89,7 +91,7 @@ export function useCatalogoBusqueda(enabled = true) {
       const disp = new Map((inv || []).map((r) => [r.articulo, { disponible: N(r.inv_actual_disponible), inventario: N(r.inv_actual_piezas) }]));
       const skus = (rm.data || []).map((r) => ({ sku: r.sku, descripcion: r.descripcion || '', marca: r.marca || '', categoria: r.categoria || '', ...(disp.get(r.sku) || { disponible: 0, inventario: 0 }) }));
       const vistos = new Set(skus.map((s) => s.sku));
-      disp.forEach((v, sku) => { if (!vistos.has(sku) && (v.inventario > 0)) skus.push({ sku, descripcion: '', marca: '', categoria: '', ...v }); });
+      disp.forEach((v, sku) => { if (!vistos.has(sku) && (v.inventario > 0) && esSkuProducto(sku)) skus.push({ sku, descripcion: '', marca: '', categoria: '', ...v }); });
       return skus;
     },
   });

@@ -75,7 +75,8 @@ export default function useInventarioDatos() {
         const mapDesc = new Map();
         if (skus.length === 0) return mapDesc;
         for (const chunk of chunkBy(skus, 200)) {
-          const { data } = await supabase.from('roadmap_sku').select('sku, descripcion, marca, familia, rdmp, categoria').in('sku', chunk);
+          // v_skus_producto: roadmap + SKUs nuevos con forma de producto (traen su descripción del catálogo del ERP).
+          const { data } = await supabase.from('v_skus_producto').select('sku, descripcion, marca, familia, rdmp, categoria').in('sku', chunk);
           (data || []).forEach((r) => {
             if (!mapDesc.has(r.sku)) mapDesc.set(r.sku, {
               descripcion: r.descripcion || '', marca: r.marca || '', familia: r.familia || '',

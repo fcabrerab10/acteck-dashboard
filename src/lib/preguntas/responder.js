@@ -105,7 +105,7 @@ async function stock(i, ctx) {
   const [inv, tr, rm] = await Promise.all([
     q1(supabase.from('v_medidas_inventario_sku').select('articulo,inv_actual,inv_actual_piezas,inv_actual_disponible,costo_promedio').eq('articulo', sku).limit(1)),
     q1(supabase.from('v_transito_sku').select('sku,cantidad,eta_mas_cercana,embarques,embarques_detalle').eq('sku', sku).limit(1)),
-    q1(supabase.from('roadmap_sku').select('sku,descripcion,marca').eq('sku', sku).limit(1)),
+    q1(supabase.from('v_skus_producto').select('sku,descripcion,marca').eq('sku', sku).limit(1)),
   ]);
   const r = inv[0], t = tr[0], d = rm[0];
   const desc = d?.descripcion ? `${d.descripcion}` : '';
