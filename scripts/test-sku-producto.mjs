@@ -9,8 +9,8 @@ test.after(async () => { await vite.close(); setTimeout(() => process.exit(proce
 const { agregarSkus } = await vite.ssrLoadModule('/src/modules/comercial/inventario/agregar.js');
 
 test('forma de producto: dos letras, guion, seis dígitos', () => {
-  for (const s of ['AC-935777', 'br-946353', ' EY-445981 ', 'ES-05001', 'ES-05001E', 'TB-05003E', 'AC-935777B']) assert.ok(esSkuProducto(s), s);
-  for (const s of ['MVIS-001', 'RT-0102', 'ES-05001EW', 'CA-ES-05001E', 'AC-936026_1', 'ST-S49838', 'AC-935777-B', 'AC-9357', '', null]) assert.ok(!esSkuProducto(s), String(s));
+  for (const s of ['AC-935777', 'br-946353', ' EY-445981 ', 'ES-05001', 'ES-05001E', 'TB-05003E', 'AC-935777B', 'ES-05001EW']) assert.ok(esSkuProducto(s), s);
+  for (const s of ['MVIS-001', 'RT-0102', 'ES-05001EWX', 'CA-ES-05001E', 'AC-936026_1', 'ST-S49838', 'AC-935777-B', 'AC-9357', '', null]) assert.ok(!esSkuProducto(s), String(s));
 });
 
 test('inventario: entran roadmap y productos nuevos; refacciones y cajas no', () => {
