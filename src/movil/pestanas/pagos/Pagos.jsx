@@ -1,21 +1,21 @@
 // Pagos (móvil) · diseño B (2026-09-12): arriba una tira con las TRES cuentas (mini resumen y selector);
 //   todo lo de abajo es de UN cliente a la vez. La pantalla principal sigue siendo una BANDEJA POR ACCIÓN.
-//   Segmented: Hoy · Calendario · Fondo · Historial
+//   Chips: Hoy · Calendario · Cálculo · Marketing · Fondo · Reglas · Historial (una sección a la vez, como la web)
+//   Cálculo · Marketing · Reglas y «＋ Pago manual» (2026-11-18) viven en SeccionesM.jsx y se descargan al abrirlos.
 //   Hoy      — grupos por etapa: Por solicitar · Por autorizar · Sin folio · Por registrar (folio sin pago) ·
 //              Vence en 7 días · Rechazados. Chips de cliente y hero con comprometido / pagado / vence 7 d.
 //   Gestos   — derecha = acción principal de la etapa (abre la hoja que toca) · izquierda = Copiar correo
 //              (siempre; si ya está solicitado copia el mismo texto para reenviar). Toast con Deshacer al
 //              solicitar y al autorizar.
 //   Calendario — mes en cuadrícula con puntos por tipo; tocar un día lista sus pagos.
-// Sin edición de reglas (sólo lectura): el candado vive en la web.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { hoyISO, isoLocal } from '../../../lib/format';
 import { useQuery } from '@tanstack/react-query';
-import { Send, Check, Hash, FileText, XCircle, Mail, RotateCcw } from 'lucide-react';
+import { Send, Check, Hash, FileText, XCircle, Mail, RotateCcw, Plus } from 'lucide-react';
 import { supabase, DB_CONFIGURED } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/themeContext';
 import { usePerfil } from '../../../lib/perfilContext';
-import { TituloGrande, HeroM, ListaAgrupada, Fila, Segmented, Vacio, HojaM, toast } from '../../piezas';
+import { TituloGrande, HeroM, ListaAgrupada, Fila, Segmented, Vacio, HojaM, BotonGrande, toast } from '../../piezas';
 import { Cargando } from '../../../components/kit';
 import { money, moneyCompact, MESES_LARGO, N } from '../../util';
 import { FilaGesto, ChipM } from '../agenda5/comun';
@@ -26,6 +26,10 @@ import { SIL_MOVIL_PAGOS } from '../../../modules/comercial/pagosv3/siluetas';
 import DetallePago from './DetallePago';
 import CalendarioM, { fechaDe } from './CalendarioM';
 import { HojaCorreo, HojaFolio, HojaRegistrar, HojaConfirmar } from './hojas';
+
+const MotorM = lazy(() => import('./SeccionesM').then((m) => ({ default: m.MotorM })));
+const ReglasM = lazy(() => import('./SeccionesM').then((m) => ({ default: m.ReglasM })));
+const HojaPagoManualM = lazy(() => import('./SeccionesM').then((m) => ({ default: m.HojaPagoManualM })));
 
 const STALE = 2 * 60 * 1000;
 const pad = (n) => String(n).padStart(2, '0');
@@ -74,6 +78,8 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
   const [fondoAbierto, setFondoAbierto] = useState(null);   // estado de cuenta del fondo (hoja)
   const [histTipo, setHistTipo] = useState(null);            // filtros del historial
   const [histRango, setHistRango] = useState('anio');
+  const [manual, setManual] = useState(false);               // hoja «＋ Pago manual»
+  const [manualVisto, setManualVisto] = useState(false);      // la hoja se descarga la primera vez que se abre
 
   const visibles = useMemo(() => clientesVisibles(perfil), [perfil]);
 
@@ -149,6 +155,7 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
 
   // ── Escrituras ──
   const editable = (p) => puedeEditarPagos(perfil, p.cliente);
+  const editables = visibles.filter((k) => puedeEditarPagos(perfil, k));   // clientes donde puede capturar
   const mover = async (pago, hacia, extra, nota) => {
     setOcupado(true);
     try { await cambiarEstado({ pago, hacia, perfil, extra, nota }); await refetch(); return true; }
@@ -295,15 +302,32 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
         ]}
       />
 
-      <div style={{ padding: '12px 16px 0' }}>
-        <Segmented size="md" style={{ display: 'flex', width: '100%' }} value={vista} onChange={setVista}
-          options={[
-            { id: 'hoy', label: 'Hoy', badge: porHacer || undefined },
-            { id: 'calendario', label: 'Calendario' },
-            { id: 'fondos', label: 'Fondo' },
-            { id: 'historial', label: 'Historial' },
-          ]} />
+      {/* Una sección a la vez. Son siete: van como chips en una fila que se desliza (la página no se mueve de lado). */}
+      <div style={{ display: 'flex', gap: 6, padding: '12px 16px 0', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+        {[
+          { id: 'hoy', label: porHacer ? `Hoy · ${porHacer}` : 'Hoy' },
+          { id: 'calendario', label: 'Calendario' },
+          { id: 'calculo', label: 'Cálculo' },
+          { id: 'marketing', label: 'Marketing' },
+          { id: 'fondos', label: 'Fondo' },
+          { id: 'reglas', label: 'Reglas' },
+          { id: 'historial', label: 'Historial' },
+        ].map((o) => <ChipM key={o.id} on={vista === o.id} onClick={() => setVista(o.id)} style={{ flex: '0 0 auto', minHeight: 44, padding: '0 14px', fontSize: 13.5 }}>{o.label}</ChipM>)}
       </div>
+
+      {editables.length > 0 && vista === 'hoy' && (
+        <div style={{ padding: '12px 16px 0' }}>
+          <BotonGrande icon={Plus} onClick={() => { setManualVisto(true); setManual(true); }}>Pago manual</BotonGrande>
+        </div>
+      )}
+
+      {(vista === 'calculo' || vista === 'marketing' || vista === 'reglas') && (
+        <Suspense fallback={<Cargando silueta={SIL_MOVIL_PAGOS} style={{ padding: '12px 16px' }} />}>
+          {vista === 'reglas'
+            ? <ReglasM cliente={clienteSel} reglas={data?.reglas || []} perfil={perfil} puedeEditar={puedeEditarPagos(perfil, clienteSel)} onCambio={refetch} />
+            : <MotorM seccion={vista} clienteSel={clienteSel} anio={anio} mes={mes} perfil={perfil} puedeEditar={(k) => puedeEditarPagos(perfil, k)} onCambio={refetch} />}
+        </Suspense>
+      )}
 
       {vista === 'hoy' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 0' }}>
@@ -434,6 +458,12 @@ export default function PagosMovil({ clienteKey = null, inicial = null }) {
         titulo="Reabrir el pago" sub={hoja?.pago ? `${CLIENTE_LABEL[hoja.pago.cliente]} · ${money(hoja.pago.monto)}` : ''}
         texto={hoja?.pago?.motivo_rechazo ? `Motivo del rechazo: ${hoja.pago.motivo_rechazo}` : 'Vuelve al inicio del flujo (Calculado) para corregirlo y solicitarlo de nuevo.'}
         label="Reabrir" icon={RotateCcw} onOk={() => reabrir(hoja.pago)} />
+
+      {manualVisto && (
+        <Suspense fallback={null}>
+          <HojaPagoManualM abierto={manual} onClose={() => setManual(false)} clientes={editables} clienteInicial={clienteSel} anio={anio} mes={mes} perfil={perfil} onGuardado={refetch} />
+        </Suspense>
+      )}
 
       <DetallePago
         pago={abierto} abierto={!!abierto} onCerrar={() => setAbierto(null)}

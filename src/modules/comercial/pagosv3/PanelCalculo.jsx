@@ -8,6 +8,7 @@ import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Boton, Pill, Segmented, TablaCompacta, toast } from '../../../components/kit';
 import M from './motor';
 import { reglaDe, CLIENTE_LABEL } from './reglas';
+import { mesesCalculo, bloquesCalculo, factorProyeccion, calculoDinamica } from './calculoPanel';
 import { mxn, mxnCorto, pctTxt, MONO, Nota, CampoInline, Entrada, ClientePill } from './ui';
 
 const MESES_CORTOS = M.MESES_CORTOS;
@@ -22,38 +23,13 @@ export default function PanelCalculo({
   const q = M.qDeMes(mesSel);
 
   const opcionesMes = useMemo(() => {
-    const arr = [];
-    for (let m = Math.max(1, mes - 2); m <= mes; m++) arr.push({ id: String(m), label: `${MESES_CORTOS[m - 1]}` });
-    return arr;
+    return mesesCalculo(mes).map((m) => ({ id: String(m), label: `${MESES_CORTOS[m - 1]}` }));
   }, [mes]);
 
   const clavesExistentes = useMemo(() => new Set(pagos.map((p) => p.clave_calculo).filter(Boolean)), [pagos]);
 
-  const bloques = clientes.map((cliente) => {
-    const rReb = reglaDe(reglas, cliente, 'rebate');
-    const rSpiff = reglaDe(reglas, cliente, 'spiff');
-    const sellIn = datosMotor.sellInMes?.[cliente]?.[per] || 0;
-    const cuota = datosMotor.cuotaMes?.[cliente]?.[per] || 0;
-    const sellOut = datosMotor.sellOutMes?.[cliente]?.[per] || 0;
-
-    let rebate = null;
-    if (rReb?.frecuencia === 'mensual') {
-      rebate = M.rebateMensual({ cliente, anio, mes: mesSel, sellIn, cuota, regla: rReb });
-    } else if (rReb?.frecuencia === 'trimestral' && rReb.modo === 'niveles') {
-      const ms = M.mesesDeQ(q);
-      const siQ = ms.reduce((s, m) => s + (datosMotor.sellInMes?.[cliente]?.[M.periodoMes(anio, m)] || 0), 0);
-      const cuQ = ms.reduce((s, m) => s + (datosMotor.cuotaMes?.[cliente]?.[M.periodoMes(anio, m)] || 0), 0);
-      rebate = M.rebateTrimestralNiveles({ cliente, anio, q, sellInQ: siQ, cuotaQ: cuQ, regla: rReb });
-    } else if (rReb?.frecuencia === 'trimestral') {
-      rebate = M.rebateTrimestralCategorias({ cliente, anio, q, porCategoria: datosMotor.sellInQCategorias?.[cliente]?.[M.periodoQ(anio, q)], regla: rReb });
-    }
-
-    const spiff = rSpiff?.base === 'sell_out'
-      ? M.spiffSellOut({ cliente, anio, mes: mesSel, sellOut, cuotaSellIn: cuota, regla: rSpiff })
-      : (rSpiff ? M.spiffSellIn({ cliente, anio, mes: mesSel, sellIn, cuota, regla: rSpiff }) : null);
-
-    return { cliente, rebate, spiff, rReb, sellIn, cuota, sellOut };
-  });
+  // Rebate y SPIFF por cliente: ./calculoPanel.js (lo comparte el celular).
+  const bloques = bloquesCalculo({ clientes, reglas, datosMotor, anio, mes: mesSel });
 
   return (
     <Panel titulo="Cálculo" meta="lo que el motor calcula solo · entra al flujo como pago calculado"
@@ -80,10 +56,7 @@ export default function PanelCalculo({
 function BloqueCliente({ cliente, rebate, spiff, rReb, sellIn, cuota, anio, mes, q, puedeEditar, onCrearPago, yaExiste }) {
   const { theme } = useTheme();
   const hair = `1px solid ${theme.border}`;
-  const hoy = new Date();
-  const diasMes = new Date(anio, mes, 0).getDate();
-  const diaHoy = (hoy.getFullYear() === anio && hoy.getMonth() + 1 === mes) ? hoy.getDate() : diasMes;
-  const factorProy = diaHoy > 0 ? diasMes / diaHoy : 1;
+  const factorProy = factorProyeccion(anio, mes);
 
   const linea = (p, etiqueta) => {
     if (!p) return null;
@@ -181,13 +154,7 @@ function DinamicaVendedores({ anio, mes, reglas, datosMotor, dinamica, puedeEdit
     }));
   }, [cfgDB?.id, anio, mes]);
 
-  const vendedores = datosMotor.vendedoresDicotech?.[per] || [];
-  const calc = M.dinamicaVendedores({
-    anio, mes, vendedores,
-    meta: Number(meta) || 0,
-    premios: premios.map((p) => ({ pos: p.pos, premio: p.premio, monto: Number(p.monto) || 0 })),
-    regla: reglaDe(reglas, 'dicotech', 'dinamica'),
-  });
+  const { calc } = calculoDinamica({ anio, mes, reglas, datosMotor, dinamica, meta, premios });
   const existe = yaExiste(calc.clave);
 
   const compartir = async () => {

@@ -7,12 +7,10 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Boton, TablaCompacta, toast } from '../../../components/kit';
 import { Modal } from '../../../components/perfil/comun';
-import { supabase } from '../../../lib/supabase';
-import { cachedQuery } from '../../../lib/queries';
+import { traerApoyoProteccion, detallePagoManual } from './datos';
 import M from './motor';
 import { TIPOS_MANUALES, TIPO_META } from './estados';
 import { CLIENTE_LABEL } from './reglas';
-import { LISTA_POR_CLIENTE } from '../propuestas/constantes';
 import { mxn, MONO, Nota, CampoInline, Entrada, Selector, AreaTexto } from './ui';
 
 export default function FormPagoManual({ abierto, onCerrar, clientes, clienteInicial, anio, mes, onGuardar }) {
@@ -34,33 +32,11 @@ export default function FormPagoManual({ abierto, onCerrar, clientes, clienteIni
   const calcularApoyo = async () => {
     setCargandoApoyo(true);
     try {
-      // Última semana cargada del inventario que reporta el cliente.
-      const { data: ult } = await supabase.from('inventario_cliente')
-        .select('anio, semana').eq('cliente', f.cliente)
-        .order('anio', { ascending: false }).order('semana', { ascending: false }).limit(1);
-      let qInv = supabase.from('inventario_cliente').select('sku, stock, titulo').eq('cliente', f.cliente);
-      if (ult?.[0]) qInv = qInv.eq('anio', ult[0].anio).eq('semana', ult[0].semana);
-      // Sólo la lista natural del cliente (2026-10-05): la vista tiene 9.6 K filas de 10 listas y el `limit(5000)`
-      // sin filtro recortaba a la mitad y mezclaba listas (el primer renglón de cualquier lista valía como «vigente»).
-      const lista = LISTA_POR_CLIENTE[f.cliente];
-      const [inv, precios] = await Promise.all([
-        qInv,
-        cachedQuery(supabase.from('v_estrategia_precios_lista').select('sku, precio, lista, anio, mes').eq('lista', lista).limit(5000)),
-      ]);
-      const invRows = (inv.data || []).map((r) => ({
-        sku: r.sku, descripcion: r.titulo, piezas: Number(r.stock) || 0,
-      })).filter((r) => r.piezas > 0);
-      // Precio anterior = el más reciente de precios_historico distinto del vigente.
-      const { data: hist } = await supabase.from('precios_historico')
-        .select('sku, precio, anio, mes').eq('lista', lista)
-        .order('anio', { ascending: false }).order('mes', { ascending: false }).limit(5000);
-      const nuevos = {}, anteriores = {};
-      for (const p of precios.data || []) if (nuevos[p.sku] == null) nuevos[p.sku] = Number(p.precio) || 0;
-      for (const h of hist || []) if (anteriores[h.sku] == null && nuevos[h.sku] != null && Number(h.precio) !== nuevos[h.sku]) anteriores[h.sku] = Number(h.precio) || 0;
-      const r = M.apoyoProteccionPrecio({ inventario: invRows, preciosAnteriores: anteriores, preciosNuevos: nuevos });
-      setApoyo({ ...r, inventario: invRows.length });
+      // Consulta + motor en ./datos.js (la usa también el celular).
+      const r = await traerApoyoProteccion(f.cliente);
+      setApoyo(r);
       if (r.total > 0 && !f.monto) setF((x) => ({ ...x, monto: String(r.total) }));
-      if (r.filas.length === 0) toast.ok(`Inventario de ${CLIENTE_LABEL[f.cliente]}: ${invRows.length} SKU. Sin bajas de lista detectadas — captura el monto.`);
+      if (r.filas.length === 0) toast.ok(`Inventario de ${CLIENTE_LABEL[f.cliente]}: ${r.inventario} SKU. Sin bajas de lista detectadas — captura el monto.`);
     } catch (e) {
       toast.error('No se pudo traer el apoyo: ' + (e.message || e));
     } finally { setCargandoApoyo(false); }
@@ -71,9 +47,7 @@ export default function FormPagoManual({ abierto, onCerrar, clientes, clienteIni
     try {
       await onGuardar?.({
         ...f, monto: Number(f.monto),
-        detalle: apoyo?.filas?.length
-          ? { filas: apoyo.filas.map((x) => ({ concepto: `${x.piezas} pz ${x.sku} × ${mxn(x.diferencia)}`, base: x.piezas, monto: x.monto })), total_apoyo: apoyo.total }
-          : { filas: [{ concepto: f.concepto, monto: Number(f.monto) }] },
+        detalle: detallePagoManual({ concepto: f.concepto, monto: f.monto, apoyo }),
       });
       onCerrar?.();
       setF((x) => ({ ...x, concepto: '', monto: '', notas: '' }));
