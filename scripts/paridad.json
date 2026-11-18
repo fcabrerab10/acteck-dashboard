@@ -22,7 +22,7 @@
       "pantalla": "Sell In consolidado",
       "bloque": "Comparador de periodos",
       "falta": "movil",
-      "estado": "pendiente"
+      "estado": "hecho · 4.2.0"
     },
     {
       "pantalla": "Sell In consolidado",
@@ -94,7 +94,7 @@
       "pantalla": "Página del cliente",
       "bloque": "Comparador de periodos y Exportar",
       "falta": "movil",
-      "estado": "pendiente"
+      "estado": "hecho · 4.2.0"
     },
     {
       "pantalla": "Propuestas",
@@ -118,7 +118,7 @@
       "pantalla": "Proyectos y forecast",
       "bloque": "Tablero arrastrable y matriz SKU × mes",
       "falta": "movil",
-      "estado": "pendiente"
+      "estado": "hecho · 4.2.0"
     },
     {
       "pantalla": "Tracking",
@@ -160,7 +160,7 @@
       "pantalla": "Todas",
       "bloque": "Cabecera común con color por sección",
       "falta": "movil",
-      "estado": "pendiente · el celular usa TituloGrande; falta el color de sección"
+      "estado": "hecho · 4.2.0"
     }
   ],
   "importsModulesAMovil": [
