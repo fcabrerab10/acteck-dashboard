@@ -15,7 +15,7 @@ import { Cargando, Panel, Pill, Boton, toast } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { supabase } from '../../lib/supabase';
 import { useAgenda5, actualizarItem, completarItem, guardarRegistroDia, guardarCheckin, crearObjetivoSemana, marcarObjetivoSemana, borrarObjetivoSemana } from './datos';
-import { cuentasPendientes } from './base/calculo';
+import { semanaDe, ideasDe, parchePromoverIdea, equipoDe, checkinDe, DIAS_CORTOS } from './vistas';
 import { hoyDe, bandejaDe, pendientesDe, isoDia, sumarDias, fmtMin, esDe, abierto } from './calculo';
 import { Avatar, FilaTarea, Titulo, Seccion, Palomita } from './comun';
 import Hoy from './Hoy';
@@ -149,8 +149,8 @@ export default function Agenda5({ onNavegar, inicial = null }) {
 // ── Ideas: tipo idea/nota, se promueven a tarea (hoy / cuando sea) o a proyecto
 function Ideas({ d, uid, propietario, personasPorId, puedeEditar, onAbrirItem, onCapturar }) {
   const { theme } = useTheme();
-  const lista = d.items.filter((it) => esDe(it, propietario) && abierto(it) && (it.tipo === 'idea' || it.tipo === 'nota') && !it.bandeja).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
-  const promover = (it, cuando) => actualizarItem(it.id, { tipo: 'tarea', cuando, promovido_a: null }).then(() => toast.ok('Ahora es un pendiente')).catch((e) => toast.error(e.message));
+  const lista = ideasDe(d.items, propietario);
+  const promover = (it, cuando) => actualizarItem(it.id, parchePromoverIdea(cuando)).then(() => toast.ok('Ahora es un pendiente')).catch((e) => toast.error(e.message));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <Titulo meta={`${lista.length} ideas y notas · escribe «idea: …» en la captura`} acciones={puedeEditar && <Boton primario onClick={onCapturar}>Nueva idea (N)</Boton>}>Ideas</Titulo>
@@ -198,18 +198,10 @@ function Semana({ d, uid, propietario, personasPorId, onAbrirItem, puedeEditar }
   const { theme } = useTheme();
   const hoy = useMemo(() => new Date(), []);
   const [nuevoObj, setNuevoObj] = useState('');
-  const lunes = useMemo(() => { const x = new Date(hoy); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }, [hoy]);
-  const dias = Array.from({ length: 7 }, (_, i) => isoDia(sumarDias(lunes, i)));
-  const porDia = dias.map((iso) => ({ iso, h: hoyDe(d.items, propietario, new Date(`${iso}T12:00:00`), { reuniones: d.reuniones, google: d.google }) }));
-  const totHechas = porDia.reduce((s, x) => s + x.h.hechasHoy.length, 0), totMin = porDia.reduce((s, x) => s + x.h.minReales, 0);
-  const porArea = new Map();
-  for (const x of porDia) for (const it of x.h.hechasHoy) { const a = d.areas.find((z) => z.id === it.area_id); const k = a?.nombre || 'Sin área'; porArea.set(k, (porArea.get(k) || 0) + (Number(it.min_real) || Number(it.duracion_min) || 0)); }
-  const DL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-  const semanaIso = isoDia(lunes);
-  const objetivos = (d.objetivos || []).filter((o) => o.usuario === propietario && o.semana === semanaIso).sort((a, b) => (a.orden || 0) - (b.orden || 0) || String(a.created_at).localeCompare(String(b.created_at)));
-  const cumplidos = objetivos.filter((o) => o.cumplido).length;
-  const sinContacto = propietario === uid ? cuentasPendientes(d.cuentas || [], hoy) : [];
-  const acuerdosVencidos = d.items.filter((it) => it.tipo === 'punto' && (it.estado === 'abierta' || it.estado === 'arrastrada') && it.fecha_limite && it.fecha_limite < isoDia(hoy) && (it.responsables || []).includes(propietario));
+  // Cálculo en ./vistas.js (lo comparte el celular).
+  const sem = semanaDe(d, propietario, { hoy, uid });
+  const { lunes, semanaIso, totHechas, totMin, objetivos, cumplidos, sinContacto, acuerdosVencidos } = sem;
+  const porDia = sem.dias, porArea = sem.porArea, DL = DIAS_CORTOS;
   const agregar = async () => { if (!nuevoObj.trim()) return; try { await crearObjetivoSemana(propietario, semanaIso, nuevoObj.trim()); setNuevoObj(''); } catch (e) { toast.error(e.message); } };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -235,8 +227,8 @@ function Semana({ d, uid, propietario, personasPorId, onAbrirItem, puedeEditar }
         </div>)}
       </div>
       <Panel titulo="Tiempo por área" meta="minutos reales (o estimados) de lo hecho esta semana">
-        {[...porArea.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '160px 1fr 70px', gap: 8, alignItems: 'center', fontSize: 12, padding: '3px 0' }}><span>{k}</span><div style={{ height: 6, background: `${theme.text}12`, borderRadius: 999 }}><div style={{ height: '100%', width: `${(v / Math.max(1, totMin)) * 100}%`, background: theme.accent, borderRadius: 999 }} /></div><span style={{ textAlign: 'right', color: theme.textMuted }}>{fmtMin(v)}</span></div>)}
-        {!porArea.size && <div style={{ fontSize: 12, color: theme.textMuted }}>Aún nada registrado esta semana.</div>}
+        {porArea.map(([k, v]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '160px 1fr 70px', gap: 8, alignItems: 'center', fontSize: 12, padding: '3px 0' }}><span>{k}</span><div style={{ height: 6, background: `${theme.text}12`, borderRadius: 999 }}><div style={{ height: '100%', width: `${(v / Math.max(1, totMin)) * 100}%`, background: theme.accent, borderRadius: 999 }} /></div><span style={{ textAlign: 'right', color: theme.textMuted }}>{fmtMin(v)}</span></div>)}
+        {!porArea.length && <div style={{ fontSize: 12, color: theme.textMuted }}>Aún nada registrado esta semana.</div>}
       </Panel>
     </div>
   );
@@ -247,13 +239,13 @@ function Equipo({ d, uid, personas, yo, perfil, onVerAgenda, puedeEditar }) {
   const { theme } = useTheme();
   const hoy = useMemo(() => new Date(), []);
   const hoyIso = isoDia(hoy);
-  const [resp, setResp] = useState(() => d.checkins.find((c) => c.usuario === uid && c.fecha === hoyIso && c.tipo === 'dia')?.respuesta || '');
+  const [resp, setResp] = useState(() => checkinDe(d.checkins, uid, hoyIso)?.respuesta || '');
   const guardar = () => guardarCheckin(uid, hoyIso, 'dia', resp).then(() => toast.ok('Check-in guardado')).catch((e) => toast.error(e.message));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Titulo meta="lo que trae cada quien hoy · check-in «¿qué hiciste hoy?»">Equipo</Titulo>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
-        {personas.map((p) => { const h = hoyDe(d.items, p.user_id, hoy, { reuniones: d.reuniones }); const ci = d.checkins.find((c) => c.usuario === p.user_id && c.fecha === hoyIso && c.tipo === 'dia'); return (
+        {equipoDe(d, personas, hoy).map(({ persona: p, h, checkin: ci }) => { return (
           <Panel key={p.user_id} titulo={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Avatar persona={p} size={22} />{p.nombre}</span>} meta={`${h.hechasHoy.length} hechas · ${h.deHoy.length} abiertas · ${h.deAyer.length} atrasadas`} acciones={<Boton size="sm" onClick={() => onVerAgenda(p)}>Ver agenda</Boton>}>
             {h.deHoy.slice(0, 5).map((it) => <div key={it.id} style={{ fontSize: 12, padding: '2px 0', color: theme.text }}>· {it.titulo}</div>)}
             {!h.deHoy.length && <div style={{ fontSize: 12, color: theme.textMuted }}>Sin pendientes para hoy.</div>}

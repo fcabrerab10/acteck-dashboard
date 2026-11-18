@@ -7,66 +7,33 @@ import { Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, Boton, Pill, Segmented, TablaCompacta, toast } from '../../../components/kit';
-import { supabase } from '../../../lib/supabase';
-import { invalidateDataCache } from '../../../lib/queries';
+import { cambiarCobroActividad } from './datos';
+import { marketingDelPeriodo } from './calculoPanel';
 import M from './motor';
 import { CLIENTE_LABEL } from './reglas';
 import { mxn, MONO, Nota, ClientePill } from './ui';
-
-const mesDe = (a) => {
-  if (a.fecha) return Number(String(a.fecha).slice(5, 7));
-  const n = Number(a.mes);
-  if (Number.isFinite(n) && n >= 1 && n <= 12) return n;
-  const i = M.MESES_LARGOS.findIndex((x) => x.toLowerCase() === String(a.mes || '').toLowerCase());
-  return i >= 0 ? i + 1 : 0;
-};
 
 export default function PanelMarketing({ actividades, clientes, anio, mes, fondos, puedeEditar, onCambio, onCrearPago, pagos, abiertoInicial = false }) {
   const { theme } = useTheme();
   const [guardando, setGuardando] = useState(null);
 
-  const delMes = useMemo(
-    () => (actividades || []).filter((a) => clientes.includes(a.cliente) && Number(a.anio) === anio && mesDe(a) === mes),
-    [actividades, clientes.join(','), anio, mes],
+  const { delMes, porCliente } = useMemo(
+    () => marketingDelPeriodo({ actividades, clientes, anio, mes, pagos }),
+    [actividades, clientes.join(','), anio, mes, pagos],
   );
 
   const cambiarCobro = async (act, cobro) => {
     setGuardando(act.id);
     try {
-      const { error } = await supabase.from('marketing_actividades').update({ cobro }).eq('id', act.id);
-      if (error) throw error;
-      // "fondo" descuenta del saldo; "empresa" entra al flujo de pagos.
-      if (cobro === 'fondo') {
-        const fondo = (fondos || []).find((f) => f.cliente === act.cliente && f.fondo_key === 'mkt');
-        const monto = Number(act.inversion ?? act.costo) || 0;
-        if (fondo && monto > 0) {
-          if (Number(fondo.saldo) < 0) {
-            toast.error(`El fondo de ${CLIENTE_LABEL[act.cliente]} está en negativo: autoriza el sobregiro en el panel de Fondos.`);
-          } else {
-            await supabase.from('pagos_fondos_movimientos').insert({
-              fondo_id: fondo.fondo_id, cliente: act.cliente,
-              fecha: act.fecha || `${anio}-${String(mes).padStart(2, '0')}-01`, anio, mes,
-              tipo: 'cargo', monto, concepto: act.nombre, actividad_id: act.id, origen: 'marketing',
-            });
-          }
-        }
-      } else {
-        await supabase.from('pagos_fondos_movimientos').delete().eq('actividad_id', act.id).eq('origen', 'marketing');
-      }
-      invalidateDataCache();
+      // La escritura vive en ./datos.js (la usa también el celular).
+      const r = await cambiarCobroActividad({ act, cobro, fondos, anio, mes });
+      if (r.fondoNegativo) toast.error(`El fondo de ${CLIENTE_LABEL[act.cliente]} está en negativo: autoriza el sobregiro en el panel de Fondos.`);
       toast.ok(cobro === 'fondo' ? 'Cargada al fondo del cliente' : 'La paga la empresa · entra al flujo de pagos');
       await onCambio?.();
     } catch (e) {
       toast.error(e.message || String(e));
     } finally { setGuardando(null); }
   };
-
-  const porCliente = clientes.map((c) => {
-    const acts = delMes.filter((a) => a.cliente === c);
-    const prop = M.marketingDelMes({ cliente: c, anio, mes, actividades: acts }).pago;
-    const yaHay = (pagos || []).some((p) => p.clave_calculo === prop.clave);
-    return { cliente: c, acts, prop, yaHay };
-  }).filter((x) => x.acts.length > 0);
 
   const columnas = [
     { key: 'nombre', label: 'Actividad', align: 'left' },

@@ -264,7 +264,7 @@ export function marketingDelMes({ cliente, anio, mes, actividades = [] }) {
   };
 }
 
-function mesDeActividad(a) {
+export function mesDeActividad(a) {
   if (a.fecha) return Number(String(a.fecha).slice(5, 7));
   const m = Number(a.mes);
   if (Number.isFinite(m) && m >= 1 && m <= 12) return m;

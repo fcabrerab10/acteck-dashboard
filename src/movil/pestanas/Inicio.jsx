@@ -5,8 +5,8 @@
 // (sell out global, sell in del año, inventario, llega en <mes>) → mix de sell in como pay (inicio/PayMix).
 // Fuera a propósito: agenda, «requiere decisión», sell out por cuenta, tabla de meses, detalle de inventario:
 // cada uno tiene su pestaña. Quien no tiene permiso sensible ve sus clientes y sus avisos.
-import React, { useMemo, useState, lazy } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
+import { AlertTriangle, LayoutGrid } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import FrescuraPill from '../../components/FrescuraPill';
@@ -23,7 +23,11 @@ import { colorCliente } from '../datos';
 import { puedeVerSensible, puedeVerPestanaGlobal, puedeVerCliente, puedeVerInicio } from '../../lib/permisos';
 import { saludo, diaLargo, nombreCorto, moneyCompact, money, pct, deltaPct, tonoCuota, MESES, N } from '../util';
 
+import { useDispositivo, usePrefsDispositivo, setPrefDispositivo } from '../../lib/dispositivo';
+
 const FichaCliente = lazy(() => import('./FichaCliente')); // se descarga al abrirla (2026-11-11)
+// Modo «tarjetas» (2026-11-18): catálogo y edición sólo se descargan si este dispositivo lo eligió (preferencia `inicio`).
+const InicioTarjetasM = lazy(() => import('./inicio/InicioTarjetasM'));
 const fmtM = (n) => moneyCompact(n);
 // El hero de escritorio termina con «N asuntos requieren decisión hoy»; en el celular esa frase sobra (Fernando: nada de «requiere decisión»).
 const sinDecision = (t) => String(t || '').replace(/\s*(Sin asuntos críticos pendientes\.|[^.]*requieren? decisión hoy\.)/g, '').trim();
@@ -48,6 +52,13 @@ export default function Inicio() {
   const veInicio = puedeVerInicio(perfil);
   const sensible = puedeVerSensible(perfil);
   const veInventario = puedeVerPestanaGlobal(perfil, 'inventario_global');
+  const veCobranza = puedeVerPestanaGlobal(perfil, 'cobranza_global');
+  // Inicio en página (default) o en tarjetas: preferencia POR DISPOSITIVO (lib/dispositivo.js, llave `inicio`), la misma
+  // que usa la web. Las tarjetas son cifras de la empresa: sin permiso sensible no hay modo tarjetas.
+  const { modo: modoDisp } = useDispositivo();
+  const prefsDisp = usePrefsDispositivo();
+  const enTarjetas = sensible && prefsDisp.inicio === 'tarjetas';
+  const ponerInicio = (v) => setPrefDispositivo(modoDisp, 'inicio', v);
   const clientesVisibles = useMemo(() => ['digitalife', 'pcel', 'dicotech'].filter((k) => puedeVerCliente(perfil, k)), [perfil]);
   const r = useMemo(() => (data ? calcular(data, alertas, { anio, mesActual, hoy, modo, sensible, clientesVisibles, enCurso }) : null), [data, alertas, anio, mesActual, hoy, modo, sensible, clientesVisibles, enCurso]);
 
@@ -80,6 +91,18 @@ export default function Inicio() {
   const mesHoyKey = `${anioHoy}-${String(mesHoy).padStart(2, '0')}`;
   const llega = ec.porMes.find((m) => m.key === mesHoyKey) || ec.porMes.find((m) => m.key !== 'sin ETA') || null;
   const metaGrafica = c.mesesConDatos ? `${c.mesesArriba} de ${c.mesesConDatos} meses arriba de ${anio - 1}` : undefined;
+
+  if (enTarjetas) {
+    return (
+      <div data-stagger>
+        <TituloGrande titulo={titulo} sub={sub} derecha={selector} />
+        <Suspense fallback={<div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><Skeleton h={230} r={18} style={{ gridColumn: 'span 2' }} /><Skeleton h={112} r={18} /><Skeleton h={112} r={18} /></div>}>
+          <InicioTarjetasM r={r} ve={{ inventario: veInventario, cobranza: veCobranza }} anio={anio} labelPeriodo={periodoLbl}
+            onNavegar={(pagina) => nav.navegar({ pagina })} onVerPagina={() => ponerInicio('pagina')} />
+        </Suspense>
+      </div>
+    );
+  }
 
   return (
     <div data-stagger>
@@ -127,6 +150,15 @@ export default function Inicio() {
       )}
 
       {sensible && <PayMix mixes={r.mixes} formato={fmtM} titulo={`Mix de sell in · ${periodoLbl}`} style={{ margin: '18px 16px 0' }} />}
+
+      {/* Interruptor al modo tarjetas (las mismas de la web; se eligen y acomodan). Se recuerda en este dispositivo. */}
+      {sensible && (
+        <div style={{ padding: '18px 16px 0' }}>
+          <button type="button" onClick={() => ponerInicio('tarjetas')} style={{ width: '100%', minHeight: 46, borderRadius: 12, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+            <LayoutGrid size={16} />Ver Inicio en tarjetas
+          </button>
+        </div>
+      )}
 
       {!sensible && <ListaAgrupada titulo={`Clientes · ${periodoLbl}`} style={{ marginTop: 18 }} pie="Toca un cliente para ver su ficha.">
         {r.clientes.map((cl) => (

@@ -14,6 +14,7 @@ import { escribir } from '../../../lib/buzon';
 import { puedeVerPestanaCliente, puedeEditarPestanaCliente } from '../../../lib/permisos';
 import { CLIENTES } from './reglas';
 import M from './motor';
+import { LISTA_POR_CLIENTE } from '../propuestas/constantes';
 
 const pad = (n) => String(n).padStart(2, '0');
 export const periodoDe = (anio, mes) => `${anio}-${pad(mes)}`;
@@ -227,6 +228,73 @@ export async function crearPagoManual({ datos, perfil }) {
   await bitacora(data.id, null, 'calculado', perfil, 'Capturado a mano');
   invalidateDataCache();
   return data;
+}
+
+/**
+ * Apoyo de cálculo de protección de precio: inventario que reporta el cliente (última semana) × baja de su lista natural
+ * (precio vigente contra el anterior distinto en precios_historico). No crea nada: devuelve { filas, total, inventario }.
+ */
+export async function traerApoyoProteccion(cliente) {
+  // Última semana cargada del inventario que reporta el cliente.
+  const { data: ult } = await supabase.from('inventario_cliente')
+    .select('anio, semana').eq('cliente', cliente)
+    .order('anio', { ascending: false }).order('semana', { ascending: false }).limit(1);
+  let qInv = supabase.from('inventario_cliente').select('sku, stock, titulo').eq('cliente', cliente);
+  if (ult?.[0]) qInv = qInv.eq('anio', ult[0].anio).eq('semana', ult[0].semana);
+  // Sólo la lista natural del cliente (2026-10-05): la vista tiene 9.6 K filas de 10 listas y el `limit(5000)`
+  // sin filtro recortaba a la mitad y mezclaba listas (el primer renglón de cualquier lista valía como «vigente»).
+  const lista = LISTA_POR_CLIENTE[cliente];
+  const [inv, precios] = await Promise.all([
+    qInv,
+    cachedQuery(supabase.from('v_estrategia_precios_lista').select('sku, precio, lista, anio, mes').eq('lista', lista).limit(5000)),
+  ]);
+  const invRows = (inv.data || []).map((r) => ({ sku: r.sku, descripcion: r.titulo, piezas: Number(r.stock) || 0 })).filter((r) => r.piezas > 0);
+  // Precio anterior = el más reciente de precios_historico distinto del vigente.
+  const { data: hist } = await supabase.from('precios_historico')
+    .select('sku, precio, anio, mes').eq('lista', lista)
+    .order('anio', { ascending: false }).order('mes', { ascending: false }).limit(5000);
+  const nuevos = {}, anteriores = {};
+  for (const p of precios.data || []) if (nuevos[p.sku] == null) nuevos[p.sku] = Number(p.precio) || 0;
+  for (const h of hist || []) if (anteriores[h.sku] == null && nuevos[h.sku] != null && Number(h.precio) !== nuevos[h.sku]) anteriores[h.sku] = Number(h.precio) || 0;
+  const r = M.apoyoProteccionPrecio({ inventario: invRows, preciosAnteriores: anteriores, preciosNuevos: nuevos });
+  return { ...r, inventario: invRows.length };
+}
+
+/** `detalle` de un pago manual: las filas del apoyo de protección de precio si lo hay; si no, una fila con el concepto. */
+export function detallePagoManual({ concepto, monto, apoyo = null }) {
+  const mxn0 = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-MX')}`; // igual que ui.jsx#mxn
+  return apoyo?.filas?.length
+    ? { filas: apoyo.filas.map((x) => ({ concepto: `${x.piezas} pz ${x.sku} × ${mxn0(x.diferencia)}`, base: x.piezas, monto: x.monto })), total_apoyo: apoyo.total }
+    : { filas: [{ concepto, monto: Number(monto) }] };
+}
+
+/**
+ * Marketing: quién paga una actividad. 'fondo' la descuenta del fondo de marketing del cliente (movimiento de cargo);
+ * 'empresa' quita ese cargo y la actividad entra al pago de marketing del mes. Devuelve { fondoNegativo } cuando el
+ * fondo está en negativo y por eso NO se registró el cargo (el sobregiro se autoriza en Fondos).
+ */
+export async function cambiarCobroActividad({ act, cobro, fondos = [], anio, mes }) {
+  const { error } = await supabase.from('marketing_actividades').update({ cobro }).eq('id', act.id);
+  if (error) throw error;
+  let fondoNegativo = false;
+  if (cobro === 'fondo') {
+    const fondo = (fondos || []).find((f) => f.cliente === act.cliente && f.fondo_key === 'mkt');
+    const monto = Number(act.inversion ?? act.costo) || 0;
+    if (fondo && monto > 0) {
+      if (Number(fondo.saldo) < 0) fondoNegativo = true;
+      else {
+        await supabase.from('pagos_fondos_movimientos').insert({
+          fondo_id: fondo.fondo_id, cliente: act.cliente,
+          fecha: act.fecha || `${anio}-${pad(mes)}-01`, anio, mes,
+          tipo: 'cargo', monto, concepto: act.nombre, actividad_id: act.id, origen: 'marketing',
+        });
+      }
+    }
+  } else {
+    await supabase.from('pagos_fondos_movimientos').delete().eq('actividad_id', act.id).eq('origen', 'marketing');
+  }
+  invalidateDataCache();
+  return { fondoNegativo };
 }
 
 export async function borrarPago({ pago }) {
