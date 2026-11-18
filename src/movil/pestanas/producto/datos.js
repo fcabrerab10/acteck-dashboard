@@ -15,7 +15,7 @@ export function useProducto360(sku, { enabled = true, hoy = new Date() } = {}) {
     queryFn: async () => {
       const anio = hoy.getFullYear();
       const [roadmap, sellin, clientes, sellout, cuentas, invCuentas, invSku, almacenes, transito, precios, stockAnio] = await Promise.all([
-        seg(cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca,categoria,familia').eq('sku', s).maybeSingle()).then((r) => r.data), 'roadmap'),
+        seg(cachedQuery(supabase.from('v_skus_producto').select('sku,descripcion,marca,categoria,familia').eq('sku', s).maybeSingle()).then((r) => r.data), 'roadmap'),
         seg(fetchAll('v_analisis_cliente_sku_mes', 'cliente,anio,mes,fact_neta,piezas_venta_neta', (q) => q.eq('articulo', s).gte('anio', anio - 2)), 'sell in'),
         seg(fetchAll('v_analisis_cliente_mes', 'cliente,cliente_nombre,canal', (q) => q.eq('anio', anio).eq('mes', hoy.getMonth() + 1)), 'clientes'),
         seg(fetchAll('vs_sellout_cuenta_sku_mes', 'cuenta,anio,mes,cantidad,importe', (q) => q.eq('sku', s).gte('anio', anio - 2)), 'sell out'),

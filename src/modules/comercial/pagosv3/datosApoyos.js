@@ -12,7 +12,7 @@ export async function buscarSkus(texto) {
   if (t.length < 2) return [];
   const sinGuion = t.replace(/-/g, '');
   const conGuion = /^[a-z]{2}\d/i.test(sinGuion) ? `${sinGuion.slice(0, 2)}-${sinGuion.slice(2)}` : t;
-  return q(supabase.from('roadmap_sku').select('sku,descripcion,marca').or(`sku.ilike.%${conGuion}%,sku.ilike.%${t}%,descripcion.ilike.%${t}%`).limit(8));
+  return q(supabase.from('v_skus_producto').select('sku,descripcion,marca').or(`sku.ilike.%${conGuion}%,sku.ilike.%${t}%,descripcion.ilike.%${t}%`).limit(8));
 }
 
 /** Precio de la última factura al cliente e inventario que hoy reporta el cliente para ese SKU. */

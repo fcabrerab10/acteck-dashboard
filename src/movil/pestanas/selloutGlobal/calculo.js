@@ -133,7 +133,7 @@ export function resumenSellOut({ cuentas = [], mensual = [], dias = [], skuAnio 
   const mixes = { canal: aFilas(canalMap, canalLabel), marca: aFilas(marcaMap), categoria: aFilas(catMap) };
 
   // SKUs activos frente al roadmap.
-  const skusRoadmap = new Set(roadmap.map((r) => String(r.sku || '').toUpperCase()).filter(Boolean));
+  const skusRoadmap = new Set(roadmap.filter((r) => r.en_roadmap !== false).map((r) => String(r.sku || '').toUpperCase()).filter(Boolean));
   const sinMovimiento = [...skusRoadmap].filter((s) => !activos.has(s)).length;
   const activosRoadmap = [...activos].filter((s) => skusRoadmap.has(s)).length;
 

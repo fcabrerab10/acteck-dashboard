@@ -31,7 +31,7 @@ export function usePcs() {
         skus.length ? suave(leer(supabase.from('v_pcs_ventas').select('sku,cliente_nombre,fecha,folio,movimiento_venta,piezas,monto'))) : [],
         propios.length ? suave(leer(supabase.from('v_medidas_inventario_sku').select('articulo,inv_actual_disponible').in('articulo', propios))) : [],
         propios.length ? suave(leer(supabase.from('v_transito_sku').select('sku,cantidad,eta_mas_cercana').in('sku', propios))) : [],
-        propios.length ? suave(leer(supabase.from('roadmap_sku').select('sku,descripcion').in('sku', propios))) : [],
+        propios.length ? suave(leer(supabase.from('v_skus_producto').select('sku,descripcion').in('sku', propios))) : [],
       ]);
       const mapaPrecios = {};
       for (const p of precios) if (p.lista === LISTA_PCS || mapaPrecios[p.sku] == null) mapaPrecios[p.sku] = Number(p.precio);

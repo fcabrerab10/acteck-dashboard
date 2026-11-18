@@ -35,7 +35,7 @@ export function useBaseReservas(hoy) {
       const anioMin = anio - 2;
       const tolerante = (p, nombre) => p.catch((e) => { console.error(`${nombre}:`, e); return []; });
       const [roadmap, soRows, pcelRows, embRows, invRows, stDgl, stDct] = await Promise.all([
-        fetchAll('roadmap_sku', 'sku,descripcion,marca,familia,rdmp,sort_order'),
+        fetchAll('v_skus_producto', 'sku,descripcion,marca,familia,rdmp,sort_order'),
         tolerante(fetchAllQ(() => supabase.from('sellout_sku').select('cliente,anio,mes,sku,piezas').gte('anio', anioMin), { orderCol: 'id', label: 'sellout_sku' }), 'sellout_sku'),
         tolerante(fetchAllQ(() => supabase.from('sellout_pcel').select('anio,semana,sku,inventario,vta_mes_1,vta_mes_1_nombre,vta_mes_2,vta_mes_2_nombre,vta_mes_3,vta_mes_3_nombre').gte('anio', anio - 1), { orderCol: 'id', label: 'sellout_pcel' }), 'sellout_pcel'),
         tolerante(fetchAllQ(() => supabase.from('embarques_compras').select('codigo,po,arribo_almacen,arribo_cedis,eta_puerto,po_qty,shp_qty,contenedor,estatus'), { orderCol: 'id', label: 'embarques_compras' }), 'embarques_compras'),

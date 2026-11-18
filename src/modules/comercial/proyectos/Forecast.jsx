@@ -43,7 +43,7 @@ export default function Forecast({ yoId }) {
   const { data: exportadas = [] } = useForecastCrm(cliente?.key); // lo que ya salió del dashboard a la plantilla (y por tanto ya está o estará en el CRM)
   const { data: roadmap } = useRoadmap();
   const { data: clientesErp = [] } = useClientesErp();
-  const rd = useMemo(() => new Map((roadmap || []).map((r) => [r.sku, r])), [roadmap]);
+  const rd = useMemo(() => new Map((roadmap || []).filter((r) => r.activo !== false).map((r) => [r.sku, r])), [roadmap]);
   const nombreErp = useMemo(() => (sel === 'erp' ? clientesErp.find((c) => c.codigo === codigoErp)?.nombre || codigoErp : null), [sel, codigoErp, clientesErp]);
 
   // Ya capturado = lo que está en el CRM (copia) + lo exportado desde aquí para cualquier mes de la ventana.

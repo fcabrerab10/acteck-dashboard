@@ -11,7 +11,8 @@ import BuscadorEntiende from '../sellin/BuscadorEntiende';
 import { filasSkuAnual, columnasVentana, categoriasDe } from './skuAnual';
 
 /** Resumen de actividad: SKUs con venta en el último mes de la ventana y SKUs del roadmap sin venta en los últimos 3. */
-export function actividadSkus(filas = [], roadmap = []) {
+export function actividadSkus(filas = [], todos = []) {
+  const roadmap = todos.filter((r) => r.en_roadmap !== false);
   const activos = filas.filter((f) => (f.piezas?.[11] || 0) > 0 || (f.monto?.[11] || 0) > 0).length;
   const con3 = new Set(filas.filter((f) => [9, 10, 11].some((i) => (f.piezas?.[i] || 0) > 0 || (f.monto?.[i] || 0) > 0)).map((f) => f.sku));
   const sinMovimiento = roadmap.filter((r) => !con3.has(String(r.sku || '').toUpperCase())).length;

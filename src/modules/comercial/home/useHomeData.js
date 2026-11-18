@@ -64,7 +64,7 @@ async function cargarInventario(ck, cfg) {
 // ── sku → { marca, precio } para el split de sell-in y el sugerido de reposición
 async function cargarMarcas(ck, cfg) {
   const rows = cfg.marcaSellIn === 'roadmap_sku'
-    ? await fetchAll('roadmap_sku', 'sku,marca')
+    ? await fetchAll('v_skus_producto', 'sku,marca')
     : (await cachedQuery(supabase.from('productos_cliente').select('sku,marca,precio_venta').eq('cliente', ck))).data || [];
   const map = {}; rows.forEach((r) => { map[String(r.sku)] = { marca: r.marca, precio: num(r.precio_venta) }; });
   return map;

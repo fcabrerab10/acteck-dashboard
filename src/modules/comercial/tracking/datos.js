@@ -39,7 +39,7 @@ export async function cargarTodo({ forzar = false } = {}) {
     fetchAllQ(() => supabase.from('v_erp_facturas_oc').select('cliente_key,folio,referencia,fecha,piezas,monto,n_partidas,partidas').gte('fecha', hoyMenos(60)), { orderCol: 'folio', label: 'v_erp_facturas_oc' }),
     fetchAll('v_transito_sku', 'sku,cantidad,eta_mas_cercana,embarques_detalle', (q) => q.gt('cantidad', 0)),
     fetchAll('v_inventario_comercial', 'sku,disponible,por_almacen'),
-    fetchAll('roadmap_sku', 'sku,descripcion,marca,familia'),
+    fetchAll('v_skus_producto', 'sku,descripcion,marca,familia'),
     fetchAll('almacenes_config', 'no_almacen,cedis'),
   ]);
   sync = await pSync;

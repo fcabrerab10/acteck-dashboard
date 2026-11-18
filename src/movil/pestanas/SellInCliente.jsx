@@ -37,7 +37,7 @@ export async function catalogoSkus(skus) {
   const lista = [...new Set(skus.filter(Boolean))];
   for (let i = 0; i < lista.length; i += 200) {
     const ch = lista.slice(i, i + 200);
-    const { data } = await cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca,categoria,familia').in('sku', ch));
+    const { data } = await cachedQuery(supabase.from('v_skus_producto').select('sku,descripcion,marca,categoria,familia').in('sku', ch));
     (data || []).forEach((r) => { if (!m.has(r.sku)) m.set(r.sku, { descripcion: r.descripcion || '', marca: r.marca || '', categoria: r.categoria || '', familia: r.familia || '' }); });
     const faltan = ch.filter((s) => !m.has(s));
     if (faltan.length) {

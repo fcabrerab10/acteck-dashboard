@@ -70,7 +70,7 @@ export function pasosDeVisita(clienteKey, { anio = new Date().getFullYear() } = 
         gcTime: SIETE_DIAS,
       }),
       fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto', (q) => q.eq('cliente_key', clienteKey).in('anio', anios)),
-      fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp'),
+      fetchAll('v_skus_producto', 'sku,marca,descripcion,categoria,familia,rdmp'),
       fetchAll('cuotas_mensuales', 'mes,anio,cuota_min,cuota_ideal', (q) => q.eq('cliente', clienteKey).eq('anio', anio)),
       queryClient.fetchQuery({
         queryKey: ['cuotas_mensuales', clienteKey, anio],

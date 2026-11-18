@@ -235,31 +235,23 @@ export function invalidateDataCache() {
 }
 
 // ─── Roadmap SKU ───
+// Desde 3.111.0 lee v_skus_producto: el roadmap + los SKUs de producto de fuera del roadmap (con inventario o en
+// camino; descripción del ERP y categoría, familia y marca clasificadas). Cada fila trae `en_roadmap` y `activo`.
+// Quien use la lista como UNIVERSO «del roadmap» (contar, «sin movimiento») filtra con soloRoadmap(); como diccionario
+// de descripciones/marca/categoría se usa tal cual. Los externos sólo reciben el roadmap.
 export function useRoadmap() {
-  return useQuery({
-    queryKey: ['roadmap_sku'],
-    queryFn: () =>
-      fetchAll(
-        'roadmap_sku',
-        'sku,marca,categoria,familia,rdmp,descripcion,sort_order',
-        (q) => q.order('sort_order', { ascending: true, nullsFirst: false })
-      ),
-  });
-}
-
-// Roadmap + SKUs de producto fuera del roadmap (v_skus_producto: traen descripción del ERP y categoría, familia y
-// marca clasificadas por descripción). Misma forma que useRoadmap(); los de fuera sólo los ven internos.
-export function useSkusProducto() {
   return useQuery({
     queryKey: ['v_skus_producto'],
     queryFn: () =>
       fetchAll(
         'v_skus_producto',
-        'sku,marca,categoria,familia,rdmp,descripcion,sort_order',
+        'sku,marca,categoria,familia,rdmp,descripcion,sort_order,en_roadmap,activo',
         (q) => q.order('sort_order', { ascending: true, nullsFirst: false })
       ),
   });
 }
+export const soloRoadmap = (filas = []) => (filas || []).filter((r) => r.en_roadmap !== false);
+export const useSkusProducto = useRoadmap;
 
 // ─── Precios SKU ───
 // usePrecios() se retiró el 2026-11-11: nadie la usaba y bajaba precios_sku completa (29 K filas). Usar

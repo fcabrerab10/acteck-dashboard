@@ -30,7 +30,7 @@ export function useForecastCliente(key, ventana, { enabled = true, hoy = new Dat
   const { data: crm = [], isLoading: l3 } = useForecastCrm(on ? cliente.key : null);
   const { data: lotes = [] } = useLotesCrm();
   const { data: roadmap = [] } = useRoadmap();
-  const rd = useMemo(() => new Map((roadmap || []).map((r) => [r.sku, r])), [roadmap]);
+  const rd = useMemo(() => new Map((roadmap || []).filter((r) => r.activo !== false).map((r) => [r.sku, r])), [roadmap]);
   const sugerido = useMemo(() => {
     if (!ventas) return [];
     const excluir = new Set(existente?.skus || []);

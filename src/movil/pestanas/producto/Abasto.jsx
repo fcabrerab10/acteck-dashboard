@@ -39,7 +39,7 @@ export function useAbastoSku(sku, { enabled = true } = {}) {
         opcional(fetchAll('v_lead_time_sku', 'sku,dias_promedio,muestras,supplier_principal,familia', (q) => q.eq('sku', sku))),
         fetchAll('facturacion_clientes', 'sku,cliente_nombre,canal,anio,mes,piezas', (q) => q.eq('sku', sku).or(filtro12m)),
         opcional(fetchAll('embarques_compras', 'po,codigo,fecha_emision,arribo_cedis,arribo_almacen,eta_puerto,po_qty,shp_qty,contenedor,estatus,supplier,familia,descripcion,unit_price,lt_dias,tipo_carga,tipo_contenedor,cbm_unitario', (q) => q.eq('codigo', sku))),
-        fetchAll('roadmap_sku', 'sku,descripcion,marca,rdmp,categoria', (q) => q.eq('sku', sku)),
+        fetchAll('v_skus_producto', 'sku,descripcion,marca,rdmp,categoria', (q) => q.eq('sku', sku)),
         opcional(fetchAll('catalogo_articulos', 'articulo,descripcion', (q) => q.eq('articulo', sku))),
         opcional(fetchAll('sku_config', 'sku,es_critico,meses_seguridad,crecimiento_override', (q) => q.eq('sku', sku))),
         opcional(fetchAll('v_compras_pendientes_sku', 'sku,descripcion,proveedor,po,fecha_po,piezas_pedidas,piezas_pendientes,usd_pendiente,eta,en_master_embarques,dias_desde_po', (q) => q.eq('sku', sku))),
