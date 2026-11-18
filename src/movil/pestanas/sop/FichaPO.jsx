@@ -8,24 +8,14 @@ import { useNav } from '../../nav';
 import { Cabecera, TituloGrande, HeroM, ListaAgrupada, Fila, BotonGrande, Pill, toast } from '../../piezas';
 import { compartir } from '../../../lib/whatsapp';
 import { int } from '../../util';
-import { fechaLarga, fechaCorta, cedisCorto, estatusCorto, usdCompact } from './calculo';
+import { textoArribo, frasePo, TONO_LABEL } from './calculo';
 import Producto360 from '../producto/Producto360';
 
-const TONO_LABEL = { red: 'urge', orange: 'justo', green: 'holgado', gray: '—' };
-
-export function textoArribo(po) {
-  const l = [`PO ${po.po}${po.supplier ? ` · ${po.supplier}` : ''}`, po.eta ? `Llega el ${fechaLarga(po.eta)}${po.cedis ? ` a ${cedisCorto(po.cedis)}` : ''}` : 'Sin ETA', `${po.nSkus} SKU${po.nSkus === 1 ? '' : 's'} · ${int(po.piezas)} pz${po.estatus ? ` · ${estatusCorto(po.estatus)}` : ''}`, ''];
-  for (const s of po.skus.slice(0, 12)) l.push(`• ${s.sku}${s.descripcion ? ` ${s.descripcion.slice(0, 40)}` : ''} · ${int(s.piezas)} pz`);
-  if (po.skus.length > 12) l.push(`… y ${po.skus.length - 12} más`);
-  return l.join('\n');
-}
+export { textoArribo };
 
 export function FichaPOVista({ po, sensible = false, onSku, onCompartir, onInventario }) {
   const { theme } = useTheme();
-  const frase = po.eta
-    ? `${po.vencida ? 'Debió llegar' : 'Llega'} el ${fechaLarga(po.eta)}${po.cedis ? ` a ${cedisCorto(po.cedis)}` : ''} con ${po.nSkus} SKU${po.nSkus === 1 ? '' : 's'} y ${int(po.piezas)} pz${po.urgen ? `; ${po.urgen === 1 ? 'resuelve 1 SKU que urge' : `resuelve ${po.urgen} SKUs que urgen`}` : ''}.`
-    : `${po.nSkus} SKU${po.nSkus === 1 ? '' : 's'} y ${int(po.piezas)} pz sin fecha de arribo todavía.`;
-  const sub = [po.etd ? `ETD ${fechaCorta(po.etd)}` : null, po.estatus ? estatusCorto(po.estatus) : null, sensible && po.usd > 0 ? `${usdCompact(po.usd)} USD${po.sinCosto ? ' (parcial)' : ''}` : null, po.vencida ? `ETA vencida ${Math.abs(po.dias)} d` : po.dias != null ? `en ${po.dias} d` : null].filter(Boolean).join(' · ');
+  const { frase, sub } = frasePo(po, { sensible });
   return (
     <div style={{ paddingBottom: 24 }}>
       <TituloGrande titulo={`PO ${po.po}`} sub={[po.supplier, po.contenedor, po.naviera].filter(Boolean).join(' · ') || 'Orden de compra'} />

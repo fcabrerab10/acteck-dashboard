@@ -1,8 +1,9 @@
 // «Por qué N pz» (2026-10-06): explicación en palabras del sugerido del motor del S&OP (forecast/calculo.js#calcularForecast).
 // Nació en el Producto 360 · Abasto del celular y ahora también la lee el drill del SKU en la web. Pura.
 import { isoLocal } from '../../../lib/format';
-import { diasCobertura, fechaLarga } from '../../../movil/pestanas/sop/calculo';
-import { int, N } from '../../../movil/util';
+import { diasCobertura, fechaLarga } from './sopCalculo';
+const N = (v) => Number(v) || 0;
+const int = (n) => Math.round(N(n)).toLocaleString('es-MX');
 
 /** Texto «Por qué N pz» con los datos del motor. */
 export function porQue(r, { hoy = new Date() } = {}) {

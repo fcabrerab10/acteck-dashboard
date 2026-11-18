@@ -49,6 +49,10 @@ import TiemposProveedores from './forecast/TiemposProveedores';
 import Reuniones from './forecast/reuniones/Reuniones';
 import AgregarLineaModal from './forecast/AgregarLineaModal';
 import MisClientesPanel from './forecast/MisClientesPanel';
+import DemandaComprar from './forecast/DemandaComprar';
+import FichaPOHoja, { ArribosVista } from './forecast/FichaPOWeb';
+import { arribosPorPo, usdCompact } from './forecast/sopCalculo';
+import { useNavieraPorContenedor } from './forecast/useEmbarquesTiempos';
 import { guardarSnapshotMensual, esPerfilInterno } from './forecast/snapshot';
 
 // El sugerido siempre se calcula sobre 3 meses (regla fija de la fórmula, Fase 4).
@@ -85,6 +89,10 @@ function ForecastPantalla({ perfil, sensible }) {
   const [previewExportOpen, setPreviewExportOpen] = useState(false);
   const [skuParaAgregar, setSkuParaAgregar] = useState(null);
   const [agregandoTodos, setAgregandoTodos] = useState(false);
+  // Ficha de PO (2026-11-18, del celular): PO abierta en la HojaLateral y panel «Lo que viene» (la naviera se pide al abrirlo).
+  const [poAbierta, setPoAbierta] = useState(null);
+  const [verArribos, setVerArribos] = useState(false);
+  const navieraPor = useNavieraPorContenedor(verArribos || !!poAbierta);
 
   // Borrador activo: el más reciente si no hay uno elegido (o si el elegido desapareció).
   useEffect(() => {
@@ -95,6 +103,20 @@ function ForecastPantalla({ perfil, sensible }) {
   // ── Motor ──
   const rowsAll = useMemo(() => (data.loading ? [] : indexar(calcularForecast(data, HORIZONTE))), [data]);
   const metaBySku = useMemo(() => Object.fromEntries((data.metadata || []).map((r) => [r.sku, r])), [data.metadata]);
+
+  // Arribos por PO (mismo agrupado que el celular) desde el tránsito que ya bajó la pantalla.
+  const arribos = useMemo(() => {
+    if (data.loading) return [];
+    const porSku = new Map(rowsAll.map((r) => [r.sku, r]));
+    return arribosPorPo({ transito: data.transito, porSku, navieraPor, hoy: new Date() });
+  }, [data.loading, data.transito, rowsAll, navieraPor]);
+  const poVista = useMemo(() => (poAbierta ? arribos.find((p) => p.po === poAbierta) || null : null), [poAbierta, arribos]);
+  const arribosMeta = useMemo(() => {
+    if (!arribos.length) return 'nada en camino en el Master Embarques';
+    const pzT = arribos.reduce((a, p) => a + p.piezas, 0), usdT = arribos.reduce((a, p) => a + p.usd, 0), venc = arribos.filter((p) => p.vencida).length;
+    return `${arribos.length} PO · ${fmtInt(pzT)} pz${sensible && usdT > 0 ? ` · ${usdCompact(usdT)} USD` : ''}${venc ? ` · ${venc} con ETA vencida` : ''} · clic en una PO para su ficha`;
+  }, [arribos, sensible]);
+  const verSku = (sku) => { setPoAbierta(null); setBusqueda(sku); setExpandedSku(sku); };
 
   // Compras en camino (compras_oc): resumen del Panel plegable. Informativo — no toca el sugerido.
   const comprasMeta = useMemo(() => {
@@ -339,6 +361,8 @@ function ForecastPantalla({ perfil, sensible }) {
 
   const hoy = new Date();
   const nSugeridos = kpis.conSugerido;
+  const hoyIso = isoLocal(hoy);
+  const siguienteArribo = arribos.find((p) => p.eta && p.eta >= hoyIso) || null;
   const labelExport = `Export · ${lineasBorrador.length} SKU${lineasBorrador.length === 1 ? '' : 's'}${sensible ? ` · USD ${fmtInt(totalBorradorUsd)}` : ` · ${fmtInt(totalBorradorPz)} pz`}`;
 
   // Carrito "Mi Export" (pill flotante + hoja + preview + modal de cantidad): compartido por las dos vistas.
@@ -372,6 +396,8 @@ function ForecastPantalla({ perfil, sensible }) {
 
       <ExportPreviewModal abierto={previewExportOpen} activo={borradorActivo} lineas={lineasBorrador} totalPz={totalBorradorPz} totalUsd={totalBorradorUsd}
         onEditarLinea={onEditarLineaWrapped} onEliminarLinea={onEliminarLineaWrapped} onExportar={ejecutarExportacion} onCerrar={() => setPreviewExportOpen(false)} sensible={sensible} />
+
+      <FichaPOHoja po={poVista} sensible={sensible} onClose={() => setPoAbierta(null)} onSku={verSku} />
 
       {skuParaAgregar && <AgregarLineaModal sensible={sensible} row={skuParaAgregar} onClose={() => setSkuParaAgregar(null)} onConfirm={confirmarAgregarLinea} />}
     </>
@@ -432,12 +458,17 @@ function ForecastPantalla({ perfil, sensible }) {
           onClick={() => onToggle('estado', 'critico')} />
         <KpiCard eyebrow="Tránsito" badge={{ tone: 'blue', l: `${kpis.enTransito} SKUs` }}
           big={`${fmtInt(kpis.traPz)} pz`} bigSmall={kpis.proxEta ? `próx. ${fmtEtaCorta(kpis.proxEta)}` : 'sin OC'}
-          sub="piezas en camino (v_transito_sku) · el sugerido descuenta lo que llega en 3 meses" />
+          sub={siguienteArribo ? `siguiente: PO ${siguienteArribo.po} · ${siguienteArribo.nSkus} SKUs · ${fmtInt(siguienteArribo.piezas)} pz · clic para su ficha` : 'piezas en camino (v_transito_sku) · el sugerido descuenta lo que llega en 3 meses'}
+          onClick={siguienteArribo ? () => setPoAbierta(siguienteArribo.po) : undefined} />
         <KpiCard eyebrow="Export activo" badge={{ tone: borradorActivo ? 'green' : 'gray', l: borradorActivo ? (borradorActivo.notas || `#${borradorActivo.id}`) : 'sin borrador' }}
           big={`${lineasBorrador.length} SKUs`} bigSmall={sensible ? `USD ${fmtInt(totalBorradorUsd)}` : `${fmtInt(totalBorradorPz)} pz`}
           sub={puedeVerSol ? `${fmtInt(totalBorradorCnt)} cnt · click para abrir Mi Export` : 'sin acceso a solicitudes'}
           onClick={puedeVerSol ? () => setHojaExport(true) : undefined} />
       </div>
+
+      {/* 2026-11-18 (del celular): demanda contra lo que tendremos y qué comprar ya. */}
+      <DemandaComprar rows={rowsAll} transito={data.transito} sensible={sensible} puedeEditar={puedeEditarSol} enSolicitud={skusEnBorrador}
+        onAgregar={onAgregarSolicitud} onAgregarTodos={agregarTodosSugeridos} agregando={agregandoTodos} onSku={verSku} />
 
       {/* Buscador + filtros + acciones */}
       <Panel padding="8px 12px">
@@ -460,9 +491,13 @@ function ForecastPantalla({ perfil, sensible }) {
         padding="6px">
         <TablaForecast rows={rowsOrdenados} expandedSku={expandedSku} setExpandedSku={setExpandedSku}
           sortCol={sortCol} sortDir={sortDir} onSort={onSort}
-          onAgregarSolicitud={onAgregarSolicitud} skusEnBorrador={skusEnBorrador} lineasBorrador={lineasBorrador}
+          onAgregarSolicitud={onAgregarSolicitud} skusEnBorrador={skusEnBorrador} lineasBorrador={lineasBorrador} onPo={setPoAbierta}
           puedeEditar={puedeEditarSol} sensible={sensible} facturacion={data.facturacion} facturacionMes={data.facturacionMes} metaBySku={metaBySku}
           vacio={busqueda || nActivos ? 'Ningún SKU coincide con la búsqueda y los filtros.' : 'Sin SKUs en el Reporte.'} />
+      </Panel>
+
+      <Panel plegable abiertoInicial={false} titulo="Lo que viene · arribos por PO" meta={arribosMeta} padding="6px" onToggle={setVerArribos}>
+        <ArribosVista arribos={arribos} sensible={sensible} onPo={(p) => setPoAbierta(p.po)} />
       </Panel>
 
       <Panel plegable abiertoInicial={false} titulo="Compras en camino · POs pendientes"

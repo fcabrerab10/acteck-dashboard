@@ -17,8 +17,10 @@ import { crearLoteDB, upsertCrmDB, invalidarCrm, invalidarLotes, useForecastCrm 
 import { clienteForecast, useVentasForecast, useStockForecast, useProyectosForecast, useForecastExistente, useClientesErp, PROPIOS } from './forecastDatos';
 import { ventana as ventanaDe, mesSiguiente, sugerir, validar, filasPlantilla, MIN_JUSTIFICACION } from './forecastCalc';
 import { LotesPanel, ForecastVsReal } from './ForecastSeguimiento';
+import ForecastLosTres from './ForecastLosTres';
 
-const CLIENTES = [{ id: 'digitalife', label: 'Digitalife' }, { id: 'pcel', label: 'PCEL' }, { id: 'dicotech', label: 'Dicotech' }, { id: 'erp', label: 'Otro cliente del ERP' }];
+// «Los tres» (2026-11-18, del celular): suma de los tres propios con reparto por cliente, sólo lectura (ForecastLosTres.jsx).
+const CLIENTES = [{ id: 'todos', label: 'Los tres' }, { id: 'digitalife', label: 'Digitalife' }, { id: 'pcel', label: 'PCEL' }, { id: 'dicotech', label: 'Dicotech' }, { id: 'erp', label: 'Otro cliente del ERP' }];
 const N = (v) => Number(v) || 0;
 const int = (n) => Math.round(N(n)).toLocaleString('es-MX');
 const TONO = { sugerido: 'blue', proyecto: 'green', mixto: 'purple', manual: 'orange' };
@@ -34,7 +36,8 @@ export default function Forecast({ yoId }) {
   const [exportando, setExportando] = useState(false);
   const [busca, setBusca] = useState('');
 
-  const cliente = useMemo(() => (sel === 'erp' ? (codigoErp ? clienteForecast(codigoErp) : null) : clienteForecast(sel)), [sel, codigoErp]);
+  const esTodos = sel === 'todos';
+  const cliente = useMemo(() => (sel === 'todos' ? null : sel === 'erp' ? (codigoErp ? clienteForecast(codigoErp) : null) : clienteForecast(sel)), [sel, codigoErp]);
   const ventana = useMemo(() => ventanaDe(mesInicio, nMeses), [mesInicio, nMeses]);
   const { data: ventas, isLoading: lVentas } = useVentasForecast(cliente);
   const { data: stock } = useStockForecast(cliente);
@@ -116,13 +119,14 @@ export default function Forecast({ yoId }) {
           {mesesInicio.map((k) => <option key={k} value={k}>desde {ventanaDe(k, 1)[0].label}</option>)}
         </select>
         <Segmented options={[{ id: 3, label: '3 m' }, { id: 6, label: '6 m' }, { id: 12, label: '12 m' }]} value={nMeses} onChange={setNMeses} />
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+        {!esTodos && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           <Boton icon={RefreshCw} onClick={() => setFilas(sugerido ? sugerido.filas.map((f) => ({ ...f, meses: { ...f.meses } })) : null)} title="Vuelve al sugerido del dashboard y descarta tus ajustes">Volver al sugerido</Boton>
           <Boton icon={Download} primario onClick={exportar} disabled={exportando || !filas?.length}>Exportar plantilla del CRM</Boton>
-        </span>
+        </span>}
       </div>
 
-      {!cliente && <Panel titulo="Forecast"><div style={{ fontSize: 12, color: theme.textMuted }}>Elige un cliente del ERP para sugerir su forecast con su ritmo de compra.</div></Panel>}
+      {esTodos && <ForecastLosTres ventana={ventana} onCliente={setSel} />}
+      {!cliente && !esTodos && <Panel titulo="Forecast"><div style={{ fontSize: 12, color: theme.textMuted }}>Elige un cliente del ERP para sugerir su forecast con su ritmo de compra.</div></Panel>}
       {cliente && (lVentas || !filas) && <Cargando pantalla="forecast" minHeight={320} />}
       {cliente && filas && (
         <>

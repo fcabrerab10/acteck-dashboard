@@ -8,8 +8,8 @@ import { Users } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, TablaCompacta, Pill, Boton } from '../../../components/kit';
-import { useSopClientes } from '../../../movil/pestanas/sop/datos';
-import { calcularMisClientes, fraseMisClientes, mesesDesde, costoDe, usdCompact } from '../../../movil/pestanas/sop/calculo';
+import { useSopClientes } from './sopDatos';
+import { calcularMisClientes, fraseMisClientes, mesesDesde, costoDe, usdCompact } from './sopCalculo';
 
 const N = (v) => Number(v) || 0;
 const int = (n) => Math.round(N(n)).toLocaleString('es-MX');

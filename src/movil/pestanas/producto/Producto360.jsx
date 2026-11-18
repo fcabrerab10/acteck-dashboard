@@ -9,7 +9,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { puedeVerSensible } from '../../../lib/permisos';
 import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
-import { quienLoDesplaza, quienLoCompra, serieSiSo, semanasDe, mesesCerrados } from '../../../modules/comercial/producto360/calculo';
+import { mesDeLectura, resumenProducto } from '../../../modules/comercial/producto360/calculo';
 import { crearDesdeCaptura } from '../../../modules/agenda5/datos';
 import { useNav } from '../../nav';
 import { Cabecera, TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Segmented, BotonGrande, Pill, Vacio, Skeleton, GraficaScrub, LeyendaScrub, toast } from '../../piezas';
@@ -34,39 +34,9 @@ export default function Producto360({ sku, cara: caraInicial = 'sellout' }) {
   const [cara, setCara] = useState(caraInicial);
   const [unidad, setUnidad] = useState('piezas');
   const { data: d, isLoading, error } = useProducto360(sku, { hoy });
-  // Mes de lectura: el mes en curso si ya tiene movimiento; si van menos de 10 días, el último cerrado.
-  const anioHoy = hoy.getFullYear(), mesHoy = hoy.getMonth() + 1;
-  const pocoMes = hoy.getDate() < 10;
-  const [anio, mes] = pocoMes ? (mesHoy === 1 ? [anioHoy - 1, 12] : [anioHoy, mesHoy - 1]) : [anioHoy, mesHoy];
-  const r = useMemo(() => {
-    if (!d) return null;
-    const nombresCuenta = Object.fromEntries(d.cuentas.map((c) => [c.cuenta, c.nombre]));
-    const desplaza = quienLoDesplaza(d.sellout.map((x) => ({ cuenta: x.cuenta, anio: x.anio, mes: x.mes, piezas: x.cantidad, importe: x.importe })), { anio, mes, inventario: d.invCuentas, nombres: nombresCuenta });
-    const compra = quienLoCompra(d.sellin.map((x) => ({ cliente: x.cliente, cliente_nombre: x.cliente_nombre, anio: x.anio, mes: x.mes, piezas: x.piezas_venta_neta, monto: x.fact_neta })), { anio, mes });
-    const serie = serieSiSo(d.sellin.map((x) => ({ anio: x.anio, mes: x.mes, piezas: x.piezas_venta_neta, monto: x.fact_neta })), d.sellout.map((x) => ({ anio: x.anio, mes: x.mes, piezas: x.cantidad, monto: x.importe })), { anio, mes, campoSi: unidad === 'piezas' ? 'piezas' : 'monto', campoSo: unidad === 'piezas' ? 'piezas' : 'monto' });
-    const mesK = `${anio}-${String(mes).padStart(2, '0')}`;
-    const si = serie.find((x) => x.key === mesK) || { si: 0, so: 0 };
-    const cerr = new Set(mesesCerrados(anioHoy, mesHoy, 3));
-    const ritmoSi = d.sellin.filter((x) => cerr.has(`${x.anio}-${String(x.mes).padStart(2, '0')}`)).reduce((s, x) => s + N(x.piezas_venta_neta), 0) / 3;
-    const ritmoSo = d.sellout.filter((x) => cerr.has(`${x.anio}-${String(x.mes).padStart(2, '0')}`)).reduce((s, x) => s + N(x.cantidad), 0) / 3;
-    const piezasSi = d.sellin.filter((x) => N(x.anio) === anio && N(x.mes) === mes).reduce((s, x) => s + N(x.piezas_venta_neta), 0);
-    const montoSi = d.sellin.filter((x) => N(x.anio) === anio && N(x.mes) === mes).reduce((s, x) => s + N(x.fact_neta), 0);
-    const piezasSo = d.sellout.filter((x) => N(x.anio) === anio && N(x.mes) === mes).reduce((s, x) => s + N(x.cantidad), 0);
-    const montoSo = d.sellout.filter((x) => N(x.anio) === anio && N(x.mes) === mes).reduce((s, x) => s + N(x.importe), 0);
-    const invPz = N(d.inv?.inv_actual_piezas), invDisp = N(d.inv?.inv_actual_disponible), invValor = N(d.inv?.inv_actual);
-    const semanas = semanasDe(invPz, ritmoSi);
-    const invCuentasPz = d.invCuentas.reduce((s, x) => s + x.piezas, 0), invCuentasValor = d.invCuentas.reduce((s, x) => s + x.valor, 0);
-    const semCuentas = semanasDe(invCuentasPz, ritmoSo);
-    const tr = d.transito; const proximo = Array.isArray(tr?.embarques_detalle) ? [...tr.embarques_detalle].filter((e) => e.eta).sort((a, b) => String(a.eta).localeCompare(String(b.eta)))[0] : null;
-    const top2 = desplaza.filter((x) => x.piezas > 0).slice(0, 2);
-    const share2 = top2.reduce((s, x) => s + x.share, 0);
-    const agotadas = desplaza.filter((x) => x.inv?.estado === 'agotado' && x.prevPz > 0);
-    const frase = piezasSo > 0 || piezasSi > 0
-      ? `${piezasSo > 0 ? `Se desplazaron ${int(piezasSo)} pz en ${desplaza.filter((x) => x.piezas > 0).length} cuenta${desplaza.filter((x) => x.piezas > 0).length === 1 ? '' : 's'}` : 'Sin sell out reportado'}${piezasSi > 0 && piezasSo > 0 ? `, ${(piezasSo / piezasSi).toFixed(1)} veces lo que facturamos` : piezasSi > 0 ? `; facturamos ${int(piezasSi)} pz` : ''}${top2.length ? `; ${top2.map((x) => x.nombre).join(' y ')} concentra${top2.length === 1 ? '' : 'n'} el ${Math.round(share2)} %` : ''}${agotadas.length ? `, y ${agotadas[0].nombre} ya se quedó sin pieza` : ''}.`
-      : 'Sin movimiento en el mes.';
-    const stockMeses = (() => { const a = d.stockAnio.find((x) => N(x.anio) === anioHoy), p = d.stockAnio.find((x) => N(x.anio) === anioHoy - 1); if (!a && !p) return null; const cols = [], vals = []; for (let i = 0; i < 12; i++) { const m = ((mesHoy - 12 + i) % 12 + 12) % 12; const esPrev = mesHoy - 12 + i < 0; const src = esPrev ? p : a; const arr = unidad === 'piezas' ? src?.piezas : src?.valor; cols.push(`${MESES[m]}${esPrev ? ` ${String(anioHoy - 1).slice(2)}` : ''}`); vals.push(N(arr?.[m])); } return { cols, vals }; })();
-    return { desplaza, compra, serie, piezasSi, montoSi, piezasSo, montoSo, ritmoSi, invPz, invDisp, invValor, semanas, invCuentasPz, invCuentasValor, semCuentas, proximo, tr, frase, stockMeses, mesK };
-  }, [d, anio, mes, anioHoy, mesHoy, unidad]);
+  // Mes de lectura y resumen: motor compartido con la ficha web (producto360/calculo.js#resumenProducto).
+  const { anio, mes, anioHoy, mesHoy, pocoMes } = useMemo(() => mesDeLectura(hoy), [hoy]);
+  const r = useMemo(() => resumenProducto(d, { hoy, unidad }), [d, hoy, unidad]);
 
   const desc = d?.roadmap?.descripcion || '';
   const marca = normalizarMarca(d?.roadmap?.marca) || marcaDeSku(sku) || '';
