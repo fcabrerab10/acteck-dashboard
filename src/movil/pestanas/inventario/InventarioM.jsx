@@ -95,7 +95,7 @@ export function InventarioMVista({ r, categorias = [], onSku, onSop, frescura = 
       <div style={{ padding: '0 16px' }}>
         <PayM titulo="Mix del inventario actual" filas={filasPay} formato={fmt} centro="HOY" vacio="Sin inventario comercial cargado."
           acciones={<ChipsPay opciones={DIMS} value={dim} onChange={setDim} />} />
-        {dim !== 'almacen' && <div style={{ fontSize: 11.5, color: gris, padding: '6px 12px 0', lineHeight: 1.4, fontFamily: TYPO.fontText }}>{dim === 'marca' ? 'Marca por prefijo del SKU y roadmap.' : 'Categoría del roadmap; sin roadmap, «Sin categoría».'}</div>}
+        {dim !== 'almacen' && <div style={{ fontSize: 11.5, color: gris, padding: '6px 12px 0', lineHeight: 1.4, fontFamily: TYPO.fontText }}>{dim === 'marca' ? 'Marca por prefijo del SKU y roadmap.' : 'Categoría del roadmap; los SKUs nuevos, por su descripción.'}</div>}
       </div>
 
       <DetalleSkuAnual titulo="Stock al cierre por SKU" filas={tabla} columnas={columnas} categorias={categorias} onSku={onSku} cargando={cargandoTabla}

@@ -2,7 +2,7 @@
 // 8 consultas chicas, ninguna por SKU y día:
 //   1 v_inventario_almacen_medida (en_inv_actual = true: SKU × almacén, 2.6 K filas, mismo primer viaje que la web)
 //   2 v_medidas_inventario (una fila: Inv Actual, Días de Inv, vueltas, CV 3 m, costo de compra pendiente)
-//   3 roadmap_sku (useRoadmap, cacheada y compartida con las demás pantallas)
+//   3 roadmap_sku (useSkusProducto, cacheada y compartida con las demás pantallas)
 //   4 v_transito_sku (1 fila por SKU con sus POs pendientes en embarques_detalle)
 //   5 v_sellin_global_sku_anio (pivote sku × año: demanda de los 3 meses cerrados; 1 página, 2 si cruza de año)
 //   6 v_inventario_cv_mes (una fila por mes: inventario al cierre [Inv Actual] + CV 3 m + costo de venta)
@@ -10,7 +10,7 @@
 //   8 embarques_compras (po, codigo, unit_price de lo pendiente: precio de lo que llega cuando el SKU aún no existe)
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
-import { fetchAll, fetchAllQ, useRoadmap, useMedidasInventario } from '../../../lib/queries';
+import { fetchAll, fetchAllQ, useSkusProducto, useMedidasInventario } from '../../../lib/queries';
 import { N } from '../../../modules/comercial/inventario/constantes';
 import { mesesCerradosDe } from './calculo';
 
@@ -39,7 +39,7 @@ export function useInventarioEmpresa(enabled = true) {
   const anio = hoy.getFullYear();
   const cerrados = mesesCerradosDe(hoy);
   const aniosDemanda = [...new Set(cerrados.map((c) => c.anio))];
-  const { data: roadmap = [], isLoading: lRoadmap } = useRoadmap();
+  const { data: roadmap = [], isLoading: lRoadmap } = useSkusProducto();
   const { data: medidasRow = null } = useMedidasInventario();
 
   const base = useQuery({

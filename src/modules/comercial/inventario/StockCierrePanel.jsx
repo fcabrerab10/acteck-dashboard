@@ -6,7 +6,7 @@ import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../../../lib/themeContext';
 import { supabase } from '../../../lib/supabase';
-import { fetchAllQ, useRoadmap } from '../../../lib/queries';
+import { fetchAllQ, useSkusProducto } from '../../../lib/queries';
 import { interpretarBusqueda, coincideSku, indiceSku } from '../../../lib/buscarSku';
 import { Panel, TablaCompacta, HeatCell, Segmented, Boton, Pill } from '../../../components/kit';
 import BuscadorEntiende from '../sellin/BuscadorEntiende';
@@ -22,7 +22,7 @@ export default function StockCierrePanel({ sensible = false }) {
   const [modo, setModo] = useState(sensible ? 'valor' : 'piezas');
   const [q, setQ] = useState('');
   const [limite, setLimite] = useState(100);
-  const rd = useRoadmap();
+  const rd = useSkusProducto();
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['inventario', 'sku_anio', anio], enabled: abierto, staleTime: 5 * 60 * 1000,
     queryFn: () => fetchAllQ(() => supabase.from('v_inventario_sku_anio').select('sku,anio,piezas,valor').in('anio', [anio - 1, anio]), { pageSize: 5000, orderCol: 'sku', label: 'inv_sku_anio' }),

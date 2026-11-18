@@ -247,6 +247,20 @@ export function useRoadmap() {
   });
 }
 
+// Roadmap + SKUs de producto fuera del roadmap (v_skus_producto: traen descripción del ERP y categoría, familia y
+// marca clasificadas por descripción). Misma forma que useRoadmap(); los de fuera sólo los ven internos.
+export function useSkusProducto() {
+  return useQuery({
+    queryKey: ['v_skus_producto'],
+    queryFn: () =>
+      fetchAll(
+        'v_skus_producto',
+        'sku,marca,categoria,familia,rdmp,descripcion,sort_order',
+        (q) => q.order('sort_order', { ascending: true, nullsFirst: false })
+      ),
+  });
+}
+
 // ─── Precios SKU ───
 // usePrecios() se retiró el 2026-11-11: nadie la usaba y bajaba precios_sku completa (29 K filas). Usar
 // fetchPreciosLista() o v_estrategia_precios_lista (precio vigente por sku + lista).
