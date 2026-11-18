@@ -10,13 +10,13 @@
       "pantalla": "Sell In consolidado",
       "bloque": "Selector de período Mes · YTD",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.1.0"
     },
     {
       "pantalla": "Sell In consolidado",
       "bloque": "Columna Δ vs año anterior en la tabla por SKU",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.1.0"
     },
     {
       "pantalla": "Sell In consolidado",
@@ -58,7 +58,7 @@
       "pantalla": "Inventario",
       "bloque": "Inventario vs venta 12 meses y pay Categoría · Marca · Almacén",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.1.0"
     },
     {
       "pantalla": "Inventario",
@@ -100,13 +100,13 @@
       "pantalla": "Propuestas",
       "bloque": "Propuesto vs facturado 12 meses",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.1.0"
     },
     {
       "pantalla": "Propuestas",
       "bloque": "Todos los precios de lista del SKU al revisar",
       "falta": "web",
-      "estado": "pendiente"
+      "estado": "hecho · 4.1.0"
     },
     {
       "pantalla": "Proyectos y forecast",
@@ -164,7 +164,6 @@
     }
   ],
   "importsModulesAMovil": [
-    "src/modules/comercial/InventarioGlobal.jsx → movil/pestanas/inventario/calculo",
     "src/modules/comercial/analisis/MovimientoPanel.jsx → movil/util",
     "src/modules/comercial/forecast/MisClientesPanel.jsx → movil/pestanas/sop/calculo",
     "src/modules/comercial/forecast/MisClientesPanel.jsx → movil/pestanas/sop/datos",
@@ -172,7 +171,6 @@
     "src/modules/comercial/forecast/porQue.js → movil/util",
     "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/calculo",
     "src/modules/comercial/home/QueLeFalta.jsx → movil/pestanas/cliente/datos",
-    "src/modules/comercial/inventario/StockCierrePanel.jsx → movil/pestanas/inventario/calculo",
     "src/modules/comercial/precios/CalculadoraPanel.jsx → movil/pestanas/precios/calculo",
     "src/modules/comercial/precios/CalculadoraPanel.jsx → movil/pestanas/precios/propuesta",
     "src/modules/comercial/sellout/FrenteAlRestoPanel.jsx → movil/pestanas/analisis/calculo",
