@@ -91,7 +91,23 @@ export function parseNumeroMX(texto) {
  * @param {string} [opts.archivo]  — nombre base; default = titulo
  * @param {Array}  opts.hojas — [{ nombre, columnas:[{label,key,tipo,ancho}], filas:[obj], totales?:obj, subtitulo? }]
  */
-export async function exportarExcel({ titulo, archivo, hojas = [] }) {
+export async function exportarExcel(opts) {
+  const { XLSX, wb, fname } = await construirLibroExcel(opts);
+  XLSX.writeFile(wb, fname);
+  return fname;
+}
+
+/**
+ * El mismo libro que exportarExcel, pero como Blob (no descarga): para compartirlo desde el celular con
+ * src/lib/compartirArchivo.js. Devuelve { blob, nombre }. (2026-11-18)
+ */
+export async function exportarExcelBlob(opts) {
+  const { XLSX, wb, fname } = await construirLibroExcel(opts);
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return { blob: new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nombre: fname };
+}
+
+async function construirLibroExcel({ titulo, archivo, hojas = [] }) {
   if (!hojas.length) throw new Error('No hay hojas que exportar');
   const xlsxMod = await import('xlsx-js-style');
   const XLSX = xlsxMod.default || xlsxMod;
@@ -174,8 +190,7 @@ export async function exportarExcel({ titulo, archivo, hojas = [] }) {
   });
 
   const fname = `${nombreArchivo(archivo || titulo)} · ${hoyISO()}.xlsx`;
-  XLSX.writeFile(wb, fname);
-  return fname;
+  return { XLSX, wb, fname };
 }
 
 /**
@@ -368,4 +383,4 @@ ${headLinks}
   return true;
 }
 
-export default { exportarExcel, exportarPDF, tablaDesdeDOM, parseNumeroMX };
+export default { exportarExcel, exportarExcelBlob, exportarPDF, tablaDesdeDOM, parseNumeroMX };

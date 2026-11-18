@@ -7,21 +7,24 @@
 //   Categoría → Detalle por SKU × 12 meses (DetalleSkuAnual). Tocar un SKU → FichaProducto.
 // Datos: sellin/datos.js#useSellInEmpresa (6 consultas) + useRoadmap. Cálculo puro en ./calculo.js.
 // ApoyoM.jsx y EquipoM.jsx (3.24) quedan en la carpeta sin uso desde esta pantalla.
-import React, { useMemo, useState, lazy } from 'react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import Producto360 from '../producto/Producto360';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
 import { puedeVerSensible } from '../../../lib/permisos';
 import FrescuraPill from '../../../components/FrescuraPill';
 import { useNav } from '../../nav';
-import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, Segmented, SelectorPeriodoM, BarraCuotaM, GraficaScrub, LeyendaScrub, PayM, ChipsPay, TituloSeccionM } from '../../piezas';
+import { TituloGrande, HeroM, KpiM, KpiGrid, Cabecera, Skeleton, Vacio, Segmented, SelectorPeriodoM, BarraCuotaM, GraficaScrub, LeyendaScrub, PayM, ChipsPay, TituloSeccionM, PlegadoM } from '../../piezas';
 import { moneyCompact, int, deltaPct, tonoCuota, MESES } from '../../util';
 import { useSellInEmpresa } from './datos';
 import { resumenSellIn } from './calculo';
 import { categoriasDe } from '../sellout/skuAnual';
 import DetalleSkuAnual from '../sellout/DetalleSkuAnual';
+
+// Comparador de periodos (2026-11-18): plegado al final; su chunk y sus consultas sólo se piden al abrirlo.
+const ComparadorM = lazy(() => import('../comparador/ComparadorM'));
 
 const FichaProducto = lazy(() => import('../../FichaProducto')); // se descarga al abrirla (2026-11-11)
 const DIMS = [['canal', 'Canal'], ['marca', 'Marca'], ['categoria', 'Categoría']];
@@ -99,6 +102,7 @@ export default function SellInGlobal() {
   const { data: roadmap = [] } = useRoadmap();
   const r = useMemo(() => (data ? resumenSellIn({ ...data, roadmap }, { anio, mes, modo, hoy, sensible }) : null), [data, roadmap, anio, mes, modo, hoy, sensible]);
   const categorias = useMemo(() => categoriasDe(roadmap), [roadmap]);
+  const rdMapa = useMemo(() => new Map((roadmap || []).map((x) => [x.sku, x])), [roadmap]);
   const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellin" />, `producto-${sku}`); // Producto 360 (2026-10-05)
 
   const periodoLbl = modo === 'mes' ? `${MESES[mes - 1]} ${anio}` : `${anio} a ${MESES[mes - 1].toLowerCase()}`;
@@ -121,6 +125,13 @@ export default function SellInGlobal() {
         </div>
       )}
       {r && !isLoading && <SellInVista r={r} sensible={sensible} categorias={categorias} onSku={abrirSku} onMes={(m) => { setMes(m); setModo('mes'); }} />}
+      {r && !isLoading && (
+        <PlegadoM icon={ArrowLeftRight} titulo="Comparador de periodos" sub="Período A frente a período B · cifras, Δ y qué SKUs lo movieron">
+          <Suspense fallback={<div style={{ padding: '0 16px' }}><Skeleton h={140} r={12} /></div>}>
+            <ComparadorM nombre="Global" sensible={sensible} onSku={abrirSku} rd={rdMapa} />
+          </Suspense>
+        </PlegadoM>
+      )}
       {!r && !isLoading && !error && <Vacio icon={null} titulo={`Sin facturación en ${periodoLbl}`} />}
     </div>
   );

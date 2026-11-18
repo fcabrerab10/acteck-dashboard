@@ -8,15 +8,15 @@
 //              La nota de cobertura de la receta va en una tarjeta chica; sin cuenta → «no reporta sell out».
 //              Tocar una sucursal o un vendedor abre HojaM con sus SKUs del mes. Al final «Abrir sell out completo»
 //              → CuentaFrenteAlResto. Todos los cálculos son los de la web (sellout/calculo.js, analisis/*).
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import Producto360 from '../producto/Producto360';
 import { useQuery } from '@tanstack/react-query';
-import { ShoppingBag } from 'lucide-react';
+import { ShoppingBag, ArrowLeftRight } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
 import { useNav } from '../../nav';
-import { KpiM, KpiGrid, Skeleton, Vacio, CampoBusqueda, Segmented, BotonGrande, TituloSeccionM, ListaAgrupada, Fila, HojaM, MiniTrazo, GraficaScrub, LeyendaScrub, Pill } from '../../piezas';
+import { KpiM, KpiGrid, Skeleton, Vacio, CampoBusqueda, Segmented, BotonGrande, TituloSeccionM, ListaAgrupada, Fila, HojaM, MiniTrazo, GraficaScrub, LeyendaScrub, Pill, PlegadoM } from '../../piezas';
 import { money, moneyCompact, int, deltaPct, MESES, N, pct } from '../../util';
 import TablaAnual from '../sellout/TablaAnual';
 import { catalogoSkus } from '../SellInCliente';
@@ -35,6 +35,7 @@ import { fraccionMes } from './calculo';
 import CuentaFrenteAlResto from './CuentaFrenteAlResto';
 import { SucursalesMovimientoM } from './RitmoM';
 
+const ComparadorM = lazy(() => import('../comparador/ComparadorM')); // 2026-11-18 · se descarga al abrir el plegado
 const STALE = 5 * 60 * 1000;
 const fmtPz = (n) => Math.round(N(n)).toLocaleString('es-MX');
 const fmtDe = (unidad) => (unidad === 'piezas' ? fmtPz : moneyCompact);
@@ -199,10 +200,22 @@ export function SellInVista({ codigo, mensual, detalle = [], diario = [], cuotas
   );
 }
 
-export function SellInM({ codigo, mensual, detalle, diario, cuotasRows, anio, mes, sensible, rd }) {
+export function SellInM({ codigo, nombre, mensual, detalle, diario, cuotasRows, anio, mes, sensible, rd }) {
   const nav = useNav();
   const abrirSku = (sku) => nav.push(<Producto360 sku={sku} cara="sellout" />, `producto-${sku}`); // Producto 360 (2026-10-05)
-  return <SellInVista codigo={codigo} mensual={mensual} detalle={detalle} diario={diario} cuotasRows={cuotasRows} anio={anio} mes={mes} sensible={sensible} rd={rd} onSku={abrirSku} />;
+  return (
+    <>
+      <SellInVista codigo={codigo} mensual={mensual} detalle={detalle} diario={diario} cuotasRows={cuotasRows} anio={anio} mes={mes} sensible={sensible} rd={rd} onSku={abrirSku} />
+      {/* Comparador de periodos por código del ERP (2026-11-18 · como la página del cliente en la web): plegado, se pide al abrir. */}
+      {codigo && (
+        <PlegadoM icon={ArrowLeftRight} titulo="Comparador de periodos" sub="Período A frente a período B de este cliente">
+          <Suspense fallback={<div style={{ padding: '0 16px' }}><Skeleton h={140} r={12} /></div>}>
+            <ComparadorM clienteCodigo={codigo} clienteNombre={nombre || null} nombre={nombre || codigo} sensible={sensible} onSku={abrirSku} rd={rd} />
+          </Suspense>
+        </PlegadoM>
+      )}
+    </>
+  );
 }
 
 // ───────────────────────────── Sell Out ─────────────────────────────

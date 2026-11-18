@@ -13,5 +13,6 @@ export { default as BarraCuotaM } from './BarraCuotaM';             // 2026-10-0
 export { default as MiniTrazo } from './MiniTrazo';                 // 2026-10-05 · sparkline 56×18
 export { default as GraficaScrub, LeyendaScrub } from './GraficaScrub'; // 2026-10-05 · gráfica que se lee arrastrando
 export { default as PayM, ChipsPay } from './PayM';                 // 2026-10-05 · dona genérica
+export { default as PlegadoM } from './PlegadoM';                   // 2026-11-18 · sección plegada (monta al abrir)
 export { Segmented, Skeleton, Pill, DeltaPill, HeatCell, toast } from '../../components/kit';
 export { IconoApp } from '../../components/nav/comun';
