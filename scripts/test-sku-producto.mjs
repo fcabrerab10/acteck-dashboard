@@ -1,8 +1,12 @@
 // Regla de «SKU de producto» (2026-11-18) y su efecto en la lista de inventario.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'vite';
 import { esSkuProducto } from '../src/lib/sku.js';
-import { agregarSkus } from '../src/modules/comercial/inventario/agregar.js';
+
+const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
+test.after(async () => { await vite.close(); setTimeout(() => process.exit(process.exitCode || 0), 200).unref(); });
+const { agregarSkus } = await vite.ssrLoadModule('/src/modules/comercial/inventario/agregar.js');
 
 test('forma de producto: dos letras, guion, seis dígitos', () => {
   for (const s of ['AC-935777', 'br-946353', ' EY-445981 ']) assert.ok(esSkuProducto(s), s);
