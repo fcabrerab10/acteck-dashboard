@@ -137,7 +137,8 @@ export async function fetchCatalogo(clienteKey) {
   })();
 
   const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes, transitoRes, facturas] = await Promise.all([
-    supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
+    // Roadmap + SKUs nuevos con forma de producto que ya tienen existencia o vienen en camino (2026-11-18).
+    supabase.from('v_skus_producto').select('sku,marca,familia,categoria,descripcion,rdmp').eq('activo', true).limit(5000),
     invAckDataP,
     invCliQuery,
     // 9,653 filas: en una sola petición PostgREST corta en 5,000 y faltaban precios de media lista (2026-10-05) → paginado.

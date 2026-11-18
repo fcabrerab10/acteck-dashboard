@@ -1,5 +1,5 @@
 // Estrategia de Precios · carga de datos (SOLO vía lib/queries.js: fetchAll paralelo + cache 5 min).
-// Base de la pantalla: roadmap (useRoadmap, cache compartido), v_estrategia_precios_lista (1 fila sku+lista),
+// Base de la pantalla: roadmap + SKUs nuevos de producto (v_skus_producto activo), v_estrategia_precios_lista (1 fila sku+lista),
 // v_estrategia_precios_bajo (cliente facturado más bajo por SKU), promos del mes, v_precios_cambios_mes
 // (último precio vs mes anterior con dato) y, sólo con permiso sensible, costo promedio de v_inventario_comercial.
 // Drill por SKU: carga al abrir (useQuery por sku): facturación 2 años, precios_historico,
@@ -12,14 +12,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { hoyISO } from '../../../lib/format.js';
 import { supabase } from '../../../lib/supabase';
-import { fetchAll, cachedQuery, useRoadmap, invalidateDataCache, fetchPreciosLista } from '../../../lib/queries';
+import { fetchAll, cachedQuery, invalidateDataCache, fetchPreciosLista } from '../../../lib/queries';
 import { cambiosPorSku, factPorSku, elasticidadPorCategoria } from './calculo';
 
 const STALE = 5 * 60 * 1000;
 const MAX_SKUS_IN = 200; // tope del .in('sku', …) por URL
 
 export function useDatosPrecios(sensible) {
-  const roadmap = useRoadmap();
+  // Roadmap + SKUs nuevos con forma de producto con existencia o en camino (2026-11-18); mismo orden del roadmap.
+  const roadmap = useQuery({
+    queryKey: ['precios', 'skus-producto'],
+    staleTime: STALE,
+    queryFn: () => fetchAll('v_skus_producto', 'sku,marca,categoria,familia,rdmp,descripcion,sort_order,en_roadmap', (q) => q.eq('activo', true).order('sort_order', { ascending: true, nullsFirst: false })),
+  });
   const base = useQuery({
     queryKey: ['precios', 'base', !!sensible],
     staleTime: STALE,

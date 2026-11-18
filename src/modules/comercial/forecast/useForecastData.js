@@ -64,7 +64,7 @@ export function useForecastData() {
       fetchAll(() => supabase.from('v_sku_metadata').select('sku,descripcion,supplier,familia,unit_price_usd_ultima,costo_promedio_mxn'), 5000).then((d) => ({ data: d })),
       fetchAll(() => supabase.from('v_demanda_sku').select('sku,anio,mes,cliente,piezas').gte('anio', anioCorte).in('cliente', ['digitalife', 'pcel'])),
       vacio,
-      fetchAll(() => supabase.from('roadmap_sku').select('sku,descripcion,rdmp,marca,familia'), 5000).then((d) => ({ data: d })),
+      fetchAll(() => supabase.from('v_skus_producto').select('sku,descripcion,rdmp,marca,familia,en_roadmap').eq('activo', true), 5000).then((d) => ({ data: d })),
       // Master de embarques completo (timeline tránsito + histórico de compras). La tabla no tiene `eta` ni
       // `marca`: se usa eta_puerto / arribo_almacen y la marca sale de v_sku_metadata.
       // OJO: en supabase-js `.or()` va DESPUÉS de `.select()` (from() no tiene .or: tiraba «.or is not a function» y el S&OP no cargaba).

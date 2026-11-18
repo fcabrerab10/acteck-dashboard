@@ -31,7 +31,7 @@ export function useSopEmpresa(enabled = true) {
         fetchAll('facturacion_clientes', 'sku,cliente_nombre,canal,anio,mes,piezas', (q) => q.or(filtro12m)),
         fetchAll('embarques_compras', 'po,codigo,fecha_emision,arribo_cedis,arribo_almacen,eta_puerto,po_qty,shp_qty,contenedor,estatus,supplier,familia,descripcion,unit_price,lt_dias,tipo_carga,tipo_contenedor,cbm_unitario'),
         opcional(fetchAll('reporte_skus', 'sku,orden', (q) => q.eq('activo', true))),
-        fetchAll('roadmap_sku', 'sku,descripcion,marca,rdmp,categoria'),
+        fetchAll('v_skus_producto', 'sku,descripcion,marca,rdmp,categoria,en_roadmap', (q) => q.eq('activo', true)),
         opcional(fetchAll('catalogo_articulos', 'articulo,descripcion')),
         opcional(fetchAll('sku_config', 'sku,es_critico,meses_seguridad,crecimiento_override')),
         opcional(fetchAll('v_compras_pendientes_sku', 'sku,descripcion,proveedor,po,fecha_po,piezas_pedidas,piezas_pendientes,usd_pendiente,eta,en_master_embarques,dias_desde_po')),

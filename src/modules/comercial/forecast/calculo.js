@@ -273,6 +273,10 @@ export function calcularForecast(data, horizonteMeses) {
   let universoOrdenado;
   if (whitelist.length > 0) {
     universoOrdenado = whitelist.map((r) => r.sku);
+    // + SKUs nuevos con forma de producto (fuera del roadmap) con existencia o mercancía en camino: v_skus_producto
+    //   los manda con en_roadmap = false (2026-11-18). Van al final, tras el orden del Reporte.
+    const yaEsta = new Set(universoOrdenado);
+    for (const r of roadmap || []) if (r.en_roadmap === false && r.sku && !yaEsta.has(r.sku)) { yaEsta.add(r.sku); universoOrdenado.push(r.sku); }
   } else {
     universoOrdenado = Array.from(new Set([
       ...Object.keys(invBySku),

@@ -51,7 +51,7 @@ function useSkusPropuesta(skus) {
     queryKey: ['movil', 'propuesta-skus', lista], staleTime: STALE, enabled: lista.length > 0,
     queryFn: async () => {
       const [rm, pr, inv] = await Promise.all([
-        cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca,familia').in('sku', lista)),
+        cachedQuery(supabase.from('v_skus_producto').select('sku,descripcion,marca,familia').in('sku', lista)),
         cachedQuery(supabase.from('v_estrategia_precios_lista').select('sku,lista,precio').in('sku', lista)),
         cachedQuery(supabase.from('v_inventario_comercial').select('sku,inventario').in('sku', lista)),
       ]);

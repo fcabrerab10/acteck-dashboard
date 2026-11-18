@@ -11,6 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import { queryClient } from '../../../lib/queryClient';
 import { fetchAll, fetchPreciosLista } from '../../../lib/queries';
 import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
+import { esSkuProducto } from '../../../lib/sku';
 // Buzón de salida: los proyectos se capturan en la visita, muchas veces sin señal.
 import { escribir } from '../../../lib/buzon';
 
@@ -52,7 +53,7 @@ export function useAbasto() {
         fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,embarques,embarques_detalle'),
         opcional(fetchAll('v_lead_time_sku', 'sku,dias_promedio,muestras,supplier_principal,familia')),
         opcional(fetchAll('v_lead_time_supplier', 'supplier,dias_promedio,muestras')),
-        opcional(fetchAll('roadmap_sku', 'sku,descripcion,marca,categoria')),
+        opcional(fetchAll('v_skus_producto', 'sku,descripcion,marca,categoria,en_roadmap', (q) => q.eq('activo', true))),
         opcional(fetchAll('catalogo_articulos', 'articulo,descripcion')),
         // Mercancía en camino: es la ÚNICA fuente de un SKU estrenado (marca nueva o
         // producto nuevo) antes de que el ERP lo facture y de que entre al roadmap.
@@ -73,10 +74,10 @@ export function useAbasto() {
       for (const r of roadmap) {
         if (!r.sku || vistos.has(r.sku)) continue;
         vistos.add(r.sku);
-        catalogoSkus.push({ sku: r.sku, descripcion: r.descripcion || '', marca: normalizarMarca(r.marca) || marcaDeSku(r.sku), enRoadmap: true });
+        catalogoSkus.push({ sku: r.sku, descripcion: r.descripcion || '', marca: normalizarMarca(r.marca) || marcaDeSku(r.sku), enRoadmap: r.en_roadmap !== false });
       }
       for (const c of catalogo) {
-        if (!c.articulo || vistos.has(c.articulo)) continue;
+        if (!c.articulo || vistos.has(c.articulo) || !esSkuProducto(c.articulo)) continue; // sin refacciones ni cajas
         vistos.add(c.articulo);
         catalogoSkus.push({ sku: c.articulo, descripcion: c.descripcion || '', marca: marcaDeSku(c.articulo), enRoadmap: false });
       }
