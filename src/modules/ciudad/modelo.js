@@ -229,7 +229,7 @@ export function leerVista(texto) {
  *  abiertos de Pagos V3 que vencen en 7 días o ya vencieron, con las MISMAS reglas de la bandeja (`venceEn`/`estaVencido` de
  *  `comercial/pagosv3/estados.js`, que `datos.js` pasa en `reglas` para que este archivo siga sin imports); sin reglas, no cuenta pagos. */
 export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISOString().slice(0, 10), reglas = null) {
-  const conVencido = (cartera || []).filter((c) => N(c.vencido) > 0);
+  const conVencido = (cartera || []).filter((c) => N(c?.vencido) > 0);
   const abiertos = reglas?.venceEn && reglas?.estaVencido ? (pagos || []).filter((p) => p && p.estado !== 'rechazado') : [];
   const semana = abiertos.filter((p) => reglas.venceEn(p, 7, hoyIso)), vencidos = abiertos.filter((p) => reglas.estaVencido(p, hoyIso));
   return { carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
@@ -238,8 +238,11 @@ export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISO
 /** Torre de pronóstico (3.90.29): propuestas de forecast no borrador (`forecast_propuestas` + líneas, como Proyectos y forecast)
  *  y avisos de arribo (`forecast_avisos`) de ayer a 7 días. Un aviso con fecha ya pasada = atrasado. */
 export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().toISOString().slice(0, 10)) {
-  const ps = (propuestas || []).filter((p) => p && p.estatus !== 'borrador'); const lineas = ps.flatMap((p) => p.forecast_propuesta_lineas || []);
-  const mas7 = new Date(new Date(`${hoyIso}T00:00:00Z`).getTime() + 7 * 86400000).toISOString().slice(0, 10);
+  // Pulido (3.110.4): líneas nulas y una fecha inválida ya no tiran el modelo (la fecha mala usa hoy).
+  const base = Date.parse(`${String(hoyIso).slice(0, 10)}T00:00:00Z`); const t0 = Number.isFinite(base) ? base : Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  hoyIso = new Date(t0).toISOString().slice(0, 10);
+  const ps = (propuestas || []).filter((p) => p && p.estatus !== 'borrador'); const lineas = ps.flatMap((p) => p.forecast_propuesta_lineas || []).filter(Boolean);
+  const mas7 = new Date(t0 + 7 * 86400000).toISOString().slice(0, 10);
   const av = (avisos || []).filter((a) => a?.fecha_arribo && String(a.fecha_arribo).slice(0, 10) <= mas7);
   const atrasados = av.filter((a) => String(a.fecha_arribo).slice(0, 10) < hoyIso);
   return { abiertas: ps.filter((p) => !p.cerrado_at).length, lineas: lineas.length, confirmadas: lineas.filter((l) => l.confirmado).length, compradas: lineas.filter((l) => l.comprado_at).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, a) => s + N(a.piezas_a_reservar), 0), atrasados: atrasados.length };

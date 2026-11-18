@@ -264,6 +264,9 @@ test('torre de pronóstico: propuestas, líneas y avisos de arribo', () => {
   assert.equal(tarjetaDe({ tipo: 'torre' }, { torre: r }).estado, 'rojo');
   assert.equal(tarjetaDe({ tipo: 'torre' }, { torre: resumenTorre(props, [avisos[1]], hoyIso) }).estado, 'ambar');
   assert.equal(tarjetaDe({ tipo: 'torre' }, { torre: resumenTorre(null, null, hoyIso) }).estado, 'verde', 'sin datos no rompe');
+  assert.doesNotThrow(() => resumenTorre(props, avisos, 'basura'), 'fecha inválida no rompe');
+  assert.equal(resumenTorre([{ estatus: 'enviada', forecast_propuesta_lineas: [null, { confirmado: true }] }], [null], hoyIso).confirmadas, 1, 'líneas nulas se ignoran');
+  assert.equal(resumenBanco([null, { vencido: 5 }], [], hoyIso).cuentasVencidas, 1, 'cartera con nulos no rompe');
   const c = campus({ x: 0, z: 0 }); const caja = (p) => ({ x0: p.x - p.ancho / 2, x1: p.x + p.ancho / 2, z0: p.z - p.largo / 2, z1: p.z + p.largo / 2 });
   const choca = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 && b.z0 < a.z1; const t = caja(c.torre);
   assert.ok(!choca(t, caja(c.banco)) && !choca(t, caja(c.estacionamiento)) && t.z1 <= c.bardas[0].a.z, 'la torre no se encima y queda al norte de la barda');
