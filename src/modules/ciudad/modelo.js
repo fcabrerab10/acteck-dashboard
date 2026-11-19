@@ -886,6 +886,7 @@ export function camionesTemporada(m, hoy = new Date()) {
  */
 // Rebote al tocar (3.90.73, Etapa 7): escala (y, xz) a los `t` segundos; aplasta, estira y se asienta en `dur`. `fin` = ya terminó.
 export function rebote(t, dur = .5) {
+  if (!(dur > 0) || !Number.isFinite(dur)) dur = .5;
   if (!(t >= 0) || t >= dur) return { y: 1, xz: 1, fin: t >= dur };
   const p = t / dur; const y = 1 - .16 * Math.sin(p * Math.PI * 3) * (1 - p);
   return { y, xz: 1 - (y - 1) * .5, fin: false };
@@ -897,6 +898,9 @@ export const paseantesDistrito = (n, ligera = false) => (n >= 3 ? Math.min(liger
 // Gesto de dos dedos (3.90.77, Etapa 8): de la pareja inicial `a` a la actual `b` ([{x,y},{x,y}] en px) → `escala` para el
 // zoom (separar los dedos = acercar, < 1) y `giro` en radianes (-π..π) para girar la cámara.
 export function gestoDosDedos(a, b) {
+  // pareja incompleta o con coordenadas que no son número (4.3.14): sin cambio, para que el zoom/giro no quede NaN (pantalla negra)
+  const ok = (p) => Array.isArray(p) && p.length >= 2 && [p[0], p[1]].every((q) => q && Number.isFinite(q.x) && Number.isFinite(q.y));
+  if (!ok(a) || !ok(b)) return { escala: 1, giro: 0 };
   const dist = (p) => Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y) || 1;
   const ang = (p) => Math.atan2(p[1].y - p[0].y, p[1].x - p[0].x);
   let giro = ang(b) - ang(a); while (giro > Math.PI) giro -= 2 * Math.PI; while (giro < -Math.PI) giro += 2 * Math.PI;
@@ -905,7 +909,8 @@ export function gestoDosDedos(a, b) {
 
 // Sonido ambiente (3.90.76, Etapa 7): qué capas suenan y a qué volumen según día/noche y lluvia. `ruido` = rumor de la ciudad
 // (ruido café filtrado), `lluvia` = ruido más brillante, `pajaros` de día y `grillos` de noche (cada cuántos segundos, aprox.).
-export function capasSonido({ esDia = true, lluvia = false } = {}) {
+export function capasSonido(op) {
+  const esDia = op?.esDia ?? true, lluvia = !!op?.lluvia;
   return {
     ruido: esDia ? .05 : .025,
     lluvia: lluvia ? .06 : 0,
@@ -926,6 +931,8 @@ export const recorridoVisto = (v) => v === '1';
 
 // Saludo al pasar el cursor (3.90.74): dos saltitos en `dur` segundos; regresa la altura extra (0 fuera de rango).
 export function saltito(t, dur = .7, alto = .45) {
+  if (!(dur > 0) || !Number.isFinite(dur)) dur = .7;
+  if (!Number.isFinite(alto)) alto = .45;
   if (!(t >= 0) || t >= dur) return 0;
   return alto * Math.abs(Math.sin(t / dur * Math.PI * 2));
 }
@@ -941,6 +948,7 @@ export function formaArbol(x = 0, z = 0) {
 // Ventanas de la oficina (3.90.70, kit low-poly): cuántas se prenden según quién está (todos menos los de viaje), repartidas
 // parejo entre las `total` ventanas. Sin personas: el patrón de siempre (2 de cada 3).
 export function ventanasOficina(personas = [], total = 12) {
+  total = Number.isFinite(Number(total)) && Number(total) >= 0 ? Math.round(Number(total)) : 12;
   personas = (Array.isArray(personas) ? personas : []).filter(Boolean);
   if (!personas.length) return Array.from({ length: total }, (_, k) => k % 3 !== 0);
   const n = Math.round(total * personas.filter((p) => p.presencia?.estado !== 'viaje').length / personas.length);

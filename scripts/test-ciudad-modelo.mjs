@@ -925,3 +925,14 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   const t = tarjetaDe({ tipo: 'camion', folio: 'F-1' }, { ...m, camiones: [{ folio: 'F-1', cliente: 'X', fecha: 'mala', monto: 1, piezas: 1 }] });
   assert.ok(t && !JSON.stringify(t.numeros).includes('NaN'), 'tarjeta del camión sin «hace NaN d»');
 });
+
+test('gestos, rebotes, sonido y ventanas aguantan entradas inválidas (sin NaN)', () => {
+  const p = (x1, y1, x2, y2) => [{ x: x1, y: y1 }, { x: x2, y: y2 }];
+  for (const [a, b] of [[null, p(0, 0, 1, 1)], [p(0, 0, 1, 1), undefined], [[{ x: 0, y: 0 }], p(0, 0, 1, 1)], [p(0, 0, NaN, 1), p(0, 0, 1, 1)], [p(0, 0, 1, 1), [null, { x: 1, y: 1 }]], ['x', 'y']])
+    assert.deepEqual(gestoDosDedos(a, b), { escala: 1, giro: 0 });
+  for (const dur of [0, -1, NaN, Infinity, 'x']) { const r = rebote(.1, dur); assert.ok(Number.isFinite(r.y) && Number.isFinite(r.xz), String(dur)); assert.ok(Number.isFinite(saltito(.1, dur)), String(dur)); }
+  assert.equal(saltito(.175, .7, NaN), saltito(.175));
+  assert.deepEqual(capasSonido(null), capasSonido()); assert.deepEqual(capasSonido({ esDia: null }), capasSonido());
+  assert.equal(capasSonido({ esDia: false, lluvia: 1 }).lluvia, capasSonido({ esDia: false, lluvia: true }).lluvia);
+  assert.equal(ventanasOficina([], NaN).length, 12); assert.equal(ventanasOficina([], -3).length, 12); assert.equal(ventanasOficina([], '6').length, 6); assert.equal(ventanasOficina([{ presencia: { estado: 'disponible' } }], 3.6).length, 4);
+});
