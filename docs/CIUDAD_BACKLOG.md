@@ -193,6 +193,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.6) `capaCiudades()` (discos de ventas/cartera/cuota) y `datosEnFecha()` (barra de tiempo, corre con los datos crudos antes de `sinNulos()`) saltan distritos, tiendas, cartera, facturas, envíos, contenedores y renglones mensuales nulos (antes lanzaban error).
   - [x] (4.3.7) `repartoPorEstado()` empata la cuenta aunque traiga espacios o venga como número (` 10 ` = `10`) y el año/mes aunque vengan en texto; cuenta vacía no junta nada. Antes los clientes finales de esas cuentas no salían como tiendas por estado.
   - [x] (4.3.8) `misionesDelDia()` salta reuniones y tarimas nulas (antes lanzaba error), una reunión sin hora de inicio ya no dice «en NaN min» (va tras las de hoy) y una ya pasada no dice «en -N min».
+  - [x] (4.3.9) `tarjetaDe()` usa `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; negativos «-$5 K») y salta personas, reuniones, racks, barcos, tarimas, distritos, tiendas, camiones, vendedores y destinos nulos (antes lanzaba error al tocar el edificio).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -208,7 +209,9 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-11-19 03:06 · v4.3.9 · tarjetas de edificio con pesos cortos uniformes y a prueba de renglones nulos.
 - 2026-11-19 01:57 · v4.3.8 · «Hoy en Acteck» (`misionesDelDia()`) salta reuniones/tarimas nulas y ya no dice «en NaN min» ni «en -N min».
 - 2026-11-19 01:56 · v4.3.7 · `repartoPorEstado()` empata cuentas con espacios o numéricas y año/mes en texto (clientes finales por estado ya no se pierden).
 - 2026-11-19 01:36 · v4.3.6 · Capas de ciudades y barra de tiempo aguantan renglones nulos (`capaCiudades()`, `datosEnFecha()`; +2 pruebas).

@@ -672,17 +672,18 @@ export function acomodoRacks(racks = [], { ancho = 14, largo = 9, cols = 3, maxN
  *  numeros: [[etiqueta, valor]] (máx. 4), pagina }. Los números salen del mismo modelo (mismas vistas que el dashboard). */
 export function tarjetaDe(tag, modelo) {
   if (!tag) return null;
-  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  // 4.3.9: mismo formato que el resto (999 600 → «$1.0 M», no «$1000 K»; negativos «-$5 K») y listas sin nulos.
+  const pesos = pesosCorto, sn = (l) => (Array.isArray(l) ? l : []).filter(Boolean);
   const num = (v) => (Number(v) || 0).toLocaleString('es-MX');
   const t = { titulo: tag.titulo || '', sub: tag.sub || '', estado: null, numeros: [], pagina: tag.pagina || null };
   const m = modelo || {};
   if (tag.tipo === 'oficina' && m.oficina) {
-    const o = m.oficina, pend = (o.personas || []).reduce((s, p) => s + (p.pendientes || 0), 0), hechas = (o.personas || []).reduce((s, p) => s + (p.hechas || 0), 0);
-    t.numeros = [['Personas', num((o.personas || []).length + (o.genericos || 0))], ['Reuniones hoy', (() => { const p = (o.agenda || []).find((r) => r.estado !== 'hecha'); return p ? `${num(o.reuniones)} · ${p.estado === 'en curso' ? 'en curso' : `próxima ${p.hora}`}` : num(o.reuniones); })()], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
+    const o = m.oficina, pend = sn(o.personas).reduce((s, p) => s + (p.pendientes || 0), 0), hechas = sn(o.personas).reduce((s, p) => s + (p.hechas || 0), 0);
+    t.numeros = [['Personas', num(sn(o.personas).length + (o.genericos || 0))], ['Reuniones hoy', (() => { const p = sn(o.agenda).find((r) => r.estado !== 'hecha'); return p ? `${num(o.reuniones)} · ${p.estado === 'en curso' ? 'en curso' : `próxima ${p.hora}`}` : num(o.reuniones); })()], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
     t.estado = o.reunionEnCurso ? 'ambar' : 'verde';
   } else if (tag.tipo === 'sala' && m.oficina) {
     // Sala de juntas (interior de la oficina, 3.90.38): las reuniones de hoy en orden; en curso = ámbar.
-    const ag = m.oficina.agenda || [];
+    const ag = sn(m.oficina.agenda);
     t.numeros = ag.length ? ag.slice(0, 5).map((r) => [`${r.hora}${r.estado === 'en curso' ? ' · ahora' : r.estado === 'hecha' ? ' · ✓' : ''}`, r.titulo]) : [['Reuniones hoy', 'ninguna']];
     t.estado = ag.some((r) => r.estado === 'en curso') ? 'ambar' : 'verde';
   } else if ((tag.tipo === 'cedis' || tag.tipo === 'montacargas') && m.cedis) {
@@ -690,15 +691,15 @@ export function tarjetaDe(tag, modelo) {
     t.numeros = [['Inventario', pesos(c.valor)], ['Días de inventario', num(Math.round(d))], ['Piezas', num(c.piezas)], ['SKUs con stock', num(c.skus)]];
     t.estado = d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'rack') {
-    const r = (m.cedis?.racksMarca || []).find((x) => x.marca === tag.marca);
+    const r = sn(m.cedis?.racksMarca).find((x) => x.marca === tag.marca);
     if (r) {
-      const tot = (m.cedis.racksMarca || []).reduce((s2, x) => s2 + (Number(x.valor) || 0), 0);
+      const tot = sn(m.cedis.racksMarca).reduce((s2, x) => s2 + (Number(x.valor) || 0), 0);
       t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${num(r.marcas)} marcas` : 'SKUs con stock', num(r.skus)]];
       t.estado = r.dias == null ? null : r.dias > 120 ? 'rojo' : r.dias > 90 ? 'ambar' : 'verde'; // mismos umbrales que el CEDIS
     }
   } else if (tag.tipo === 'barco' && m.puerto) {
     // Contenedor en el mar (interior del puerto, 3.90.34): proveedor, ETA, piezas y POs (`v_embarques_contenedor`). ETA vencida sin arribo = rojo.
-    const b = [...(m.puerto.barcos || []), ...(m.puerto.tarimas || [])].find((x) => x.id === tag.id);
+    const b = [...sn(m.puerto.barcos), ...sn(m.puerto.tarimas)].find((x) => x.id === tag.id);
     if (b) {
       const f = b.arribo || b.eta; const fc = f ? new Date(`${String(f).slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : null;
       const cuando = b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias < 0 ? `${fc} · ${-b.llegaEnDias} d tarde` : b.llegaEnDias === 0 ? `${fc} · hoy` : `${fc} · en ${b.llegaEnDias} d`;
@@ -706,8 +707,8 @@ export function tarjetaDe(tag, modelo) {
       t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';
     }
   } else if (tag.tipo === 'puerto' && m.puerto) {
-    const p = m.puerto, b = p.barcos || [], pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
-    t.numeros = [['Navegando', num(b.length)], ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num((p.tarimas || []).length)]];
+    const p = m.puerto, b = sn(p.barcos), pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
+    t.numeros = [['Navegando', num(b.length)], ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num(sn(p.tarimas).length)]];
     t.estado = b.some((x) => x.llegaEnDias == null) ? 'ambar' : 'verde';
   } else if (tag.tipo === 'banco' && m.banco) {
     const b = m.banco;
@@ -718,16 +719,16 @@ export function tarjetaDe(tag, modelo) {
     t.numeros = [['Propuestas abiertas', num(r.abiertas)], ['SKUs confirmados', `${num(r.confirmadas)} de ${num(r.lineas)}`], ['Comprados', num(r.compradas)], ['Arribos 7 días', `${num(r.arribos7)}${r.atrasados ? ` · ${num(r.atrasados)} atrasado${r.atrasados === 1 ? '' : 's'}` : ''}`]];
     t.estado = r.atrasados > 0 ? 'rojo' : r.arribos7 > 0 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'ciudad') {
-    const d = (m.distritos || []).find((x) => x.ciudad === tag.ciudad) || tag.distrito;
+    const d = sn(m.distritos).find((x) => x.ciudad === tag.ciudad) || tag.distrito;
     if (d) {
-      const ts = d.tiendas || [], act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + (Number(x.importe) || 0), 0), r = ts.length ? act / ts.length : 0;
-      t.numeros = [['Tiendas activas', `${act} de ${ts.length}`], ['Venta del mes', pesos(venta)], ['Clientes', num((d.cuentas || []).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num((d.vendedores || []).length)]];
+      const ts = sn(d.tiendas), act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + (Number(x.importe) || 0), 0), r = ts.length ? act / ts.length : 0;
+      t.numeros = [['Tiendas activas', `${act} de ${ts.length}`], ['Venta del mes', pesos(venta)], ['Clientes', num(sn(d.cuentas).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num(sn(d.vendedores).length)]];
       const cq = cuotaRitmo(m, ts.map((x) => x.cuenta)); if (cq) { t.numeros.splice(2, 0, ['Cuota del mes', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
       t.estado = !ts.length ? null : r >= 0.6 ? 'verde' : r >= 0.3 ? 'ambar' : 'rojo';
     }
   } else if (tag.tipo === 'tienda') {
-    const d = (m.distritos || []).find((x) => x.ciudad === tag.ciudad);
-    const s = d?.tiendas?.find((x) => x.cuenta === tag.cuenta && `${x.nombreCuenta} · ${x.sucursal}` === tag.titulo);
+    const d = sn(m.distritos).find((x) => x.ciudad === tag.ciudad);
+    const s = sn(d?.tiendas).find((x) => x.cuenta === tag.cuenta && `${x.nombreCuenta} · ${x.sucursal}` === tag.titulo);
     if (s) {
       t.numeros = [['Este mes', pesos(s.importe)], ['Mes anterior', pesos(s.previo)]];
       if (s.vendedores) t.numeros.push(['Vendedores', num(s.vendedores)]);
@@ -742,7 +743,7 @@ export function tarjetaDe(tag, modelo) {
   } else if (tag.tipo === 'camion') {
     // Camión (etapa 5, 3.90.54): factura (cliente, monto, piezas) o envío del Tracking (paquetería), cuándo salió y destino.
     // Envío con más de 5 días en camino = ámbar.
-    const c = (m.camiones || []).find((x) => x.folio === tag.folio);
+    const c = sn(m.camiones).find((x) => x.folio === tag.folio);
     if (c) {
       const n = c.fecha ? dias(c.fecha, m.hoyIso || new Date().toISOString().slice(0, 10)) : null;
       const salio = c.fecha ? `${String(c.fecha).slice(0, 10)}${n == null ? '' : n <= 0 ? ' · hoy' : n === 1 ? ' · ayer' : ` · hace ${n} d`}` : '—';
@@ -752,8 +753,8 @@ export function tarjetaDe(tag, modelo) {
     }
   } else if (tag.tipo === 'vendedorErp') {
     // Vendedor del ERP en ruta (etapa 5, 3.90.53): ventas del mes y del año (`v_ventas_vendedor_cliente_mes`) y a quién visita.
-    const v = (m.vendedoresRuta || []).find((x) => x.nombre === tag.titulo);
-    if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', (v.destinos || []).map((x) => x.cliente).slice(0, 3).join(' → ') || '—']]; t.estado = v.totalMes > 0 ? 'verde' : 'ambar'; }
+    const v = sn(m.vendedoresRuta).find((x) => x.nombre === tag.titulo);
+    if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', sn(v.destinos).map((x) => x.cliente).slice(0, 3).join(' → ') || '—']]; t.estado = v.totalMes > 0 ? 'verde' : 'ambar'; }
   } else if (tag.tipo === 'barco' && tag.barco) {
     const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', b.eta || '—'], ['Llega a CEDIS', b.arribo || '—']];
     if (b.estatus) t.numeros.push(['Estatus', b.estatus]);

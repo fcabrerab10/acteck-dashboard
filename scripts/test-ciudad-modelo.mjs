@@ -855,3 +855,21 @@ test('pin, ciudades top y POs del puerto aguantan renglones nulos', () => {
   ponerPosEnPuerto(pto, [{ contenedor: 'C1', po: 'PO-2' }, null, { contenedor: 'C1', po: 'PO-1' }]);
   assert.deepEqual(pto.barcos[1].listaPos, ['PO-1', 'PO-2'], 'barco/tarima nulos no rompen');
 });
+
+test('tarjeta del edificio: pesos cortos y renglones nulos (4.3.9)', () => {
+  assert.equal(tarjetaDe({ tipo: 'cedis' }, { cedis: { valor: 999600, dias: 10 } }).numeros[0][1], '$1.0 M', 'ya no «$1000 K»');
+  const mod = { oficina: { personas: [null, { pendientes: 2, hechas: 1 }], agenda: [null, { hora: '10:00', titulo: 'Junta', estado: 'en curso' }], reuniones: 1 },
+    cedis: { racksMarca: [null, { marca: 'ACTECK', valor: 500, dias: 30, piezas: 3, skus: 1 }] },
+    puerto: { barcos: [null, { id: 'C1', llegaEnDias: 2, piezas: 4 }], tarimas: [undefined], totalPiezas: 4 },
+    distritos: [null, { ciudad: 'LEON', cuentas: [null], vendedores: [null], tiendas: [null, { cuenta: 'ct', nombreCuenta: 'CT', sucursal: 'Centro', importe: -5000, vendio: true, vendioMes: true }] }],
+    camiones: [null, { folio: 'F1', cliente: 'X', monto: 1500 }], vendedoresRuta: [null, { nombre: 'Ana', totalMes: 1, destinos: [null, { cliente: 'Y' }] }] };
+  assert.deepEqual(tarjetaDe({ tipo: 'oficina' }, mod).numeros.slice(0, 3), [['Personas', '1'], ['Reuniones hoy', '1 · en curso'], ['Pendientes', '2']]);
+  assert.deepEqual(tarjetaDe({ tipo: 'sala' }, mod).numeros, [['10:00 · ahora', 'Junta']]);
+  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'ACTECK' }, mod).numeros[0][1], '$500 · 100 %');
+  assert.equal(tarjetaDe({ tipo: 'barco', id: 'C1' }, mod).estado, 'verde');
+  assert.deepEqual(tarjetaDe({ tipo: 'puerto' }, mod).numeros[3], ['Descargando', '0'], 'tarima nula no cuenta');
+  const ci = tarjetaDe({ tipo: 'ciudad', ciudad: 'LEON' }, mod); assert.deepEqual(ci.numeros[0], ['Tiendas activas', '1 de 1']); assert.equal(ci.numeros[1][1], '-$5 K');
+  assert.equal(tarjetaDe({ tipo: 'tienda', ciudad: 'LEON', cuenta: 'ct', titulo: 'CT · Centro' }, mod).numeros[0][1], '-$5 K');
+  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, mod).numeros[1][1], '$2 K');
+  assert.equal(tarjetaDe({ tipo: 'vendedorErp', titulo: 'Ana' }, mod).numeros[3][1], 'Y');
+});
