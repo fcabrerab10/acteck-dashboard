@@ -188,6 +188,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.1) `fechaHoy()` pura y probada: misiones, bitácora, burbujas, calendario, momentos de la barra de tiempo, camiones de temporada, demanda de 3 meses y `construirModelo()` aceptan «hoy» nulo, texto o inválido (usan ahora; 'AAAA-MM-DD' a mediodía local) en vez de lanzar error y tumbar la Ciudad.
   - [x] (4.3.2) Cadena y circuito: `cadenaSuministro()` / `cintasCadena()` saltan barcos, camiones, distritos y tiendas nulos (antes lanzaban error) y `tramoActual()` ya no da NaN con ciclo/paradas inválidos (vendedores sin posición).
   - [x] (4.3.3) `pensamientos()`, `celebraciones()`, `burbujasAtencion()` y `bitacoraEventos()` saltan cartera, distritos, tiendas, cuotas, barcos y reuniones nulos (antes lanzaban error) y los pensamientos usan `fechaHoy()` (hoyIso inválido ya no da ritmo NaN).
+  - [x] (4.3.4) `sinNulos()` pura y probada: `construirModelo()` limpia los renglones nulos de cada lista de datos (cuentas, envíos, contenedores, facturas, sucursales, clientes finales, vendedores, perfiles, reuniones, cartera…; antes un null tumbaba toda la Ciudad) y acepta `d` nulo; `etiquetasSinEncimar()` y `ventanasOficina()` también saltan nulos.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -203,7 +204,9 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-11-19 00:56 · v4.3.4 · `construirModelo()`, etiquetas y ventanas de la oficina aguantan renglones nulos (`sinNulos()`).
 - 2026-11-19 00:26 · v4.3.3 · Pensamientos, celebraciones, burbujas y bitácora aguantan renglones nulos y fecha inválida (+1 prueba).
 - 2026-11-18 23:35 · v4.3.2 · Cadena de suministro y circuito de vendedores aguantan renglones nulos y ciclos inválidos (+1 prueba).
 - 2026-11-18 23:06 · v4.3.1 · `fechaHoy()`: las capas con fecha (misiones, bitácora, burbujas, calendario, camiones de temporada, demanda) y el modelo aguantan un «hoy» nulo/inválido (+1 prueba).

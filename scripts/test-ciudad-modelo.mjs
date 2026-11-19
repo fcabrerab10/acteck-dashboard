@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -819,4 +819,15 @@ test('pensamientos, celebraciones, burbujas y bitácora aguantan renglones nulos
   let b; assert.doesNotThrow(() => { b = burbujasAtencion(m, h); });
   assert.deepEqual(b.map((x) => x.lugar), ['puerto', 'oficina']);
   assert.doesNotThrow(() => bitacoraEventos({ hoyIso: '2026-11-18', oficina: { agenda: [null] } }, h));
+});
+
+test('construirModelo, etiquetas y ventanas aguantan renglones nulos', () => {
+  const listas = ['cuentas', 'envios', 'contenedores', 'facturas', 'sucursales', 'clientesFinales', 'vendedoresMayoristas', 'vendedoresErp', 'perfiles', 'reunionesHoy', 'cartera', 'agendaHoy', 'tiendas', 'pos', 'forecast'];
+  for (const k of listas) assert.doesNotThrow(() => construirModelo({ [k]: [null, {}] }, new Date('2026-11-18T10:00:00')), k);
+  assert.doesNotThrow(() => construirModelo(null));
+  assert.deepEqual(sinNulos({ a: [null, 1, undefined, 0], b: 'x', c: null }), { a: [1, 0], b: 'x', c: null });
+  assert.deepEqual(etiquetasSinEncimar([null, { x: 0, y: 0, w: 10, h: 10, prioridad: 1 }]), [false, true]);
+  assert.deepEqual(etiquetasSinEncimar(null), []);
+  assert.deepEqual(ventanasOficina([null, { presencia: { estado: 'viaje' } }], 4), [false, false, false, false]);
+  assert.equal(ventanasOficina([null], 3).length, 3);
 });

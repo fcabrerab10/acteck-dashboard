@@ -72,7 +72,8 @@ export const esChico = (s) => Number.isFinite(s) && s < 1;
 // Etiquetas sin encimarse: cajas en pixeles de pantalla { x, y (centro), w, h, prioridad }; se quedan las de mayor prioridad
 // (empate: la primera) y se esconden las que chocan con una ya puesta. Regresa un arreglo de booleanos en el orden recibido.
 export function etiquetasSinEncimar(cajas, margen = 4) {
-  const orden = cajas.map((c, i) => i).sort((a, b) => (cajas[b].prioridad || 0) - (cajas[a].prioridad || 0) || a - b);
+  cajas = Array.isArray(cajas) ? cajas : [];
+  const orden = cajas.map((c, i) => i).sort((a, b) => (cajas[b]?.prioridad || 0) - (cajas[a]?.prioridad || 0) || a - b);
   const vis = cajas.map(() => false); const puestas = [];
   for (const i of orden) {
     const c = cajas[i]; if (!c || ![c.x, c.y, c.w, c.h].every(Number.isFinite)) continue;
@@ -916,12 +917,22 @@ export function formaArbol(x = 0, z = 0) {
 // Ventanas de la oficina (3.90.70, kit low-poly): cuántas se prenden según quién está (todos menos los de viaje), repartidas
 // parejo entre las `total` ventanas. Sin personas: el patrón de siempre (2 de cada 3).
 export function ventanasOficina(personas = [], total = 12) {
+  personas = (Array.isArray(personas) ? personas : []).filter(Boolean);
   if (!personas.length) return Array.from({ length: total }, (_, k) => k % 3 !== 0);
   const n = Math.round(total * personas.filter((p) => p.presencia?.estado !== 'viaje').length / personas.length);
   return Array.from({ length: total }, (_, k) => Math.floor((k + 1) * n / total) > Math.floor(k * n / total));
 }
 
+// Datos limpios (4.3.4): cada lista de `d` sin renglones nulos y sin listas que no sean arreglo (una vista que trae un null
+// o un campo que no es lista ya no tumba toda la Ciudad). Los demás campos pasan igual.
+export function sinNulos(d) {
+  const o = {};
+  for (const [k, v] of Object.entries(d && typeof d === 'object' ? d : {})) o[k] = Array.isArray(v) ? v.filter((x) => x != null) : v;
+  return o;
+}
+
 export function construirModelo(d, hoy = new Date()) {
+  d = sinNulos(d);
   hoy = fechaHoy(hoy);
   const hoyIso = hoy.toISOString().slice(0, 10);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
