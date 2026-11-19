@@ -363,6 +363,8 @@ test('interior de la oficina: escritorios y sala de juntas', () => {
   assert.deepEqual(acomodoEscritorios(0), []); assert.deepEqual(acomodoEscritorios(1), [{ x: 0, z: 0 }]);
   const e = acomodoEscritorios(6); assert.equal(e.length, 6); assert.deepEqual(e[0], { x: -3.5, z: -2.6 }); assert.deepEqual(e[3], { x: 3.5, z: -2.6 }); assert.ok(Math.abs(e[5].x + 7 / 6) < 1e-9 && e[5].z === 2.6);
   assert.equal(acomodoEscritorios(40).length, 12, 'tope'); assert.ok(acomodoEscritorios(12).every((p) => Math.abs(p.x) <= 3.5 && Math.abs(p.z) <= 2.6));
+  assert.equal(acomodoEscritorios(3.7).length, 3); assert.deepEqual(acomodoEscritorios(3.7), acomodoEscritorios(3)); assert.deepEqual(acomodoEscritorios('abc'), []);
+  assert.ok(acomodoEscritorios(4, { cols: 0 }).every((p) => Number.isFinite(p.x) && Number.isFinite(p.z)), 'cols 0 no da NaN');
   const ag = reunionesDelDia([{ titulo: 'A', fecha: '2026-10-05T09:00:00' }, { titulo: 'B', fecha: '2026-10-05T10:30:00' }, { titulo: 'C', fecha: '2026-10-05T16:00:00' }], new Date('2026-10-05T11:00:00'));
   const t = tarjetaDe({ tipo: 'sala' }, { oficina: { agenda: ag } });
   assert.deepEqual(t.numeros, [['09:00 · ✓', 'A'], ['10:30 · ahora', 'B'], ['16:00', 'C']]); assert.equal(t.estado, 'ambar');
@@ -560,6 +562,10 @@ test('barcos por ETA real: atracado, en fila, llegando, mar abierto', () => {
   assert.deepEqual(r.map((x) => [x.modo, x.muelle]), [['esperando', 1], ['atracado', 0], ['llegando', null], ['navegando', null], ['navegando', null], ['navegando', null], ['navegando', null]]);
   assert.equal(r[2].avance, .5); assert.equal(r[3].avance, .6); assert.equal(r[4].avance, .3); assert.equal(r[6].avance, 0);
   assert.deepEqual(rumboBarcos(null), []);
+  // 4.3.10: ETA en texto cuenta, vacía o basura = sin ETA (antes «» atracaba)
+  const t = rumboBarcos([{ llegaEnDias: '' }, { llegaEnDias: 'abc', progreso: .2 }, { llegaEnDias: '-1' }, { llegaEnDias: ' 4 ' }, { llegaEnDias: NaN }, null]);
+  assert.deepEqual(t.map((x) => x.modo), ['navegando', 'navegando', 'atracado', 'llegando', 'navegando', 'navegando']);
+  assert.equal(t[1].avance, .2); assert.equal(t[3].avance, .5); assert.deepEqual(rumboBarcos({ a: 1 }), []);
 });
 
 test('cuentas sin sucursal repartidas por estado', () => {

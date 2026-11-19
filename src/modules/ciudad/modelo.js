@@ -299,12 +299,15 @@ export function repartoPorEstado(cuenta, filas = [], { anio, mes, anioPrev, mesP
 // Barcos por ETA real (etapa 5, 3.90.55): dónde va cada barco sin arribo al CEDIS. ETA vencida o de hoy → en el puerto:
 // el más atrasado atraca y descarga (`muelle` 0), los demás esperan en fila (`muelle` 1, 2…); llega en ≤ 7 días → se
 // acerca (`avance` = 1 − días/8); más lejos o sin ETA → mar abierto (`avance` ≤ .6, con el progreso de sus fechas).
+// (4.3.10) ETA en texto («3») cuenta igual; vacía o basura («», «abc», NaN) = sin ETA (antes «» se tomaba como 0 y atracaba).
+const etaDias = (v) => (v == null || (typeof v === 'string' && !v.trim()) ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
 export function rumboBarcos(barcos = []) {
-  const enPuerto = (barcos || []).map((b, i) => ({ b, i })).filter(({ b }) => !b?.arribo && b?.llegaEnDias != null && b.llegaEnDias <= 0).sort((a, c) => a.b.llegaEnDias - c.b.llegaEnDias || a.i - c.i);
+  barcos = Array.isArray(barcos) ? barcos : [];
+  const enPuerto = barcos.map((b, i) => ({ b, i, d: etaDias(b?.llegaEnDias) })).filter(({ b, d }) => !b?.arribo && d != null && d <= 0).sort((a, c) => a.d - c.d || a.i - c.i);
   const fila = new Map(enPuerto.map(({ i }, k) => [i, k]));
-  return (barcos || []).map((b, i) => {
+  return barcos.map((b, i) => {
     if (fila.has(i)) { const k = fila.get(i); return { modo: k === 0 ? 'atracado' : 'esperando', muelle: k, avance: 1 }; }
-    const d = b?.llegaEnDias;
+    const d = etaDias(b?.llegaEnDias);
     if (!b?.arribo && d != null && d > 0 && d <= 7) return { modo: 'llegando', muelle: null, avance: Math.round((1 - d / 8) * 1000) / 1000 };
     return { modo: 'navegando', muelle: null, avance: Math.min(.6, Math.max(0, Number(b?.progreso) || 0)) };
   });
@@ -545,8 +548,8 @@ export function reunionesDelDia(reuniones = [], hoy = new Date()) {
 
 // Interior de la oficina (3.90.38): escritorios en rejilla dentro de la planta (`ancho` × `largo`, centrada en 0,0), hasta `max`.
 export function acomodoEscritorios(n, { ancho = 7, largo = 5.2, cols = 4, max = 12 } = {}) {
-  const k = Math.max(0, Math.min(Number(n) || 0, max)); if (!k) return [];
-  const c = Math.min(cols, k), filas = Math.ceil(k / c);
+  const k = Math.max(0, Math.min(Math.floor(Number(n)) || 0, max)); if (!k) return []; // (4.3.10) 3.7 → 3 escritorios bien repartidos
+  const c = Math.max(1, Math.min(Math.floor(cols) || 1, k)), filas = Math.ceil(k / c);
   return Array.from({ length: k }, (_, i) => ({ x: c === 1 ? 0 : -ancho / 2 + (i % c) * (ancho / (c - 1)), z: filas === 1 ? 0 : -largo / 2 + Math.floor(i / c) * (largo / (filas - 1)) }));
 }
 
