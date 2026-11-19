@@ -370,14 +370,15 @@ export function tramoActual(ciclo, paradas) {
 // «¡Voy N % arriba del mes pasado!»; cuenta al ritmo de su cuota (`m.cuotas`) → «Voy arriba de mi cuota».
 export function pensamientos(m, max = 5) {
   if (!m) return [];
-  const venc = new Set((m.kpis?.cartera || []).filter((c) => Number(c.vencido) > 0).map((c) => c.cuenta));
-  const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = m.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date();
+  // 4.3.3: salta cartera/distritos/tiendas nulos y un hoyIso inválido usa hoy (antes lanzaba error o ritmo NaN).
+  const venc = new Set((m.kpis?.cartera || []).filter((c) => Number(c?.vencido) > 0).map((c) => c.cuenta));
+  const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = fechaHoy(m.hoyIso);
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   const out = [];
   for (const d of m.distritos || []) {
-    let mejor = null;
+    if (!d) continue; let mejor = null;
     for (const t of d.tiendas || []) {
-      if (t.reparto) continue; // «Clientes en …» (3.90.56) no es una tienda que piense
+      if (!t || t.reparto) continue; // «Clientes en …» (3.90.56) no es una tienda que piense
       const act = Number(t.importe) || 0, prev = Number(t.previo) || 0, cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cu = q.get(t.cuenta);
       const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: `${t.nombreCuenta || t.cuenta} · ${t.sucursal}` };
       let p = null;
@@ -423,7 +424,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   const sy = m.ultimaSync?.created_at ? fechaHora(m.ultimaSync.created_at) : null;
   if (sy && sy.f <= hoyIso) out.push({ id: 'sync', icono: '🔄', texto: `Se actualizaron los datos${m.ultimaSync.status ? ` · ${m.ultimaSync.status}` : ''}`, clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
-  for (const r of m.oficina?.agenda || []) if (r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${r.titulo}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
+  for (const r of m.oficina?.agenda || []) if (r && r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${r.titulo}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
   const vistos = new Set();
   return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ir: null, ...x }));
 }
@@ -432,9 +433,9 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
 // (fuegos artificiales sobre la base); `tiendas` = las que vendieron este mes sin haber vendido el mes anterior (≈ 30 días o más
 // sin venta y volvieron; confeti), sin las de reparto, de mayor a menor venta, máximo `max`.
 export function celebraciones(m, max = 5) {
-  const q = m?.cuotas instanceof Map ? [...m.cuotas.values()] : [];
+  const q = m?.cuotas instanceof Map ? [...m.cuotas.values()].filter(Boolean) : [];
   const venta = q.reduce((s, x) => s + (Number(x.venta) || 0), 0), cuo = q.reduce((s, x) => s + (Number(x.cuota) || 0), 0);
-  const tiendas = (m?.distritos || []).flatMap((d) => (d.tiendas || []).filter((t) => !t.reparto && t.vendioMes && !(Number(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: Number(t.importe) || 0 })))
+  const tiendas = (m?.distritos || []).filter(Boolean).flatMap((d) => (d.tiendas || []).filter((t) => t && !t.reparto && t.vendioMes && !(Number(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: Number(t.importe) || 0 })))
     .sort((a, b) => b.importe - a.importe).slice(0, max);
   return { cuota: cuo > 0 && venta >= cuo ? { pct: Math.round(venta / cuo * 100) } : null, tiendas };
 }
@@ -605,7 +606,7 @@ export function burbujasAtencion(m, hoy = new Date()) {
   const out = []; const b = m.banco;
   if (b && Number(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
   else if (b && Number(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `${b.pagosVencidos} pago${b.pagosVencidos === 1 ? '' : 's'} vencido${b.pagosVencidos === 1 ? '' : 's'}` });
-  const barcos = m.puerto?.barcos || [];
+  const barcos = (m.puerto?.barcos || []).filter(Boolean); // 4.3.3: renglones nulos no truenan
   const tarde = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias < 0).length;
   const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;
   if (tarde) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'rojo', texto: `${tarde} contenedor${tarde === 1 ? '' : 'es'} con ETA vencida` });
@@ -613,7 +614,7 @@ export function burbujasAtencion(m, hoy = new Date()) {
   const oc = Number(m.ocDetenidas) || 0; // alerta `oc_detenida` (pedidos de cliente detenidos) → CEDIS
   if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: `${oc} pedido${oc === 1 ? '' : 's'} de cliente detenido${oc === 1 ? '' : 's'}` });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
-  const prox = (m.oficina?.agenda || []).find((r) => r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
+  const prox = (m.oficina?.agenda || []).find((r) => r && r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
   if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${prox.titulo} en ${prox.ini - ahora} min` });
   return out.map((x) => ({ ...x, tag: { tipo: x.lugar } })).sort((a, c) => (a.nivel === 'rojo' ? 0 : 1) - (c.nivel === 'rojo' ? 0 : 1));
 }

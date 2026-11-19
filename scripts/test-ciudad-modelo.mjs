@@ -806,3 +806,17 @@ test('cadena y circuito: renglones nulos y ciclos inválidos no truenan ni dan N
   let c; assert.doesNotThrow(() => { c = cintasCadena(m); });
   assert.equal(c.find((x) => x.a === 'guadalajara')?.tono, 'ambar');
 });
+
+test('pensamientos, celebraciones, burbujas y bitácora aguantan renglones nulos', () => {
+  const h = new Date('2026-11-18T10:00:00');
+  const m = { hoyIso: 'basura', kpis: { cartera: [null, { cuenta: 'a', vencido: 5 }] }, cuotas: new Map([['x', null], ['q', { venta: 120, cuota: 100 }]]),
+    distritos: [null, { ciudad: 'GDL', tiendas: [null, { cuenta: 'a', sucursal: 'Centro', importe: 10, previo: 10 }, { cuenta: 'n', sucursal: 'Nueva', importe: 50, previo: 0, vendioMes: true }] }],
+    puerto: { barcos: [null, { llegaEnDias: -1 }] }, oficina: { agenda: [null, { estado: 'próxima', ini: 610, hora: '10:10', titulo: 'Junta' }] } };
+  let p; assert.doesNotThrow(() => { p = pensamientos(m); });
+  assert.equal(p[0]?.texto, 'Tengo pagos vencidos');
+  let c; assert.doesNotThrow(() => { c = celebraciones(m); });
+  assert.equal(c.cuota?.pct, 120); assert.deepEqual(c.tiendas.map((t) => t.sucursal), ['Nueva']);
+  let b; assert.doesNotThrow(() => { b = burbujasAtencion(m, h); });
+  assert.deepEqual(b.map((x) => x.lugar), ['puerto', 'oficina']);
+  assert.doesNotThrow(() => bitacoraEventos({ hoyIso: '2026-11-18', oficina: { agenda: [null] } }, h));
+});
