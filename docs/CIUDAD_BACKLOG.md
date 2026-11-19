@@ -195,6 +195,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.8) `misionesDelDia()` salta reuniones y tarimas nulas (antes lanzaba error), una reunión sin hora de inicio ya no dice «en NaN min» (va tras las de hoy) y una ya pasada no dice «en -N min».
   - [x] (4.3.9) `tarjetaDe()` usa `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; negativos «-$5 K») y salta personas, reuniones, racks, barcos, tarimas, distritos, tiendas, camiones, vendedores y destinos nulos (antes lanzaba error al tocar el edificio).
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
+  - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -212,6 +213,7 @@ Principios que no se rompen en ninguna etapa:
 
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-11-19 03:56 · v4.3.11 · racks del CEDIS y circuito de vendedores a prueba de parámetros inválidos (cols 0/decimal, maxNiveles NaN, tieneRuta nulo, max 0).
 - 2026-11-19 03:35 · v4.3.10 · barcos con ETA vacía o en texto ya no salen atracados por error; escritorios aguantan n decimal y cols 0.
 - 2026-11-19 03:06 · v4.3.9 · tarjetas de edificio con pesos cortos uniformes y a prueba de renglones nulos.
 - 2026-11-19 01:57 · v4.3.8 · «Hoy en Acteck» (`misionesDelDia()`) salta reuniones/tarimas nulas y ya no dice «en NaN min» ni «en -N min».

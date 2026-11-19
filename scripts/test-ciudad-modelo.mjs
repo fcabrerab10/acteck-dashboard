@@ -296,6 +296,11 @@ test('interior del CEDIS: acomodo de racks y tarjeta del rack', () => {
   assert.deepEqual(a.map((r) => [r.x, r.z]), [[-4, -2], [0, -2], [4, -2], [-4, 2]], 'rejilla centrada en la nave');
   assert.ok(a.every((r) => Math.abs(r.x) < 6 && Math.abs(r.z) < 4), 'todos dentro de la nave');
   assert.deepEqual(acomodoRacks(null), []); assert.equal(acomodoRacks([{ marca: 'X', valor: 0 }])[0].niveles, 1, 'sin valor no rompe');
+  assert.deepEqual(acomodoRacks('basura'), []); assert.deepEqual(acomodoRacks([null, { marca: '  ' }]), [], 'marca vacía no cuenta');
+  assert.ok(acomodoRacks(racks, { cols: 0 }).every((r) => Number.isFinite(r.x) && Number.isFinite(r.z)), 'cols 0 no da NaN');
+  assert.deepEqual(acomodoRacks(racks, { ancho: 12, largo: 8, cols: 3.9 }).map((r) => [r.x, r.z]), [[-4, -2], [0, -2], [4, -2], [-4, 2]], 'cols decimal → 3');
+  assert.ok(acomodoRacks(racks, { maxNiveles: NaN }).every((r) => r.niveles === 1), 'maxNiveles inválido → 1');
+  assert.equal(acomodoRacks([{ marca: 'A', valor: 10 }, { marca: 'B', valor: -5 }])[1].niveles, 1, 'valor negativo = 1 nivel');
   const m = { cedis: { racksMarca: racks } };
   const t = tarjetaDe({ tipo: 'rack', marca: 'ACTECK', titulo: 'ACTECK', pagina: 'inventarioGlobal' }, m);
   assert.deepEqual(t.numeros, [['Inventario', '$1 K · 67 %'], ['Días de inventario', 'sin demanda'], ['Piezas', '10'], ['SKUs con stock', '3']]); assert.equal(t.estado, null);
@@ -538,6 +543,8 @@ test('vendedores: circuito por las sedes de sus clientes y tarjeta con ventas de
   const ds = [{ cliente: 'A', ciudad: 'GDL' }, { cliente: 'B', ciudad: 'GDL' }, { cliente: 'C', ciudad: 'MTY' }, { cliente: 'D', ciudad: 'XXX' }, { cliente: 'E', ciudad: 'CDMX' }, { cliente: 'F', ciudad: 'PUE' }];
   assert.deepEqual(circuitoVendedor(ds, (c) => c !== 'XXX').map((x) => x.cliente), ['A', 'C', 'E']);
   assert.deepEqual(circuitoVendedor(ds, () => false), []); assert.deepEqual(circuitoVendedor(null), []);
+  assert.deepEqual(circuitoVendedor('x'), []); assert.deepEqual(circuitoVendedor([null, ...ds], null).map((x) => x.cliente), ['A', 'C', 'D'], 'tieneRuta nulo = todas');
+  assert.equal(circuitoVendedor(ds, undefined, 0).length, 3, 'max 0 → 3'); assert.equal(circuitoVendedor(ds, undefined, 2.8).length, 2, 'max decimal');
   assert.deepEqual(tramoActual(0, 3), { i: 0, q: 0, tramos: 4 }); assert.deepEqual(tramoActual(.5, 3), { i: 2, q: 0, tramos: 4 });
   assert.equal(tramoActual(.99, 3).i, 3); assert.equal(tramoActual(1.25, 1).i, 0); assert.equal(tramoActual(-.25, 3).i, 3);
   assert.ok(Math.abs(tramoActual(.3, 1).q - .6) < 1e-9);

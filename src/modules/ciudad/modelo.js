@@ -359,8 +359,10 @@ export function cintasCadena(m, max = 8) {
 // únicas con carretera (`tieneRuta`), máximo `max`, en el orden de `destinos` (de más a menos facturación). tramoActual()
 // reparte un ciclo (0–1) en tramos iguales: CEDIS → 1.ª sede → … → última sede → CEDIS (n paradas = n + 1 tramos).
 export function circuitoVendedor(destinos = [], tieneRuta = () => true, max = 3) {
-  const out = []; const vistas = new Set();
-  for (const d of destinos || []) { if (!d?.ciudad || vistas.has(d.ciudad) || !tieneRuta(d.ciudad)) continue; vistas.add(d.ciudad); out.push(d); if (out.length >= max) break; }
+  // (4.3.11) Acepta algo que no es lista, `tieneRuta` que no es función (todas tienen ruta) y max 0/decimal/NaN (usa 3).
+  const out = []; const vistas = new Set(); const ruta = typeof tieneRuta === 'function' ? tieneRuta : () => true;
+  const tope = Number.isFinite(Number(max)) && Number(max) >= 1 ? Math.floor(Number(max)) : 3;
+  for (const d of Array.isArray(destinos) ? destinos : []) { if (!d?.ciudad || vistas.has(d.ciudad) || !ruta(d.ciudad)) continue; vistas.add(d.ciudad); out.push(d); if (out.length >= tope) break; }
   return out;
 }
 export function tramoActual(ciclo, paradas) {
@@ -665,10 +667,12 @@ export function demanda3Meses(rows = [], hoy = new Date()) {
  *  (`ancho` × `largo`, centro 0,0) y `niveles` de cajas según el valor de la marca frente a la mayor (1…`maxNiveles`).
  *  Nada escala por tamaño de cliente: aquí escala el inventario propio de Acteck por marca, que es lo que se ve en Inventario. */
 export function acomodoRacks(racks = [], { ancho = 14, largo = 9, cols = 3, maxNiveles = 5 } = {}) {
-  const rs = (racks || []).filter((r) => r && r.marca); if (!rs.length) return [];
-  const max = Math.max(...rs.map((r) => N(r.valor))); const filas = Math.ceil(rs.length / cols);
-  const dx = ancho / cols, dz = largo / filas;
-  return rs.map((r, i) => ({ ...r, x: -ancho / 2 + dx * ((i % cols) + .5), z: -largo / 2 + dz * (Math.floor(i / cols) + .5), niveles: max > 0 ? Math.max(1, Math.min(maxNiveles, Math.ceil(N(r.valor) / max * maxNiveles))) : 1 }));
+  // (4.3.11) Acepta algo que no es lista, cols 0/decimal (antes NaN/Infinity en x) y maxNiveles inválido; valor negativo = 1 nivel.
+  const rs = (Array.isArray(racks) ? racks : []).filter((r) => r && String(r.marca ?? '').trim()); if (!rs.length) return [];
+  const c = Math.max(1, Math.floor(Number(cols)) || 1), tope = Math.max(1, Math.floor(Number(maxNiveles)) || 1);
+  const max = Math.max(...rs.map((r) => N(r.valor))); const filas = Math.ceil(rs.length / c);
+  const dx = ancho / c, dz = largo / filas;
+  return rs.map((r, i) => ({ ...r, x: -ancho / 2 + dx * ((i % c) + .5), z: -largo / 2 + dz * (Math.floor(i / c) + .5), niveles: max > 0 ? Math.max(1, Math.min(tope, Math.ceil(N(r.valor) / max * tope))) : 1 }));
 }
 
 /** Tarjeta del edificio (una sola plantilla, estilo Hay Day): de un tag tocado → { titulo, sub, estado: 'verde'|'ambar'|'rojo'|null,
