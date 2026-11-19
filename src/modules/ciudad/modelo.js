@@ -183,6 +183,7 @@ export function pinCiudad(distrito, camiones = []) {
 }
 // Acceso rápido (minimapa, paso 1): las n ciudades con más actividad = tiendas activas + camiones llegando (empate: más tiendas).
 export function ciudadesTop(modelo, n = 5) {
+  n = Math.max(0, Math.floor(Number(n))); if (!Number.isFinite(n)) n = 5; // n en texto/decimal/basura (antes NaN → lista vacía)
   const ds = (modelo?.distritos || []).filter(Boolean);
   return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); return { ciudad: d.ciudad, nombre: p.texto.split(' · ')[0], activas: p.activas, llegando: p.llegando, actividad: p.activas + p.llegando, tiendas: (d.tiendas || []).length }; })
     .filter((c) => c.ciudad && c.actividad > 0).sort((x, y) => y.actividad - x.actividad || y.tiendas - x.tiendas).slice(0, n);
@@ -871,7 +872,7 @@ export function eventosCalendario(hoy = new Date()) {
   const aBf = entre(d0, bfIni), finBf = entre(d0, lunes3);
   if (aBf <= 14 && finBf >= 0) out.push({ id: 'buenfin', icono: '🏷️', dias: Math.max(0, aBf), desde: isoLocal(bfIni), hasta: isoLocal(lunes3), nivel: aBf <= 0 ? 'ambar' : null, texto: aBf <= 0 ? `Buen Fin · hasta el lunes ${lunes3.getDate()}` : `Buen Fin en ${aBf} día${aBf === 1 ? '' : 's'} (${bfIni.getDate()}–${lunes3.getDate()} nov)` });
   if ((mo === 6 && d0.getDate() >= 15) || mo === 7) out.push({ id: 'clases', icono: '🎒', dias: 0, nivel: null, texto: 'Temporada de regreso a clases' });
-  if (mo === 11 && d0.getDate() <= 25) { const n = 25 - d0.getDate(); out.push({ id: 'navidad', icono: '🎄', dias: n, nivel: null, texto: n === 0 ? '¡Feliz Navidad!' : `Temporada navideña · faltan ${n} días` }); }
+  if (mo === 11 && d0.getDate() <= 25) { const n = 25 - d0.getDate(); out.push({ id: 'navidad', icono: '🎄', dias: n, nivel: null, texto: n === 0 ? '¡Feliz Navidad!' : n === 1 ? 'Temporada navideña · falta 1 día' : `Temporada navideña · faltan ${n} días` }); }
   return out.sort((a, b) => a.dias - b.dias);
 }
 // Paso 3 (3.90.67): camiones de facturas que salieron durante la temporada en curso (Buen Fin ya empezado, o la semana del

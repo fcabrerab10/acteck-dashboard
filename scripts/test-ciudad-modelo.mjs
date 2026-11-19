@@ -970,3 +970,12 @@ test('barra de tiempo, temporada y vistas aguantan fechas ilegibles y opciones n
   }
   assert.deepEqual(vistaMapa(null), vistaMapa());
 });
+
+test('navidad en singular y top de ciudades con n inválido', () => {
+  assert.equal(eventosCalendario(new Date(2026, 11, 24)).find((e) => e.id === 'navidad').texto, 'Temporada navideña · falta 1 día');
+  assert.equal(eventosCalendario(new Date(2026, 11, 23)).find((e) => e.id === 'navidad').texto, 'Temporada navideña · faltan 2 días');
+  const mod = { distritos: [{ ciudad: 'LEON', tiendas: [{ vendio: true }] }, { ciudad: 'QUERETARO', tiendas: [{ vendio: true }] }], camiones: [] };
+  const base = ciudadesTop(mod).length;
+  assert.equal(ciudadesTop(mod, '1').length, Math.min(1, base)); assert.equal(ciudadesTop(mod, 1.7).length, Math.min(1, base));
+  assert.equal(ciudadesTop(mod, NaN).length, base); assert.equal(ciudadesTop(mod, 'x').length, base); assert.equal(ciudadesTop(mod, -2).length, 0);
+});
