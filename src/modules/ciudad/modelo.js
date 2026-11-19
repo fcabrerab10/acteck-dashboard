@@ -474,9 +474,11 @@ export function capaCiudades(m, capa) {
   if (!m || !['ventas', 'cartera', 'cuota'].includes(capa)) return null;
   const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
   const porCiudad = new Map();
+  // Distritos y tiendas nulos se saltan (4.3.6): antes un renglón null tumbaba la capa y el disco de cada ciudad.
+  const distritos = (m.distritos || []).filter((d) => d?.ciudad).map((d) => ({ ...d, tiendas: (d.tiendas || []).filter(Boolean) }));
   if (capa === 'ventas') {
-    for (const d of m.distritos || []) {
-      const act = (d.tiendas || []).reduce((s, t) => s + (Number(t.importe) || 0), 0), prev = (d.tiendas || []).reduce((s, t) => s + (Number(t.previo) || 0), 0);
+    for (const d of distritos) {
+      const act = d.tiendas.reduce((s, t) => s + (Number(t.importe) || 0), 0), prev = d.tiendas.reduce((s, t) => s + (Number(t.previo) || 0), 0);
       const pct = prev > 0 ? Math.round((act / prev - 1) * 100) : null;
       const tono = pct == null ? (act > 0 ? 'verde' : 'gris') : pct >= 0 ? 'verde' : pct >= -20 ? 'ambar' : 'rojo';
       porCiudad.set(d.ciudad, { tono, valor: pct, texto: `${pesos(act)}${pct == null ? '' : ` · ${pct > 0 ? '+' : ''}${pct} % vs mes anterior`}` });
@@ -485,15 +487,15 @@ export function capaCiudades(m, capa) {
   }
   if (capa === 'cuota') {
     // Avance del mes de las cuentas con tiendas en la ciudad (venta ÷ cuota, sumadas) contra el ritmo esperado al día de hoy.
-    for (const d of m.distritos || []) {
-      const c = cuotaRitmo(m, (d.tiendas || []).map((t) => t.cuenta));
+    for (const d of distritos) {
+      const c = cuotaRitmo(m, d.tiendas.map((t) => t.cuenta));
       porCiudad.set(d.ciudad, c ? { tono: c.tono, valor: c.pct, texto: `${c.pct} % de la cuota del mes (${c.n} cuenta${c.n === 1 ? '' : 's'}) · ritmo ${c.ritmo} %` } : { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' });
     }
     return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
-  const venc = new Map((m.kpis?.cartera || []).filter((c) => Number(c.vencido) > 0).map((c) => [c.cuenta, Number(c.vencido)]));
-  for (const d of m.distritos || []) {
-    const cuentas = [...new Set((d.tiendas || []).map((t) => t.cuenta))], malas = cuentas.filter((c) => venc.has(c));
+  const venc = new Map((m.kpis?.cartera || []).filter((c) => c && Number(c.vencido) > 0).map((c) => [c.cuenta, Number(c.vencido)]));
+  for (const d of distritos) {
+    const cuentas = [...new Set(d.tiendas.map((t) => t.cuenta))], malas = cuentas.filter((c) => venc.has(c));
     const monto = malas.reduce((s, c) => s + venc.get(c), 0);
     porCiudad.set(d.ciudad, { tono: malas.length ? 'rojo' : 'verde', valor: monto, texto: malas.length ? `${malas.length} cuenta${malas.length === 1 ? '' : 's'} con vencido · ${pesos(monto)}` : 'Sin cartera vencida' });
   }
@@ -820,10 +822,10 @@ export function datosEnFecha(d, fecha) {
   if (!d || !(fecha instanceof Date) || Number.isNaN(fecha.getTime())) return d;
   const f = isoLocal(fecha), am = fecha.getFullYear() * 12 + fecha.getMonth() + 1;
   const despues = (x) => !!x && String(x).slice(0, 10) > f;
-  const hastaMes = (rows) => (rows || []).filter((r) => N(r.anio) * 12 + N(r.mes) <= am);
-  const envios = (d.envios || []).filter((e) => !despues(e.fecha_envio_erp || e.fecha_surtida)).map((e) => (despues(e.fecha_entrega_erp || e.fecha_entregada) ? { ...e, fecha_entrega_erp: null, fecha_entregada: null } : e));
-  const contenedores = (d.contenedores || []).filter((c) => !despues(c.fecha_emision)).map((c) => (despues(c.arribo_cedis) ? { ...c, arribo_cedis: null, estatus: /CONCLUIDO/i.test(c.estatus || '') ? 'EN TRANSITO' : c.estatus } : c));
-  return { ...d, facturas: (d.facturas || []).filter((x) => !despues(x.fecha)), envios, contenedores,
+  const hastaMes = (rows) => (rows || []).filter((r) => r && N(r.anio) * 12 + N(r.mes) <= am);
+  const envios = (d.envios || []).filter((e) => e && !despues(e.fecha_envio_erp || e.fecha_surtida)).map((e) => (despues(e.fecha_entrega_erp || e.fecha_entregada) ? { ...e, fecha_entrega_erp: null, fecha_entregada: null } : e));
+  const contenedores = (d.contenedores || []).filter((c) => c && !despues(c.fecha_emision)).map((c) => (despues(c.arribo_cedis) ? { ...c, arribo_cedis: null, estatus: /CONCLUIDO/i.test(c.estatus || '') ? 'EN TRANSITO' : c.estatus } : c));
+  return { ...d, facturas: (d.facturas || []).filter((x) => x && !despues(x.fecha)), envios, contenedores,
     sucursales: hastaMes(d.sucursales), cuentaMes: hastaMes(d.cuentaMes), clientesFinales: hastaMes(d.clientesFinales), vendedoresMayoristas: hastaMes(d.vendedoresMayoristas), vendedoresErp: hastaMes(d.vendedoresErp),
     agendaHoy: [], reunionesHoy: [], viajesHoy: [], _aprox: ['inventario', 'cartera', 'pagos', 'ventas del mes completas', 'agenda'] };
 }

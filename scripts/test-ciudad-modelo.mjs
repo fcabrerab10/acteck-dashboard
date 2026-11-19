@@ -475,6 +475,9 @@ test('capa de cuota por ciudad', () => {
   assert.equal(c.porCiudad.get('GDL').valor, 60); assert.equal(c.porCiudad.get('CDMX').valor, 37);
   assert.equal(c.porCiudad.get('GDL').texto, '60 % de la cuota del mes (1 cuenta) · ritmo 48 %');
   assert.equal(capaCiudades({ distritos: m.distritos }, 'cuota').porCiudad.get('GDL').tono, 'gris'); // sin datos de cuota: falla sola
+  // renglones nulos (4.3.6): distritos, tiendas y cartera null se saltan sin lanzar error
+  const conNulos = { ...m, distritos: [null, ...m.distritos.map((x) => ({ ...x, tiendas: [null, ...(x.tiendas || [])] })), { ciudad: null }], kpis: { ...m.kpis, cartera: [null, ...(m.kpis?.cartera || [])] } };
+  for (const capa of ['ventas', 'cartera', 'cuota']) assert.deepEqual([...capaCiudades(conNulos, capa).porCiudad], [...capaCiudades(m, capa).porCiudad], `capa ${capa} con nulos`);
   assert.equal(cuotasPorCuenta(null, null).size, 0);
   assert.equal(cuotasPorCuenta([{ cliente_erp: ' 10 ', cuenta_sellout: 'a', cuota_venta: 5 }], [{ cliente: '10', fact_neta: 3 }, { cliente: 10, fact_neta: 'x' }]).get('a').venta, 3, 'cliente con espacios');
 });
@@ -631,6 +634,8 @@ test('datosEnFecha: regresa facturas, envíos, contenedores y ventas a esa fecha
   assert.deepEqual(r.sucursales.map((x) => x.mes), [9]); assert.deepEqual(r.agendaHoy, []); assert.equal(r.inventario, crudos.inventario);
   assert.ok(r._aprox.includes('inventario'));
   assert.equal(datosEnFecha(crudos, null), crudos);
+  const rn = datosEnFecha({ ...crudos, facturas: [null, ...crudos.facturas], envios: [null, ...crudos.envios], contenedores: [null, ...crudos.contenedores], sucursales: [null, ...crudos.sucursales], cuentaMes: [null] }, new Date(2026, 8, 30, 12));
+  assert.deepEqual([rn.facturas.length, rn.envios.length, rn.contenedores.length, rn.sucursales.length, rn.cuentaMes.length], [1, 1, 1, 1, 0], 'nulos fuera (4.3.6)');
   // reconstruida: ya no hay camión de la factura 2 y el contenedor A sigue en camino
   const m = construirModelo({ ...d, ...datosEnFecha({ ...d, facturas: crudos.facturas, contenedores: crudos.contenedores }, new Date(2026, 8, 30, 12)) }, new Date(2026, 8, 30, 12));
   assert.equal(m.hoyIso, '2026-09-30'); assert.ok(!m.camiones.some((c) => c.folio === 2)); assert.ok(m.puerto.barcos.some((b) => b.id === 'A'));
