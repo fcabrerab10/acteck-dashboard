@@ -8,6 +8,8 @@
 
 
 const N = (v) => Number(v) || 0;
+// (4.3.19) Lo que no es lista (null, texto, número, objeto) → []: una consulta que regresa algo raro no tumba la capa.
+export const comoLista = (x) => (Array.isArray(x) ? x : []);
 export const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
 /** Ciudades (lat, lon) · la escena usa x = (lon − lonGDL)·ESC, z = −(lat − latGDL)·ESC. */
@@ -92,7 +94,8 @@ export const ELEV_CAM = Math.atan2(240, 300);
 // Límites del zoom (media altura visible). El máximo deja ver México completo aun en pantallas angostas (Vista Mapa, 3.90.x).
 export const ZOOM_MIN = 8, ZOOM_MAX = 180;
 export const zoomEnRango = (z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Number.isFinite(z) ? z : ZOOM_MAX));
-export function encuadre(puntos, { ang = Math.PI / 4, aspecto = 1.6, margen = 1.15, alto = 12, min = 8, max = 120 } = {}) {
+export function encuadre(puntos, op) {
+  let { ang = Math.PI / 4, aspecto = 1.6, margen = 1.15, alto = 12, min = 8, max = 120 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
   const ok = (Array.isArray(puntos) ? puntos : []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
   if (!ok.length) return null;
   const pos = (v, def) => (Number.isFinite(v) && v > 0 ? v : def);
@@ -178,7 +181,7 @@ export function nombreCiudad(ciudad) {
 export function pinCiudad(distrito, camiones = []) {
   const nombre = nombreCiudad(distrito?.ciudad);
   const activas = (distrito?.tiendas || []).filter((t) => t?.vendio && !t.virtual).length;
-  const llegando = (camiones || []).filter((c) => c && c.ciudad === distrito?.ciudad).length;
+  const llegando = comoLista(camiones).filter((c) => c && c.ciudad === distrito?.ciudad).length;
   return { activas, llegando, texto: [nombre, `🏬 ${activas}`, llegando ? `🚚 ${llegando}` : null].filter(Boolean).join(' · ') };
 }
 // Acceso rápido (minimapa, paso 1): las n ciudades con más actividad = tiendas activas + camiones llegando (empate: más tiendas).
@@ -252,8 +255,8 @@ export function fechaHoy(h) {
 }
 
 export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISOString().slice(0, 10), reglas = null) {
-  const conVencido = (cartera || []).filter((c) => N(c?.vencido) > 0);
-  const abiertos = reglas?.venceEn && reglas?.estaVencido ? (pagos || []).filter((p) => p && p.estado !== 'rechazado') : [];
+  const conVencido = comoLista(cartera).filter((c) => N(c?.vencido) > 0);
+  const abiertos = reglas?.venceEn && reglas?.estaVencido ? comoLista(pagos).filter((p) => p && p.estado !== 'rechazado') : [];
   const semana = abiertos.filter((p) => reglas.venceEn(p, 7, hoyIso)), vencidos = abiertos.filter((p) => reglas.estaVencido(p, hoyIso));
   return { carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
 }
@@ -264,9 +267,9 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().t
   // Pulido (3.110.4): líneas nulas y una fecha inválida ya no tiran el modelo (la fecha mala usa hoy).
   const base = Date.parse(`${String(hoyIso).slice(0, 10)}T00:00:00Z`); const t0 = Number.isFinite(base) ? base : Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
   hoyIso = new Date(t0).toISOString().slice(0, 10);
-  const ps = (propuestas || []).filter((p) => p && p.estatus !== 'borrador'); const lineas = ps.flatMap((p) => p.forecast_propuesta_lineas || []).filter(Boolean);
+  const ps = comoLista(propuestas).filter((p) => p && p.estatus !== 'borrador'); const lineas = ps.flatMap((p) => p.forecast_propuesta_lineas || []).filter(Boolean);
   const mas7 = new Date(t0 + 7 * 86400000).toISOString().slice(0, 10);
-  const av = (avisos || []).filter((a) => a?.fecha_arribo && String(a.fecha_arribo).slice(0, 10) <= mas7);
+  const av = comoLista(avisos).filter((a) => a?.fecha_arribo && String(a.fecha_arribo).slice(0, 10) <= mas7);
   const atrasados = av.filter((a) => String(a.fecha_arribo).slice(0, 10) < hoyIso);
   return { abiertas: ps.filter((p) => !p.cerrado_at).length, lineas: lineas.length, confirmadas: lineas.filter((l) => l.confirmado).length, compradas: lineas.filter((l) => l.comprado_at).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, a) => s + N(a.piezas_a_reservar), 0), atrasados: atrasados.length };
 }
@@ -293,10 +296,11 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
 // Cuentas sin sucursal repartidas por estado (etapa 5, 3.90.56): con su sell out a clientes finales por estado
 // (`mv_sellout_cliente_final_mes`: cuenta, anio, mes, estado, importe) → una tienda «Clientes en <ciudad>» por ciudad
 // representativa del estado (`CIUDAD_POR_ESTADO`), sin la `sede` (ahí ya está su Matriz), top `max` por actividad.
-export function repartoPorEstado(cuenta, filas = [], { anio, mes, anioPrev, mesPrev, sede = null, max = 6 } = {}) {
+export function repartoPorEstado(cuenta, filas = [], op) {
+  let { anio, mes, anioPrev, mesPrev, sede = null, max = 6 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
   const por = new Map(); const clave = (v) => String(v ?? '').trim(); const cta = clave(cuenta); if (!cta) return [];
   anio = Number(anio); mes = Number(mes); anioPrev = Number(anioPrev); mesPrev = Number(mesPrev);
-  for (const r of filas || []) {
+  for (const r of comoLista(filas)) {
     if (clave(r?.cuenta) !== cta) continue; const est = norm(r.estado);
     const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad || ciudad === sede) continue;
     const a = Number(r.anio), ms = Number(r.mes), imp = Number(r.importe) || 0; const o = por.get(ciudad) || { ciudad, importe: 0, previo: 0 };
@@ -463,7 +467,7 @@ export function cuotaRitmo(m, cuentas = []) {
   // 3.90.85: fecha inválida → hoy y venta faltante → 0 (antes salía «NaN %» y el tono rojo).
   const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h0 = m?.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date(); const h = Number.isNaN(h0.getTime()) ? new Date() : h0;
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
-  const cs = [...new Set(cuentas || [])].filter((c) => q.get(c)?.cuota > 0); if (!cs.length) return null;
+  const cs = [...new Set(comoLista(cuentas))].filter((c) => q.get(c)?.cuota > 0); if (!cs.length) return null;
   const venta = cs.reduce((s, c) => s + (Number(q.get(c).venta) || 0), 0), cuo = cs.reduce((s, c) => s + q.get(c).cuota, 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
   return { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', pct, ritmo: Math.round(ritmo * 100), n: cs.length, venta, cuota: cuo };
 }
@@ -473,11 +477,11 @@ export function cuotaRitmo(m, cuentas = []) {
 // La venta se suma sólo de los clientes ERP con cuota (su cuenta sale de la fila de cuota); el % se saca al agregar, nunca se suma.
 export function cuotasPorCuenta(cuotas = [], ventas = []) {
   const cuentaDe = new Map(); const out = new Map();
-  for (const r of cuotas || []) {
+  for (const r of comoLista(cuotas)) {
     if (!r?.cuenta_sellout) continue; const k = String(r.cliente_erp ?? '').trim(); if (k) cuentaDe.set(k, r.cuenta_sellout);
     const o = out.get(r.cuenta_sellout) || { venta: 0, cuota: 0 }; o.cuota += Number(r.cuota_venta) || 0; out.set(r.cuenta_sellout, o);
   }
-  for (const v of ventas || []) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += Number(v.fact_neta) || 0; }
+  for (const v of comoLista(ventas)) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += Number(v.fact_neta) || 0; }
   return out;
 }
 
@@ -526,7 +530,7 @@ export function capaCiudades(m, capa) {
 export function ponerPosEnPuerto(puerto, filas = []) {
   if (!puerto) return puerto;
   const por = new Map();
-  for (const f of filas || []) {
+  for (const f of comoLista(filas)) {
     const c = String(f?.contenedor || '').trim(), po = String(f?.po ?? '').trim();
     if (!c || !po) continue;
     if (!por.has(c)) por.set(c, new Set());
@@ -551,7 +555,7 @@ export function listaCorta(lista, n = 3) {
 export function reunionesDelDia(reuniones = [], hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
-  return (reuniones || []).map((r) => {
+  return comoLista(reuniones).map((r) => {
     const t = new Date(r?.fecha); if (Number.isNaN(t.getTime())) return null;
     const ini = t.getHours() * 60 + t.getMinutes(), fin = ini + (Number(r.duracion_min) || 60);
     return { titulo: r.titulo || 'Reunión', cliente_key: r.cliente_key || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
@@ -559,7 +563,8 @@ export function reunionesDelDia(reuniones = [], hoy = new Date()) {
 }
 
 // Interior de la oficina (3.90.38): escritorios en rejilla dentro de la planta (`ancho` × `largo`, centrada en 0,0), hasta `max`.
-export function acomodoEscritorios(n, { ancho = 7, largo = 5.2, cols = 4, max = 12 } = {}) {
+export function acomodoEscritorios(n, op) {
+  const { ancho = 7, largo = 5.2, cols = 4, max = 12 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
   const k = Math.max(0, Math.min(Math.floor(Number(n)) || 0, max)); if (!k) return []; // (4.3.10) 3.7 → 3 escritorios bien repartidos
   const c = Math.max(1, Math.min(Math.floor(cols) || 1, k)), filas = Math.ceil(k / c);
   return Array.from({ length: k }, (_, i) => ({ x: c === 1 ? 0 : -ancho / 2 + (i % c) * (ancho / (c - 1)), z: filas === 1 ? 0 : -largo / 2 + Math.floor(i / c) * (largo / (filas - 1)) }));
@@ -574,11 +579,11 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
   const dia = (x) => { const t = new Date(x); return Number.isNaN(t.getTime()) ? null : `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
   const hoyD = dia(hoy), ahora = hoy.getTime();
   const de = (r, id) => r && id && (r.creado_por === id || (Array.isArray(r.asistentes) && r.asistentes.some((a) => a && (a.user_id === id || a === id))));
-  const todas = [...(reuniones || []), ...(viajes || [])].filter(Boolean);
+  const todas = [...comoLista(reuniones), ...comoLista(viajes)].filter(Boolean);
   const vistos = new Set(); const unicas = todas.filter((r) => { const k = r.id || `${r.titulo}|${r.fecha}`; if (vistos.has(k)) return false; vistos.add(k); return true; });
   const viajeHoy = unicas.filter((r) => r.tipo === 'viaje' && dia(r.fecha) && dia(r.fecha) <= hoyD && (dia(r.fecha_fin || r.fecha) || dia(r.fecha)) >= hoyD);
   const enCurso = unicas.filter((r) => { if (r.tipo === 'viaje') return false; const t = new Date(r.fecha).getTime(); return !Number.isNaN(t) && t <= ahora && ahora < t + (Number(r.duracion_min) || 60) * 60000; });
-  for (const p of personas || []) {
+  for (const p of comoLista(personas)) {
     if (!p || typeof p !== 'object') continue;
     const v = viajeHoy.find((r) => de(r, p.id)); const r = !v && enCurso.find((x) => de(x, p.id));
     p.presencia = v ? { estado: 'viaje', titulo: v.titulo || 'Viaje' } : r ? { estado: 'reunion', titulo: r.titulo || 'Reunión' } : { estado: 'disponible', titulo: null };
@@ -644,7 +649,7 @@ export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) 
   const get = (k) => (marcas instanceof Map ? marcas.get(k) : marcas?.[k]);
   const marcaDe = (raw, k) => norm(get(raw) ?? get(String(raw).trim()) ?? get(k)) || 'SIN MARCA';
   const por = new Map();
-  for (const r of filas || []) {
+  for (const r of comoLista(filas)) {
     const k = String(r?.articulo ?? '').trim().toUpperCase();
     if (!k || !(N(r.inventario) > 0)) continue;
     const m = marcaDe(r.articulo, k); const g = por.get(m) || { marca: m, valor: 0, piezas: 0, skus: new Set() };
@@ -666,7 +671,7 @@ export function demanda3Meses(rows = [], hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const cerrados = [1, 2, 3].map((i) => { const f = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1); return { anio: f.getFullYear(), mes: f.getMonth() + 1 }; });
   const m = new Map();
-  for (const r of rows || []) {
+  for (const r of comoLista(rows)) {
     const sku = String(r?.sku || '').trim().toUpperCase(); if (!sku) continue;
     let s2 = 0; for (const c of cerrados) if (N(r.anio) === c.anio) s2 += N((r.piezas || [])[c.mes - 1]);
     if (s2) m.set(sku, (m.get(sku) || 0) + s2);
@@ -677,7 +682,8 @@ export function demanda3Meses(rows = [], hoy = new Date()) {
 /** Acomodo de los racks dentro de la nave del CEDIS (interior, 3.90.31): rejilla de `cols` columnas centrada en la nave
  *  (`ancho` × `largo`, centro 0,0) y `niveles` de cajas según el valor de la marca frente a la mayor (1…`maxNiveles`).
  *  Nada escala por tamaño de cliente: aquí escala el inventario propio de Acteck por marca, que es lo que se ve en Inventario. */
-export function acomodoRacks(racks = [], { ancho = 14, largo = 9, cols = 3, maxNiveles = 5 } = {}) {
+export function acomodoRacks(racks = [], op) {
+  const { ancho = 14, largo = 9, cols = 3, maxNiveles = 5 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
   // (4.3.11) Acepta algo que no es lista, cols 0/decimal (antes NaN/Infinity en x) y maxNiveles inválido; valor negativo = 1 nivel.
   const rs = (Array.isArray(racks) ? racks : []).filter((r) => r && String(r.marca ?? '').trim()); if (!rs.length) return [];
   const c = Math.max(1, Math.floor(Number(cols)) || 1), tope = Math.max(1, Math.floor(Number(maxNiveles)) || 1);

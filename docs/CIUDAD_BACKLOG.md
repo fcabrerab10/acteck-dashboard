@@ -203,6 +203,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.16) `ciudadDeSucursal()` ya no adivina ciudad con nombres de menos de 4 letras («A», «LA» caían en Guadalajara; «MEX» en CDMX); `encimaDelCampus()` con margen inválido (NaN/negativo/texto) usa el de omisión (antes ninguna ciudad chocaba y se dibujaban encima de la base); `enLaBase()` con centro inválido cuenta como base (antes el botón saltaba a «lejos»).
   - [x] (4.3.17) Barra de tiempo: `datosEnFecha()` usa `fechaIso()`: una factura/envío/contenedor con fecha ilegible («pendiente») cuenta como sin fecha y se queda (antes se comparaba como texto, salía «posterior» y desaparecía); `camionesTemporada()` lee la fecha con `fechaIso()` (con espacios cuenta, basura no); `vistaMapa()`, `vistaCiudad()` y `planoMini()` aceptan opciones null (antes lanzaban error).
   - [x] (4.3.18) Calendario: a un día de Navidad dice «falta 1 día» (antes «faltan 1 días»); `ciudadesTop()` acepta `n` en texto/decimal/basura (antes NaN → acceso rápido vacío).
+  - [x] (4.3.19) `comoLista()` pura y probada: banco, torre, cuotas, reuniones, presencia, racks, demanda, reparto por estado, puerto y pines aceptan algo que no es lista (null, texto, número) en vez de lanzar error; `encuadre()`, `repartoPorEstado()`, `acomodoEscritorios()` y `acomodoRacks()` aceptan opciones null.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -218,6 +219,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 15:16 · v4.3.19 · Pulido: funciones del modelo aguantan listas que no son lista y opciones null (`comoLista()`; +1 prueba).
 - 2026-11-19 06:15 · v4.3.18 · Pulido: aviso de Navidad en singular a un día y top de ciudades con `n` inválido; pruebas nuevas.
 - 2026-11-19 05:56 · v4.3.17 · Pulido: barra de tiempo y camiones de temporada con fechas ilegibles; vistas/minimapa con opciones null; pruebas nuevas.
 - 2026-11-19 05:15 · v4.3.15 · Pulido: etiquetas sin encimar con margen/prioridad inválidos y árboles sin tono NaN (pruebas nuevas).

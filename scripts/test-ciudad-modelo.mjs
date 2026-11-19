@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso } from '../src/modules/ciudad/modelo.js';
+import { comoLista, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -978,4 +978,17 @@ test('navidad en singular y top de ciudades con n inválido', () => {
   const base = ciudadesTop(mod).length;
   assert.equal(ciudadesTop(mod, '1').length, Math.min(1, base)); assert.equal(ciudadesTop(mod, 1.7).length, Math.min(1, base));
   assert.equal(ciudadesTop(mod, NaN).length, base); assert.equal(ciudadesTop(mod, 'x').length, base); assert.equal(ciudadesTop(mod, -2).length, 0);
+});
+
+test('listas que no son lista y opciones null no tumban la Ciudad (4.3.19)', () => {
+  assert.deepEqual(comoLista(null), []); assert.deepEqual(comoLista('abc'), []); assert.deepEqual(comoLista(5), []); assert.deepEqual(comoLista({ a: 1 }), []);
+  const l = [1, 2]; assert.equal(comoLista(l), l);
+  assert.equal(cuotasPorCuenta(-1, 'x').size, 0);
+  assert.equal(resumenBanco('x', 5).carteraVencida, 0); assert.equal(resumenTorre('x', 5).avisos?.length ?? 0, 0);
+  assert.deepEqual(reunionesDelDia('x', hoy), []); assert.deepEqual(demanda3Meses(-1, hoy), demanda3Meses([], hoy));
+  assert.deepEqual(racksPorMarca(-1), racksPorMarca([])); assert.equal(pinCiudad({ ciudad: 'LEON', tiendas: [] }, 'x').llegando, 0);
+  assert.equal(cuotaRitmo({ hoyIso: '2026-10-05', cuotas: new Map() }, -1), null);
+  assert.deepEqual(repartoPorEstado('10', 'x'), []); assert.deepEqual(repartoPorEstado('10', [], null), []);
+  assert.deepEqual(acomodoEscritorios(3, null), acomodoEscritorios(3)); assert.deepEqual(acomodoRacks([{ marca: 'A', valor: 1 }], null), acomodoRacks([{ marca: 'A', valor: 1 }]));
+  const pts = [{ x: 0, z: 0 }, { x: 10, z: 10 }]; assert.deepEqual(encuadre(pts, null), encuadre(pts));
 });
