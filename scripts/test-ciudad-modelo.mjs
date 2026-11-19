@@ -34,6 +34,8 @@ test('sucursales → ciudad', () => {
   assert.equal(ciudadDeSucursal('AMAZON').virtual, true);
   assert.equal(ciudadDeSucursal('BAJA CALIFORNIA NORTE').ciudad, 'TIJUANA');
   assert.equal(ciudadDeSucursal('XALAPA').ciudad, 'XALAPA');
+  for (const x of ['A', 'LA', 'MEX']) assert.equal(ciudadDeSucursal(x).ciudad, null, `«${x}» es muy corto para adivinar la ciudad`);
+  assert.equal(ciudadDeSucursal('JUAREZ').ciudad, 'CIUDAD JUAREZ', 'un nombre parcial largo sí empata');
   const g = posDe(CIUDADES.GUADALAJARA); assert.equal(Math.abs(g.x), 0); assert.equal(Math.abs(g.z), 0);
   assert.ok(posDe(CIUDADES.HERMOSILLO).z < 0 && posDe(CIUDADES.HERMOSILLO).x < 0, 'Hermosillo al noroeste');
 });
@@ -127,6 +129,8 @@ test('distritos reales encima del campus: capa mapa, sólo de lejos (3.90.12)', 
   for (const k of ['LEON', 'QUERETARO', 'MORELIA']) assert.equal(encimaDelCampus(c, posDe(CIUDADES[k]), 7, 4.5, cajaGDL), true, `${k} cae sobre la base`);
   for (const k of ['MONTERREY', 'CIUDAD DE MEXICO', 'MANZANILLO', 'TOLUCA']) assert.equal(encimaDelCampus(c, posDe(CIUDADES[k]), 7, 4.5, cajaGDL), false, `${k} no toca la base`);
   assert.deepEqual([CIUDADES.LEON, CIUDADES.QUERETARO].map((x) => posDe(x)), [posDe(CIUDADES.LEON), posDe(CIUDADES.QUERETARO)], 'su posición en el mapa no cambia');
+  for (const mg of [NaN, -3, 'x', null, '']) assert.equal(encimaDelCampus(c, posDe(CIUDADES.LEON), 7, 4.5, cajaGDL, mg), true, `margen ${String(mg)} usa el de omisión`);
+  assert.equal(encimaDelCampus(c, posDe(CIUDADES.MONTERREY), 7, 4.5, cajaGDL, '2'), false, 'margen en texto');
   assert.equal(encimaDelCampus(null, { x: 0, z: 0 }), false); assert.equal(encimaDelCampus(c, { x: NaN, z: 0 }), false, 'datos inválidos no esconden nada');
   assert.equal(juntarCapas('fino', 'mapa'), 'fino+mapa'); assert.equal(juntarCapas('mapa+fino', 'mapa'), 'fino+mapa', 'sin repetir');
   assert.equal(juntarCapas(undefined, false, ''), undefined); assert.equal(juntarCapas(false, 'mapa'), 'mapa');
@@ -177,6 +181,7 @@ test('enLaBase: un solo botón Base/Mapa según dónde está la cámara', () => 
   assert.equal(enLaBase({ cx: 0, cz: 0, zoom: 160 }, b), false, 'alejarse al mapa');
   assert.equal(enLaBase({ cx: 200, cz: 40, zoom: 18 }, b), false, 'de cerca pero en otra ciudad');
   assert.equal(enLaBase(null, b), true, 'sin datos no rompe');
+  assert.equal(enLaBase({ cx: NaN, cz: 0, zoom: 10 }, b), true, 'centro inválido no salta a lejos'); assert.equal(enLaBase({ cx: 0, cz: 0, zoom: 10 }, { ...b, cx: undefined }), true, 'base sin centro no rompe');
   assert.equal(enLaBase(vistaMapa(), b), false, 'la Vista Mapa cuenta como lejos');
 });
 

@@ -200,6 +200,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.13) `fechaIso()` pura y probada: en el puerto una ETA/arribo/ETD ilegible («pendiente», '2026-99-99') cuenta como sin fecha (antes progreso y «llega en» NaN: barco fuera del mar); envío con salida ilegible ya no sale como camión con progreso NaN; factura/envío con fecha futura ya no da progreso negativo; la tarjeta del camión ya no dice «hace NaN d».
   - [x] (4.3.14) `gestoDosDedos()` con pareja incompleta o coordenadas que no son número regresa sin cambio (antes zoom/giro NaN: pantalla negra); `rebote()`/`saltito()` aguantan duración/alto inválidos; `capasSonido(null)` ya no lanza error; `ventanasOficina()` acepta `total` en texto/decimal/inválido.
   - [x] (4.3.15) `etiquetasSinEncimar()` aguanta margen inválido (NaN/negativo/texto: antes ninguna chocaba y se encimaban todas) y prioridad en texto o basura (antes desordenaba el sort); `formaArbol()` con posición inválida ya no da tono NaN (color indefinido del árbol).
+  - [x] (4.3.16) `ciudadDeSucursal()` ya no adivina ciudad con nombres de menos de 4 letras («A», «LA» caían en Guadalajara; «MEX» en CDMX); `encimaDelCampus()` con margen inválido (NaN/negativo/texto) usa el de omisión (antes ninguna ciudad chocaba y se dibujaban encima de la base); `enLaBase()` con centro inválido cuenta como base (antes el botón saltaba a «lejos»).
 
 ## Necesita a Fernando (el agente no lo hace)
 

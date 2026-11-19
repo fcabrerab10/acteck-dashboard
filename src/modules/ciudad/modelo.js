@@ -145,6 +145,7 @@ export function campus(esc = { x: 0, z: 0 }) {
 export function encimaDelCampus(c, d, ancho = 0, largo = 0, gdl = null, margen = 1) {
   if (!c?.caja || !d || !Number.isFinite(d.x) || !Number.isFinite(d.z)) return false;
   const w = Number(ancho) || 0, l = Number(largo) || 0;
+  margen = Number.isFinite(Number(margen)) && Number(margen) >= 0 && margen !== null && margen !== '' ? Number(margen) : 1;
   const r = { x0: d.x - w / 2 - 2.8 - margen, x1: d.x + w / 2 + margen, z0: d.z - l / 2 - margen, z1: d.z + l / 2 + margen };
   const choca = (b) => !!b && r.x0 < b.x1 && b.x0 < r.x1 && r.z0 < b.z1 && b.z0 < r.z1;
   return choca(c.caja) || choca(gdl);
@@ -188,7 +189,7 @@ export function ciudadesTop(modelo, n = 5) {
 }
 // Botón único Base/Mapa: estás «en la base» si la cámara está cerca del encuadre de la Vista Base (centro a menos de medio
 // encuadre y zoom no más de 1.5× el de la base); si no, estás lejos y el botón ofrece volver. Sin datos cuenta como base.
-export function enLaBase(v, b) { if (!v || !b || !Number.isFinite(v.zoom) || !Number.isFinite(b.zoom)) return true; return Math.hypot(v.cx - b.cx, v.cz - b.cz) <= b.zoom * 0.5 && v.zoom <= b.zoom * 1.5; }
+export function enLaBase(v, b) { if (!v || !b || ![v.zoom, v.cx, v.cz, b.zoom, b.cx, b.cz].every(Number.isFinite)) return true; return Math.hypot(v.cx - b.cx, v.cz - b.cz) <= b.zoom * 0.5 && v.zoom <= b.zoom * 1.5; }
 // Viajar (3.90.16): Vista Ciudad = encuadre de las manzanas de un distrito ({ x, z, ancho, largo }) con la calle de enfrente;
 // el zoom no pasa de DETALLE.gente para que de cerca se vean la gente y las tiendas.
 export function vistaCiudad(caja, { ang = Math.PI / 4, aspecto = 1.6 } = {}) {
@@ -812,7 +813,7 @@ export function ciudadDeSucursal(nombre) {
   if (ALIAS[s]) return { ciudad: ALIAS[s], virtual: false };
   if (CIUDADES[s]) return { ciudad: s, virtual: false };
   for (const [k, v] of Object.entries(ALIAS)) if (s.includes(k)) return { ciudad: v, virtual: false };
-  for (const k of Object.keys(CIUDADES)) if (s.includes(k) || (k.length > 5 && k.includes(s))) return { ciudad: k, virtual: false };
+  for (const k of Object.keys(CIUDADES)) if (s.includes(k) || (s.length >= 4 && k.length > 5 && k.includes(s))) return { ciudad: k, virtual: false };
   return { ciudad: null, virtual: false };
 }
 
