@@ -186,6 +186,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.110.4) `resumenTorre()` / `resumenBanco()` aguantan renglones nulos (cartera, líneas de forecast) y una fecha inválida (usa hoy): antes lanzaban error y tumbaban el modelo de la Ciudad.
   - [x] (3.111.1) `presenciaPersonas()` salta personas nulas (antes lanzaba error) y, junto con `reunionesDelDia()`, usa ahora si `hoy` es inválida (antes todos «disponible» y las reuniones siempre «próxima»).
   - [x] (4.3.1) `fechaHoy()` pura y probada: misiones, bitácora, burbujas, calendario, momentos de la barra de tiempo, camiones de temporada, demanda de 3 meses y `construirModelo()` aceptan «hoy» nulo, texto o inválido (usan ahora; 'AAAA-MM-DD' a mediodía local) en vez de lanzar error y tumbar la Ciudad.
+  - [x] (4.3.2) Cadena y circuito: `cadenaSuministro()` / `cintasCadena()` saltan barcos, camiones, distritos y tiendas nulos (antes lanzaban error) y `tramoActual()` ya no da NaN con ciclo/paradas inválidos (vendedores sin posición).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -202,6 +203,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-11-18 23:35 · v4.3.2 · Cadena de suministro y circuito de vendedores aguantan renglones nulos y ciclos inválidos (+1 prueba).
 - 2026-11-18 23:06 · v4.3.1 · `fechaHoy()`: las capas con fecha (misiones, bitácora, burbujas, calendario, camiones de temporada, demanda) y el modelo aguantan un «hoy» nulo/inválido (+1 prueba).
 - 2026-11-18 15:55 · v3.111.1 · Presencia y reuniones de la oficina aguantan personas nulas y fecha inválida (+1 prueba).
 - 2026-11-18 15:35 · v3.110.4 · Pulido: torre y banco ya no truenan con renglones nulos o fecha inválida (pruebas nuevas).

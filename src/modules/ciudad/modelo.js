@@ -314,15 +314,15 @@ export function rumboBarcos(barcos = []) {
 export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   if (!m) return { tramos: [], atasco: null };
   const n = (v) => Number(v) || 0; const pz = (v) => `${Math.round(n(v)).toLocaleString('es-MX')} pzs`;
-  const barcos = m.puerto?.barcos || [];
+  const barcos = (m.puerto?.barcos || []).filter(Boolean);
   const mar = barcos.filter((b) => !(b.llegaEnDias != null && b.llegaEnDias <= 0)), enPuerto = barcos.filter((b) => b.llegaEnDias != null && b.llegaEnDias <= 0);
   const tarde = enPuerto.filter((b) => b.llegaEnDias < -3).length;
   const c = m.cedis || {}, d = n(c.dias);
-  const cam = m.camiones || [];
+  const cam = (m.camiones || []).filter(Boolean);
   const lentos = cam.filter((x) => x.envio && hoyIso && x.fecha && dias(x.fecha, hoyIso) > 5).length;
-  const tiendas = (m.distritos || []).flatMap((x) => x.tiendas || []).filter((t) => !t.reparto);
+  const tiendas = (m.distritos || []).filter(Boolean).flatMap((x) => x.tiendas || []).filter((t) => t && !t.reparto);
   const activas = tiendas.filter((t) => t.vendio).length, ratio = tiendas.length ? activas / tiendas.length : 1;
-  const cf = (m.distritos || []).reduce((s, x) => ({ n: s.n + n(x.clientesFinales?.n), imp: s.imp + n(x.clientesFinales?.importe) }), { n: 0, imp: 0 });
+  const cf = (m.distritos || []).reduce((s, x) => ({ n: s.n + n(x?.clientesFinales?.n), imp: s.imp + n(x?.clientesFinales?.importe) }), { n: 0, imp: 0 });
   const tramos = [
     { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${mar.length} barcos · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length} con ETA vencida · ${(m.puerto?.tarimas || []).length} recién llegados`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${tarde} barco${tarde === 1 ? '' : 's'} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
@@ -339,10 +339,10 @@ export function cintasCadena(m, max = 8) {
   const cad = cadenaSuministro(m); if (!cad.tramos.length) return [];
   const est = Object.fromEntries(cad.tramos.map((t) => [t.clave, t.estado]));
   const peso = (v, tope) => (tope > 0 ? 1 + Math.round(3 * Math.min(1, v / tope)) : 1);
-  const barcos = (m.puerto?.barcos || []).length;
+  const barcos = (m.puerto?.barcos || []).filter(Boolean).length;
   const out = [{ de: 'mar', a: 'puerto', tono: est.puerto === 'rojo' ? 'rojo' : est.mar, peso: peso(barcos, 8) }, { de: 'puerto', a: 'cedis', tono: est.puerto, peso: peso(barcos + (m.puerto?.tarimas || []).length, 8) }];
-  const cam = new Map(); for (const c of m.camiones || []) { const o = cam.get(c.ciudad) || { n: 0, lento: false }; o.n += 1; if (c.envio && m.hoyIso && c.fecha && dias(c.fecha, m.hoyIso) > 5) o.lento = true; cam.set(c.ciudad, o); }
-  const ciudades = (m.distritos || []).map((d) => { const ts = (d.tiendas || []).filter((t) => !t.reparto); const r = ts.length ? ts.filter((t) => t.vendio).length / ts.length : 1; const c = cam.get(d.ciudad) || { n: 0, lento: false };
+  const cam = new Map(); for (const c of (m.camiones || []).filter(Boolean)) { const o = cam.get(c.ciudad) || { n: 0, lento: false }; o.n += 1; if (c.envio && m.hoyIso && c.fecha && dias(c.fecha, m.hoyIso) > 5) o.lento = true; cam.set(c.ciudad, o); }
+  const ciudades = (m.distritos || []).filter(Boolean).map((d) => { const ts = (d.tiendas || []).filter((t) => t && !t.reparto); const r = ts.length ? ts.filter((t) => t.vendio).length / ts.length : 1; const c = cam.get(d.ciudad) || { n: 0, lento: false };
     return { ciudad: d.ciudad, n: c.n, tiendas: ts.length, tono: ts.length && r < 0.4 ? 'rojo' : c.lento || (ts.length && r < 0.7) ? 'ambar' : c.n || ts.length ? 'verde' : 'gris' }; })
     .filter((x) => x.n || x.tiendas).sort((a, b) => b.n - a.n || b.tiendas - a.tiendas).slice(0, max);
   const tope = Math.max(1, ...ciudades.map((x) => x.n));
@@ -359,7 +359,7 @@ export function circuitoVendedor(destinos = [], tieneRuta = () => true, max = 3)
   return out;
 }
 export function tramoActual(ciclo, paradas) {
-  const n = Math.max(1, paradas) + 1; const c = ((Number(ciclo) % 1) + 1) % 1; const i = Math.min(n - 1, Math.floor(c * n));
+  const n = Math.max(1, Number.isFinite(Number(paradas)) ? Math.floor(Number(paradas)) : 1) + 1; const k = Number(ciclo), c = Number.isFinite(k) ? ((k % 1) + 1) % 1 : 0; const i = Math.min(n - 1, Math.floor(c * n));
   return { i, q: c * n - i, tramos: n };
 }
 

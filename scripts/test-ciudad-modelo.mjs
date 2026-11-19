@@ -791,3 +791,18 @@ test('fechaHoy: cualquier «hoy» malo cae en ahora y las capas con fecha ya no 
   assert.deepEqual(eventosCalendario('2026-11-28'), eventosCalendario(new Date(2026, 10, 28, 12)), 'texto de fecha se lee como la fecha');
   assert.ok(eventosCalendario('2026-11-28').length > 0, 'fin de mes trae eventos');
 });
+
+test('cadena y circuito: renglones nulos y ciclos inválidos no truenan ni dan NaN', () => {
+  for (const mal of [NaN, undefined, null, 'x', Infinity]) {
+    const r = tramoActual(mal, 3); assert.deepEqual([r.i, r.q, r.tramos], [0, 0, 4], `ciclo ${String(mal)}`);
+    assert.equal(tramoActual(.5, mal).tramos, 2, `paradas ${String(mal)}`);
+  }
+  assert.equal(tramoActual(.5, 2.7).tramos, 3, 'paradas fraccionarias se truncan');
+  const m = { hoyIso: '2026-11-18', puerto: { barcos: [null, { llegaEnDias: -5, piezas: 10 }] }, cedis: { dias: 30 }, camiones: [null, { ciudad: 'guadalajara', envio: true, fecha: '2026-11-01', piezas: 5 }], distritos: [null, { ciudad: 'guadalajara', tiendas: [null, { vendio: true }] }] };
+  let r; assert.doesNotThrow(() => { r = cadenaSuministro(m); });
+  assert.equal(r.tramos.find((t) => t.clave === 'puerto').estado, 'rojo');
+  assert.equal(r.tramos.find((t) => t.clave === 'tienda').volumen, '1 de 1 vendieron');
+  assert.equal(r.tramos.find((t) => t.clave === 'camion').estado, 'ambar');
+  let c; assert.doesNotThrow(() => { c = cintasCadena(m); });
+  assert.equal(c.find((x) => x.a === 'guadalajara')?.tono, 'ambar');
+});
