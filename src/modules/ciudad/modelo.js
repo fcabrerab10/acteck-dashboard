@@ -73,7 +73,9 @@ export const esChico = (s) => Number.isFinite(s) && s < 1;
 // (empate: la primera) y se esconden las que chocan con una ya puesta. Regresa un arreglo de booleanos en el orden recibido.
 export function etiquetasSinEncimar(cajas, margen = 4) {
   cajas = Array.isArray(cajas) ? cajas : [];
-  const orden = cajas.map((c, i) => i).sort((a, b) => (cajas[b]?.prioridad || 0) - (cajas[a]?.prioridad || 0) || a - b);
+  margen = Number(margen); if (!Number.isFinite(margen) || margen < 0) margen = 4; // margen inválido ya no deja todas encimadas
+  const pri = (c) => { const n = Number(c?.prioridad); return Number.isFinite(n) ? n : 0; }; // «alta»/NaN no desordenan el sort
+  const orden = cajas.map((c, i) => i).sort((a, b) => pri(cajas[b]) - pri(cajas[a]) || a - b);
   const vis = cajas.map(() => false); const puestas = [];
   for (const i of orden) {
     const c = cajas[i]; if (!c || ![c.x, c.y, c.w, c.h].every(Number.isFinite)) continue;
@@ -940,6 +942,7 @@ export function saltito(t, dur = .7, alto = .45) {
 // Forma de árbol (3.90.71, kit low-poly): estable por posición (misma ciudad = mismos árboles en cada recarga).
 // ~45 % pino, 30 % redondo, 15 % palma, 10 % arbusto; `tono` 0/1 para alternar el verde.
 export function formaArbol(x = 0, z = 0) {
+  x = Number(x); z = Number(z); if (!Number.isFinite(x)) x = 0; if (!Number.isFinite(z)) z = 0; // sin tono NaN (color indefinido)
   const r = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
   const forma = r < .45 ? 'pino' : r < .75 ? 'redondo' : r < .9 ? 'palma' : 'arbusto';
   return { forma, tono: Math.floor(r * 100) % 2 };

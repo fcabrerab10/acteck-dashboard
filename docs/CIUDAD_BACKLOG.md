@@ -199,6 +199,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
   - [x] (4.3.13) `fechaIso()` pura y probada: en el puerto una ETA/arribo/ETD ilegible («pendiente», '2026-99-99') cuenta como sin fecha (antes progreso y «llega en» NaN: barco fuera del mar); envío con salida ilegible ya no sale como camión con progreso NaN; factura/envío con fecha futura ya no da progreso negativo; la tarjeta del camión ya no dice «hace NaN d».
   - [x] (4.3.14) `gestoDosDedos()` con pareja incompleta o coordenadas que no son número regresa sin cambio (antes zoom/giro NaN: pantalla negra); `rebote()`/`saltito()` aguantan duración/alto inválidos; `capasSonido(null)` ya no lanza error; `ventanasOficina()` acepta `total` en texto/decimal/inválido.
+  - [x] (4.3.15) `etiquetasSinEncimar()` aguanta margen inválido (NaN/negativo/texto: antes ninguna chocaba y se encimaban todas) y prioridad en texto o basura (antes desordenaba el sort); `formaArbol()` con posición inválida ya no da tono NaN (color indefinido del árbol).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -214,6 +215,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 05:15 · v4.3.15 · Pulido: etiquetas sin encimar con margen/prioridad inválidos y árboles sin tono NaN (pruebas nuevas).
 - 2026-11-19 04:56 · v4.3.14 · Pulido: gesto de dos dedos sin NaN con toques incompletos (evita pantalla negra), rebote/saltito con duración inválida, `capasSonido(null)` y `ventanasOficina()` con total inválido; pruebas nuevas.
 - 2026-11-19 04:36 · v4.3.13 · Pulido: fechas ilegibles en contenedores/envíos/facturas ya no dan NaN (barco fuera del mar, camión perdido, «hace NaN d»); `fechaIso()` probada.
 

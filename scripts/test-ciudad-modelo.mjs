@@ -936,3 +936,15 @@ test('gestos, rebotes, sonido y ventanas aguantan entradas inválidas (sin NaN)'
   assert.equal(capasSonido({ esDia: false, lluvia: 1 }).lluvia, capasSonido({ esDia: false, lluvia: true }).lluvia);
   assert.equal(ventanasOficina([], NaN).length, 12); assert.equal(ventanasOficina([], -3).length, 12); assert.equal(ventanasOficina([], '6').length, 6); assert.equal(ventanasOficina([{ presencia: { estado: 'disponible' } }], 3.6).length, 4);
 });
+
+test('etiquetas y árboles aguantan margen, prioridad y posición inválidos', () => {
+  const c = (x, y, prioridad) => ({ x, y, w: 40, h: 12, prioridad });
+  for (const m of [NaN, -5, 'x', null]) assert.deepEqual(etiquetasSinEncimar([c(0, 0, 1), c(10, 0, 1)], m), [true, false], String(m));
+  assert.deepEqual(etiquetasSinEncimar([c(0, 0, 1), c(10, 0, 1)], '0'), [true, false]);
+  assert.deepEqual(etiquetasSinEncimar([c(0, 0, 'alta'), c(10, 0, '3')]), [false, true], 'prioridad en texto cuenta; basura = 0');
+  assert.deepEqual(etiquetasSinEncimar([c(0, 0, NaN), c(10, 0, 2), c(300, 0, undefined)]), [false, true, true]);
+  for (const [x, z] of [[NaN, 1], [1, Infinity], ['x', null], [undefined, undefined]]) {
+    const f = formaArbol(x, z); assert.ok([0, 1].includes(f.tono), `${x},${z}`); assert.ok(['pino', 'redondo', 'palma', 'arbusto'].includes(f.forma));
+  }
+  assert.deepEqual(formaArbol('3.2', '-7.5'), formaArbol(3.2, -7.5));
+});
