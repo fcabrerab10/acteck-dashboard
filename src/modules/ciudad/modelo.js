@@ -172,13 +172,13 @@ export function nombreCiudad(ciudad) {
 }
 export function pinCiudad(distrito, camiones = []) {
   const nombre = nombreCiudad(distrito?.ciudad);
-  const activas = (distrito?.tiendas || []).filter((t) => t.vendio && !t.virtual).length;
+  const activas = (distrito?.tiendas || []).filter((t) => t?.vendio && !t.virtual).length;
   const llegando = (camiones || []).filter((c) => c && c.ciudad === distrito?.ciudad).length;
   return { activas, llegando, texto: [nombre, `🏬 ${activas}`, llegando ? `🚚 ${llegando}` : null].filter(Boolean).join(' · ') };
 }
 // Acceso rápido (minimapa, paso 1): las n ciudades con más actividad = tiendas activas + camiones llegando (empate: más tiendas).
 export function ciudadesTop(modelo, n = 5) {
-  const ds = modelo?.distritos || [];
+  const ds = (modelo?.distritos || []).filter(Boolean);
   return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); return { ciudad: d.ciudad, nombre: p.texto.split(' · ')[0], activas: p.activas, llegando: p.llegando, actividad: p.activas + p.llegando, tiendas: (d.tiendas || []).length }; })
     .filter((c) => c.ciudad && c.actividad > 0).sort((x, y) => y.actividad - x.actividad || y.tiendas - x.tiendas).slice(0, n);
 }
@@ -515,7 +515,7 @@ export function ponerPosEnPuerto(puerto, filas = []) {
     por.get(c).add(po);
   }
   for (const b of [...(puerto.barcos || []), ...(puerto.tarimas || [])]) {
-    const s = por.get(String(b.id || '').trim());
+    if (!b) continue; const s = por.get(String(b.id || '').trim());
     if (s) b.listaPos = [...s].sort((a, z) => a.localeCompare(z, 'es', { numeric: true }));
   }
   return puerto;

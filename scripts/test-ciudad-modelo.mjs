@@ -831,3 +831,12 @@ test('construirModelo, etiquetas y ventanas aguantan renglones nulos', () => {
   assert.deepEqual(ventanasOficina([null, { presencia: { estado: 'viaje' } }], 4), [false, false, false, false]);
   assert.equal(ventanasOficina([null], 3).length, 3);
 });
+
+test('pin, ciudades top y POs del puerto aguantan renglones nulos', () => {
+  assert.equal(pinCiudad({ ciudad: 'LEON', tiendas: [null, { vendio: true }, { vendio: true, virtual: true }] }).activas, 1, 'tienda nula se salta');
+  const top = ciudadesTop({ distritos: [null, { ciudad: 'LEON', tiendas: [null, { vendio: true }] }], camiones: [null] });
+  assert.deepEqual(top.map((c) => c.ciudad), ['LEON'], 'distrito nulo se salta');
+  const pto = { barcos: [null, { id: ' C1 ' }], tarimas: [undefined] };
+  ponerPosEnPuerto(pto, [{ contenedor: 'C1', po: 'PO-2' }, null, { contenedor: 'C1', po: 'PO-1' }]);
+  assert.deepEqual(pto.barcos[1].listaPos, ['PO-1', 'PO-2'], 'barco/tarima nulos no rompen');
+});
