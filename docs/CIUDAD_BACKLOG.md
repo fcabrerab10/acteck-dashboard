@@ -197,6 +197,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
+  - [x] (4.3.13) `fechaIso()` pura y probada: en el puerto una ETA/arribo/ETD ilegible («pendiente», '2026-99-99') cuenta como sin fecha (antes progreso y «llega en» NaN: barco fuera del mar); envío con salida ilegible ya no sale como camión con progreso NaN; factura/envío con fecha futura ya no da progreso negativo; la tarjeta del camión ya no dice «hace NaN d».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -212,6 +213,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 04:36 · v4.3.13 · Pulido: fechas ilegibles en contenedores/envíos/facturas ya no dan NaN (barco fuera del mar, camión perdido, «hace NaN d»); `fechaIso()` probada.
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
 - 2026-11-19 04:15 · v4.3.12 · Pulido: encuadre de cámara, minimapa y top SKUs a prueba de parámetros inválidos.

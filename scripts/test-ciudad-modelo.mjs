@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -906,4 +906,22 @@ test('encuadre, minimapa y top SKUs aguantan parámetros inválidos', () => {
   assert.equal(topSkus(f, NaN).length, 4, 'n inválido usa 5'); assert.equal(topSkus(f, '2').length, 2, 'n en texto'); assert.equal(topSkus(f, 1.7).length, 1, 'n decimal');
   assert.equal(topSkus(f, -1).length, 4, 'n negativo usa 5'); assert.deepEqual(topSkus({ sku: 'A' }), [], 'algo que no es lista');
   assert.ok(topSkus(f).some((r) => r.sku === '0'), 'SKU numérico 0 cuenta');
+});
+test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
+  assert.equal(fechaIso('2026-10-05'), '2026-10-05'); assert.equal(fechaIso(' 2026-10-05T08:00:00Z'), '2026-10-05', 'con hora y espacios');
+  assert.equal(fechaIso(new Date(2026, 1, 3, 9)), '2026-02-03', 'Date');
+  for (const x of [null, undefined, '', 'pendiente', '2026-13-40', '2026-02-30', 20261005, new Date('x'), {}]) assert.equal(fechaIso(x), null, String(x));
+  const m = construirModelo({ ...d,
+    contenedores: [...d.contenedores, { contenedor: 'MALO', supplier: 'X', estatus: 'NAVEGANDO', piezas: 5, etd: 'pendiente', eta_puerto: 'sin fecha', arribo_cedis: '2026-99-99' }, { contenedor: 'MEDIO', estatus: 'NAVEGANDO', etd: 'x', fecha_emision: '2026-09-05', eta_puerto: '2026-10-05' }],
+    envios: [...d.envios, { fecha_surtida: 'ayer', fecha_entregada: null, guia_rastreo: 'G-MALA', oc_clientes: { cliente_key: 'pcel' } }, { fecha_surtida: '2026-10-08', fecha_entregada: null, guia_rastreo: 'G-FUT', oc_clientes: { cliente_key: 'pcel' } }],
+    facturas: [...d.facturas, { cliente_key: '01234', folio: 'F-FUT', fecha: '2026-10-07', piezas: 1, monto: 1 }] }, hoy);
+  const malo = m.puerto.barcos.find((b) => b.id === 'MALO');
+  assert.ok(malo, 'el barco con fechas malas sigue en el mar'); assert.equal(malo.progreso, 0.5); assert.equal(malo.llegaEnDias, null); assert.equal(malo.arribo, null);
+  const medio = [...m.puerto.barcos, ...m.puerto.tarimas].find((b) => b.id === 'MEDIO');
+  assert.ok(medio && Number.isFinite(medio.progreso) && medio.llegaEnDias === 0, 'etd malo usa fecha_emision');
+  assert.ok(m.puerto.barcos.every((b) => Number.isFinite(b.progreso)), 'progreso siempre número');
+  assert.ok(!m.camiones.some((c) => c.folio === 'guía G-MALA'), 'envío con salida ilegible no sale');
+  assert.ok(m.camiones.every((c) => Number.isFinite(c.progreso) && c.progreso >= 0), 'progreso de camiones sin NaN ni negativo');
+  const t = tarjetaDe({ tipo: 'camion', folio: 'F-1' }, { ...m, camiones: [{ folio: 'F-1', cliente: 'X', fecha: 'mala', monto: 1, piezas: 1 }] });
+  assert.ok(t && !JSON.stringify(t.numeros).includes('NaN'), 'tarjeta del camión sin «hace NaN d»');
 });

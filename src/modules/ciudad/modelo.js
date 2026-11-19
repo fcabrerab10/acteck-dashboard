@@ -757,7 +757,7 @@ export function tarjetaDe(tag, modelo) {
     // Envío con más de 5 días en camino = ámbar.
     const c = sn(m.camiones).find((x) => x.folio === tag.folio);
     if (c) {
-      const n = c.fecha ? dias(c.fecha, m.hoyIso || new Date().toISOString().slice(0, 10)) : null;
+      const nd = c.fecha ? dias(c.fecha, m.hoyIso || new Date().toISOString().slice(0, 10)) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
       const salio = c.fecha ? `${String(c.fecha).slice(0, 10)}${n == null ? '' : n <= 0 ? ' · hoy' : n === 1 ? ' · ayer' : ` · hace ${n} d`}` : '—';
       const destino = String(c.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) || '—';
       t.numeros = c.envio ? [['Cliente', c.cliente || '—'], ['Paquetería', c.paqueteria || '—'], ['Salió', salio], ['Destino', destino]] : [['Cliente', c.cliente || '—'], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], ['Salió', salio]];
@@ -814,6 +814,14 @@ export function ciudadDeSucursal(nombre) {
   return { ciudad: null, virtual: false };
 }
 
+// Fecha 'AAAA-MM-DD' de un valor de la base (texto ISO, con hora o no, o Date) si es una fecha real; si no (null, «pendiente»,
+// '2026-13-40', Date inválido) → null. Así una fecha mala cuenta como «sin fecha» y no da NaN en el puerto ni en los camiones.
+export function fechaIso(x) {
+  if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
+  if (typeof x !== 'string') return null;
+  const s = x.trim().slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
+}
 const dias = (a, b) => Math.round((new Date(`${String(b).slice(0, 10)}T12:00:00`) - new Date(`${String(a).slice(0, 10)}T12:00:00`)) / 86400000);
 const nombreCorto = (s) => { const p = norm(s).split(/\s+/).filter(Boolean); if (!p.length) return ''; const cap = (w) => w.charAt(0) + w.slice(1).toLowerCase(); return p.length >= 3 ? `${cap(p[0])} ${cap(p[p.length - 2])}` : p.map(cap).join(' '); };
 
@@ -979,9 +987,9 @@ export function construirModelo(d, hoy = new Date()) {
   const barcos = []; const tarimas = [];
   for (const c of d.contenedores || []) {
     if (/CONCLUIDO|CANCELADO/i.test(c.estatus || '')) continue;
-    const arribo = c.arribo_cedis || null; const eta = c.eta_puerto || null;
+    const arribo = fechaIso(c.arribo_cedis); const eta = fechaIso(c.eta_puerto); // fecha mala = sin fecha (antes progreso/llegada NaN)
     if (arribo && dias(hoyIso, arribo) < -3) continue; // llegó hace días: ya no se dibuja
-    const inicio = c.etd || c.fin_produccion || c.fecha_emision || null;
+    const inicio = fechaIso(c.etd) || fechaIso(c.fin_produccion) || fechaIso(c.fecha_emision);
     const fin = arribo || eta || null;
     let p = 0.5;
     if (inicio && fin) { const tot = Math.max(1, dias(inicio, fin)); p = Math.max(0.02, Math.min(0.98, dias(inicio, hoyIso) / tot)); }
@@ -1064,14 +1072,14 @@ export function construirModelo(d, hoy = new Date()) {
     const key = cuenta?.cuenta || f.cliente_key;
     const ciudad = SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO';
     const edad = dias(f.fecha, hoyIso);
-    return { folio: f.folio, cliente: cuenta?.nombre || f.cliente_key, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + edad * 0.12) };
+    return { folio: f.folio, cliente: cuenta?.nombre || f.cliente_key, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + Math.max(0, edad) * 0.12) };
   }).sort((a, b) => b.monto - a.monto).slice(0, 14);
   for (const e of d.envios || []) {
     const salida = e.fecha_envio_erp || e.fecha_surtida; const entrega = e.fecha_entrega_erp || e.fecha_entregada;
     if (!salida || entrega) continue;
     const key = e.oc_clientes?.cliente_key || 'digitalife';
-    const edad = dias(salida, hoyIso); if (edad > 20) continue;
-    camiones.push({ folio: e.guia_rastreo ? `guía ${e.guia_rastreo}` : `envío OC ${e.oc_clientes?.numero_oc || ''}`.trim(), cliente: cuentas.get(key)?.nombre || key, ciudad: SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO', monto: 0, piezas: 0, fecha: salida, progreso: Math.min(0.9, 0.15 + edad * 0.15), envio: true, paqueteria: e.paqueteria || null });
+    const edad = dias(salida, hoyIso); if (!Number.isFinite(edad) || edad > 20) continue; // salida ilegible: sin camión (antes progreso NaN)
+    camiones.push({ folio: e.guia_rastreo ? `guía ${e.guia_rastreo}` : `envío OC ${e.oc_clientes?.numero_oc || ''}`.trim(), cliente: cuentas.get(key)?.nombre || key, ciudad: SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO', monto: 0, piezas: 0, fecha: salida, progreso: Math.min(0.9, 0.15 + Math.max(0, edad) * 0.15), envio: true, paqueteria: e.paqueteria || null });
   }
 
   // ── Vendedores del ERP (equipo comercial): de la oficina a sus clientes ──
