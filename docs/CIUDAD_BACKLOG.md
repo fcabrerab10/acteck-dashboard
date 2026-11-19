@@ -204,6 +204,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.17) Barra de tiempo: `datosEnFecha()` usa `fechaIso()`: una factura/envío/contenedor con fecha ilegible («pendiente») cuenta como sin fecha y se queda (antes se comparaba como texto, salía «posterior» y desaparecía); `camionesTemporada()` lee la fecha con `fechaIso()` (con espacios cuenta, basura no); `vistaMapa()`, `vistaCiudad()` y `planoMini()` aceptan opciones null (antes lanzaban error).
   - [x] (4.3.18) Calendario: a un día de Navidad dice «falta 1 día» (antes «faltan 1 días»); `ciudadesTop()` acepta `n` en texto/decimal/basura (antes NaN → acceso rápido vacío).
   - [x] (4.3.19) `comoLista()` pura y probada: banco, torre, cuotas, reuniones, presencia, racks, demanda, reparto por estado, puerto y pines aceptan algo que no es lista (null, texto, número) en vez de lanzar error; `encuadre()`, `repartoPorEstado()`, `acomodoEscritorios()` y `acomodoRacks()` aceptan opciones null.
+  - [x] (4.3.20) `cuantos()` pura y probada: misiones, bitácora, pensamientos, celebraciones, cintas de la cadena, racks del CEDIS, reparto por estado y `listaCorta()` aceptan `max`/`n` en texto, decimal o basura (NaN, negativo, null → la omisión); antes `slice(0, NaN)` dejaba la lista vacía y «+NaN» en la tarjeta del puerto.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -219,6 +220,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 15:36 · v4.3.20 · Pulido: `cuantos()` para `max`/`n` inválidos en las listas del modelo (antes salían vacías); +1 prueba.
 - 2026-11-19 15:16 · v4.3.19 · Pulido: funciones del modelo aguantan listas que no son lista y opciones null (`comoLista()`; +1 prueba).
 - 2026-11-19 06:15 · v4.3.18 · Pulido: aviso de Navidad en singular a un día y top de ciudades con `n` inválido; pruebas nuevas.
 - 2026-11-19 05:56 · v4.3.17 · Pulido: barra de tiempo y camiones de temporada con fechas ilegibles; vistas/minimapa con opciones null; pruebas nuevas.

@@ -10,6 +10,9 @@
 const N = (v) => Number(v) || 0;
 // (4.3.19) Lo que no es lista (null, texto, número, objeto) → []: una consulta que regresa algo raro no tumba la capa.
 export const comoLista = (x) => (Array.isArray(x) ? x : []);
+// (4.3.20) Cuántos mostrar: número o texto ≥ 0 → entero (3.7 → 3); NaN, negativo, null o basura → la omisión. Antes un
+// `max`/`n` inválido llegaba a `slice(0, NaN)` y la lista salía vacía (misiones, pensamientos, bitácora, cintas, racks…).
+export const cuantos = (x, omision) => { const n = x == null || x === '' ? NaN : Number(x); return Number.isFinite(n) && n >= 0 ? Math.floor(n) : omision; };
 export const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
 /** Ciudades (lat, lon) · la escena usa x = (lon − lonGDL)·ESC, z = −(lat − latGDL)·ESC. */
@@ -278,6 +281,7 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().t
 // puerto, CEDIS), las reuniones de hoy (en curso / próximas; las hechas quedan al final con ✓) y los contenedores que se
 // están descargando. Cada misión trae `ir` (a dónde vuela la cámara) y `tarjeta` (qué tarjeta abre). Rojo, ámbar, luego por hora.
 export function misionesDelDia(m, hoy = new Date(), max = 8) {
+  max = cuantos(max, 8);
   hoy = fechaHoy(hoy);
   if (!m) return [];
   const out = [];
@@ -299,7 +303,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
 export function repartoPorEstado(cuenta, filas = [], op) {
   let { anio, mes, anioPrev, mesPrev, sede = null, max = 6 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
   const por = new Map(); const clave = (v) => String(v ?? '').trim(); const cta = clave(cuenta); if (!cta) return [];
-  anio = Number(anio); mes = Number(mes); anioPrev = Number(anioPrev); mesPrev = Number(mesPrev);
+  anio = Number(anio); mes = Number(mes); anioPrev = Number(anioPrev); mesPrev = Number(mesPrev); max = cuantos(max, 6);
   for (const r of comoLista(filas)) {
     if (clave(r?.cuenta) !== cta) continue; const est = norm(r.estado);
     const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad || ciudad === sede) continue;
@@ -355,6 +359,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
 // Cintas de la cadena en la escena (3.90.59): mar → puerto → CEDIS y CEDIS → las `max` ciudades con más camiones o tiendas.
 // `peso` 1–4 (grosor) por volumen relativo; tono del tramo (ciudad: tiendas sin venta como en la tira, ámbar si le va un envío lento).
 export function cintasCadena(m, max = 8) {
+  max = cuantos(max, 8);
   const cad = cadenaSuministro(m); if (!cad.tramos.length) return [];
   const est = Object.fromEntries(cad.tramos.map((t) => [t.clave, t.estado]));
   const peso = (v, tope) => (tope > 0 ? 1 + Math.round(3 * Math.min(1, v / tope)) : 1);
@@ -390,6 +395,7 @@ export function tramoActual(ciclo, paradas) {
 // anterior y éste no → «Este mes no he vendido nada»; cae > 30 % → «Vendo N % menos que el mes pasado»; sube > 30 % →
 // «¡Voy N % arriba del mes pasado!»; cuenta al ritmo de su cuota (`m.cuotas`) → «Voy arriba de mi cuota».
 export function pensamientos(m, max = 5) {
+  max = cuantos(max, 5);
   if (!m) return [];
   // 4.3.3: salta cartera/distritos/tiendas nulos y un hoyIso inválido usa hoy (antes lanzaba error o ritmo NaN).
   const venc = new Set((m.kpis?.cartera || []).filter((c) => Number(c?.vencido) > 0).map((c) => c.cuenta));
@@ -419,6 +425,7 @@ export function pensamientos(m, max = 5) {
 // (camiones), envíos surtidos del Tracking, contenedores que llegaron al CEDIS y reuniones de hoy que ya empezaron. Lo más
 // nuevo primero; cada uno con `cuando` (hoy / ayer / hace N d, o la hora) e `ir` para volar al lugar.
 export function bitacoraEventos(m, hoy = new Date(), max = 12) {
+  max = cuantos(max, 12);
   hoy = fechaHoy(hoy);
   if (!m) return [];
   const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
@@ -454,6 +461,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
 // (fuegos artificiales sobre la base); `tiendas` = las que vendieron este mes sin haber vendido el mes anterior (≈ 30 días o más
 // sin venta y volvieron; confeti), sin las de reparto, de mayor a menor venta, máximo `max`.
 export function celebraciones(m, max = 5) {
+  max = cuantos(max, 5);
   const q = m?.cuotas instanceof Map ? [...m.cuotas.values()].filter(Boolean) : [];
   const venta = q.reduce((s, x) => s + (Number(x.venta) || 0), 0), cuo = q.reduce((s, x) => s + (Number(x.cuota) || 0), 0);
   const tiendas = (m?.distritos || []).filter(Boolean).flatMap((d) => (d.tiendas || []).filter((t) => t && !t.reparto && t.vendioMes && !(Number(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: Number(t.importe) || 0 })))
@@ -545,6 +553,7 @@ export function ponerPosEnPuerto(puerto, filas = []) {
 // Lista de POs para la tarjeta: las primeras 3 y «+N» (la tarjeta es angosta).
 // Lista corta (3.90.84): sin vacíos ni repetidos (« PO-2 » y «PO-2» cuentan una vez), así el «+N» cuenta lo que de verdad falta.
 export function listaCorta(lista, n = 3) {
+  n = cuantos(n, 3);
   if (!Array.isArray(lista)) return '';
   const u = [...new Set(lista.map((x) => (x == null ? '' : String(x).trim())).filter(Boolean))];
   return u.slice(0, n).join(', ') + (u.length > n ? ` +${u.length - n}` : '');
@@ -645,6 +654,7 @@ export function burbujasAtencion(m, hoy = new Date()) {
 }
 
 export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) {
+  n = cuantos(n, 8);
   // SKU limpio (3.110.3): « abc» y «ABC» son el mismo SKU (cuenta una vez y encuentra su marca y su demanda).
   const get = (k) => (marcas instanceof Map ? marcas.get(k) : marcas?.[k]);
   const marcaDe = (raw, k) => norm(get(raw) ?? get(String(raw).trim()) ?? get(k)) || 'SIN MARCA';

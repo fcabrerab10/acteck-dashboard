@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -991,4 +991,21 @@ test('listas que no son lista y opciones null no tumban la Ciudad (4.3.19)', () 
   assert.deepEqual(repartoPorEstado('10', 'x'), []); assert.deepEqual(repartoPorEstado('10', [], null), []);
   assert.deepEqual(acomodoEscritorios(3, null), acomodoEscritorios(3)); assert.deepEqual(acomodoRacks([{ marca: 'A', valor: 1 }], null), acomodoRacks([{ marca: 'A', valor: 1 }]));
   const pts = [{ x: 0, z: 0 }, { x: 10, z: 10 }]; assert.deepEqual(encuadre(pts, null), encuadre(pts));
+});
+
+test('cuántos mostrar con max/n inválido no vacía las listas (4.3.20)', () => {
+  assert.equal(cuantos(3, 5), 3); assert.equal(cuantos('4', 5), 4); assert.equal(cuantos(3.7, 5), 3); assert.equal(cuantos(0, 5), 0);
+  for (const x of [NaN, -1, null, undefined, '', 'x', Infinity, {}]) assert.equal(cuantos(x, 5), 5, `cuantos(${String(x)})`);
+  const m = construirModelo(d, hoy);
+  for (const x of ['x', NaN, -2, null]) {
+    assert.deepEqual(misionesDelDia(m, hoy, x), misionesDelDia(m, hoy), `misiones max=${x}`);
+    assert.deepEqual(bitacoraEventos(m, hoy, x), bitacoraEventos(m, hoy), `bitácora max=${x}`);
+    assert.deepEqual(pensamientos(m, x), pensamientos(m), `pensamientos max=${x}`);
+    assert.deepEqual(celebraciones(m, x), celebraciones(m), `celebraciones max=${x}`);
+    assert.deepEqual(cintasCadena(m, x), cintasCadena(m), `cintas max=${x}`);
+    assert.deepEqual(racksPorMarca(d.inventarioSku, d.marcasSku, x), racksPorMarca(d.inventarioSku, d.marcasSku), `racks n=${x}`);
+  }
+  assert.ok(misionesDelDia(m, hoy).length > 0, 'el fixture sí tiene misiones');
+  assert.equal(listaCorta(['a', 'b', 'c', 'd'], 'x'), 'a, b, c +1'); assert.equal(listaCorta(['a', 'b', 'c'], '2'), 'a, b +1'); assert.equal(listaCorta(['a', 'b'], NaN), 'a, b');
+  assert.equal(misionesDelDia(m, hoy, '1').length, Math.min(1, misionesDelDia(m, hoy).length));
 });
