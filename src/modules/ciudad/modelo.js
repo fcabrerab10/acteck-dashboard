@@ -271,11 +271,11 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   for (const b of burbujasAtencion(m, hoy)) if (b.lugar !== 'oficina') out.push({ id: `alerta-${b.lugar}`, icono: b.icono, nivel: b.nivel, texto: b.texto, ir: b.tag, tarjeta: b.tag, orden: 0 });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   for (const r of m.oficina?.agenda || []) {
-    const hecha = r.estado === 'hecha', falta = r.ini - ahora;
+    if (!r) continue; const ini = Number.isFinite(r.ini) ? r.ini : null; const hecha = r.estado === 'hecha', falta = ini == null ? NaN : ini - ahora;
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
-      texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta <= 15 ? ` · en ${falta} min` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: r.ini });
+      texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · en ${falta} min` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
   }
-  for (const t of m.puerto?.tarimas || []) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${(Number(t.piezas) || 0).toLocaleString('es-MX')} pz`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
+  for (const t of m.puerto?.tarimas || []) if (t) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${(Number(t.piezas) || 0).toLocaleString('es-MX')} pz`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
   const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }

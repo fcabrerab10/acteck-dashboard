@@ -440,6 +440,11 @@ test('misiones del día («Hoy en Acteck»)', () => {
   assert.ok(!ms.some((x) => 'orden' in x)); assert.equal(new Set(ms.map((x) => x.id)).size, ms.length);
   assert.equal(misionesDelDia(m, h, 2).length, 2);
   assert.deepEqual(misionesDelDia(null), []); assert.deepEqual(misionesDelDia({}, h), []);
+  // 4.3.8: reuniones y tarimas nulas se saltan, sin hora de inicio no sale «en NaN min» (va tras las de hoy) y una ya pasada no dice «en -N min».
+  const m2 = { oficina: { agenda: [null, { titulo: 'Sin hora', hora: '—', estado: 'próxima' }, { titulo: 'Pasada', hora: '10:30', ini: 10 * 60 + 30, estado: 'próxima' }] }, puerto: { tarimas: [null, { id: 'T1', piezas: 5 }] } };
+  const ms2 = misionesDelDia(m2, h);
+  assert.deepEqual(ms2.map((x) => x.texto), ['10:30 · Pasada', '— · Sin hora', 'Descargar T1 · 5 pz']);
+  assert.ok(!ms2.some((x) => /NaN|en -/.test(x.texto)));
   assert.ok(Array.isArray(misionesDelDia(construirModelo(d, hoy), hoy)));
 });
 
