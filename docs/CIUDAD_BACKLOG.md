@@ -205,6 +205,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.18) Calendario: a un día de Navidad dice «falta 1 día» (antes «faltan 1 días»); `ciudadesTop()` acepta `n` en texto/decimal/basura (antes NaN → acceso rápido vacío).
   - [x] (4.3.19) `comoLista()` pura y probada: banco, torre, cuotas, reuniones, presencia, racks, demanda, reparto por estado, puerto y pines aceptan algo que no es lista (null, texto, número) en vez de lanzar error; `encuadre()`, `repartoPorEstado()`, `acomodoEscritorios()` y `acomodoRacks()` aceptan opciones null.
   - [x] (4.3.20) `cuantos()` pura y probada: misiones, bitácora, pensamientos, celebraciones, cintas de la cadena, racks del CEDIS, reparto por estado y `listaCorta()` aceptan `max`/`n` en texto, decimal o basura (NaN, negativo, null → la omisión); antes `slice(0, NaN)` dejaba la lista vacía y «+NaN» en la tarjeta del puerto.
+  - [x] (4.3.21) `posDe()` con lon/lat ilegibles (null, texto, NaN) cae en el origen en vez de dar x/z NaN (objeto fuera de la escena); `hexCss()` con color inválido (tono desconocido, texto, negativo) da gris en vez de «#000NaN» (CSS inválido en la tira de la cadena y la leyenda).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -220,6 +221,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 15:56 · v4.3.21 · Pulido: `posDe()` y `hexCss()` aguantan entradas inválidas (sin posiciones NaN ni «#000NaN»); +1 prueba.
 - 2026-11-19 15:36 · v4.3.20 · Pulido: `cuantos()` para `max`/`n` inválidos en las listas del modelo (antes salían vacías); +1 prueba.
 - 2026-11-19 15:16 · v4.3.19 · Pulido: funciones del modelo aguantan listas que no son lista y opciones null (`comoLista()`; +1 prueba).
 - 2026-11-19 06:15 · v4.3.18 · Pulido: aviso de Navidad en singular a un día y top de ciudades con `n` inválido; pruebas nuevas.

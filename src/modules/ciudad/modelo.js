@@ -168,7 +168,8 @@ export const K = ESC / PX.a;
 export const aPx = (lon, lat) => ({ X: PX.a * lon + PX.b, Y: PX.c * lat + PX.d });
 export const PX_ORIGEN = aPx(ORIGEN.lon, ORIGEN.lat);
 export const pxAEscena = (X, Y) => ({ x: (X - PX_ORIGEN.X) * K, z: (Y - PX_ORIGEN.Y) * K });
-export const posDe = (c) => { const p = aPx(c.lon, c.lat); return pxAEscena(p.X, p.Y); };
+// Sin lon/lat legibles (null, texto, NaN) cae en el origen (Guadalajara) en vez de dar x/z NaN (objeto fuera de la escena).
+export const posDe = (c) => { const lon = Number(c?.lon), lat = Number(c?.lat); if (c?.lon == null || c?.lat == null || c?.lon === '' || c?.lat === '' || !Number.isFinite(lon) || !Number.isFinite(lat)) return { x: 0, z: 0 }; const p = aPx(lon, lat); return pxAEscena(p.X, p.Y); };
 // Vista Mapa de México (etapa 2): las puntas del país (Tijuana, Mexicali, Juárez, Piedras Negras, Matamoros, Cancún,
 // Tapachula, Los Cabos) encuadradas según el giro y el lienzo, para ver el país completo con todas sus ciudades.
 export const EXTREMOS_MEXICO = [[32.53, -117.12], [32.72, -114.72], [31.75, -106.48], [28.7, -100.52], [25.87, -97.5], [21.16, -86.85], [14.9, -92.26], [22.89, -109.91]].map(([lat, lon]) => ({ lat, lon }));
@@ -804,7 +805,8 @@ export function vistaMapa(op) { // op null/no objeto → omisión (antes la dese
 
 /** Color de cada cuenta (toldo y letrero de sus tiendas, sus vendedores, la leyenda). */
 export const COLOR_CUENTA = { ct: 0x0A84FF, cva: 0xFF9F0A, dicotech: 0x30D158, digitalife: 0xBF5AF2, pcel: 0xFF453A, ingram: 0x5AC8FA, pch: 0xFFD60A, loma: 0x64D2FF, guc: 0xFF6482, kabik: 0xA2845E, dcmayorista: 0x7D8BFF, exel: 0x30B0C7, techsmart: 0xAC8E68, arroba: 0xD4A5FF, ingram_retail: 0x5AC8FA, directo: 0x8E8E93 };
-export const hexCss = (n) => `#${Number(n).toString(16).padStart(6, '0')}`;
+// Color inválido (undefined, texto, negativo, > 0xFFFFFF) → gris de omisión; antes salía «#000NaN» (CSS inválido).
+export const hexCss = (n) => { const v = typeof n === 'number' || (typeof n === 'string' && n.trim() !== '') ? Math.round(Number(n)) : NaN; return `#${(Number.isFinite(v) && v >= 0 && v <= 0xFFFFFF ? v : 0x8E8E93).toString(16).padStart(6, '0')}`; };
 
 /** Sede de cada cuenta de sell out (de dónde es el cliente). Las que reportan estado en el sell out lo usan primero. */
 export const SEDE_POR_CUENTA = {

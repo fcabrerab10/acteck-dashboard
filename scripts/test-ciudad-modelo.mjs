@@ -1009,3 +1009,13 @@ test('cuántos mostrar con max/n inválido no vacía las listas (4.3.20)', () =>
   assert.equal(listaCorta(['a', 'b', 'c', 'd'], 'x'), 'a, b, c +1'); assert.equal(listaCorta(['a', 'b', 'c'], '2'), 'a, b +1'); assert.equal(listaCorta(['a', 'b'], NaN), 'a, b');
   assert.equal(misionesDelDia(m, hoy, '1').length, Math.min(1, misionesDelDia(m, hoy).length));
 });
+
+test('posDe y hexCss aguantan entradas inválidas (4.3.21)', () => {
+  for (const c of [undefined, null, {}, { lon: 'x', lat: 20 }, { lon: NaN, lat: NaN }, { lon: '', lat: '' }, { lon: null, lat: 20 }]) {
+    const p = posDe(c); assert.ok(Number.isFinite(p.x) && Number.isFinite(p.z), `posDe(${JSON.stringify(c)}) sin NaN`); assert.deepEqual(p, { x: 0, z: 0 }, 'cae en el origen');
+  }
+  assert.deepEqual(posDe({ lon: String(CIUDADES.HERMOSILLO.lon), lat: String(CIUDADES.HERMOSILLO.lat) }), posDe(CIUDADES.HERMOSILLO), 'lon/lat en texto');
+  assert.equal(hexCss(0xFF3B30), '#ff3b30'); assert.equal(hexCss(0), '#000000'); assert.equal(hexCss('255'), '#0000ff');
+  for (const n of [undefined, null, 'x', '', NaN, -1, 0x1000000, Infinity, {}]) assert.equal(hexCss(n), '#8e8e93', `hexCss(${String(n)}) gris`);
+  assert.equal(hexCss(CAPA_TONOS.noExiste), '#8e8e93', 'tono desconocido de la cadena');
+});
