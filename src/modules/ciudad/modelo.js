@@ -228,6 +228,18 @@ export function leerVista(texto) {
 /** Banco/tesorería (3.90.28): cartera vencida de los propios (`v_vision_cartera_consolidada`, la misma de la Matriz) y pagos
  *  abiertos de Pagos V3 que vencen en 7 días o ya vencieron, con las MISMAS reglas de la bandeja (`venceEn`/`estaVencido` de
  *  `comercial/pagosv3/estados.js`, que `datos.js` pasa en `reglas` para que este archivo siga sin imports); sin reglas, no cuenta pagos. */
+// Fecha de «hoy» siempre válida: Date válido tal cual; 'AAAA-MM-DD' (a mediodía local) o número/ISO
+// si se pueden leer; cualquier otra cosa (null, texto, fecha inválida) → ahora. Evita que una
+// fecha mala tumbe el modelo o una capa de la Ciudad.
+export function fechaHoy(h) {
+  if (h instanceof Date) return Number.isNaN(h.getTime()) ? new Date() : h;
+  if (typeof h === 'string' || typeof h === 'number') {
+    const t = typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h.trim()) ? new Date(`${h.trim()}T12:00:00`) : new Date(h);
+    if (!Number.isNaN(t.getTime())) return t;
+  }
+  return new Date();
+}
+
 export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISOString().slice(0, 10), reglas = null) {
   const conVencido = (cartera || []).filter((c) => N(c?.vencido) > 0);
   const abiertos = reglas?.venceEn && reglas?.estaVencido ? (pagos || []).filter((p) => p && p.estado !== 'rechazado') : [];
@@ -252,6 +264,7 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().t
 // puerto, CEDIS), las reuniones de hoy (en curso / próximas; las hechas quedan al final con ✓) y los contenedores que se
 // están descargando. Cada misión trae `ir` (a dónde vuela la cámara) y `tarjeta` (qué tarjeta abre). Rojo, ámbar, luego por hora.
 export function misionesDelDia(m, hoy = new Date(), max = 8) {
+  hoy = fechaHoy(hoy);
   if (!m) return [];
   const out = [];
   for (const b of burbujasAtencion(m, hoy)) if (b.lugar !== 'oficina') out.push({ id: `alerta-${b.lugar}`, icono: b.icono, nivel: b.nivel, texto: b.texto, ir: b.tag, tarjeta: b.tag, orden: 0 });
@@ -384,6 +397,7 @@ export function pensamientos(m, max = 5) {
 // (camiones), envíos surtidos del Tracking, contenedores que llegaron al CEDIS y reuniones de hoy que ya empezaron. Lo más
 // nuevo primero; cada uno con `cuando` (hoy / ayer / hace N d, o la hora) e `ir` para volar al lugar.
 export function bitacoraEventos(m, hoy = new Date(), max = 12) {
+  hoy = fechaHoy(hoy);
   if (!m) return [];
   const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
   const hoyIso = m.hoyIso || `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
@@ -515,7 +529,7 @@ export function listaCorta(lista, n = 3) {
 // Interior de la oficina (paso 1, 3.90.37): reuniones de hoy (`agenda_reuniones`, sin viajes) en orden, con hora local y si ya
 // pasó, está en curso o viene. Duración por omisión 60 min. Fechas inválidas se omiten.
 export function reunionesDelDia(reuniones = [], hoy = new Date()) {
-  if (!(hoy instanceof Date) || Number.isNaN(hoy.getTime())) hoy = new Date();
+  hoy = fechaHoy(hoy);
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   return (reuniones || []).map((r) => {
     const t = new Date(r?.fecha); if (Number.isNaN(t.getTime())) return null;
@@ -536,7 +550,7 @@ export function acomodoEscritorios(n, { ancho = 7, largo = 5.2, cols = 4, max = 
 // es asistente (`asistentes[].user_id`) o quien la creó (`creado_por`). El viaje gana a la reunión.
 // (3.111.1) Personas nulas se saltan y una fecha `hoy` inválida usa ahora (antes lanzaba error / dejaba todos «disponible»).
 export function presenciaPersonas(personas = [], reuniones = [], viajes = [], hoy = new Date()) {
-  if (!(hoy instanceof Date) || Number.isNaN(hoy.getTime())) hoy = new Date();
+  hoy = fechaHoy(hoy);
   const dia = (x) => { const t = new Date(x); return Number.isNaN(t.getTime()) ? null : `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
   const hoyD = dia(hoy), ahora = hoy.getTime();
   const de = (r, id) => r && id && (r.creado_por === id || (Array.isArray(r.asistentes) && r.asistentes.some((a) => a && (a.user_id === id || a === id))));
@@ -585,6 +599,7 @@ export function recursosBarra(r) {
 // Cartera o pagos vencidos → banco; contenedor con ETA vencida o que llega en ≤ 3 días → puerto; reunión que empieza en
 // ≤ 15 min → oficina. Rojo primero. Cada una trae el `tag` para abrir la tarjeta del edificio.
 export function burbujasAtencion(m, hoy = new Date()) {
+  hoy = fechaHoy(hoy);
   if (!m) return [];
   const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
   const out = []; const b = m.banco;
@@ -627,6 +642,7 @@ export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) 
 /** Demanda de los 3 meses cerrados anteriores a `hoy` por SKU (piezas, suma), desde el pivote `v_sellin_global_sku_anio`
  *  ({ sku, anio, piezas[12] }), igual que Inventario: Map SKU en mayúsculas → piezas. */
 export function demanda3Meses(rows = [], hoy = new Date()) {
+  hoy = fechaHoy(hoy);
   const cerrados = [1, 2, 3].map((i) => { const f = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1); return { anio: f.getFullYear(), mes: f.getMonth() + 1 }; });
   const m = new Map();
   for (const r of rows || []) {
@@ -787,6 +803,7 @@ const nombreCorto = (s) => { const p = norm(s).split(/\s+/).filter(Boolean); if 
 // a la misma hora; inicio de mes = día 1 a mediodía). Se quitan los que caen en el mismo día que uno anterior.
 const isoLocal = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 export function momentosTiempo(hoy = new Date()) {
+  hoy = fechaHoy(hoy);
   const atras = (n) => { const t = new Date(hoy); t.setDate(t.getDate() - n); return t; };
   const todos = [{ id: 'hoy', texto: 'Hoy', fecha: hoy }, { id: 'ayer', texto: 'Ayer', fecha: atras(1) }, { id: 'semana', texto: 'Hace 7 días', fecha: atras(7) },
     { id: 'mes', texto: 'Inicio de mes', fecha: new Date(hoy.getFullYear(), hoy.getMonth(), 1, 12, 0) }];
@@ -813,6 +830,7 @@ export function datosEnFecha(d, fecha) {
 // los últimos 7 días), Buen Fin (viernes a lunes del fin de semana largo de la Revolución = 3.er lunes de noviembre; aviso
 // desde 14 días antes), regreso a clases (15 jul – 31 ago) y Navidad (1–25 dic). `dias` = cuántos faltan (0 = ya es hoy/en curso).
 export function eventosCalendario(hoy = new Date()) {
+  hoy = fechaHoy(hoy);
   const d0 = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()), y = d0.getFullYear(), mo = d0.getMonth();
   const entre = (a, b) => Math.round((b - a) / 86400000), out = [];
   const ultimo = new Date(y, mo + 1, 0), faltan = entre(d0, ultimo);
@@ -827,6 +845,7 @@ export function eventosCalendario(hoy = new Date()) {
 // Paso 3 (3.90.67): camiones de facturas que salieron durante la temporada en curso (Buen Fin ya empezado, o la semana del
 // cierre de mes) → Map folio → { id, texto } para pintarlos de promoción. Sólo facturas reales de `m.camiones`, sin inventar volumen.
 export function camionesTemporada(m, hoy = new Date()) {
+  hoy = fechaHoy(hoy);
   const out = new Map(); const evs = eventosCalendario(hoy).filter((e) => e.desde && (e.id === 'cierre' || e.dias === 0));
   for (const c of m?.camiones || []) {
     if (c?.envio || !c?.fecha) continue; const f = String(c.fecha).slice(0, 10);
@@ -902,6 +921,7 @@ export function ventanasOficina(personas = [], total = 12) {
 }
 
 export function construirModelo(d, hoy = new Date()) {
+  hoy = fechaHoy(hoy);
   const hoyIso = hoy.toISOString().slice(0, 10);
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const mesPrev = mes === 1 ? 12 : mes - 1, anioPrev = mes === 1 ? anio - 1 : anio;

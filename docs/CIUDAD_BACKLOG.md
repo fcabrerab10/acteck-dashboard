@@ -185,6 +185,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (3.110.3) `racksPorMarca()` / `demanda3Meses()` limpian el SKU (espacios y minúsculas): un SKU ya no cuenta doble en los racks del CEDIS y encuentra su marca y su demanda (días de inventario).
   - [x] (3.110.4) `resumenTorre()` / `resumenBanco()` aguantan renglones nulos (cartera, líneas de forecast) y una fecha inválida (usa hoy): antes lanzaban error y tumbaban el modelo de la Ciudad.
   - [x] (3.111.1) `presenciaPersonas()` salta personas nulas (antes lanzaba error) y, junto con `reunionesDelDia()`, usa ahora si `hoy` es inválida (antes todos «disponible» y las reuniones siempre «próxima»).
+  - [x] (4.3.1) `fechaHoy()` pura y probada: misiones, bitácora, burbujas, calendario, momentos de la barra de tiempo, camiones de temporada, demanda de 3 meses y `construirModelo()` aceptan «hoy» nulo, texto o inválido (usan ahora; 'AAAA-MM-DD' a mediodía local) en vez de lanzar error y tumbar la Ciudad.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -201,6 +202,7 @@ Principios que no se rompen en ninguna etapa:
 ## Hecho
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
+- 2026-11-18 23:06 · v4.3.1 · `fechaHoy()`: las capas con fecha (misiones, bitácora, burbujas, calendario, camiones de temporada, demanda) y el modelo aguantan un «hoy» nulo/inválido (+1 prueba).
 - 2026-11-18 15:55 · v3.111.1 · Presencia y reuniones de la oficina aguantan personas nulas y fecha inválida (+1 prueba).
 - 2026-11-18 15:35 · v3.110.4 · Pulido: torre y banco ya no truenan con renglones nulos o fecha inválida (pruebas nuevas).
 - 2026-11-18 15:15 · v3.110.3 · Racks del CEDIS: SKU limpio (espacios/minúsculas) en `racksPorMarca()` y `demanda3Meses()`, con prueba.

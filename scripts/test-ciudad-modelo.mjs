@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE } from '../src/modules/ciudad/modelo.js';
+import { construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -772,4 +772,22 @@ test('presenciaPersonas / reunionesDelDia aguantan persona nula y fecha inválid
   assert.equal(gente[1].presencia.estado, 'reunion', 'fecha inválida usa ahora');
   const ag = reunionesDelDia(reu, new Date('mal'));
   assert.equal(ag.length, 1); assert.equal(ag[0].estado, 'en curso');
+});
+
+test('fechaHoy: cualquier «hoy» malo cae en ahora y las capas con fecha ya no truenan', () => {
+  const d = new Date(2026, 10, 18, 9);
+  assert.equal(fechaHoy(d), d, 'Date válido tal cual');
+  const t = fechaHoy('2026-11-18');
+  assert.deepEqual([t.getFullYear(), t.getMonth(), t.getDate(), t.getHours()], [2026, 10, 18, 12], 'AAAA-MM-DD a mediodía local');
+  for (const mal of [null, undefined, 'x', new Date('mal'), {}, NaN]) {
+    const r = fechaHoy(mal);
+    assert.ok(r instanceof Date && !Number.isNaN(r.getTime()), `«${String(mal)}» → ahora`);
+  }
+  const m = construirModelo({});
+  for (const mal of [null, 'x', new Date('mal')]) {
+    assert.doesNotThrow(() => { misionesDelDia(m, mal); bitacoraEventos(m, mal); burbujasAtencion(m, mal); camionesTemporada(m, mal); eventosCalendario(mal); momentosTiempo(mal); demanda3Meses([], mal); });
+  }
+  assert.doesNotThrow(() => construirModelo({}, 'x'));
+  assert.deepEqual(eventosCalendario('2026-11-28'), eventosCalendario(new Date(2026, 10, 28, 12)), 'texto de fecha se lee como la fecha');
+  assert.ok(eventosCalendario('2026-11-28').length > 0, 'fin de mes trae eventos');
 });
