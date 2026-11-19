@@ -192,7 +192,8 @@ export function ciudadesTop(modelo, n = 5) {
 export function enLaBase(v, b) { if (!v || !b || ![v.zoom, v.cx, v.cz, b.zoom, b.cx, b.cz].every(Number.isFinite)) return true; return Math.hypot(v.cx - b.cx, v.cz - b.cz) <= b.zoom * 0.5 && v.zoom <= b.zoom * 1.5; }
 // Viajar (3.90.16): Vista Ciudad = encuadre de las manzanas de un distrito ({ x, z, ancho, largo }) con la calle de enfrente;
 // el zoom no pasa de DETALLE.gente para que de cerca se vean la gente y las tiendas.
-export function vistaCiudad(caja, { ang = Math.PI / 4, aspecto = 1.6 } = {}) {
+export function vistaCiudad(caja, op) {
+  const { ang = Math.PI / 4, aspecto = 1.6 } = op && typeof op === 'object' ? op : {};
   if (!caja || !Number.isFinite(caja.x) || !Number.isFinite(caja.z)) return null;
   const w = Number.isFinite(caja.ancho) && caja.ancho > 0 ? caja.ancho : 8, l = Number.isFinite(caja.largo) && caja.largo > 0 ? caja.largo : 8;
   const esq = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => ({ x: caja.x + a * w / 2, z: caja.z + b * l / 2 + (b > 0 ? 2 : 0), r: 2 }));
@@ -207,7 +208,8 @@ export function nivelVista(v, base, ciudad = null) {
 // Minimapa (paso 2): plano chico norte arriba de ancho × alto px con el contorno EXTREMOS_MEXICO, un punto por ciudad y el
 // paso escena ↔ plano. aSvg(x, z) → { u, v }; aEscena(u, v) → { x, z }; marco(vista) = { u, v, r } del marcador de la cámara;
 // cercana(u, v, maxPx) = la ciudad más cerca del toque (o null si ninguna queda a menos de maxPx).
-export function planoMini(distritos = [], { ancho = 150, alto = 96, margen = 6 } = {}) {
+export function planoMini(distritos = [], op) {
+  let { ancho = 150, alto = 96, margen = 6 } = op && typeof op === 'object' ? op : {};
   ancho = Number.isFinite(ancho) && ancho > 0 ? ancho : 150; alto = Number.isFinite(alto) && alto > 0 ? alto : 96;
   margen = Number.isFinite(margen) && margen >= 0 && margen * 2 < Math.min(ancho, alto) ? margen : Math.min(6, Math.min(ancho, alto) / 4);
   const pts = EXTREMOS_MEXICO.map(posDe);
@@ -778,7 +780,8 @@ export function tarjetaDe(tag, modelo) {
   t.numeros = t.numeros.slice(0, 4);
   return t;
 }
-export function vistaMapa({ ang = Math.PI / 4, aspecto = 1.6 } = {}) {
+export function vistaMapa(op) { // op null/no objeto → omisión (antes la desestructuración lanzaba error)
+  const { ang = Math.PI / 4, aspecto = 1.6 } = op && typeof op === 'object' ? op : {};
   return encuadre(EXTREMOS_MEXICO.map((c) => ({ ...posDe(c), r: 4 })), { ang, aspecto, margen: 1.05, min: ZOOM_MIN, max: ZOOM_MAX });
 }
 
@@ -846,7 +849,7 @@ export function momentosTiempo(hoy = new Date()) {
 export function datosEnFecha(d, fecha) {
   if (!d || !(fecha instanceof Date) || Number.isNaN(fecha.getTime())) return d;
   const f = isoLocal(fecha), am = fecha.getFullYear() * 12 + fecha.getMonth() + 1;
-  const despues = (x) => !!x && String(x).slice(0, 10) > f;
+  const despues = (x) => { const i = fechaIso(x); return !!i && i > f; }; // ilegible = sin fecha (antes «pendiente» > f y se borraba)
   const hastaMes = (rows) => (rows || []).filter((r) => r && N(r.anio) * 12 + N(r.mes) <= am);
   const envios = (d.envios || []).filter((e) => e && !despues(e.fecha_envio_erp || e.fecha_surtida)).map((e) => (despues(e.fecha_entrega_erp || e.fecha_entregada) ? { ...e, fecha_entrega_erp: null, fecha_entregada: null } : e));
   const contenedores = (d.contenedores || []).filter((c) => c && !despues(c.fecha_emision)).map((c) => (despues(c.arribo_cedis) ? { ...c, arribo_cedis: null, estatus: /CONCLUIDO/i.test(c.estatus || '') ? 'EN TRANSITO' : c.estatus } : c));
@@ -877,7 +880,7 @@ export function camionesTemporada(m, hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const out = new Map(); const evs = eventosCalendario(hoy).filter((e) => e.desde && (e.id === 'cierre' || e.dias === 0));
   for (const c of m?.camiones || []) {
-    if (c?.envio || !c?.fecha) continue; const f = String(c.fecha).slice(0, 10);
+    if (c?.envio) continue; const f = fechaIso(c?.fecha); if (!f) continue;
     const e = evs.find((x) => f >= x.desde && f <= x.hasta); if (e) out.set(c.folio, { id: e.id, texto: e.id === 'buenfin' ? 'Buen Fin' : 'Cierre de mes' });
   }
   return out;

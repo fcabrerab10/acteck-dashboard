@@ -201,6 +201,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.14) `gestoDosDedos()` con pareja incompleta o coordenadas que no son número regresa sin cambio (antes zoom/giro NaN: pantalla negra); `rebote()`/`saltito()` aguantan duración/alto inválidos; `capasSonido(null)` ya no lanza error; `ventanasOficina()` acepta `total` en texto/decimal/inválido.
   - [x] (4.3.15) `etiquetasSinEncimar()` aguanta margen inválido (NaN/negativo/texto: antes ninguna chocaba y se encimaban todas) y prioridad en texto o basura (antes desordenaba el sort); `formaArbol()` con posición inválida ya no da tono NaN (color indefinido del árbol).
   - [x] (4.3.16) `ciudadDeSucursal()` ya no adivina ciudad con nombres de menos de 4 letras («A», «LA» caían en Guadalajara; «MEX» en CDMX); `encimaDelCampus()` con margen inválido (NaN/negativo/texto) usa el de omisión (antes ninguna ciudad chocaba y se dibujaban encima de la base); `enLaBase()` con centro inválido cuenta como base (antes el botón saltaba a «lejos»).
+  - [x] (4.3.17) Barra de tiempo: `datosEnFecha()` usa `fechaIso()`: una factura/envío/contenedor con fecha ilegible («pendiente») cuenta como sin fecha y se queda (antes se comparaba como texto, salía «posterior» y desaparecía); `camionesTemporada()` lee la fecha con `fechaIso()` (con espacios cuenta, basura no); `vistaMapa()`, `vistaCiudad()` y `planoMini()` aceptan opciones null (antes lanzaban error).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -216,6 +217,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 05:56 · v4.3.17 · Pulido: barra de tiempo y camiones de temporada con fechas ilegibles; vistas/minimapa con opciones null; pruebas nuevas.
 - 2026-11-19 05:15 · v4.3.15 · Pulido: etiquetas sin encimar con margen/prioridad inválidos y árboles sin tono NaN (pruebas nuevas).
 - 2026-11-19 04:56 · v4.3.14 · Pulido: gesto de dos dedos sin NaN con toques incompletos (evita pantalla negra), rebote/saltito con duración inválida, `capasSonido(null)` y `ventanasOficina()` con total inválido; pruebas nuevas.
 - 2026-11-19 04:36 · v4.3.13 · Pulido: fechas ilegibles en contenedores/envíos/facturas ya no dan NaN (barco fuera del mar, camión perdido, «hace NaN d»); `fechaIso()` probada.

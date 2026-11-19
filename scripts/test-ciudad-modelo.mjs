@@ -953,3 +953,20 @@ test('etiquetas y árboles aguantan margen, prioridad y posición inválidos', (
   }
   assert.deepEqual(formaArbol('3.2', '-7.5'), formaArbol(3.2, -7.5));
 });
+
+test('barra de tiempo, temporada y vistas aguantan fechas ilegibles y opciones nulas', () => {
+  const d = { facturas: [{ folio: 'A', fecha: 'pendiente' }, { folio: 'B', fecha: '2026-10-05' }, { folio: 'C', fecha: '2026-09-01' }],
+    envios: [{ id: 1, fecha_envio_erp: '??', fecha_entrega_erp: 'sin dato' }], contenedores: [{ id: 1, fecha_emision: '2026-99-99', arribo_cedis: 'x', estatus: 'CONCLUIDO' }] };
+  const r = datosEnFecha(d, new Date(2026, 8, 30, 12));
+  assert.deepEqual(r.facturas.map((x) => x.folio), ['A', 'C'], 'la ilegible se queda (sin fecha), la futura se va');
+  assert.equal(r.envios.length, 1); assert.equal(r.envios[0].fecha_entrega_erp, 'sin dato', 'entrega ilegible no se toca');
+  assert.equal(r.contenedores.length, 1); assert.equal(r.contenedores[0].estatus, 'CONCLUIDO');
+  const t = camionesTemporada({ camiones: [{ folio: 'X', fecha: 'pendiente' }, { folio: 'Y', fecha: null }, null, { folio: 'Z', fecha: ' 2026-11-30' }] }, new Date(2026, 10, 28, 12));
+  assert.equal(t.has('X') || t.has('Y'), false, 'fecha ilegible no es de temporada'); assert.ok(t.has('Z'), 'fecha con espacios sí cuenta');
+  for (const op of [null, 'x', 3]) {
+    const m = vistaMapa(op); assert.ok(m && Number.isFinite(m.zoom), `vistaMapa(${op})`);
+    const v = vistaCiudad({ x: 1, z: 2, ancho: 6, largo: 6 }, op); assert.ok(v && Number.isFinite(v.zoom), `vistaCiudad(${op})`);
+    const p = planoMini([], op); assert.equal(p.ancho, 150); assert.ok(p.contorno && !p.contorno.includes('NaN'), `planoMini(${op})`);
+  }
+  assert.deepEqual(vistaMapa(null), vistaMapa());
+});
