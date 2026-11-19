@@ -91,9 +91,11 @@ export const ELEV_CAM = Math.atan2(240, 300);
 export const ZOOM_MIN = 8, ZOOM_MAX = 180;
 export const zoomEnRango = (z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Number.isFinite(z) ? z : ZOOM_MAX));
 export function encuadre(puntos, { ang = Math.PI / 4, aspecto = 1.6, margen = 1.15, alto = 12, min = 8, max = 120 } = {}) {
-  const ok = (puntos || []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
+  const ok = (Array.isArray(puntos) ? puntos : []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
   if (!ok.length) return null;
-  const asp = Number.isFinite(aspecto) && aspecto > 0 ? aspecto : 1.6;
+  const pos = (v, def) => (Number.isFinite(v) && v > 0 ? v : def);
+  const asp = pos(aspecto, 1.6); margen = pos(margen, 1.15); alto = pos(alto, 12); min = pos(min, 8); max = pos(max, 120);
+  if (max < min) max = min; if (!Number.isFinite(ang)) ang = Math.PI / 4;
   const der = { x: Math.sin(ang), z: -Math.cos(ang) }; const fondo = { x: -Math.cos(ang), z: -Math.sin(ang) };
   let h0 = Infinity, h1 = -Infinity, v0 = Infinity, v1 = -Infinity;
   for (const p of ok) {
@@ -203,6 +205,8 @@ export function nivelVista(v, base, ciudad = null) {
 // paso escena ↔ plano. aSvg(x, z) → { u, v }; aEscena(u, v) → { x, z }; marco(vista) = { u, v, r } del marcador de la cámara;
 // cercana(u, v, maxPx) = la ciudad más cerca del toque (o null si ninguna queda a menos de maxPx).
 export function planoMini(distritos = [], { ancho = 150, alto = 96, margen = 6 } = {}) {
+  ancho = Number.isFinite(ancho) && ancho > 0 ? ancho : 150; alto = Number.isFinite(alto) && alto > 0 ? alto : 96;
+  margen = Number.isFinite(margen) && margen >= 0 && margen * 2 < Math.min(ancho, alto) ? margen : Math.min(6, Math.min(ancho, alto) / 4);
   const pts = EXTREMOS_MEXICO.map(posDe);
   const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x)), z0 = Math.min(...pts.map((p) => p.z)), z1 = Math.max(...pts.map((p) => p.z));
   const s = Math.min((ancho - 2 * margen) / (x1 - x0), (alto - 2 * margen) / (z1 - z0));
@@ -211,7 +215,7 @@ export function planoMini(distritos = [], { ancho = 150, alto = 96, margen = 6 }
   const aEscena = (u, v) => ({ x: x0 + (u - ox) / s, z: z0 + (v - oz) / s });
   const r1 = (n) => Math.round(n * 10) / 10;
   const contorno = pts.map((p) => { const q = aSvg(p.x, p.z); return `${r1(q.u)},${r1(q.v)}`; }).join(' ');
-  const puntos = (distritos || []).filter((d) => d?.ciudad && Number.isFinite(d?.pos?.x) && Number.isFinite(d?.pos?.z)).map((d) => { const q = aSvg(d.pos.x, d.pos.z); return { ciudad: d.ciudad, u: r1(q.u), v: r1(q.v) }; });
+  const puntos = (Array.isArray(distritos) ? distritos : []).filter((d) => d?.ciudad && Number.isFinite(d?.pos?.x) && Number.isFinite(d?.pos?.z)).map((d) => { const q = aSvg(d.pos.x, d.pos.z); return { ciudad: d.ciudad, u: r1(q.u), v: r1(q.v) }; });
   const marco = (vista) => { if (!vista || !Number.isFinite(vista.cx) || !Number.isFinite(vista.cz)) return null; const q = aSvg(vista.cx, vista.cz); return { u: r1(Math.max(0, Math.min(ancho, q.u))), v: r1(Math.max(0, Math.min(alto, q.v))), r: r1(Math.max(3, Math.min(alto / 2, (Number.isFinite(vista.zoom) ? vista.zoom : 0) * s))) }; };
   const cercana = (u, v, maxPx = 8) => { let mejor = null, dm = maxPx; for (const p of puntos) { const dd = Math.hypot(p.u - u, p.v - v); if (dd <= dm) { dm = dd; mejor = p.ciudad; } } return mejor; };
   return { ancho, alto, contorno, puntos, aSvg, aEscena, marco, cercana };
@@ -580,7 +584,8 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
 // (SKU en mayúsculas, sumado). Mismo cálculo que Análisis en el celular (useSkusDimension).
 export function topSkus(filas = [], n = 5) {
   const m = new Map();
-  for (const r of filas || []) { const k = String(r?.sku || '').trim().toUpperCase(); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += Number(r.importe) || 0; o.cantidad += Number(r.cantidad) || 0; m.set(k, o); }
+  n = Number.isFinite(Number(n)) && Number(n) >= 0 ? Math.floor(Number(n)) : 5;
+  for (const r of Array.isArray(filas) ? filas : []) { const k = String(r?.sku ?? '').trim().toUpperCase(); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += Number(r.importe) || 0; o.cantidad += Number(r.cantidad) || 0; m.set(k, o); }
   return [...m.values()].filter((o) => o.importe > 0 || o.cantidad > 0).sort((a, b) => b.importe - a.importe || b.cantidad - a.cantidad).slice(0, n);
 }
 // Cifra corta (3.90.83): 999 600 ya no sale «1000 K» sino «1.0 M», 999.6 → «1 K», negativos con signo y basura → 0.

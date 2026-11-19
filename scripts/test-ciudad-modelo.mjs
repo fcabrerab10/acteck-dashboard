@@ -886,3 +886,24 @@ test('tarjeta del edificio: pesos cortos y renglones nulos (4.3.9)', () => {
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, mod).numeros[1][1], '$2 K');
   assert.equal(tarjetaDe({ tipo: 'vendedorErp', titulo: 'Ana' }, mod).numeros[3][1], 'Y');
 });
+test('encuadre, minimapa y top SKUs aguantan parámetros inválidos', () => {
+  const pts = [{ x: 0, z: 0, r: 2 }, { x: 10, z: 4 }];
+  const ok = (e) => e && [e.cx, e.cz, e.zoom].every(Number.isFinite);
+  const base = encuadre(pts);
+  for (const o of [{ ang: NaN }, { margen: 0 }, { margen: -1 }, { alto: NaN }, { min: NaN }, { max: 'x' }, { min: 50, max: 10 }]) assert.ok(ok(encuadre(pts, o)), `encuadre con ${JSON.stringify(o)}`);
+  assert.deepEqual(encuadre(pts, { ang: NaN, margen: NaN, alto: NaN, min: NaN, max: NaN }), base, 'basura = valores de omisión');
+  assert.equal(encuadre(pts, { min: 50, max: 10 }).zoom, 50, 'max < min usa min');
+  assert.equal(encuadre({ x: 1, z: 1 }), null, 'algo que no es lista');
+  assert.ok(ok(vistaCiudad({ x: 1, z: 2 }, { ang: NaN })), 'vista ciudad con ángulo inválido');
+  const g = posDe(CIUDADES.GUADALAJARA);
+  for (const o of [{ ancho: 0 }, { alto: NaN }, { margen: 999 }, { margen: -3 }, { ancho: 'x', alto: null }]) {
+    const p = planoMini([{ ciudad: 'GUADALAJARA', pos: g }], o);
+    assert.ok(p.contorno.split(/[ ,]/).map(Number).every(Number.isFinite), `contorno sin NaN con ${JSON.stringify(o)}`);
+    assert.ok(Number.isFinite(p.puntos[0].u) && Number.isFinite(p.marco({ cx: g.x, cz: g.z, zoom: 5 }).r), 'punto y marco finitos');
+  }
+  assert.deepEqual(planoMini({ a: 1 }).puntos, [], 'distritos que no son lista');
+  const f = [{ sku: 'A', importe: 3 }, { sku: 'B', importe: 2 }, { sku: 'C', importe: 1 }, { sku: 0, importe: 1 }];
+  assert.equal(topSkus(f, NaN).length, 4, 'n inválido usa 5'); assert.equal(topSkus(f, '2').length, 2, 'n en texto'); assert.equal(topSkus(f, 1.7).length, 1, 'n decimal');
+  assert.equal(topSkus(f, -1).length, 4, 'n negativo usa 5'); assert.deepEqual(topSkus({ sku: 'A' }), [], 'algo que no es lista');
+  assert.ok(topSkus(f).some((r) => r.sku === '0'), 'SKU numérico 0 cuenta');
+});
