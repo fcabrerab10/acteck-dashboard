@@ -564,6 +564,11 @@ test('cuentas sin sucursal repartidas por estado', () => {
   const r = repartoPorEstado('x', f, opt);
   assert.deepEqual(r.map((o) => [o.ciudad, o.importe, o.previo]), [[CIUDAD_POR_ESTADO['NUEVO LEON'], 100, 50], [CIUDAD_POR_ESTADO.YUCATAN, 0, 30]]);
   assert.equal(repartoPorEstado('x', f, { ...opt, max: 1 }).length, 1); assert.deepEqual(repartoPorEstado('z', f, opt), []); assert.deepEqual(repartoPorEstado('x', null, opt), []);
+  // 4.3.7: cuenta con espacios o numérica y año/mes en texto empatan igual; cuenta vacía no junta nada.
+  const g = [{ cuenta: ' 10 ', anio: '2026', mes: '10', estado: 'Nuevo León', importe: 40 }, { cuenta: 10, anio: 2026, mes: 9, estado: 'Nuevo León', importe: 15 }, null, { cuenta: null, anio: 2026, mes: 10, estado: 'Puebla', importe: 9 }];
+  assert.deepEqual(repartoPorEstado(10, g, opt).map((o) => [o.ciudad, o.importe, o.previo]), [[CIUDAD_POR_ESTADO['NUEVO LEON'], 40, 15]]);
+  assert.deepEqual(repartoPorEstado('10', g, { ...opt, anio: '2026', mes: '10', anioPrev: '2026', mesPrev: '9' }).map((o) => [o.importe, o.previo]), [[40, 15]]);
+  assert.deepEqual(repartoPorEstado(null, g, opt), []); assert.deepEqual(repartoPorEstado('', g, opt), []);
 });
 
 test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {

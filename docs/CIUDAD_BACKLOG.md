@@ -191,6 +191,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.4) `sinNulos()` pura y probada: `construirModelo()` limpia los renglones nulos de cada lista de datos (cuentas, envíos, contenedores, facturas, sucursales, clientes finales, vendedores, perfiles, reuniones, cartera…; antes un null tumbaba toda la Ciudad) y acepta `d` nulo; `etiquetasSinEncimar()` y `ventanasOficina()` también saltan nulos.
   - [x] (4.3.5) `pinCiudad()`, `ciudadesTop()` y `ponerPosEnPuerto()` saltan tiendas, distritos y barcos/tarimas nulos (antes lanzaban error en el minimapa, los pines y la tarjeta del puerto).
   - [x] (4.3.6) `capaCiudades()` (discos de ventas/cartera/cuota) y `datosEnFecha()` (barra de tiempo, corre con los datos crudos antes de `sinNulos()`) saltan distritos, tiendas, cartera, facturas, envíos, contenedores y renglones mensuales nulos (antes lanzaban error).
+  - [x] (4.3.7) `repartoPorEstado()` empata la cuenta aunque traiga espacios o venga como número (` 10 ` = `10`) y el año/mes aunque vengan en texto; cuenta vacía no junta nada. Antes los clientes finales de esas cuentas no salían como tiendas por estado.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -206,6 +207,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 01:56 · v4.3.7 · `repartoPorEstado()` empata cuentas con espacios o numéricas y año/mes en texto (clientes finales por estado ya no se pierden).
 
 <!-- El agente agrega aquí: - AAAA-MM-DD HH:MM · vX.Y.Z · qué cambió (una línea) -->
 - 2026-11-19 01:36 · v4.3.6 · Capas de ciudades y barra de tiempo aguantan renglones nulos (`capaCiudades()`, `datosEnFecha()`; +2 pruebas).

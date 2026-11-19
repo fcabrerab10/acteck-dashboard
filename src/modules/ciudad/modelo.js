@@ -284,9 +284,10 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
 // (`mv_sellout_cliente_final_mes`: cuenta, anio, mes, estado, importe) → una tienda «Clientes en <ciudad>» por ciudad
 // representativa del estado (`CIUDAD_POR_ESTADO`), sin la `sede` (ahí ya está su Matriz), top `max` por actividad.
 export function repartoPorEstado(cuenta, filas = [], { anio, mes, anioPrev, mesPrev, sede = null, max = 6 } = {}) {
-  const por = new Map();
+  const por = new Map(); const clave = (v) => String(v ?? '').trim(); const cta = clave(cuenta); if (!cta) return [];
+  anio = Number(anio); mes = Number(mes); anioPrev = Number(anioPrev); mesPrev = Number(mesPrev);
   for (const r of filas || []) {
-    if (r?.cuenta !== cuenta) continue; const est = norm(r.estado);
+    if (clave(r?.cuenta) !== cta) continue; const est = norm(r.estado);
     const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad || ciudad === sede) continue;
     const a = Number(r.anio), ms = Number(r.mes), imp = Number(r.importe) || 0; const o = por.get(ciudad) || { ciudad, importe: 0, previo: 0 };
     if (a === anio && ms === mes) o.importe += imp; else if (a === anioPrev && ms === mesPrev) o.previo += imp; else continue;
