@@ -4,6 +4,7 @@
 //   calcularTendencia(data, filtro, periodo)     → 12 meses del año del periodo (sell in · cuotas · año anterior)
 //   estatusCliente(resumen)                      → 'bad' | 'warn' | 'neutral' | 'good'
 import { PCEL_REAL } from '../../../lib/constants';
+import { dsoDe, msUtc } from '../../../lib/cartera.js';
 import { MARCAS_CASA_LABEL } from '../../../lib/marcas';
 
 export const CLIENTES = [
@@ -165,14 +166,9 @@ export function calcularResumen(clienteKey, data, periodo) {
   if (corte) {
     const det = data.estadosCuentaDetalle.filter((r) => r.estado_cuenta_id === corte.id && N(r.saldo_actual) > 0);
     facturasAbiertas = det.length;
-    const tCorte = new Date(corte.fecha_corte).getTime();
-    let num = 0, den = 0;
-    for (const r of det) {
-      if (!r.fecha_emision) continue;
-      const dias = Math.max(0, Math.round((tCorte - new Date(r.fecha_emision).getTime()) / 86400000));
-      num += N(r.saldo_actual) * dias; den += N(r.saldo_actual);
-    }
-    dsoReal = den > 0 ? Math.round(num / den) : (corte.dso != null ? N(corte.dso) : null);
+    // Regla única en src/lib/cartera.js. Esta pantalla conserva sus tres particularidades: fechas leídas tal cual (UTC),
+    // días redondeados y facturas emitidas después del corte contando con 0 días.
+    dsoReal = dsoDe(det, msUtc(corte.fecha_corte), { leer: msUtc, redondeo: 'round', futuras: 'cero' }) ?? (corte.dso != null ? N(corte.dso) : null);
   }
 
   return {

@@ -2,6 +2,7 @@
 // Los % (MC, MUC, lost profit) se calculan SIEMPRE al agregar, nunca se suman ni se promedian.
 import { MESES, MESES_LARGO, CLIENTES, DIAS_AGENDA } from './config';
 import { isoLocal } from '../../../lib/format.js';
+import { dsoPonderado } from '../../../lib/cartera.js';
 import { inventarioDesdeVista } from '../../../lib/medidas';
 import { SEV_ORDEN } from '../../../lib/alertas';
 
@@ -49,8 +50,7 @@ function cartera(estados) {
   estados.forEach((e) => { if (!ult[e.cliente] || e.fecha_corte > ult[e.cliente].fecha_corte) ult[e.cliente] = e; });
   const filas = Object.values(ult).map((e) => ({ cliente: e.cliente, corte: e.fecha_corte, saldo: N(e.saldo_actual), vencido: N(e.saldo_vencido), mas90: N(e.aging_mas90), dso: e.dso != null ? N(e.dso) : null }));
   const saldo = sum(filas, (f) => f.saldo), vencido = sum(filas, (f) => f.vencido), mas90 = sum(filas, (f) => f.mas90);
-  const conDso = filas.filter((f) => f.dso != null && f.saldo > 0);
-  const dso = conDso.length ? Math.round(sum(conDso, (f) => f.dso * f.saldo) / sum(conDso, (f) => f.saldo)) : null;
+  const dso = dsoPonderado(filas, { soloConSaldo: true });
   const corte = filas.reduce((m, f) => (f.corte > m ? f.corte : m), '') || null;
   return { filas: filas.sort((a, b) => b.vencido - a.vencido), saldo, vencido, mas90, dso, corte, pctVencido: pctDe(vencido, saldo) };
 }

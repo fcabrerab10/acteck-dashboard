@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { diasAtraso as diasAtrasoA, dsoDe, agingDe } from '../../lib/cartera.js';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
@@ -10,6 +11,10 @@ import { Cargando } from '../../components/kit';
 
 const NOMBRES_MES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
+const TRAMOS_V1 = [
+  { id: 'd0_30', min: 1, max: 30 }, { id: 'd31_60', min: 31, max: 60 }, { id: 'd61_90', min: 61, max: 90 },
+  { id: 'd91_180', min: 91, max: 180 }, { id: 'mas180', min: 181, max: Infinity },
+];
 export default function CreditoCobranza({ cliente, clienteKey }) {
   const c = cliente;
   const perfil = usePerfil();
@@ -124,28 +129,15 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   //     agregados del corte que a veces vienen vacíos).
   //     Usa fecha_vencimiento + días desde vencimiento para clasificar.
   const hoyMs = hoy.getTime();
-  const diasAtraso = (f) => {
-    if (!f.vencimiento) return 0;
-    const v = new Date(f.vencimiento + "T00:00:00").getTime();
-    return Math.max(0, Math.floor((hoyMs - v) / (1000 * 60 * 60 * 24)));
-  };
+  const diasAtraso = (f) => diasAtrasoA(f, hoyMs);
   const facturasConSaldo = useMemo(() =>
     (detalle || []).filter(f => Number(f.saldo_actual) > 0),
   [detalle]);
 
+  // Regla única en src/lib/cartera.js; esta vista vieja conserva sus 5 tramos (parte el +90 en 91–180 y +180).
   const aging = useMemo(() => {
-    const buckets = { d0_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, mas180: 0 };
-    facturasConSaldo.forEach(f => {
-      const d = diasAtraso(f);
-      if (d <= 0) return; // no vencida → no cuenta en aging
-      const saldo = Number(f.saldo_actual) || 0;
-      if (d <= 30) buckets.d0_30 += saldo;
-      else if (d <= 60) buckets.d31_60 += saldo;
-      else if (d <= 90) buckets.d61_90 += saldo;
-      else if (d <= 180) buckets.d91_180 += saldo;
-      else buckets.mas180 += saldo;
-    });
-    return buckets;
+    const a = agingDe(facturasConSaldo, hoyMs, { tramos: TRAMOS_V1 }).aging;
+    return Object.fromEntries(TRAMOS_V1.map((t) => [t.id, a[t.id].monto]));
   }, [facturasConSaldo]);
   const agTotal  = aging.d0_30 + aging.d31_60 + aging.d61_90 + aging.d91_180 + aging.mas180;
   const hasAging = agTotal > 0;
@@ -155,18 +147,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   //     "El tiempo real que tarda el dinero en regresar" — si plazo son
   //     90 y el cliente paga a los 105, DSO será ~105.
   //     Fórmula: Σ(saldo × días_desde_emisión) / Σ(saldo)
-  const dsoReal = useMemo(() => {
-    let num = 0, den = 0;
-    facturasConSaldo.forEach(f => {
-      if (!f.fecha_emision) return;
-      const saldo = Number(f.saldo_actual) || 0;
-      const dias = Math.floor((hoyMs - new Date(f.fecha_emision + "T00:00:00").getTime()) / (1000*60*60*24));
-      if (dias < 0) return;
-      num += saldo * dias;
-      den += saldo;
-    });
-    return den > 0 ? Math.round(num / den) : null;
-  }, [facturasConSaldo]);
+  const dsoReal = useMemo(() => dsoDe(facturasConSaldo, hoyMs), [facturasConSaldo]);
 
   // DSO del corte anterior (recalculado igual, para delta)
   const dsoRealPrev = useMemo(() => {
@@ -174,16 +155,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
     const prev = detallePrev.filter(f => Number(f.saldo_actual) > 0);
     // Usar fecha de corte previo como "hoy" para consistencia temporal
     const refMs = estadoPrev?.fecha_corte ? new Date(estadoPrev.fecha_corte + "T00:00:00").getTime() : hoyMs;
-    let num = 0, den = 0;
-    prev.forEach(f => {
-      if (!f.fecha_emision) return;
-      const saldo = Number(f.saldo_actual) || 0;
-      const dias = Math.floor((refMs - new Date(f.fecha_emision + "T00:00:00").getTime()) / (1000*60*60*24));
-      if (dias < 0) return;
-      num += saldo * dias;
-      den += saldo;
-    });
-    return den > 0 ? Math.round(num / den) : null;
+    return dsoDe(prev, refMs);
   }, [detallePrev, estadoPrev]);
 
   // Usar el recalculado si hay detalle; caer al del Excel si no.

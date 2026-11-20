@@ -14,6 +14,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { tramosCon, tramoDe as tramoCartera, diasAtraso as diasAtrasoA, diasParaVencer as diasParaVencerA, dsoDe, agingDe, msDia as msDe } from '../../lib/cartera.js';
 import { useNav } from '../nav';
 import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Cabecera, CampoBusqueda, Skeleton, Segmented, Pill, Vacio, BotonGrande, GraficaScrub, LeyendaScrub, TituloSeccionM, toast } from '../piezas';
 import { nombreCliente } from '../datos';
@@ -22,14 +23,9 @@ import { textoEstadoCuenta, folioCorto, compartir, copiar } from '../../lib/what
 
 const STALE = 5 * 60 * 1000;
 const DIA_MS = 86400000;
-const TRAMOS = [
-  { id: '0_30',  label: '0–30 días',  corto: '0–30',  min: 1,  max: 30,       tone: 'yellow' },
-  { id: '31_60', label: '31–60 días', corto: '31–60', min: 31, max: 60,       tone: 'orange' },
-  { id: '61_90', label: '61–90 días', corto: '61–90', min: 61, max: 90,       tone: 'red' },
-  { id: 'mas90', label: '+90 días',   corto: '+90',   min: 91, max: Infinity, tone: 'red' },
-];
-const tramoDe = (d) => (d <= 0 ? null : TRAMOS.find((t) => d >= t.min && d <= t.max)?.id || 'mas90');
-const msDe = (iso) => new Date(String(iso).slice(0, 10) + 'T00:00:00').getTime();
+// Límites, tonos y cálculo: src/lib/cartera.js (única implementación, la misma del escritorio). Aquí sólo ids y rótulos.
+const TRAMOS = tramosCon({ ids: ['0_30', '31_60', '61_90', 'mas90'], labels: ['0–30 días', '31–60 días', '61–90 días', '+90 días'], extra: [{ corto: '0–30' }, { corto: '31–60' }, { corto: '61–90' }, { corto: '+90' }] });
+const tramoDe = (d) => tramoCartera(d, TRAMOS);
 
 function useCortes(ck) {
   return useQuery({
@@ -122,21 +118,18 @@ export default function CobranzaCliente({ clienteKey, nombre, embebido = false }
     if (!estado || !detalle) return null;
     // Referencia temporal: hoy para el último corte, la fecha de corte para semanas anteriores (igual que escritorio).
     const refMs = !esUltimo && estado.fecha_corte ? msDe(estado.fecha_corte) : Date.now();
-    const diasAtraso = (f) => (f.vencimiento ? Math.max(0, Math.floor((refMs - msDe(f.vencimiento)) / DIA_MS)) : 0);
+    const diasAtraso = (f) => diasAtrasoA(f, refMs);
     const conSaldo = detalle.filter((f) => N(f.saldo_actual) > 0);
     const facturas = conSaldo.map((f) => {
       const dias = diasAtraso(f);
-      return { id: f.id, folio: folioCorto(f.movimiento), referencia: f.referencia || '', fecha: f.fecha_emision, vencimiento: f.vencimiento, importe: N(f.importe_factura), saldo: N(f.saldo_actual), dias, tramo: tramoDe(dias), paraVencer: f.vencimiento ? Math.floor((msDe(f.vencimiento) - refMs) / DIA_MS) : null };
+      return { id: f.id, folio: folioCorto(f.movimiento), referencia: f.referencia || '', fecha: f.fecha_emision, vencimiento: f.vencimiento, importe: N(f.importe_factura), saldo: N(f.saldo_actual), dias, tramo: tramoDe(dias), paraVencer: diasParaVencerA(f, refMs) };
     }).sort((a, b) => (b.dias - a.dias) || (b.saldo - a.saldo));
     const suma = (rows) => rows.reduce((s, f) => s + f.saldo, 0);
     const vencidas = facturas.filter((f) => f.dias > 0);
     const saldoActual = N(estado.saldo_actual) > 0 ? N(estado.saldo_actual) : suma(facturas);
     const saldoVencido = N(estado.saldo_vencido) > 0 ? N(estado.saldo_vencido) : suma(vencidas);
-    const aging = Object.fromEntries(TRAMOS.map((t) => [t.id, { monto: 0, n: 0 }]));
-    facturas.forEach((f) => { if (f.tramo) { aging[f.tramo].monto += f.saldo; aging[f.tramo].n++; } });
-    let num = 0, den = 0;
-    facturas.forEach((f) => { if (!f.fecha) return; const d = Math.floor((refMs - msDe(f.fecha)) / DIA_MS); if (d < 0) return; num += f.saldo * d; den += f.saldo; });
-    const dso = den > 0 ? Math.round(num / den) : (estado.dso != null ? N(estado.dso) : null);
+    const { aging } = agingDe(conSaldo, refMs, { tramos: TRAMOS });
+    const dso = dsoDe(conSaldo, refMs) ?? (estado.dso != null ? N(estado.dso) : null);
     const pctVencido = saldoActual > 0 ? (saldoVencido / saldoActual) * 100 : 0;
     const nMas90 = aging.mas90.n;
     const frase = saldoVencido > 0 ? `Vencido ${moneyCompact(saldoVencido)}, ${nMas90 > 0 ? `${nMas90} factura${nMas90 === 1 ? '' : 's'} a más de 90 días` : 'ninguna a más de 90 días'}` : 'Cartera sana';

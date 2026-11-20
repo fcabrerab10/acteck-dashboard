@@ -1,6 +1,7 @@
 // Cálculos puros del Home V3 · sin React, sin red. Entradas: data de useHomeData + config.
 import { MESES, META_INV_DIAS, Q_MESES } from './config';
 import { hoyISO } from '../../../lib/format.js';
+import { agingDe, tramosCon } from '../../../lib/cartera.js';
 
 const num = (v) => Number(v) || 0;
 const sum = (arr, f = (x) => x) => arr.reduce((s, x) => s + num(f(x)), 0);
@@ -24,20 +25,13 @@ export const normMarca = (m) => {
 };
 
 // ── Cartera: aging de la última semana (buckets sólo vencidos)
+// Regla única en src/lib/cartera.js; aquí sólo cambia la forma (lista de facturas por tramo) y la referencia = ahora.
+const TRAMOS_HOME = tramosCon({ ids: ['d1_30', 'd31_60', 'd61_90', 'mas90'] });
 function aging(detalle) {
-  const b = { d1_30: [], d31_60: [], d61_90: [], mas90: [] };
-  let total = 0, vencido = 0, alDia = 0;
-  const now = Date.now();
-  detalle.forEach((f) => {
-    const saldo = num(f.saldo_actual); if (saldo <= 0) return;
-    total += saldo;
-    const dias = f.vencimiento ? Math.floor((now - new Date(f.vencimiento + 'T00:00:00').getTime()) / 86400000) : 0;
-    if (dias <= 0) { alDia += saldo; return; }
-    vencido += saldo;
-    (dias <= 30 ? b.d1_30 : dias <= 60 ? b.d31_60 : dias <= 90 ? b.d61_90 : b.mas90).push({ folio: f.movimiento || f.referencia || 'Factura', dias, saldo });
-  });
-  Object.values(b).forEach((arr) => arr.sort((x, y) => y.saldo - x.saldo));
-  return { total, vencido, alDia, buckets: b };
+  const a = agingDe(detalle, Date.now(), { tramos: TRAMOS_HOME });
+  const b = {};
+  for (const t of TRAMOS_HOME) b[t.id] = a.porTramo[t.id].map((f) => ({ folio: f.movimiento || f.referencia || 'Factura', dias: f.dias, saldo: f.saldo })).sort((x, y) => y.saldo - x.saldo);
+  return { total: a.total, vencido: a.vencido, alDia: a.alDia, buckets: b };
 }
 
 // ── Resumen principal: KPIs, hero, cartera, inventario, pagos, marketing, proyección, sugerido, recos
