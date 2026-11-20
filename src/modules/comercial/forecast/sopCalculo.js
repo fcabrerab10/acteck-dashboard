@@ -6,6 +6,7 @@
 //               tabla por SKU. Lo que llega se agrupa por PO desde v_transito_sku.embarques_detalle (arribosPorPo).
 //   Mis clientes → forecast capturado (Proyectos y forecast) − inventario del cliente − nuestro stock − tránsito
 //               = lo que hay que pedirle a Compras, por SKU y por cliente (calcularMisClientes). Aquí NO se captura nada.
+import { moneyCompact1 } from '../../../lib/format.js';
 import { estadoCobertura, PERFILES, TONOS } from '../../../lib/cobertura.js';
 import { agruparTransitoPorPO, llegadasDe } from '../../../lib/transito.js';
 
@@ -15,7 +16,7 @@ const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'jul
 export const mesKey = (a, m) => `${a}-${String(m).padStart(2, '0')}`;
 export const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const keyDeIso = (iso) => (iso ? String(iso).slice(0, 7) : null);
-export const usdCompact = (n) => { const v = N(n); const a = Math.abs(v); if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`; if (a >= 1e3) return `$${Math.round(v / 1e3)}K`; return `$${Math.round(v)}`; };
+export const usdCompact = (n) => moneyCompact1(n);   // formato único: src/lib/format.js
 export const costoDe = (r) => N(r?.ultimoCostoUsd || r?.costoPromedioUsd || r?.costoUnitUsd);
 export const ESTATUS_CORTO = { 'TRANSITO MARITIMO': 'en el mar', 'PROXIMO A ZARPAR': 'por zarpar', 'EN PRODUCCION': 'en producción', 'EN ESPERA DE CONSOLIDAR': 'por consolidar', 'EN RESGUARDO': 'en resguardo', 'Pendiente modular': 'pendiente', 'EN PUERTO': 'en puerto' };
 export const estatusCorto = (s) => (s ? ESTATUS_CORTO[s] || String(s).toLowerCase() : '');

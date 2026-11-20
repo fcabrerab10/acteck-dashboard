@@ -2,6 +2,7 @@
 // (v_sellin_cliente_dia: cliente, anio, mes, dia, fact_neta, piezas, facturas). Fernando eligió sólo estos dos bloques
 // (en lugar del Pareto y el Comparador): quién sube y baja contra el mes anterior a mismo día, quién compró el mes pasado
 // y este mes no, y la lista de llamadas: cada cuántos días compra cada cliente y cuántos lleva sin comprar.
+import { moneyCompact1 } from '../../../lib/format.js';
 import { MESES } from './calc';
 
 const N = (v) => (Number.isFinite(+v) ? +v : 0);
@@ -18,7 +19,7 @@ export function cadenciaDe(fechas = [], minCompras = 3) {
   return m == null ? null : Math.max(1, Math.round(m));
 }
 const mediana = (xs) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-const fmtM = (n) => { const a = Math.abs(n); const s = a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${Math.round(a / 1e3)}K` : `$${Math.round(a)}`; return (n < 0 ? '−' : '') + s; };
+const fmtM = (n) => moneyCompact1(n, { signo: '−' });   // formato único: src/lib/format.js
 
 /** Agrupa las filas diarias por cliente: { cliente, key, dias: [{fecha, f, piezas, facturas}] } ordenados por fecha. */
 export function porClienteDia(filas = []) {

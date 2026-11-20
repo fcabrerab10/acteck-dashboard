@@ -1,12 +1,13 @@
 // Cliente propio en el celular (Resumen · Sell In · Sell Out) · cálculo puro. Pruebas: scripts/test-cliente-propio-movil.mjs.
 // Regla fija (Fernando, 2026-10-05): estas pestañas las ven los clientes → NUNCA margen, costo ni utilidad; gráficas de
 // línea (sólo el zoom diario en barras); en Sell Out el dinero en inventario es la cifra grande.
+import { moneyCompact1 } from '../../../lib/format.js';
 const N = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? 0 : Number(v));
 export const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const idx = (a, m) => N(a) * 12 + (N(m) - 1);
 const redondear5 = (v) => { const n = Math.max(0, Math.round(v)); return n >= 20 ? Math.round(n / 5) * 5 : n; };
-export const compact = (n) => { const v = N(n); const a = Math.abs(v); if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`; if (a >= 1e3) return `$${Math.round(v / 1e3)}K`; return `$${Math.round(v)}`; };
+export const compact = (n) => moneyCompact1(n);   // formato único: src/lib/format.js
 
 /** Tres meses cerrados antes de (anio, mes) → índices. */
 export const cerradosAntes = (anio, mes, n = 3) => Array.from({ length: n }, (_, i) => idx(anio, mes) - 1 - i);

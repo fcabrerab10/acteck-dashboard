@@ -1,27 +1,31 @@
 // Página del cliente · «Sell in vs sell out del año, con la cuota» (2026-10-26). Puro.
 // Serie de los 12 meses del año elegido: sell in del cliente (cliente.mensual), sell out de la cuenta ligada
 // (v_sellout_cuenta_mes), sell in del año anterior y cuota mensual (v_cuota_erp_mes → mapaCuotas). Y la frase de lectura.
+import { moneyCompact1 } from '../../../lib/format.js';
 import { MESES, N, idxMes } from './calc';
 
 const mesLbl = (m) => MESES[m - 1].toLowerCase();
-const fmtM = (n) => { const a = Math.abs(n); const s = a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${Math.round(a / 1e3)}K` : `$${Math.round(a)}`; return (n < 0 ? '−' : '') + s; };
+const fmtM = (n) => moneyCompact1(n, { signo: '−' });   // formato único: src/lib/format.js
 
 /**
  * 12 filas { x, mes, sellIn, sellOut, anterior, cuota }. Los meses después de `hastaMes` llevan sellIn/sellOut null
  * (la línea se detiene); cuota y año anterior van completos. Sin cuenta → sellOut null; sin cuota → cuota null.
  */
-export function serieSiSoAnio({ mensual, mensualSO = [], cuenta = null, cuotas = null, cliente, anio, hastaMes = 12 }) {
+export function serieSiSoAnio({ mensual, mensualSO = [], cuenta = null, cuotas = null, cliente, anio, hastaMes = 12, soRepetido = 'sumar' }) {
+  // ÚNICA serie sell in vs sell out del año (web y celular; calculoLista.js#serieAnioSiSo es un envoltorio de ésta).
+  // `soRepetido`: si la cuenta trae más de una fila en un mes, la página web las suma ('sumar') y el celular toma la
+  // primera ('primera'). Con una fila por mes (lo normal) dan lo mismo.
   const so = new Map();
-  if (cuenta) for (const r of mensualSO) if (r.cuenta === cuenta && N(r.anio) === anio) so.set(N(r.mes), N(so.get(N(r.mes))) + N(r.importe));
+  if (cuenta) for (const r of mensualSO) if (r.cuenta === cuenta && N(r.anio) === anio) { const m = N(r.mes); if (soRepetido === 'primera') { if (!so.has(m)) so.set(m, N(r.importe)); } else so.set(m, N(so.get(m)) + N(r.importe)); }
   return Array.from({ length: 12 }, (_, i) => {
     const mes = i + 1, k = idxMes(anio, mes);
     const futuro = mes > hastaMes;
     const cuota = cuotas ? cuotas.get(`${cliente}|${anio}|${mes}`) : undefined;
     return {
       x: MESES[i], mes,
-      sellIn: futuro ? null : N(mensual?.get(k)?.fact_neta),
+      sellIn: futuro ? null : N(mensual?.get?.(k)?.fact_neta),
       sellOut: cuenta ? (futuro ? null : N(so.get(mes))) : null,
-      anterior: N(mensual?.get(k - 12)?.fact_neta),
+      anterior: N(mensual?.get?.(k - 12)?.fact_neta),
       cuota: cuota == null ? null : N(cuota),
     };
   });

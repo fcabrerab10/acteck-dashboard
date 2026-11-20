@@ -1,11 +1,12 @@
 // Pagos del cliente propio en el celular · cálculo puro. Pruebas: scripts/test-cliente-propio-movil.mjs. 2026-10-06.
 // Uso interno (Fernando y Karolina): rebates, apoyos, marketing, fondos. Las reglas y el flujo son los de pagosv3.
+import { moneyCompact1 } from '../../../lib/format.js';
 import { ETAPAS } from '../../../modules/comercial/pagosv3/estados';
 import { periodoMes } from '../../../modules/comercial/pagosv3/motor';
 
 const N = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? 0 : Number(v));
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-export const compact = (n) => { const v = N(n); const a = Math.abs(v); if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`; if (a >= 1e3) return `$${Math.round(v / 1e3)}K`; return `$${Math.round(v)}`; };
+export const compact = (n) => moneyCompact1(n);   // formato único: src/lib/format.js
 export const fechaDe = (p) => String(p?.fecha_programada || p?.fecha_compromiso || p?.fecha_limite || '').slice(0, 10) || null;
 export const abierto = (p) => !['pagado', 'cancelado', 'rechazado'].includes(p.estado) && (p.estado !== 'calculado' || N(p.monto) > 0);
 export const ACCION = { calculado: 'Solicitar', solicitado: 'Autorizar', autorizado: 'Capturar folio', folio: 'Registrar pago', rechazado: 'Corregir' };
