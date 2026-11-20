@@ -22,7 +22,7 @@ import { FILTROS_VACIOS, conBusqueda, nActivos, listasVisibles, listasDeDatos, p
 import { usePreferencias, setPreferencia } from '../../lib/preferencias';
 import { listaLbl, roadmapTone, fmtInt, fmtPct, fmtMoneyShort, MESES_LARGO } from './precios/textos';
 
-export default function EstrategiaPrecios() {
+export default function EstrategiaPrecios({ inicial = null } = {}) {
   const perfil = usePerfil();
   if (!puedeVerPestanaGlobal(perfil, 'estrategia_precios')) return <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />;
   return <Pantalla sensible={puedeVerSensible(perfil)} />;
@@ -130,7 +130,7 @@ function Pantalla({ sensible }) {
       </div>
 
       {/* Calculadora de precio (2026-10-06): la del celular, con la misma propuesta en curso. */}
-      <CalculadoraPanel catalogo={roadmap} filasPorSku={filasPorSku} sensible={sensible} perfil={perfil}
+      <CalculadoraPanel catalogo={roadmap} filasPorSku={filasPorSku} sensible={sensible} perfil={perfil} skuInicial={inicial?.sku ? String(inicial.sku).toUpperCase() : null}
         onNavegar={(d) => window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: d }))} />
 
       <Panel titulo="Buscar y filtrar" meta={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs · ${listas.length} de ${listasTodas.length} listas en la tabla${listasTodas.length > listas.length ? ' (usa el filtro "Listas" para ver las demás; el drill y el Excel las llevan todas)' : ''}${orden ? ' · ordenado por columna' : ''}`}

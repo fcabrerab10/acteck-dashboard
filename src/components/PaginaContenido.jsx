@@ -217,7 +217,7 @@ export default function PaginaContenido({
       )}
       {pagina === 'estrategiaPrecios' && (
         puedeVerPestanaGlobal(perfil, 'estrategia_precios')
-          ? (<EstrategiaPrecios />)
+          ? (<EstrategiaPrecios inicial={extra} />)
           : <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />
       )}
       {pagina === 'acteckPcs' && (
