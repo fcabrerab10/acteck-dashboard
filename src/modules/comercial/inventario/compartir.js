@@ -6,6 +6,7 @@
 //   itemDisponibilidad(row, precio) → item para textoDisponibilidad a partir de una fila enriquecida de la tabla
 //   armarTexto(rows, porSku, lista) → string listo para compartir
 //   useQuienLoCompra(sku, abierto) → sell in de los últimos 6 meses por cliente/canal (top 8 + Otros)
+import { proximoEmbarque } from '../../../lib/transito.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { cachedQuery } from '../../../lib/queries';
@@ -45,9 +46,7 @@ export function usePreciosLista(skus, enabled = true) {
 
 /** Embarque con la ETA más cercana (≥ hoy; si no hay, el primero con fecha). */
 export function proximoArriboDe(row) {
-  const pos = (row?.transito?.pos || []).filter((p) => N(p.cantidad) > 0);
-  const hoy = hoyISO();
-  const p = pos.find((e) => e.eta && e.eta >= hoy) || pos.find((e) => e.eta) || null;
+  const p = proximoEmbarque(row?.transito?.pos, hoyISO());
   return p ? { fecha: p.eta, piezas: N(p.cantidad), po: p.po } : null;
 }
 

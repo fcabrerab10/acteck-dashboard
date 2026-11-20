@@ -3,6 +3,7 @@
 import { MESES, MESES_LARGO, CLIENTES, DIAS_AGENDA } from './config';
 import { isoLocal } from '../../../lib/format.js';
 import { dsoPonderado } from '../../../lib/cartera.js';
+import { agruparTransitoPorPO } from '../../../lib/transito.js';
 import { inventarioDesdeVista } from '../../../lib/medidas';
 import { SEV_ORDEN } from '../../../lib/alertas';
 
@@ -55,6 +56,17 @@ function cartera(estados) {
   return { filas: filas.sort((a, b) => b.vencido - a.vencido), saldo, vencido, mas90, dso, corte, pctVencido: pctDe(vencido, saldo) };
 }
 
+// Tránsito por PO para Inicio (arribos de 7 días y «En camino»). Agrupado y ETA: src/lib/transito.js (única
+// implementación). Particularidades de Inicio que se conservan: cuenta también renglones sin PO (bajo «sin PO») y sin
+// piezas, estatus/CEDIS del primer renglón, y con la misma ETA respeta el orden de llegada. `skus` = SKUs distintos.
+function posDeTransito(transito, costo) {
+  return agruparTransitoPorPO(transito, {
+    exigirPo: false, exigirCantidad: false, cabecera: 'primera', desempate: null,
+    alCrear: () => ({ valor: 0, descripcion: null }),
+    porRenglon: (o, { sku, piezas }) => { o.valor += piezas * N(costo[sku]); },
+  }).map((o) => ({ ...o, skus: o.skusDistintos }));
+}
+
 // ── Inventario comercial + tránsito (agrupado por PO) + arribos ≤ 7 días
 //
 // 2026-09-12: el valor, las piezas y la cobertura ya NO se calculan aquí.
@@ -74,21 +86,13 @@ function inventario(d, hoyISO, limiteISO) {
   const skus = m.skus_con_stock;
   const cobertura = m.dias_inv != null ? Math.round(m.dias_inv) : null;
 
-  const pos = {};
   let transitoPzs = 0, transitoValor = 0, transitoSinCosto = 0;
   d.transito.forEach((r) => {
     const c = costo[r.sku];
     if (c == null) transitoSinCosto += N(r.cantidad);
     transitoPzs += N(r.cantidad); transitoValor += N(r.cantidad) * N(c);
-    const det = Array.isArray(r.embarques_detalle) ? r.embarques_detalle : [];
-    det.forEach((e) => {
-      const k = e.po || 'sin PO';
-      const o = pos[k] || (pos[k] = { po: k, eta: e.eta || null, piezas: 0, skus: new Set(), estatus: e.estatus, cedis: e.cedis, valor: 0 });
-      o.piezas += N(e.cantidad); o.valor += N(e.cantidad) * N(c); o.skus.add(r.sku);
-      if (e.eta && (!o.eta || e.eta < o.eta)) o.eta = e.eta;
-    });
   });
-  const porPo = Object.values(pos).map((o) => ({ ...o, skus: o.skus.size })).sort((a, b) => String(a.eta || '9').localeCompare(String(b.eta || '9')));
+  const porPo = posDeTransito(d.transito, costo);
   const arribos = porPo.filter((o) => o.eta && o.eta >= hoyISO && o.eta <= limiteISO);
   return {
     valor, piezas, skus, cobertura, transitoPzs, transitoValor, transitoSinCosto,
@@ -256,7 +260,7 @@ export function calcular(d, alertas, { anio, mesActual, hoy, modo, sensible = tr
   // En camino: tránsito agrupado por mes de llegada (ETA) + próximo arribo + atrasados (ETA < hoy)
   const porMesEta = new Map();
   let atrasados = { pos: 0, piezas: 0, valor: 0 };
-  const posAll = (() => { const costo = {}; d.inv.forEach((r) => { costo[r.sku] = N(r.costo_promedio); }); const pos = {}; d.transito.forEach((r) => { const c = N(costo[r.sku]); (Array.isArray(r.embarques_detalle) ? r.embarques_detalle : []).forEach((e) => { const k = e.po || 'sin PO'; const o = pos[k] || (pos[k] = { po: k, eta: e.eta || null, piezas: 0, valor: 0, skus: new Set(), estatus: e.estatus, descripcion: null }); o.piezas += N(e.cantidad); o.valor += N(e.cantidad) * c; o.skus.add(r.sku); if (e.eta && (!o.eta || e.eta < o.eta)) o.eta = e.eta; }); }); return Object.values(pos).map((o) => ({ ...o, skus: o.skus.size })); })();
+  const posAll = posDeTransito(d.transito, Object.fromEntries(d.inv.map((r) => [r.sku, N(r.costo_promedio)])));
   posAll.forEach((o) => {
     if (!o.eta) { const k = 'sin ETA'; const g = porMesEta.get(k) || (porMesEta.set(k, { key: k, label: 'Sin fecha', orden: '9999-99', pos: 0, piezas: 0, valor: 0 }), porMesEta.get(k)); g.pos++; g.piezas += o.piezas; g.valor += o.valor; return; }
     if (o.eta < hoyISO) { atrasados.pos++; atrasados.piezas += o.piezas; atrasados.valor += o.valor; }

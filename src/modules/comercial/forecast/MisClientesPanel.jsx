@@ -9,6 +9,7 @@ import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { Panel, TablaCompacta, Pill, Boton } from '../../../components/kit';
 import { useSopClientes } from './sopDatos';
+import { llegadasDe } from '../../../lib/transito.js';
 import { calcularMisClientes, fraseMisClientes, mesesDesde, costoDe, usdCompact } from './sopCalculo';
 
 const N = (v) => Number(v) || 0;
@@ -21,7 +22,7 @@ export default function MisClientesPanel({ data, rows = [], sensible = false, on
   const hoy = useMemo(() => new Date(), []);
   const ventana = useMemo(() => mesesDesde(hoy, 6, 1), [hoy]);
   const inventario = useMemo(() => { const m = new Map(); for (const r of data?.inventario || []) if (r.sku) m.set(r.sku, (m.get(r.sku) || 0) + N(r.disponible ?? r.inventario)); return m; }, [data?.inventario]);
-  const llegadas = useMemo(() => { const out = []; for (const t of data?.transito || []) for (const e of Array.isArray(t.embarques_detalle) ? t.embarques_detalle : []) if (e?.po && N(e.cantidad) > 0) out.push({ sku: t.sku, po: e.po, eta: e.eta || null, cantidad: N(e.cantidad) }); return out; }, [data?.transito]);
+  const llegadas = useMemo(() => llegadasDe(data?.transito), [data?.transito]);
   const costos = useMemo(() => new Map(rows.map((r) => [r.sku, costoDe(r)])), [rows]);
   const descripciones = useMemo(() => { const m = new Map(); for (const r of data?.roadmap || []) if (r.sku && r.descripcion) m.set(r.sku, r.descripcion); for (const r of rows) if (r.sku && r.descripcion && !m.has(r.sku)) m.set(r.sku, r.descripcion); return m; }, [data?.roadmap, rows]);
   const res = useMemo(() => (abierto && !cli.loading ? calcularMisClientes({ clientes: cli.clientes.map((c) => ({ key: c.key, label: c.label, forecast: c.forecast, stock: c.stock })), inventario, llegadas, ventana, costos, descripciones, hoy }) : null), [abierto, cli.loading, cli.clientes, inventario, llegadas, ventana, costos, descripciones, hoy]);

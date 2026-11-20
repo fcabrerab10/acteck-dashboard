@@ -4,6 +4,7 @@
 // v_transito_sku y v_estrategia_precios_lista. MC % sólo con permiso `sensible`.
 // "Compartir disponibilidad" usa textoDisponibilidad de lib/whatsapp.js: lista de precios obligatoria y SIN datos sensibles.
 import React, { useMemo, useState } from 'react';
+import { proximoEmbarque } from '../../../lib/transito.js';
 import { hoyISO } from '../../../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Share2, Copy, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
@@ -87,8 +88,7 @@ export default function DrillSku({ sku, info = {}, anio, anioPrev, mesActual, se
     const inventario = N(inv?.inventario), disponible = N(inv?.disponible);
     const cobertura = demMes > 0 ? inventario / (demMes / 30) : null;
     const hoy = hoyISO();
-    const det = (Array.isArray(tr?.embarques_detalle) ? tr.embarques_detalle : []).filter((e) => N(e.cantidad) > 0).sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')));
-    const proximo = det.find((e) => e.eta && e.eta >= hoy) || det.find((e) => e.eta) || null;
+    const proximo = proximoEmbarque(tr?.embarques_detalle, hoy);
     const proximoArribo = proximo ? { fecha: proximo.eta, piezas: N(proximo.cantidad), po: proximo.po, estatus: proximo.estatus } : null;
     // Precios por lista (1 fila por lista, la más reciente)
     const porLista = new Map();
