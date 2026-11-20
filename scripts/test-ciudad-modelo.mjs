@@ -1155,6 +1155,7 @@ test('4.3.33 · bitácora: montos con pesosCorto y pagos con fecha sola, espacio
 test('plural(): singular con 1, plural con 0/varios y n ilegible; la cadena dice «1 barco» y «1 tienda»', () => {
   assert.equal(plural(1, 'barco'), '1 barco'); assert.equal(plural(0, 'barco'), '0 barcos'); assert.equal(plural(2, 'día'), '2 días');
   assert.equal(plural(1.2, 'día'), '1 día'); assert.equal(plural('abc', 'tienda'), '0 tiendas'); assert.equal(plural(-1, 'pago'), '-1 pago');
+  assert.equal(plural(1, 'cliente'), '1 cliente'); assert.equal(plural(1, 'cajón', 'cajones'), '1 cajón'); assert.equal(plural(12, 'cajón', 'cajones'), '12 cajones'); assert.equal(plural(1, 'vendedor', 'vendedores'), '1 vendedor');
   assert.equal(plural(1500, 'pieza'), '1,500 piezas'); assert.equal(plural(3, 'mes', 'meses'), '3 meses');
   const r = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [{ etaPuerto: '2026-10-20', piezas: 10 }] }, cedis: { dias: 1 }, camiones: [], distritos: [{ tiendas: [{ vendio: true }, { vendio: false }] }] });
   const vol = (k) => r.tramos.find((x) => x.clave === k);

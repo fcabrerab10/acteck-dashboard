@@ -337,7 +337,7 @@ export function campusCalles(ctx, cedisPos) {
     const cuerpo = box(1, .6, 1.8, col); cuerpo.position.set(x, .55, z); dg.add(cuerpo); instanciar(ctx, cuerpo);
     const cab = box(.9, .45, 1, 0x2B3340); cab.position.set(x, 1.05, z + (f ? .15 : -.15)); cab.userData.detalle = 'fino'; dg.add(cab); instanciar(ctx, cab);
   }
-  add(dg, { tipo: 'estacionamiento', titulo: 'Estacionamiento Acteck', sub: `${coches} de ${est.cajones} cajones ocupados · el equipo de hoy`, pagina: 'agenda' });
+  add(dg, { tipo: 'estacionamiento', titulo: 'Estacionamiento Acteck', sub: `${coches} de ${plural(est.cajones, 'cajón', 'cajones')} ocupados · el equipo de hoy`, pagina: 'agenda' });
   const bg = new THREE.Group();
   for (const b of c.bardas) { const dx = b.b.x - b.a.x, dz = b.b.z - b.a.z, L = Math.hypot(dx, dz); if (!L) continue; const m = box(L, .9, .25, 0xB9AD96); m.position.set((b.a.x + b.b.x) / 2, .45, (b.a.z + b.b.z) / 2); m.rotation.y = -Math.atan2(dz, dx); bg.add(m); }
   const jd = c.jardin; const pasto = box(jd.ancho, .3, jd.largo, P.cerro); pasto.castShadow = false; pasto.position.set(jd.x, .15, jd.z); bg.add(pasto);
@@ -387,7 +387,7 @@ export function distritos(ctx, cedisPos) {
       const col = COLOR_CUENTA[t.cuenta] || ACC.gris;
       const tg = new THREE.Group(); tg.position.set(x, .3, z);
       (ctx.tiendaPos ||= new Map()).set(`${t.cuenta}|${t.sucursal}`, { x: base.x + x, z: base.z + z }); // pensamientos (3.90.52)
-      const tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${t.vendedores} vendedores` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
+      const tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${plural(t.vendedores, 'vendedor', 'vendedores')}` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
       const cuerpo = new THREE.Mesh(geo(ctx, 'tiendaBisel', () => cajaBiselada(2, 1.9, 2, .12)), M(P.tienda)); cuerpo.castShadow = cuerpo.receiveShadow = true; cuerpo.position.y = .95; tg.add(cuerpo); // kit low-poly (3.90.68): esquinas biseladas
       // ventanas laterales: de noche se prenden (todas si la tienda vendió, una sí y una no si no); de día, vidrio oscuro
       const prendida = (k) => noche && (t.vendio || (i + k) % 2 === 0);

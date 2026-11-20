@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { fmtK } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
-import { circuitoVendedor, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad } from '../modelo.js';
+import { circuitoVendedor, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
@@ -64,7 +64,7 @@ export function vendedoresRuta(ctx, rutas) {
     const g = new THREE.Group(); const cuerpo = box(1.8, .7, 1, ACC.azul); cuerpo.position.y = .55; g.add(cuerpo); const techo = box(1, .5, .9, 0xDCE6F2); techo.position.set(-.1, 1.1, 0); g.add(techo);
     [[-.55, .45], [-.55, -.45], [.55, .45], [.55, -.45]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCoche', () => new THREE.CylinderGeometry(.22, .22, .2, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .22, z); g.add(r); });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); });
-    const subDe = (k) => `Equipo comercial · ${v.clientes} clientes · ${k < paradas.length ? `va a ${paradas[k].cliente} (${nombreCiudad(paradas[k].ciudad)})` : 'regresa al CEDIS'}`;
+    const subDe = (k) => `Equipo comercial · ${plural(v.clientes, 'cliente')} · ${k < paradas.length ? `va a ${paradas[k].cliente} (${nombreCiudad(paradas[k].ciudad)})` : 'regresa al CEDIS'}`;
     const tag = { tipo: 'vendedorErp', titulo: v.nombre, sub: subDe(0), pagina: 'sellIn' }; let tramoVisto = 0;
     add(g, tag);
     animados.push((t) => {
