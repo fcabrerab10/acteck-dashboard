@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { Cargando, Segmented } from '../../components/kit';
+import { Cargando, Segmented, AccionesCabecera, ControlesCabecera } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import Filtros from '../comercial/sellin/Filtros';
 import { traducirAccion, areaDeTabla } from './equipo/textos';
@@ -451,7 +451,7 @@ export default function HistorialCambios() {
       <div style={{ background: theme.surface, border, borderRadius: 12, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* Rango · segmented */}
-          <Segmented options={RANGOS} value={rango} onChange={setRango} />
+          <ControlesCabecera><Segmented options={RANGOS} value={rango} onChange={setRango} /></ControlesCabecera>
 
           {/* Búsqueda (sin acentos: acción, tabla, persona, contenido del cambio) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, border, borderRadius: 9, padding: '4px 9px', flex: '1 1 200px', minWidth: 160, background: theme.bg }}>
@@ -464,6 +464,7 @@ export default function HistorialCambios() {
             />
           </div>
 
+          <AccionesCabecera>
           <button type="button" onClick={() => setRefreshTick((n) => n + 1)} title="Actualizar" style={{ ...pillStyle(false), padding: '4px 8px' }}>
             <RefreshCw style={{ width: 11, height: 11 }} /> Actualizar
           </button>
@@ -474,6 +475,7 @@ export default function HistorialCambios() {
             pdf={{ ref: rootRef }}
             deshabilitado={loading || !filtradas.length}
           />
+          </AccionesCabecera>
         </div>
 
         <Filtros

@@ -15,7 +15,7 @@ import { apiFetch } from '../../lib/apiFetch';
 import { CLIENTES, PESTANAS_CLIENTE, PAGINA_A_PERMISO_GLOBAL, nivelPestanaGlobal, nivelPestanaCliente, puedeVerInicio } from '../../lib/permisos';
 import { construirArbol } from '../../components/nav/arbol';
 import { AvatarImg } from '../../lib/avatar';
-import { Panel, Pill, Segmented, Boton, toast } from '../../components/kit';
+import { Panel, Pill, Segmented, Boton, toast, AccionesCabecera } from '../../components/kit';
 import { Modal, HojaLateral, Interruptor, hoverBg, suaveBg, hairline } from '../../components/perfil/comun';
 import {
   TriNivel, Input, Eyebrow, PillTipo, estadoDe, tipoDe, TIPO_LABEL, gruposGlobales, normalizarPermisos, clientesConAcceso,
@@ -49,7 +49,7 @@ export default function UsuariosPermisos({ usuarios, cargando, actividad, actual
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 1fr', gap: 10, alignItems: 'start' }}>
       <Panel titulo="Usuarios" meta={cargando ? 'cargando…' : `${lista.length} de ${usuarios.length}`} padding="8px"
-        acciones={<Boton primario icon={Plus} onClick={onNuevo}>Nuevo usuario</Boton>}>
+        acciones={<AccionesCabecera><Boton primario icon={Plus} onClick={onNuevo}>Nuevo usuario</Boton></AccionesCabecera>}>
         <div style={{ position: 'relative', marginBottom: 6 }}>
           <Search size={13} style={{ position: 'absolute', left: 9, top: 8.5, color: theme.textSubtle || theme.textMuted, pointerEvents: 'none' }} />
           <Input value={busca} onChange={setBusca} placeholder="Buscar por nombre, correo o puesto" style={{ paddingLeft: 28 }} />
