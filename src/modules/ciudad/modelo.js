@@ -869,10 +869,10 @@ export function datosEnFecha(d, fecha) {
   if (!d || !(fecha instanceof Date) || Number.isNaN(fecha.getTime())) return d;
   const f = isoLocal(fecha), am = fecha.getFullYear() * 12 + fecha.getMonth() + 1;
   const despues = (x) => { const i = fechaIso(x); return !!i && i > f; }; // ilegible = sin fecha (antes «pendiente» > f y se borraba)
-  const hastaMes = (rows) => (rows || []).filter((r) => r && N(r.anio) * 12 + N(r.mes) <= am);
-  const envios = (d.envios || []).filter((e) => e && !despues(e.fecha_envio_erp || e.fecha_surtida)).map((e) => (despues(e.fecha_entrega_erp || e.fecha_entregada) ? { ...e, fecha_entrega_erp: null, fecha_entregada: null } : e));
-  const contenedores = (d.contenedores || []).filter((c) => c && !despues(c.fecha_emision)).map((c) => (despues(c.arribo_cedis) ? { ...c, arribo_cedis: null, estatus: /CONCLUIDO/i.test(c.estatus || '') ? 'EN TRANSITO' : c.estatus } : c));
-  return { ...d, facturas: (d.facturas || []).filter((x) => x && !despues(x.fecha)), envios, contenedores,
+  const hastaMes = (rows) => comoLista(rows).filter((r) => r && N(r.anio) * 12 + N(r.mes) <= am); // no-lista (texto, objeto) → vacía, no error
+  const envios = comoLista(d.envios).filter((e) => e && !despues(e.fecha_envio_erp || e.fecha_surtida)).map((e) => (despues(e.fecha_entrega_erp || e.fecha_entregada) ? { ...e, fecha_entrega_erp: null, fecha_entregada: null } : e));
+  const contenedores = comoLista(d.contenedores).filter((c) => c && !despues(c.fecha_emision)).map((c) => (despues(c.arribo_cedis) ? { ...c, arribo_cedis: null, estatus: /CONCLUIDO/i.test(c.estatus || '') ? 'EN TRANSITO' : c.estatus } : c));
+  return { ...d, facturas: comoLista(d.facturas).filter((x) => x && !despues(x.fecha)), envios, contenedores,
     sucursales: hastaMes(d.sucursales), cuentaMes: hastaMes(d.cuentaMes), clientesFinales: hastaMes(d.clientesFinales), vendedoresMayoristas: hastaMes(d.vendedoresMayoristas), vendedoresErp: hastaMes(d.vendedoresErp),
     agendaHoy: [], reunionesHoy: [], viajesHoy: [], _aprox: ['inventario', 'cartera', 'pagos', 'ventas del mes completas', 'agenda'] };
 }
@@ -898,7 +898,7 @@ export function eventosCalendario(hoy = new Date()) {
 export function camionesTemporada(m, hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const out = new Map(); const evs = eventosCalendario(hoy).filter((e) => e.desde && (e.id === 'cierre' || e.dias === 0));
-  for (const c of m?.camiones || []) {
+  for (const c of comoLista(m?.camiones)) {
     if (c?.envio) continue; const f = fechaIso(c?.fecha); if (!f) continue;
     const e = evs.find((x) => f >= x.desde && f <= x.hasta); if (e) out.set(c.folio, { id: e.id, texto: e.id === 'buenfin' ? 'Buen Fin' : 'Cierre de mes' });
   }

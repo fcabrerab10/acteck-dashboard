@@ -1019,3 +1019,11 @@ test('posDe y hexCss aguantan entradas inválidas (4.3.21)', () => {
   for (const n of [undefined, null, 'x', '', NaN, -1, 0x1000000, Infinity, {}]) assert.equal(hexCss(n), '#8e8e93', `hexCss(${String(n)}) gris`);
   assert.equal(hexCss(CAPA_TONOS.noExiste), '#8e8e93', 'tono desconocido de la cadena');
 });
+
+test('datosEnFecha y camionesTemporada aguantan listas que no son lista (4.3.22)', () => {
+  const malo = { facturas: 'error', envios: { a: 1 }, contenedores: 3, sucursales: 'x', cuentaMes: {}, clientesFinales: 7, vendedoresMayoristas: true, vendedoresErp: 'y', cartera: [1] };
+  let r; assert.doesNotThrow(() => { r = datosEnFecha(malo, new Date(2026, 8, 30, 12)); }, 'datos crudos que no son lista no tumban la barra de tiempo');
+  for (const k of ['facturas', 'envios', 'contenedores', 'sucursales', 'cuentaMes', 'clientesFinales', 'vendedoresMayoristas', 'vendedoresErp']) assert.deepEqual(r[k], [], `${k} no-lista → vacía`);
+  assert.deepEqual(r.cartera, [1], 'la foto de hoy queda igual');
+  for (const cam of ['x', 3, { folio: 1 }, true]) assert.equal(camionesTemporada({ camiones: cam }, new Date(2026, 10, 14)).size, 0, `camiones ${JSON.stringify(cam)}`);
+});

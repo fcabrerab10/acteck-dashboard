@@ -206,6 +206,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.19) `comoLista()` pura y probada: banco, torre, cuotas, reuniones, presencia, racks, demanda, reparto por estado, puerto y pines aceptan algo que no es lista (null, texto, número) en vez de lanzar error; `encuadre()`, `repartoPorEstado()`, `acomodoEscritorios()` y `acomodoRacks()` aceptan opciones null.
   - [x] (4.3.20) `cuantos()` pura y probada: misiones, bitácora, pensamientos, celebraciones, cintas de la cadena, racks del CEDIS, reparto por estado y `listaCorta()` aceptan `max`/`n` en texto, decimal o basura (NaN, negativo, null → la omisión); antes `slice(0, NaN)` dejaba la lista vacía y «+NaN» en la tarjeta del puerto.
   - [x] (4.3.21) `posDe()` con lon/lat ilegibles (null, texto, NaN) cae en el origen en vez de dar x/z NaN (objeto fuera de la escena); `hexCss()` con color inválido (tono desconocido, texto, negativo) da gris en vez de «#000NaN» (CSS inválido en la tira de la cadena y la leyenda).
+  - [x] (4.3.22) Barra de tiempo: `datosEnFecha()` (corre con los datos crudos, antes de `sinNulos()`) acepta facturas, envíos, contenedores y ventas mensuales que no son lista (texto, objeto, número: quedan vacías) en vez de lanzar error; `camionesTemporada()` igual con `camiones`.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -221,6 +222,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 22:16 · v4.3.22 · Pulido: barra de tiempo y camiones de temporada aguantan listas crudas que no son lista (`comoLista()`); +1 prueba.
 - 2026-11-19 15:56 · v4.3.21 · Pulido: `posDe()` y `hexCss()` aguantan entradas inválidas (sin posiciones NaN ni «#000NaN»); +1 prueba.
 - 2026-11-19 15:36 · v4.3.20 · Pulido: `cuantos()` para `max`/`n` inválidos en las listas del modelo (antes salían vacías); +1 prueba.
 - 2026-11-19 15:16 · v4.3.19 · Pulido: funciones del modelo aguantan listas que no son lista y opciones null (`comoLista()`; +1 prueba).
