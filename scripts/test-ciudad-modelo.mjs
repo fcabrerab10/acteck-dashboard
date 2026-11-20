@@ -750,6 +750,17 @@ test('paseantes por manzana (versión ligera)', () => {
   assert.equal(paseantesDistrito(40, true), 1); assert.equal(paseantesDistrito(2, true), 0);
 });
 
+test('pulido: aPx / pxAEscena con coordenadas ilegibles caen en el origen (4.3.25)', () => {
+  for (const [a, b] of [[null, null], [undefined, undefined], ['x', NaN], [Infinity, -Infinity], ['', true], [{}, []]]) {
+    const p = aPx(a, b); assert.deepEqual(p, PX_ORIGEN, `aPx(${String(a)}, ${String(b)})`);
+    assert.deepEqual(pxAEscena(a, b), { x: 0, z: 0 }, `pxAEscena(${String(a)}, ${String(b)})`);
+  }
+  // número en texto se lee; sólo el eje ilegible cae en el origen
+  assert.deepEqual(aPx('-103.35', null).X, aPx(-103.35, 0).X); assert.equal(aPx(-100, 'basura').Y, PX_ORIGEN.Y);
+  const q = pxAEscena(PX_ORIGEN.X + 10, 'z'); assert.ok(Math.abs(q.x - 10 * K) < 1e-9 && q.z === 0);
+  assert.deepEqual(pxAEscena(' ' + PX_ORIGEN.X + ' ', String(PX_ORIGEN.Y)), { x: 0, z: 0 });
+});
+
 test('pulido: proyección y catálogos coherentes', () => {
   // Guadalajara es el origen de la escena; norte = z negativa, oriente = x positiva.
   const o = pxAEscena(PX_ORIGEN.X, PX_ORIGEN.Y);

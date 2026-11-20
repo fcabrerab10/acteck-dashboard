@@ -165,9 +165,12 @@ export const ORIGEN = CIUDADES.GUADALAJARA;
 // de México) y las ciudades caen en el mismo sistema.
 export const PX = { a: 32.1003, b: 3792.67, c: -33.3885, d: 1099.92 };
 export const K = ESC / PX.a;
-export const aPx = (lon, lat) => ({ X: PX.a * lon + PX.b, Y: PX.c * lat + PX.d });
+// Número legible (número o texto numérico finito) o `omision`: null, '', NaN, Infinity, objetos/listas o basura no pasan.
+const numO = (v, omision) => { if ((typeof v !== 'number' && typeof v !== 'string') || v.trim?.() === '') return omision; const n = Number(v); return Number.isFinite(n) ? n : omision; };
+// lon/lat (o X/Y) ilegibles caen en el origen (Guadalajara) en vez de dar NaN (terreno y objetos fuera de la escena).
+export const aPx = (lon, lat) => ({ X: PX.a * numO(lon, ORIGEN.lon) + PX.b, Y: PX.c * numO(lat, ORIGEN.lat) + PX.d });
 export const PX_ORIGEN = aPx(ORIGEN.lon, ORIGEN.lat);
-export const pxAEscena = (X, Y) => ({ x: (X - PX_ORIGEN.X) * K, z: (Y - PX_ORIGEN.Y) * K });
+export const pxAEscena = (X, Y) => ({ x: (numO(X, PX_ORIGEN.X) - PX_ORIGEN.X) * K, z: (numO(Y, PX_ORIGEN.Y) - PX_ORIGEN.Y) * K });
 // Sin lon/lat legibles (null, texto, NaN) cae en el origen (Guadalajara) en vez de dar x/z NaN (objeto fuera de la escena).
 export const posDe = (c) => { const lon = Number(c?.lon), lat = Number(c?.lat); if (c?.lon == null || c?.lat == null || c?.lon === '' || c?.lat === '' || !Number.isFinite(lon) || !Number.isFinite(lat)) return { x: 0, z: 0 }; const p = aPx(lon, lat); return pxAEscena(p.X, p.Y); };
 // Vista Mapa de México (etapa 2): las puntas del país (Tijuana, Mexicali, Juárez, Piedras Negras, Matamoros, Cancún,
