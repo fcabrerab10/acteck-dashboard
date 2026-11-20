@@ -106,6 +106,24 @@ const fmt = {
 //   en vez de renderizar data parcial. Por compat aquí devolvemos [] y
 //   log a consola para no romper el flujo.
 // Delegado al motor paginado PARALELO central (lib/queries.js).
+// Detalle por renglón (con SKU) bajo demanda: sólo las filas del SKU, vendedor o cliente final que se abre.
+// campo: 'sku' | 'vendedor_nombre' | 'cliente_nombre' · valor null → no pide nada.
+function useDetalleDicotech(campo, valor, anios) {
+  const [estado, setEstado] = useState({ filas: [], cargando: false });
+  const clave = valor ? `${campo}|${valor}|${(anios || []).join(',')}` : '';
+  useEffect(() => {
+    if (!clave) { setEstado({ filas: [], cargando: false }); return undefined; }
+    let vivo = true;
+    setEstado({ filas: [], cargando: true });
+    fetchAllCentral('v_sellout_general_dicotech', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
+      (q) => q.in('anio', anios).eq(campo, valor))
+      .then((filas) => { if (vivo) setEstado({ filas: filas || [], cargando: false }); })
+      .catch((e) => { console.error('[SellOutDicotech] detalle', campo, e); if (vivo) setEstado({ filas: [], cargando: false }); });
+    return () => { vivo = false; };
+  }, [clave]); // eslint-disable-line react-hooks/exhaustive-deps
+  return estado;
+}
+
 async function fetchAll(table, select, applyFilter = (q) => q) {
   return fetchAllCentral(table, select, applyFilter);
 }
@@ -151,9 +169,10 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     let vivo = true;
     (async () => {
       try {
-        // 2026-11-18 (rendimiento): el detalle por renglón (≈ 49 K filas, sólo lo usan rankings, mapa de calor y
-        // drills) baja en segundo plano; la pantalla pinta con las cuatro consultas chicas.
-        const pGeneral = fetchAll('v_sellout_general_dicotech', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
+        // 2026-11-20 (rendimiento): rankings, mapa de calor y drill por sucursal no usan el SKU, así que bajan de
+        // v_sellout_dicotech_dim_mes (mes × cliente × vendedor × sucursal, ≈ 18 K filas con `tx`) en segundo plano;
+        // el detalle con SKU (49 K renglones) ya no se baja completo: cada drill pide sólo lo suyo (useDetalleDicotech).
+        const pGeneral = fetchAll('v_sellout_dicotech_dim_mes', 'anio,mes,cliente_nombre,vendedor_nombre,sucursal,cantidad,importe,tx',
           (q) => q.in('anio', [anioPrev, anio]));
         pGeneral.then((g) => { if (vivo) setSelloutGeneral(g); }).catch((e) => console.error('[SellOutDicotech] detalle:', e));
         const [mes, skuMes, sucMes, invSuc] = await Promise.all([
@@ -444,10 +463,10 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
       if (!mVend) continue;
       if (!mVend.has(vn)) mVend.set(vn, { name: vn, monto: 0, piezas: 0, tx: 0, clientes: new Set() });
       const vv = mVend.get(vn);
-      vv.monto += imp; vv.piezas += cnt; vv.tx += 1; vv.clientes.add(cn);
+      vv.monto += imp; vv.piezas += cnt; vv.tx += Number(r.tx) || 1; vv.clientes.add(cn);
       if (!mCli.has(cn)) mCli.set(cn, { name: cn, monto: 0, piezas: 0, tx: 0 });
       const cc = mCli.get(cn);
-      cc.monto += imp; cc.piezas += cnt; cc.tx += 1;
+      cc.monto += imp; cc.piezas += cnt; cc.tx += Number(r.tx) || 1;
     }
     const totVend = Array.from(vend.values()).reduce((s, x) => s + x.monto, 0);
     const totCli = Array.from(cli.values()).reduce((s, x) => s + x.monto, 0);
@@ -1673,12 +1692,16 @@ function RankingCard({ theme, P, isDark, type, title, allItems, totalCount, colo
   const maxMonto = Math.max(1, ...allItems.map((x) => x.monto || 0));
   const restCount = Math.max(0, allItems.length - TOP_N);
 
+  const sinNombre = !openName || /^\(sin /.test(openName);
+  const detalleAbierto = useDetalleDicotech(type === 'vendedor' ? 'vendedor_nombre' : 'cliente_nombre', sinNombre ? null : openName, [anio]);
+
   // Derivar drill del item abierto — depende del tipo
   const drillData = useMemo(() => {
     if (!openName) return null;
     const field = type === 'vendedor' ? 'vendedor_nombre' : 'cliente_nombre';
     const filtered = [];
-    for (const r of selloutGeneral) {
+    // Con nombre real se usa el detalle con SKU pedido al abrir; «(sin nombre)» cae al agregado (sin productos).
+    for (const r of (detalleAbierto.filas.length || !sinNombre ? detalleAbierto.filas : selloutGeneral)) {
       if (Number(r.anio) !== anio) continue;
       if (Number(r.mes) > mesActual) continue;
       const val = (r[field] || '(sin nombre)').trim() || '(sin nombre)';
@@ -1688,7 +1711,7 @@ function RankingCard({ theme, P, isDark, type, title, allItems, totalCount, colo
     const skus = new Map(), sucs = new Map();
     const otros = new Map(); // clientes si type=vendedor · vendedores si type=cliente
     const otrosField = type === 'vendedor' ? 'cliente_nombre' : 'vendedor_nombre';
-    let totalPz = 0, totalMonto = 0, totalTx = filtered.length;
+    let totalPz = 0, totalMonto = 0, totalTx = filtered.reduce((n, r) => n + (Number(r.tx) || 1), 0);
     for (const r of filtered) {
       const cnt = Number(r.cantidad) || 0;
       const imp = Number(r.importe) || 0;
@@ -1714,7 +1737,7 @@ function RankingCard({ theme, P, isDark, type, title, allItems, totalCount, colo
       .sort((a, b) => b.monto - a.monto).slice(0, 5);
     const ticket = totalTx > 0 ? totalMonto / totalTx : null;
     return { topProductos, topSucursales, topOtros, totalPz, totalMonto, totalTx, ticket, totalSkus: skus.size, totalOtros: otros.size };
-  }, [openName, type, selloutGeneral, anio, mesActual]);
+  }, [openName, type, selloutGeneral, detalleAbierto.filas, sinNombre, anio, mesActual]);
 
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
@@ -2174,7 +2197,7 @@ function SkuDrillInline({ clienteKey, theme, P, isDark, skuRow, anio, anioPrev, 
   }, [sku, anio, mesActual]);
 
   // Filtrar sellout_general por sku
-  const skuRows = useMemo(() => selloutGeneral.filter((r) => r.sku === sku), [selloutGeneral, sku]);
+  const { filas: skuRows } = useDetalleDicotech('sku', sku, [anioPrev, anio]);
 
   // Rankings del SKU
   const { topClientes, topVendedores, topSucursales, mensuales, piezasYTD, montoYTD, precioReal, clientesTotal, vendedoresTotal, sucursalesTotal } = useMemo(() => {
