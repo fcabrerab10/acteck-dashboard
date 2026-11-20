@@ -1112,3 +1112,18 @@ test('bitácora y tarjeta del barco con fechas sucias (4.3.30)', () => {
   const t = tarjetaDe({ tipo: 'barco', id: 'Z2' }, { puerto: { barcos: [{ id: 'Z2', eta: 'pendiente', llegaEnDias: 3 }], tarimas: [] } });
   assert.ok(t && !JSON.stringify(t).includes('Invalid Date'), 'sin «Invalid Date» en la tarjeta');
 });
+
+test('4.3.31 · reuniones y presencia aguantan fechas nulas, solo-día y duraciones malas', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  const ag = reunionesDelDia([{ titulo: 'Nula', fecha: null }, { titulo: 'Vacía', fecha: '  ' }, { titulo: 'Neg', fecha: ' 2026-10-05T10:30:00 ', duracion_min: -30 }, { titulo: 'Txt', fecha: '2026-10-05T10:45:00', duracion_min: 'x' }], h);
+  assert.deepEqual(ag.map((x) => x.titulo), ['Neg', 'Txt'], 'nula/vacía ya no salen a las 18:00');
+  assert.deepEqual(ag.map((x) => x.estado), ['en curso', 'en curso'], 'duración mala → 60 min');
+  const gente = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  presenciaPersonas(gente, [{ id: 'r1', titulo: 'R', fecha: '2026-10-05T10:30:00', duracion_min: 0, asistentes: [{ user_id: 'c' }] }], [
+    { id: 'v1', tipo: 'viaje', titulo: 'Último día', fecha: '2026-10-01', fecha_fin: '2026-10-05', creado_por: 'a' },
+    { id: 'v2', tipo: 'viaje', titulo: 'Sin fecha', fecha: null, fecha_fin: '2026-10-09', creado_por: 'b' },
+  ], h);
+  assert.equal(gente[0].presencia.estado, 'viaje', 'fecha_fin solo-día cuenta el día completo');
+  assert.equal(gente[1].presencia.estado, 'disponible', 'viaje sin fecha ya no cuenta');
+  assert.equal(gente[2].presencia.estado, 'reunion', 'duración 0 → 60 min');
+});

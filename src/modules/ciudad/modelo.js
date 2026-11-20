@@ -580,12 +580,22 @@ export function listaCorta(lista, n = 3) {
 
 // Interior de la oficina (paso 1, 3.90.37): reuniones de hoy (`agenda_reuniones`, sin viajes) en orden, con hora local y si ya
 // pasó, está en curso o viene. Duración por omisión 60 min. Fechas inválidas se omiten.
+// Instante de una reunión (4.3.31): null/'' ya no se lee como 1970 (antes salía a las 18:00 «hecha» o un viaje sin fecha contaba),
+// 'AAAA-MM-DD' sola es ese día local (antes UTC: el viaje terminaba un día antes en Guadalajara) y se aceptan espacios y Date.
+function instante(x) {
+  if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : x;
+  if (typeof x !== 'string' || !x.trim()) return null;
+  const s = x.trim(), t = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`) : new Date(s);
+  return Number.isNaN(t.getTime()) ? null : t;
+}
+// Duración en minutos (4.3.31): 0, negativa, texto o basura → 60 (antes -30 dejaba la reunión «hecha» antes de empezar).
+const duracionMin = (d) => { const n = Number(d); return Number.isFinite(n) && n > 0 ? n : 60; };
 export function reunionesDelDia(reuniones = [], hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   return comoLista(reuniones).map((r) => {
-    const t = new Date(r?.fecha); if (Number.isNaN(t.getTime())) return null;
-    const ini = t.getHours() * 60 + t.getMinutes(), fin = ini + (Number(r.duracion_min) || 60);
+    const t = instante(r?.fecha); if (!t) return null;
+    const ini = t.getHours() * 60 + t.getMinutes(), fin = ini + duracionMin(r.duracion_min);
     return { titulo: r.titulo || 'Reunión', cliente_key: r.cliente_key || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
   }).filter(Boolean).sort((a, b) => a.ini - b.ini);
 }
@@ -604,13 +614,13 @@ export function acomodoEscritorios(n, op) {
 // (3.111.1) Personas nulas se saltan y una fecha `hoy` inválida usa ahora (antes lanzaba error / dejaba todos «disponible»).
 export function presenciaPersonas(personas = [], reuniones = [], viajes = [], hoy = new Date()) {
   hoy = fechaHoy(hoy);
-  const dia = (x) => { const t = new Date(x); return Number.isNaN(t.getTime()) ? null : `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
+  const dia = (x) => { const t = instante(x); return !t ? null : `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
   const hoyD = dia(hoy), ahora = hoy.getTime();
   const de = (r, id) => r && id && (r.creado_por === id || (Array.isArray(r.asistentes) && r.asistentes.some((a) => a && (a.user_id === id || a === id))));
   const todas = [...comoLista(reuniones), ...comoLista(viajes)].filter(Boolean);
   const vistos = new Set(); const unicas = todas.filter((r) => { const k = r.id || `${r.titulo}|${r.fecha}`; if (vistos.has(k)) return false; vistos.add(k); return true; });
   const viajeHoy = unicas.filter((r) => r.tipo === 'viaje' && dia(r.fecha) && dia(r.fecha) <= hoyD && (dia(r.fecha_fin || r.fecha) || dia(r.fecha)) >= hoyD);
-  const enCurso = unicas.filter((r) => { if (r.tipo === 'viaje') return false; const t = new Date(r.fecha).getTime(); return !Number.isNaN(t) && t <= ahora && ahora < t + (Number(r.duracion_min) || 60) * 60000; });
+  const enCurso = unicas.filter((r) => { if (r.tipo === 'viaje') return false; const t = instante(r.fecha)?.getTime(); return Number.isFinite(t) && t <= ahora && ahora < t + duracionMin(r.duracion_min) * 60000; });
   for (const p of comoLista(personas)) {
     if (!p || typeof p !== 'object') continue;
     const v = viajeHoy.find((r) => de(r, p.id)); const r = !v && enCurso.find((x) => de(x, p.id));
