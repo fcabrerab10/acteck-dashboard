@@ -12,7 +12,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
 import { crearAmbiente } from './sonido';
-import { COLOR_CUENTA, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto } from './modelo';
+import { COLOR_CUENTA, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -129,7 +129,7 @@ export default function Ciudad({ onNavegar }) {
     if (!modelo || !busca.trim()) return [];
     const q = busca.trim().toUpperCase();
     const out = [];
-    for (const d of modelo.distritos) { if (d.ciudad.includes(q)) out.push({ tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: `${d.tiendas.length} tiendas`, ciudad: d.ciudad }); for (const t of d.tiendas) if (`${t.nombreCuenta} ${t.sucursal}`.toUpperCase().includes(q)) out.push({ tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: capital(d.ciudad), ciudad: d.ciudad, cuenta: t.cuenta }); for (const v of d.vendedores) if (v.nombreCompleto.toUpperCase().includes(q)) out.push({ tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${capital(d.ciudad)}`, ciudad: d.ciudad }); }
+    for (const d of modelo.distritos) { if (d.ciudad.includes(q)) out.push({ tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: plural(d.tiendas.length, 'tienda'), ciudad: d.ciudad }); for (const t of d.tiendas) if (`${t.nombreCuenta} ${t.sucursal}`.toUpperCase().includes(q)) out.push({ tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: capital(d.ciudad), ciudad: d.ciudad, cuenta: t.cuenta }); for (const v of d.vendedores) if (v.nombreCompleto.toUpperCase().includes(q)) out.push({ tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${capital(d.ciudad)}`, ciudad: d.ciudad }); }
     if ('ACTECK OFICINA CEDIS'.includes(q)) out.push({ tipo: 'cedis', titulo: 'Acteck · CEDIS', sub: 'Guadalajara' });
     if ('MANZANILLO PUERTO'.includes(q)) out.push({ tipo: 'puerto', titulo: 'Puerto de Manzanillo', sub: 'contenedores' });
     return out.slice(0, 8);
@@ -259,7 +259,7 @@ export default function Ciudad({ onNavegar }) {
         </svg>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', pointerEvents: 'auto' }}>
-        {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} en ruta`], ['Clientes finales', `${k.clientesFinales.toLocaleString('es-MX')} · 2 meses`], ['CEDIS', `${fmtM(modelo.cedis.valor)} · ${Math.round(modelo.cedis.dias)} d`], ['Oficina', `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reuniones`]].map(([l, v]) => (
+        {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} en ruta`], ['Clientes finales', `${k.clientesFinales.toLocaleString('es-MX')} · 2 meses`], ['CEDIS', `${fmtM(modelo.cedis.valor)} · ${Math.round(modelo.cedis.dias)} d`], ['Oficina', `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')}`]].map(([l, v]) => (
           <div key={l} style={{ ...card, padding: '8px 12px', minWidth: 110 }}><div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</div></div>
         ))}
       </div>
