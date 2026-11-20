@@ -1039,7 +1039,7 @@ export function construirModelo(d, hoy = new Date()) {
   });
   const reuniones = (d.reunionesHoy || []).filter((r) => r.tipo !== 'viaje');
   const ahoraMin = hoy.getHours() * 60 + hoy.getMinutes();
-  const reunionEnCurso = reuniones.find((r) => { const t = new Date(r.fecha); const ini = t.getHours() * 60 + t.getMinutes(); return ini <= ahoraMin && ahoraMin < ini + (N(r.duracion_min) || 60); }) || null;
+  const reunionEnCurso = reuniones.find((r) => { const t = instante(r?.fecha); if (!t) return false; const ini = t.getHours() * 60 + t.getMinutes(); return ini <= ahoraMin && ahoraMin < ini + duracionMin(r.duracion_min); }) || null; // 4.3.32: fecha nula ya no es 1970 (18:00) ni duración mala la deja «en curso»
   presenciaPersonas(personas, d.reunionesHoy, d.viajesHoy, hoy); // 3.90.40: en reunión / de viaje / disponible (como Gather)
   const oficina = { personas, genericos: 3, reuniones: reuniones.length, reunionEnCurso: reunionEnCurso ? { titulo: reunionEnCurso.titulo, cliente_key: reunionEnCurso.cliente_key } : null, agenda: reunionesDelDia(reuniones, hoy) };
 

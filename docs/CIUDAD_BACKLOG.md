@@ -216,6 +216,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.29) Días entre fechas (camiones de facturas, envíos lentos de la cadena, barcos y tarimas del puerto, «hace N d» del camión) con `fechaIso()`: una fecha con espacios (« 2026-10-03») o un Date ya cuenta (antes NaN: el camión o el barco desaparecía); ilegible sigue sin contar.
   - [x] (4.3.30) Bitácora en vivo y tarjeta del barco con `fechaIso()`: «hoy» del modelo con espacios, fechas de facturas/envíos/arribos con espacios o Date ya cuentan y una ilegible se salta (antes «hace NaN d»); la tarjeta del contenedor con ETA ilegible dice «s/f» en vez de «Invalid Date».
   - [x] (4.3.31) Reuniones y presencia: `reunionesDelDia()` / `presenciaPersonas()` ya no leen una fecha nula o vacía como 1970 (antes la reunión salía a las 18:00 «hecha» y un viaje sin fecha contaba), una fecha sola 'AAAA-MM-DD' es ese día local (antes UTC: el viaje terminaba un día antes en Guadalajara) y una duración 0, negativa o en basura usa 60 min.
+  - [x] (4.3.32) La reunión en curso de la oficina (ventana iluminada de la sala) usa `instante()` / `duracionMin()`: una fecha nula o vacía ya no es 1970 (a las 18:00 salía «en curso») y una duración negativa o basura usa 60 min; fecha con espacios cuenta.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -231,6 +232,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-20 01:36 · v4.3.32 · reunión en curso de la oficina aguanta fecha nula y duración mala; +1 prueba.
 - 2026-11-20 01:16 · v4.3.31 · reuniones y presencia aguantan fechas nulas, solo-día y duraciones malas.
 - 2026-11-20 00:56 · v4.3.30 · Pulido: bitácora en vivo y tarjeta del barco aguantan fechas sucias (sin «hace NaN d» ni «Invalid Date»); +1 prueba.
 - 2026-11-20 00:36 · v4.3.29 · Pulido: días entre fechas (camiones, cadena, puerto) usan `fechaIso()`: fechas con espacios o Date ya no desaparecen el camión/barco; +1 prueba.

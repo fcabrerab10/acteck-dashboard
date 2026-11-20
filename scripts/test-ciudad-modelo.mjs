@@ -1127,3 +1127,12 @@ test('4.3.31 · reuniones y presencia aguantan fechas nulas, solo-día y duracio
   assert.equal(gente[1].presencia.estado, 'disponible', 'viaje sin fecha ya no cuenta');
   assert.equal(gente[2].presencia.estado, 'reunion', 'duración 0 → 60 min');
 });
+
+test('4.3.32 · la reunión en curso de la oficina aguanta fecha nula y duración mala', () => {
+  const e = new Date(0), h = new Date(2026, 9, 5, e.getHours(), e.getMinutes() + 30); // a la hora en que «1970» caería
+  const m1 = construirModelo({ reunionesHoy: [{ titulo: 'Nula', fecha: null }, { titulo: 'Vacía', fecha: ' ' }] }, h);
+  assert.equal(m1.oficina.reunionEnCurso, null, 'fecha nula/vacía ya no es una reunión en curso');
+  const h2 = new Date(2026, 9, 5, 11, 0), ini = new Date(2026, 9, 5, 10, 30).toISOString();
+  const m2 = construirModelo({ reunionesHoy: [{ titulo: 'Neg', fecha: ` ${ini} `, duracion_min: -30 }] }, h2);
+  assert.equal(m2.oficina.reunionEnCurso?.titulo, 'Neg', 'duración negativa → 60 min y fecha con espacios cuenta');
+});
