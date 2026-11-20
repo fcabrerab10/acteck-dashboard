@@ -362,11 +362,11 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const activas = tiendas.filter((t) => t.vendio).length, ratio = tiendas.length ? activas / tiendas.length : 1;
   const cf = (m.distritos || []).reduce((s, x) => ({ n: s.n + n(x?.clientesFinales?.n), imp: s.imp + n(x?.clientesFinales?.importe) }), { n: 0, imp: 0 });
   const tramos = [
-    { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${mar.length} barcos · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
+    { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length} con ETA vencida · ${(m.puerto?.tarimas || []).length} recién llegados`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${tarde} barco${tarde === 1 ? '' : 's'} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
-    { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${Math.round(d)} días`, estado: d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde', motivo: d > 90 ? `${Math.round(d)} días de inventario` : null },
+    { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${plural(d, 'día')}`, estado: d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde', motivo: d > 90 ? `${plural(d, 'día')} de inventario` : null },
     { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${lentos} envío${lentos === 1 ? '' : 's'} con más de 5 días en camino` : null },
-    { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas} de ${tiendas.length} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${tiendas.length - activas} tiendas sin venta este mes` : null },
+    { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas} de ${tiendas.length} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
     { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${cf.n.toLocaleString('es-MX')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
   ];
   return { tramos, atasco: tramos.find((t) => t.estado === 'rojo') || tramos.find((t) => t.estado === 'ambar') || null };
@@ -640,6 +640,11 @@ export function topSkus(filas = [], n = 5) {
   return [...m.values()].filter((o) => o.importe > 0 || o.cantidad > 0).sort((a, b) => b.importe - a.importe || b.cantidad - a.cantidad).slice(0, n);
 }
 // Cifra corta (3.90.83): 999 600 ya no sale «1000 K» sino «1.0 M», 999.6 → «1 K», negativos con signo y basura → 0.
+// Singular/plural (4.3.34): «1 barco», «2 barcos», «0 barcos»; n ilegible cuenta como 0. `varios` por omisión = uno + 's'.
+export function plural(n, uno, varios = `${uno}s`) {
+  const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
+  return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;
+}
 export function cifraCorta(v) {
   const n = Number(v); if (!Number.isFinite(n)) return '0';
   const a = Math.abs(n); const s = n < 0 && Math.round(a) > 0 ? '-' : '';
@@ -761,7 +766,7 @@ export function tarjetaDe(tag, modelo) {
     const r = sn(m.cedis?.racksMarca).find((x) => x.marca === tag.marca);
     if (r) {
       const tot = sn(m.cedis.racksMarca).reduce((s2, x) => s2 + (Number(x.valor) || 0), 0);
-      t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${num(r.marcas)} marcas` : 'SKUs con stock', num(r.skus)]];
+      t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${plural(r.marcas, 'marca')}` : 'SKUs con stock', num(r.skus)]];
       t.estado = r.dias == null ? null : r.dias > 120 ? 'rojo' : r.dias > 90 ? 'ambar' : 'verde'; // mismos umbrales que el CEDIS
     }
   } else if (tag.tipo === 'barco' && m.puerto) {

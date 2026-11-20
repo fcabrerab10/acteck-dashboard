@@ -218,6 +218,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.31) Reuniones y presencia: `reunionesDelDia()` / `presenciaPersonas()` ya no leen una fecha nula o vacía como 1970 (antes la reunión salía a las 18:00 «hecha» y un viaje sin fecha contaba), una fecha sola 'AAAA-MM-DD' es ese día local (antes UTC: el viaje terminaba un día antes en Guadalajara) y una duración 0, negativa o en basura usa 60 min.
   - [x] (4.3.32) La reunión en curso de la oficina (ventana iluminada de la sala) usa `instante()` / `duracionMin()`: una fecha nula o vacía ya no es 1970 (a las 18:00 salía «en curso») y una duración negativa o basura usa 60 min; fecha con espacios cuenta.
   - [x] (4.3.33) Bitácora en vivo: los montos usan `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; negativos «-$5 K») y la hora de los pagos/sincronización usa `instante()` (un `pagado_at` 'AAAA-MM-DD' ya no sale «ayer» por UTC; espacios y Date cuentan; ilegible se salta).
+  - [x] (4.3.34) `plural()` pura y probada: la cadena de suministro y la tarjeta de racks dicen «1 barco», «1 día», «1 tienda sin venta», «1 marca» (antes «1 barcos», «1 días»…). Sigue: lo mismo en `Ciudad.jsx` (buscador «1 tiendas», panel «1 personas · 1 reuniones»; requiere harness).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -233,6 +234,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-20 03:05 · v4.3.34 · `plural()`: cadena y racks en singular con 1 («1 barco», «1 día»); +1 prueba.
 - 2026-11-20 01:56 · v4.3.33 · bitácora: montos con `pesosCorto()` y pagos con fecha sola/espacios/Date sin corrimiento UTC; +1 prueba.
 - 2026-11-20 01:36 · v4.3.32 · reunión en curso de la oficina aguanta fecha nula y duración mala; +1 prueba.
 - 2026-11-20 01:16 · v4.3.31 · reuniones y presencia aguantan fechas nulas, solo-día y duraciones malas.
