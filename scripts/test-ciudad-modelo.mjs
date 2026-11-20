@@ -1071,3 +1071,18 @@ test('Pulido: torre de pronóstico con fechas de arribo sucias (4.3.27)', () => 
   assert.deepEqual(resumenTorre([], [{ fecha_arribo: '2026-10-06' }], ' 2026-10-07 '), resumenTorre([], [{ fecha_arribo: '2026-10-06' }], hoyIso), 'hoy con espacios se lee');
   assert.equal(resumenTorre([], [{ fecha_arribo: '2026-10-06' }], new Date(2026, 9, 7, 12)).atrasados, 1, 'hoy como Date');
 });
+test('banco (4.3.28): fechas y estados sucios en pagos, hoy inválido y reglas que fallan', async () => {
+  const reglas = await import('../src/modules/comercial/pagosv3/estados.js');
+  const hoyIso = '2026-10-07';
+  const pagos = [{ estado: ' autorizado', monto: 100, fecha_programada: ' 2026-10-09' }, { estado: 'Rechazado ', monto: 7, fecha_programada: '2026-10-08' }, { estado: ' pagado ', monto: 9, fecha_programada: '2026-10-01' },
+    { estado: 'solicitado', monto: '50', fecha_programada: 'pendiente', fecha_compromiso: '2026-10-01' }, { estado: 'calculado', monto: 4, fecha_programada: new Date(2026, 9, 10, 12) }, 'basura', 5];
+  const b = resumenBanco([], pagos, hoyIso, reglas);
+  assert.equal(b.pagosSemana, 2, 'fecha con espacios y Date cuentan en la semana; rechazado con mayúsculas no');
+  assert.equal(b.montoSemana, 104);
+  assert.equal(b.pagosVencidos, 1, 'programada ilegible cae a la de compromiso; pagado con espacios ya no sale vencido'); assert.equal(b.montoVencido, 50);
+  const sinHoy = resumenBanco([], [{ estado: 'autorizado', monto: 1, fecha_programada: '2000-01-01' }], 'nunca', reglas);
+  assert.equal(sinHoy.pagosVencidos, 1, 'hoy inválido usa hoy (antes NaN: no contaba)');
+  const rotas = { venceEn: () => { throw new Error('x'); }, estaVencido: () => true };
+  assert.deepEqual(resumenBanco([], [{ estado: 'autorizado', monto: 3 }], hoyIso, rotas), { carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 1, montoVencido: 3 }, 'una regla que lanza no tira el banco');
+  assert.equal(resumenBanco([], pagos, hoyIso, { venceEn: 1, estaVencido: 'x' }).pagosSemana, 0, 'reglas que no son función no cuentan');
+});

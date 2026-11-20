@@ -265,9 +265,16 @@ export function fechaHoy(h) {
 }
 
 export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISOString().slice(0, 10), reglas = null) {
+  // Pulido (4.3.28): «hoy» inválido usa hoy (antes NaN: ningún pago contaba); fechas de pago con `fechaIso()` (« 2026-10-09»
+  // con espacios o un Date ya cuentan; una programada ilegible cae a la de compromiso); estado con espacios/mayúsculas
+  // («Rechazado », « pagado») se lee; reglas que no son función o que lanzan error con un pago no tiran el banco.
+  hoyIso = fechaIso(hoyIso) ?? fechaIso(fechaHoy(hoyIso));
   const conVencido = comoLista(cartera).filter((c) => N(c?.vencido) > 0);
-  const abiertos = reglas?.venceEn && reglas?.estaVencido ? comoLista(pagos).filter((p) => p && p.estado !== 'rechazado') : [];
-  const semana = abiertos.filter((p) => reglas.venceEn(p, 7, hoyIso)), vencidos = abiertos.filter((p) => reglas.estaVencido(p, hoyIso));
+  const fn = (f) => (typeof f === 'function' ? f : null), vence = fn(reglas?.venceEn), vencido = fn(reglas?.estaVencido);
+  const seguro = (f, ...a) => { try { return !!f(...a); } catch { return false; } };
+  const limpio = (p) => { const est = typeof p.estado === 'string' ? p.estado.trim().toLowerCase() : p.estado; const fp = fechaIso(p.fecha_programada), fc = fechaIso(p.fecha_compromiso); return { ...p, estado: est, fecha_programada: fp ?? fc, fecha_compromiso: fc }; };
+  const abiertos = vence && vencido ? comoLista(pagos).filter((p) => p && typeof p === 'object').map(limpio).filter((p) => p.estado !== 'rechazado') : [];
+  const semana = abiertos.filter((p) => seguro(vence, p, 7, hoyIso)), vencidos = abiertos.filter((p) => seguro(vencido, p, hoyIso));
   return { carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
 }
 
