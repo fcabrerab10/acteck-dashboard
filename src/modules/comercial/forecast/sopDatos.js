@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAll } from '../../../lib/queries';
 import { calcularForecast } from './calculo';
+import { llegadasDe } from '../../../lib/transito.js';
 import { useVentasForecast, useStockForecast, useProyectosForecast, useForecastExistente, clienteForecast, PROPIOS } from '../proyectos/forecastDatos';
 import { useForecastCrm } from '../reservas/datos';
 import { CLIENTES } from '../proyectos/calculo';
@@ -44,8 +45,7 @@ export function useSopEmpresa(enabled = true) {
       for (const r of roadmap || []) if (r.sku && r.descripcion) descripciones.set(r.sku, r.descripcion);
       const navieraPor = new Map();
       for (const c of contenedores || []) if (c.contenedor && c.naviera) navieraPor.set(c.contenedor, c.naviera);
-      const llegadas = [];
-      for (const t of transito || []) for (const e of Array.isArray(t.embarques_detalle) ? t.embarques_detalle : []) if (e?.po && N(e.cantidad) > 0) llegadas.push({ sku: t.sku, po: e.po, eta: e.eta || null, cantidad: N(e.cantidad) });
+      const llegadas = llegadasDe(transito);
       const inventarioMap = new Map();
       for (const r of inventario || []) if (r.sku) inventarioMap.set(r.sku, (inventarioMap.get(r.sku) || 0) + N(r.disponible ?? r.inventario));
       return {

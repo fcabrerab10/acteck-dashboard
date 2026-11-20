@@ -6,13 +6,17 @@
 //               tabla por SKU. Lo que llega se agrupa por PO desde v_transito_sku.embarques_detalle (arribosPorPo).
 //   Mis clientes → forecast capturado (Proyectos y forecast) − inventario del cliente − nuestro stock − tránsito
 //               = lo que hay que pedirle a Compras, por SKU y por cliente (calcularMisClientes). Aquí NO se captura nada.
+import { moneyCompact1 } from '../../../lib/format.js';
+import { estadoCobertura, PERFILES, TONOS } from '../../../lib/cobertura.js';
+import { agruparTransitoPorPO, llegadasDe } from '../../../lib/transito.js';
+
 const N = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? 0 : Number(v));
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 export const mesKey = (a, m) => `${a}-${String(m).padStart(2, '0')}`;
 export const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const keyDeIso = (iso) => (iso ? String(iso).slice(0, 7) : null);
-export const usdCompact = (n) => { const v = N(n); const a = Math.abs(v); if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`; if (a >= 1e3) return `$${Math.round(v / 1e3)}K`; return `$${Math.round(v)}`; };
+export const usdCompact = (n) => moneyCompact1(n);   // formato único: src/lib/format.js
 export const costoDe = (r) => N(r?.ultimoCostoUsd || r?.costoPromedioUsd || r?.costoUnitUsd);
 export const ESTATUS_CORTO = { 'TRANSITO MARITIMO': 'en el mar', 'PROXIMO A ZARPAR': 'por zarpar', 'EN PRODUCCION': 'en producción', 'EN ESPERA DE CONSOLIDAR': 'por consolidar', 'EN RESGUARDO': 'en resguardo', 'Pendiente modular': 'pendiente', 'EN PUERTO': 'en puerto' };
 export const estatusCorto = (s) => (s ? ESTATUS_CORTO[s] || String(s).toLowerCase() : '');
@@ -28,7 +32,8 @@ export function mesesDesde(hoy = new Date(), n = 6, desde = 0) {
 
 /** Cobertura en días de una fila del motor: la del ERP (3 meses reales) y si no la del horizonte. */
 export const diasCobertura = (r) => (r?.coberturaDiasErp != null ? N(r.coberturaDiasErp) : r?.coberturaDias != null ? N(r.coberturaDias) : null);
-export const tonoCobertura = (dias, inv = 0) => (inv <= 0 || dias === 0 ? 'red' : dias == null ? 'gray' : dias < 30 ? 'red' : dias < 60 ? 'orange' : 'green');
+// Regla en src/lib/cobertura.js, perfil «sop» (<30 urge · <60 justo · holgado). OJO: no es el perfil de Inventario (30/90).
+export const tonoCobertura = (dias, inv = 0) => TONOS.sop[estadoCobertura(dias, PERFILES.sop, { agotado: inv <= 0 || dias === 0, soloNull: true })];
 
 /**
  * Arribos por PO desde v_transito_sku (`transito` = filas con embarques_detalle) · mismo criterio que el S&OP web:
@@ -36,38 +41,25 @@ export const tonoCobertura = (dias, inv = 0) => (inv <= 0 || dias === 0 ? 'red' 
  * `navieraPor` = Map(contenedor → naviera) de v_embarques_contenedor.
  */
 export function arribosPorPo({ transito = [], porSku = new Map(), descripciones = new Map(), navieraPor = new Map(), hoy = new Date() } = {}) {
-  const hoyIso = isoDia(hoy);
-  const m = new Map();
-  for (const t of transito || []) {
-    const det = Array.isArray(t.embarques_detalle) ? t.embarques_detalle : [];
-    for (const e of det) {
-      if (!e?.po || !(N(e.cantidad) > 0)) continue;
-      const o = m.get(e.po) || { po: e.po, eta: null, etd: null, cedis: '', estatus: '', contenedor: '', supplier: t.supplier || porSku.get(t.sku)?.supplier || '', piezas: 0, usd: 0, sinCosto: 0, skus: [] };
-      if (e.eta && (!o.eta || e.eta < o.eta)) o.eta = e.eta;
-      if (e.etd && (!o.etd || e.etd < o.etd)) o.etd = e.etd;
-      if (!o.cedis && e.cedis) o.cedis = e.cedis;
-      if (!o.estatus && e.estatus) o.estatus = e.estatus;
-      if (!o.contenedor && e.contenedor) o.contenedor = e.contenedor;
-      const r = porSku.get(t.sku);
+  // Agrupado, ETA, piezas, vencida, días y orden: src/lib/transito.js (única implementación). Aquí costo y cobertura por SKU.
+  return agruparTransitoPorPO(transito, {
+    hoy,
+    alCrear: (e, sku, t) => ({ supplier: t.supplier || porSku.get(sku)?.supplier || '', usd: 0, sinCosto: 0, skus: [] }),
+    porRenglon: (o, { e, sku, piezas: pz }) => {
+      const r = porSku.get(sku);
       const costo = costoDe(r);
-      const pz = N(e.cantidad);
-      o.piezas += pz;
       if (costo > 0) o.usd += pz * costo; else o.sinCosto += pz;
       const dias = diasCobertura(r);
       const inv = N(r?.inv);
-      o.skus.push({ sku: t.sku, descripcion: r?.descripcion || descripciones.get(t.sku) || '', piezas: pz, inv, dias, tono: r ? tonoCobertura(dias, inv) : 'gray', eta: e.eta || null, estatus: e.estatus || '' });
-      m.set(e.po, o);
-    }
-  }
-  return [...m.values()].map((o) => ({
+      o.skus.push({ sku, descripcion: r?.descripcion || descripciones.get(sku) || '', piezas: pz, inv, dias, tono: r ? tonoCobertura(dias, inv) : 'gray', eta: e.eta || null, estatus: e.estatus || '' });
+    },
+  }).map((o) => ({
     ...o,
     naviera: (o.contenedor && navieraPor.get(o.contenedor)) || null,
     nSkus: o.skus.length,
     urgen: o.skus.filter((s) => s.tono === 'red').length,
-    vencida: !!o.eta && o.eta < hoyIso,
-    dias: o.eta ? Math.round((Date.parse(`${o.eta}T12:00:00`) - Date.parse(`${hoyIso}T12:00:00`)) / 86400000) : null,
     skus: o.skus.sort((a, b) => (a.tono === 'red' ? 0 : 1) - (b.tono === 'red' ? 0 : 1) || b.piezas - a.piezas),
-  })).sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')) || b.piezas - a.piezas);
+  }));
 }
 
 /** Hero y tarjetas de Empresa. */
@@ -265,8 +257,4 @@ export function frasePo(po, { sensible = false } = {}) {
 }
 
 /** Llegadas [{ sku, po, eta, cantidad }] e inventario Map(sku → disponible) desde lo que ya bajó la pantalla. */
-export function llegadasDe(transito = []) {
-  const out = [];
-  for (const t of transito || []) for (const e of Array.isArray(t.embarques_detalle) ? t.embarques_detalle : []) if (e?.po && N(e.cantidad) > 0) out.push({ sku: t.sku, po: e.po, eta: e.eta || null, cantidad: N(e.cantidad) });
-  return out;
-}
+export { llegadasDe };

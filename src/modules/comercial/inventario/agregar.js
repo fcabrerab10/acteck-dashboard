@@ -4,7 +4,8 @@
 // Sin React ni layout: se prueba en Node (scripts/test-movil-tracking-inventario-ssr.mjs).
 import { marcaDeSku, normalizarMarca } from '../../../lib/marcas';
 import { estadoDe } from './filtros';
-import { COBERTURA_CRITICA, COBERTURA_SOBRESTOCK, N, diasHasta, normalizar } from './constantes';
+import { N, diasHasta, normalizar } from './constantes';
+import { estadoCobertura, PERFILES } from '../../../lib/cobertura.js';
 
 import { esSkuProducto } from '../../../lib/sku.js';
 // SKU × almacén enriquecido (descripción, tránsito, lead time, demanda, cobertura, estado, índice de búsqueda)
@@ -39,8 +40,9 @@ export function agregarSkus(filas, { descripciones, transito, leadTime, demanda 
     const tieneStock = it.totalPz > 0;
     const diasEta = tr?.eta ? diasHasta(tr.eta) : null;
     const agotado = !tieneStock && demandaMes > 0;
-    const critico = tieneStock && coberturaDias != null && coberturaDias < COBERTURA_CRITICA;
-    const sobrestock = tieneStock && coberturaDias != null && coberturaDias > COBERTURA_SOBRESTOCK;
+    const estadoCob = estadoCobertura(coberturaDias, PERFILES.inventario, { agotado: !tieneStock });
+    const critico = estadoCob === 'critico';
+    const sobrestock = estadoCob === 'sobre';
     // Se agota antes de que llegue su tránsito: hay embarque pendiente y la cobertura no alcanza a la ETA
     const riesgo = transitoPz > 0 && (agotado || (critico && diasEta != null && coberturaDias < Math.max(diasEta, 0)));
     const row = {

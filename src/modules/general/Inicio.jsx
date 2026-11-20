@@ -11,6 +11,7 @@
 // Carga en inicio/useInicioData.js (sólo lib/queries), cálculos en inicio/calc.js, bloques en inicio/bloques.jsx.
 // Se monta lazy desde App.jsx en paginaActiva === 'inicio' con props { onNavegar(clienteKey|null, pagina) }.
 import React, { lazy, Suspense, useMemo, useState } from 'react';
+import { estadoCobertura, PERFILES, TONOS } from '../../lib/cobertura.js';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
@@ -96,7 +97,7 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
     const d = inv.valor - Number(f.inv_cierre_mes);
     return `${d >= 0 ? 'Creció' : 'Bajó'} ${$c(Math.abs(d))} (${(Math.abs(d) / Number(f.inv_cierre_mes) * 100).toFixed(1)} %) contra el cierre de ${MESES[ant.mes - 1].toLowerCase()}`;
   })();
-  const coberturaTone = inv.cobertura == null ? 'gray' : inv.cobertura > 120 ? 'orange' : inv.cobertura < 30 ? 'red' : 'green';
+  const coberturaTone = TONOS.direccion[estadoCobertura(inv.cobertura, PERFILES.direccion, { soloNull: true })];
 
   // La facturación de TODA la empresa es información sensible (Fernando, 2026-09-21): sin el permiso, el tablero
   // del negocio no se muestra; la persona ve su día, sus avisos y sus clientes.

@@ -7,6 +7,7 @@ import { agregarClientes, mapaCuotas, cuotaPeriodo, alcanceCuota, idxMes, yoyDe,
 import { semanasInventario, sumaUltimosMeses, idxMes as idxSo } from '../../../modules/comercial/sellout/calculo';
 import { moneyCompact } from '../../../lib/format';
 import { cadenciaDe } from '../../../modules/comercial/analisis/ritmo';
+import { serieSiSoAnio } from './siso';
 
 export const N = (v) => Number(v) || 0;
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -180,13 +181,11 @@ export function sellOutMesCuenta(mensual = [], cuenta, anio, mes, hoy = new Date
 /** Serie Ene…Dic del año: sell in (mv mes del cliente), sell out (cuenta ligada) y cuota; meses futuros en null. */
 export function serieAnioSiSo({ mensual, soMensual = [], cuenta, mapa, codigo, anio, hoy = new Date() }) {
   const limite = anio === hoy.getFullYear() ? hoy.getMonth() + 1 : anio < hoy.getFullYear() ? 12 : 0;
-  return MESES.map((label, i) => {
-    const m = i + 1, futuro = m > limite;
-    const si = futuro ? null : N(mensual?.get?.(idxMes(anio, m))?.fact_neta);
-    const soRow = cuenta ? soMensual.find((r) => r.cuenta === cuenta && N(r.anio) === anio && N(r.mes) === m) : null;
-    const so = futuro || !cuenta ? null : N(soRow?.importe);
-    const cuota = mapa ? cuotaPeriodo(mapa, codigo, anio, m, 'mes') : null;
-    return { label, mes: m, si, so, cuota: cuota == null ? null : cuota, soSi: si && so != null && si > 0 ? so / si : null, enCurso: !futuro && m === limite && anio === hoy.getFullYear() };
+  // Misma serie que la página web del cliente (analisis/siso.js#serieSiSoAnio); aquí sólo cambian los nombres de los
+  // campos, el corte (el mes de hoy) y se añaden SO/SI y «en curso».
+  return serieSiSoAnio({ mensual, mensualSO: soMensual, cuenta: cuenta || null, cuotas: mapa || null, cliente: codigo, anio, hastaMes: limite, soRepetido: 'primera' }).map((d) => {
+    const si = d.sellIn, so = d.sellOut;
+    return { label: d.x, mes: d.mes, si, so, cuota: d.cuota, soSi: si && so != null && si > 0 ? so / si : null, enCurso: d.mes <= limite && d.mes === limite && anio === hoy.getFullYear() };
   });
 }
 

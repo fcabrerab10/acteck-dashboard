@@ -8,6 +8,7 @@
 //   6 v_inventario_cv_mes (una fila por mes: inventario al cierre [Inv Actual] + CV 3 m + costo de venta)
 //   7 v_inventario_sku_anio (pivote sku × año del stock al cierre de cada mes: la tabla)
 //   8 embarques_compras (po, codigo, unit_price de lo pendiente: precio de lo que llega cuando el SKU aún no existe)
+import { mapaTransito } from '../../../lib/transito.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { fetchAll, fetchAllQ, useSkusProducto, useMedidasInventario } from '../../../lib/queries';
@@ -18,21 +19,8 @@ const STALE = 5 * 60 * 1000;
 const SELECT_INV = 'articulo,no_almacen,almacen_nombre,cedis,disponible,inventario,costopromedio,costodisponible,costoinventario';
 const ESTATUS_PENDIENTE = ['EN PRODUCCION', 'PROXIMO A ZARPAR', 'TRANSITO MARITIMO', 'EN ESPERA DE CONSOLIDAR', 'EN RESGUARDO', 'Pendiente modular'];
 
-/** v_transito_sku → Map(sku → { cantidad, pos:[{ po, estatus, cantidad, eta, etd, cedis, contenedor }], eta, supplier }), como useInventarioDatos. */
-export function mapaTransito(rows = []) {
-  const m = new Map();
-  (rows || []).forEach((r) => {
-    if (!r.sku) return;
-    const prev = m.get(r.sku) || { cantidad: 0, pos: [], eta: null, supplier: r.supplier || '' };
-    prev.cantidad += N(r.cantidad);
-    const det = Array.isArray(r.embarques_detalle) ? r.embarques_detalle : [];
-    det.forEach((d) => prev.pos.push({ po: d.po, estatus: d.estatus, cantidad: N(d.cantidad), eta: d.eta || null, etd: d.etd || null, cedis: d.cedis || '', contenedor: d.contenedor || '' }));
-    if (r.eta_mas_cercana && (!prev.eta || r.eta_mas_cercana < prev.eta)) prev.eta = r.eta_mas_cercana;
-    m.set(r.sku, prev);
-  });
-  m.forEach((v) => v.pos.sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999'))));
-  return m;
-}
+// v_transito_sku → Map(sku → { cantidad, pos, eta, supplier }): src/lib/transito.js (la misma de la computadora).
+export { mapaTransito };
 
 export function useInventarioEmpresa(enabled = true) {
   const hoy = new Date();

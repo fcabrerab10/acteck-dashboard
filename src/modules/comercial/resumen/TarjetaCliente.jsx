@@ -1,6 +1,7 @@
 // Tarjeta por cliente · narrativa + barra de cuota (mínima e ideal, marca del día) + 4 KpiCard + acciones.
 // Clic en la tarjeta → onDrillDown (Home del cliente). "Ir a" abre un popover con Sell In · Sell Out · Cobranza.
 import React, { useEffect, useRef, useState } from 'react';
+import { estadoCobertura, PERFILES } from '../../../lib/cobertura.js';
 import { Share2, Copy, ChevronDown, Home, TrendingUp, ShoppingCart, Wallet } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -133,7 +134,7 @@ export default function TarjetaCliente({ cliente, resumen: r, margen, verSensibl
             badge={r.saldoVencido > 0 ? { l: `${fmtCompact(r.saldoVencido)} venc.`, tone: r.pctVencido > 15 ? 'red' : 'orange' } : (r.corteFecha ? { l: 'al día', tone: 'green' } : null)}
             sub={r.dsoReal != null ? <>DSO <span style={{ color: dsoCol, fontWeight: 600 }}>{r.dsoReal}d</span> · plazo {r.dsoPlazo}d{r.facturasAbiertas > 0 && <> · {fmtInt(r.facturasAbiertas)} fact.</>}</> : (r.corteFecha ? `corte ${r.corteFecha}` : 'sin corte en el periodo')} />
           <KpiCard eyebrow="Cobertura" big={r.coberturaDias != null ? `${r.coberturaDias}d` : '—'}
-            bigColor={r.coberturaDias == null ? theme.text : r.coberturaDias < 30 ? red : r.coberturaDias < 60 ? orange : theme.text}
+            bigColor={{ critico: red, justo: orange }[estadoCobertura(r.coberturaDias, PERFILES.sop, { soloNull: true })] || theme.text}
             sub={r.inventarioPiezas > 0 || r.inventarioValor > 0
               ? (r.inventarioValor > 0 ? `Inv. ${fmtCompact(r.inventarioValor)} · ${fmtInt(r.inventarioPiezas)} pz` : `Inv. ${fmtInt(r.inventarioPiezas)} pz`)
               : 'Sin inventario al corte'} />

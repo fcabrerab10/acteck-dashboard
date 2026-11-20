@@ -15,6 +15,7 @@
 // ExportCart + ExportPreviewModal, UltimasComprasCard, TransitoTimeline, AgregarLineaModal, useSolicitudes, excelSOP,
 // snapshot, reuniones/ (Reuniones, FormularioReunion, DetalleReunion, parserCorreo, cruce, useReuniones).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { estadoCobertura, PERFILES } from '../../lib/cobertura.js';
 import { isoLocal } from '../../lib/format';
 import { ShoppingCart, Plus, CalendarDays, LayoutList } from 'lucide-react';
 import { usePerfil } from '../../lib/perfilContext';
@@ -164,8 +165,9 @@ function ForecastPantalla({ perfil, sensible }) {
   const kpis = useMemo(() => {
     const conBrecha = rowsAll.filter((r) => r.brecha > 0);
     const conSugerido = rowsAll.filter((r) => Number(r.sugerido || 0) > 0);
-    const sobrestock = rowsAll.filter((r) => r.inv > 0 && (r.coberturaDiasErp == null || r.coberturaDiasErp > 90));
-    const criticos = rowsAll.filter((r) => r.coberturaDiasErp != null && r.coberturaDiasErp < 30);
+    const cobDe = (r) => estadoCobertura(r.coberturaDiasErp, PERFILES.inventario, { soloNull: true });
+    const sobrestock = rowsAll.filter((r) => r.inv > 0 && ['sinDato', 'sobre'].includes(cobDe(r)));   // aquí «sin demanda» cuenta como sobre-stock
+    const criticos = rowsAll.filter((r) => cobDe(r) === 'critico');
     const conDemanda = rowsAll.filter((r) => Number(r.demandaMesErp || 0) > 0);
     const enTransito = rowsAll.filter((r) => r.traCant > 0);
     const traPz = enTransito.reduce((a, r) => a + Number(r.traCant || 0), 0);

@@ -8,6 +8,7 @@
 // Datos (≤ 8): v_sellout_cuentas · v_sellout_cuenta_mes · mv_sellout_cuenta_dia · mv_sellout_cuenta_sku_mes (cuenta + pares,
 // 3 meses) · mv_sellout_cuenta_sku_mes de la cuenta (2 años) · v_sellout_inventario_cuenta_sku · mv_sellout_cliente_final_mes · roadmap_sku.
 import React, { useMemo } from 'react';
+import { estadoCobertura, PERFILES } from '../../../lib/cobertura.js';
 import Producto360 from '../producto/Producto360';
 import { Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -33,7 +34,7 @@ export function FrenteVista({ nombre, anio, mes, rank, rankPrev, peso, oport, in
   const frase = fraseFrente({ nombre, pos: rank?.pos, de: rank?.de, pct: peso?.pct, canalLbl, soSi: peso?.soSi, soSiCanal: peso?.soSiCanal, nOport: oport?.total || 0 });
   const movRank = rank?.pos && rankPrev?.pos ? rankPrev.pos - rank.pos : null;
   const subRank = movRank == null ? `${mesL.toLowerCase()} ${anio}` : movRank === 0 ? `igual que en ${MESES[(mes + 10) % 12].toLowerCase()}` : movRank > 0 ? `sube ${movRank} vs ${MESES[(mes + 10) % 12].toLowerCase()}` : `baja ${-movRank} vs ${MESES[(mes + 10) % 12].toLowerCase()}`;
-  const tonoSem = (s) => (s == null ? 'gray' : s <= 0 ? 'red' : s < 4 ? 'orange' : 'green');
+  const tonoSem = (s) => ({ sinDato: 'gray', agotado: 'red', justo: 'orange', sano: 'green' })[estadoCobertura(s, PERFILES.frenteSemanas, { agotado: s != null && s <= 0, soloNull: true })];
   const lblSem = (s, stock) => (stock != null && stock <= 0 ? 'agotado' : s == null ? 'sin ritmo' : `${Math.round(s)} sem`);
   return (
     <>

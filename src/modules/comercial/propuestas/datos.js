@@ -5,6 +5,7 @@
 //   fetchCatalogo(clienteKey)                      → { skus, contexto } (roadmap + inventario + precios + costo + sell-out + SPIFF)
 //   fetchPreciosVigentes(skus)                     → Map sku → { lista → precio } (para Duplicar con lista vigente)
 //   fetchKpisClientes()                            → { clienteKey: { cuota, facturado, gap } } del mes en curso
+import { proximoEmbarque } from '../../../lib/transito.js';
 import { supabase } from '../../../lib/supabase';
 import { hoyISO } from '../../../lib/format.js';
 import { fetchAll, fetchAllQ, cachedQuery, fetchPreciosLista } from '../../../lib/queries';
@@ -177,8 +178,8 @@ export async function fetchCatalogo(clienteKey) {
   const hoyIso = hoyISO();
   const arribo = new Map();
   for (const t of transitoRes?.data || []) {
-    const det = (Array.isArray(t.embarques_detalle) ? t.embarques_detalle : []).filter((d) => d?.eta).sort((a, b) => String(a.eta).localeCompare(String(b.eta)));
-    const prox = det.find((d) => String(d.eta) >= hoyIso) || det[0];
+    // Regla única en src/lib/transito.js. Aquí también cuentan renglones sin piezas y, si no hay detalle, la ETA más cercana de la vista.
+    const prox = proximoEmbarque(t.embarques_detalle, hoyIso, { exigirCantidad: false });
     if (prox) arribo.set(t.sku, { fecha: String(prox.eta).slice(0, 10), piezas: Number(prox.cantidad) || 0, po: prox.po || null, estatus: prox.estatus || null, total: Number(t.cantidad) || 0 });
     else if (t.eta_mas_cercana) arribo.set(t.sku, { fecha: String(t.eta_mas_cercana).slice(0, 10), piezas: Number(t.cantidad) || 0, po: null, estatus: null, total: Number(t.cantidad) || 0 });
   }

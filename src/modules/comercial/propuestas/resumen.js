@@ -1,12 +1,13 @@
 // Vive en modules (regla de congruencia, 2026-11-18): movil/pestanas/propuestas/calculo.js sólo lo reexporta.
 // Propuestas · cálculo puro (lista, conversión, sugeridos). Pruebas: scripts/test-propuestas-movil.mjs. 2026-10-06.
+import { moneyCompact1 } from '../../../lib/format.js';
 import { calcularEfectividad } from './efectividad';
 import { sugeridoDe } from './sugeridos';
 
 const N = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? 0 : Number(v));
 export const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-export const compact = (n) => { const v = N(n); const a = Math.abs(v); if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`; if (a >= 1e3) return `$${Math.round(v / 1e3)}K`; return `$${Math.round(v)}`; };
+export const compact = (n) => moneyCompact1(n);   // formato único: src/lib/format.js
 const totalDe = (p) => (p.resumen?.total != null ? N(p.resumen.total) : (p.lineas || []).reduce((s, l) => s + N(l.piezas) * N(l.precio), 0));
 const mesObj = (p) => { if (p.anio && p.mes) return { anio: N(p.anio), mes: N(p.mes) }; const d = new Date(N(p.tstamp) || Date.now()); return { anio: d.getFullYear(), mes: d.getMonth() + 1 }; };
 

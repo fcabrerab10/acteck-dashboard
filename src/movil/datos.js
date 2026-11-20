@@ -1,6 +1,7 @@
 // Datos de la app móvil · SOLO vía src/lib/queries.js (fetchAll / cachedQuery) + React Query.
 // Las tablas que la app escribe (pagos, pendientes, minutas, eventos_*, marketing_actividades,
 // auditoria_cambios) se leen con supabase directo bajo useQuery (sin cachedQuery).
+import { embarquesPendientes, proximoEmbarque } from '../lib/transito.js';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { fetchAll, cachedQuery } from '../lib/queries';
@@ -126,8 +127,8 @@ export function useFichaProducto(skus) {
         const d = desc.get(sku) || {};
         const i = invBy.get(sku) || {};
         const t = trBy.get(sku);
-        const det = (Array.isArray(t?.embarques_detalle) ? t.embarques_detalle : []).filter((e) => N(e.cantidad) > 0).sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')));
-        const proximo = det.find((e) => e.eta && e.eta >= hoy) || det.find((e) => e.eta) || null;
+        const det = embarquesPendientes(t?.embarques_detalle);
+        const proximo = proximoEmbarque(det, hoy);
         const inventario = N(i.inventario), disponible = N(i.disponible);
         const demMes = (demanda.get(sku) || 0) / meses.length;
         // Cobertura POR SKU en piezas, con los 3 meses CERRADOS (mesesCerrados()).

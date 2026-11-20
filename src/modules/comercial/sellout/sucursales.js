@@ -1,9 +1,10 @@
 // Sell Out de una cuenta · «Sucursales que suben, bajan y dejaron de vender» (2026-10-26). Puro, sobre
 // vs_sellout_sucursal_mes (anio, mes, sucursal, importe). Compara el mes de la pestaña contra el mes anterior, en pesos.
+import { moneyCompact1 } from '../../../lib/format.js';
 import { idxMes, N, MESES } from './calculo.js';
 
 const mesLbl = (m) => MESES[m - 1].toLowerCase();
-const fmtM = (n) => { const a = Math.abs(n); const s = a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${Math.round(a / 1e3)}K` : `$${Math.round(a)}`; return (n < 0 ? '−' : '') + s; };
+const fmtM = (n) => moneyCompact1(n, { signo: '−' });   // formato único: src/lib/format.js
 
 /**
  * { suben, bajan, sinVenta, mesLbl, mesPrevLbl, total }.

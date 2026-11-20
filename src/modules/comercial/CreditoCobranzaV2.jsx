@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { tramosCon, tramoDe as tramoCartera, diasAtraso as diasAtrasoA, diasParaVencer as diasParaVencerA, dsoDe, agingDe } from '../../lib/cartera.js';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
 import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, SkeletonPantalla, GraficaLineas, EASE, DUR, AccionesCabecera } from '../../components/kit';
@@ -53,13 +54,9 @@ const paletteFromTheme = (theme) => ({
 const TONE = { good: 'green', warn: 'orange', bad: 'red' };
 
 // Tramos del aging · tono por tramo (el kit pinta el color)
-const TRAMOS = [
-  { id: '0_30',  label: '0–30 días',  min: 1,  max: 30,       tone: 'yellow' },
-  { id: '31_60', label: '31–60 días', min: 31, max: 60,       tone: 'orange' },
-  { id: '61_90', label: '61–90 días', min: 61, max: 90,       tone: 'red' },
-  { id: 'mas90', label: '+90 días',   min: 91, max: Infinity, tone: 'red' },
-];
-const tramoDe = (d) => (d <= 0 ? null : TRAMOS.find((t) => d >= t.min && d <= t.max)?.id || 'mas90');
+// Límites, tonos y cálculo: src/lib/cartera.js (única implementación). Esta pantalla conserva sus ids y su rótulo «0–30».
+const TRAMOS = tramosCon({ ids: ['0_30', '31_60', '61_90', 'mas90'], labels: ['0–30 días', '31–60 días', '61–90 días', '+90 días'] });
+const tramoDe = (d) => tramoCartera(d, TRAMOS);
 
 // ═══════════════════════════════════════════════════════════════════
 export default function CreditoCobranzaV2({ cliente, clienteKey }) {
@@ -158,26 +155,8 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const PLAZO = Number(config?.plazo_dias_credito) || 90;
   const lineaMXN = lineaUSD * tipoCambio + lineaMXNPagare;
 
-  const diasAtrasoA = (f, ref) => {
-    if (!f.vencimiento) return 0;
-    return Math.max(0, Math.floor((ref - new Date(f.vencimiento + 'T00:00:00').getTime()) / DIA_MS));
-  };
   const diasAtraso = (f) => diasAtrasoA(f, refMs);
-  const diasParaVencer = (f) => {
-    if (!f.vencimiento) return null;
-    return Math.floor((new Date(f.vencimiento + 'T00:00:00').getTime() - refMs) / DIA_MS);
-  };
-  const dsoDe = (rows, ref) => {
-    let num = 0, den = 0;
-    rows.forEach((f) => {
-      if (!f.fecha_emision) return;
-      const s = Number(f.saldo_actual) || 0;
-      const d = Math.floor((ref - new Date(f.fecha_emision + 'T00:00:00').getTime()) / DIA_MS);
-      if (d < 0) return;
-      num += s * d; den += s;
-    });
-    return den > 0 ? Math.round(num / den) : null;
-  };
+  const diasParaVencer = (f) => diasParaVencerA(f, refMs);
 
   const facturasConSaldo = useMemo(() => (detalle || []).filter((f) => Number(f.saldo_actual) > 0), [detalle]);
   const facturasPrev = useMemo(() => (detallePrev || []).filter((f) => Number(f.saldo_actual) > 0), [detallePrev]);
@@ -194,18 +173,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const saldoVencidoPrev = Number(estadoPrev?.saldo_vencido) > 0 ? Number(estadoPrev.saldo_vencido) : suma(facturasPrev.filter((f) => diasAtrasoA(f, refPrevMs) > 0));
 
   // Aging por tramo (monto + número de facturas)
-  const aging = useMemo(() => {
-    const b = Object.fromEntries(TRAMOS.map((t) => [t.id, { monto: 0, n: 0, maxDias: 0 }]));
-    facturasConSaldo.forEach((f) => {
-      const d = diasAtraso(f);
-      const id = tramoDe(d);
-      if (!id) return;
-      b[id].monto += Number(f.saldo_actual) || 0;
-      b[id].n += 1;
-      b[id].maxDias = Math.max(b[id].maxDias, d);
-    });
-    return b;
-  }, [facturasConSaldo, refMs]);
+  const aging = useMemo(() => agingDe(facturasConSaldo, refMs, { tramos: TRAMOS }).aging, [facturasConSaldo, refMs]);
   const agTotal = TRAMOS.reduce((s, t) => s + aging[t.id].monto, 0);
 
   // DSO real (edad promedio ponderada por saldo) · fallback al DSO del header

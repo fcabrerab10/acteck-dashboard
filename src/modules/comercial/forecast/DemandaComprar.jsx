@@ -7,6 +7,7 @@
 //                      cantidad que la tabla (AgregarLineaModal → borrador de solicitudes_compra); «Agregar todos» es el
 //                      mismo botón de la barra de filtros.
 import React, { useMemo, useState } from 'react';
+import { estadoCobertura, PERFILES } from '../../../lib/cobertura.js';
 import { Plus } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
@@ -56,7 +57,7 @@ export function ComprarAhoraVista({ comprar, sensible = false, puedeEditar = fal
     ) },
     { key: 'linea', label: 'Estado', align: 'left', maxWidth: 260, render: (c) => (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <Pill tone={c.inv <= 0 ? 'red' : c.dias != null && c.dias < 30 ? 'orange' : 'gray'} size="xs">{c.inv <= 0 ? 'agotado' : c.dias != null ? `${int(c.dias)} d` : 'sin ritmo'}</Pill>
+        <Pill tone={{ agotado: 'red', critico: 'orange' }[estadoCobertura(c.dias, { critico: PERFILES.sop.critico }, { agotado: c.inv <= 0, soloNull: true })] || 'gray'} size="xs">{c.inv <= 0 ? 'agotado' : c.dias != null ? `${int(c.dias)} d` : 'sin ritmo'}</Pill>
         <span title={`${c.descripcion ? `${c.descripcion} · ` : ''}${c.linea}`} style={{ color: theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.linea.split(' · ').slice(1).join(' · ') || c.descripcion}</span>
       </span>
     ) },

@@ -11,6 +11,7 @@
 // lead time (v_lead_time_sku), demanda ERP (facturacion_clientes, 3 meses
 // cerrados) e histórico diario (v_inventario_historico_dia). Todo pasa por lib/queries.js salvo roadmap_sku (la app la
 // escribe → sin cache).
+import { mapaTransito } from '../../../lib/transito.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { N } from './constantes';
@@ -89,20 +90,7 @@ export default function useInventarioDatos() {
 
       // Tránsito · v_transito_sku (1 fila por sku; embarques_detalle = POs pendientes)
       const pTransito = fetchAll('v_transito_sku', 'sku,supplier,cantidad,eta_mas_cercana,eta_mas_lejana,embarques,embarques_detalle')
-        .then((rows) => {
-          const m = new Map();
-          (rows || []).forEach((r) => {
-            if (!r.sku) return;
-            const prev = m.get(r.sku) || { cantidad: 0, pos: [], eta: null, supplier: r.supplier || '' };
-            prev.cantidad += N(r.cantidad);
-            const det = Array.isArray(r.embarques_detalle) ? r.embarques_detalle : [];
-            det.forEach((d) => prev.pos.push({ po: d.po, estatus: d.estatus, cantidad: N(d.cantidad), eta: d.eta || null, etd: d.etd || null, cedis: d.cedis || '', contenedor: d.contenedor || '' }));
-            if (r.eta_mas_cercana && (!prev.eta || r.eta_mas_cercana < prev.eta)) prev.eta = r.eta_mas_cercana;
-            m.set(r.sku, prev);
-          });
-          m.forEach((v) => v.pos.sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999'))));
-          return m;
-        })
+        .then(mapaTransito)
         .catch((e) => { console.warn('[InventarioGlobal] v_transito_sku', e); return new Map(); });
 
       // Lead time · v_lead_time_sku

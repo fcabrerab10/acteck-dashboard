@@ -1,6 +1,7 @@
 // Estrategia de Precios · cálculo puro (sin React): filas SKU × listas, filtros facetados,
 // precio bajo accionable, margen por lista (sensible), cambios del mes y análisis del drill.
 // Elasticidad / simulador / precio bajo por SKU: ./elasticidad.js (sin imports, con test en scripts/test-precios-elasticidad.mjs).
+import { proximoEmbarque } from '../../../lib/transito.js';
 import { LISTAS, MAX_COLUMNAS_LISTA, ordenarListas, listaDeCliente, normalizar, tokens as tokenizar, coincide, N, mesesCerrados } from './textos';
 import { hoyISO } from '../../../lib/format.js';
 import { coincideSku, interpretarBusqueda } from '../../../lib/buscarSku.js';
@@ -209,8 +210,7 @@ export function serieHistorico(historico, listas) {
 
 /** Disponibilidad hoy: disponible + próximo arribo (v_transito_sku.embarques_detalle). */
 export function disponibilidad(inv, tr, hoy = hoyISO()) {
-  const det = (Array.isArray(tr?.embarques_detalle) ? tr.embarques_detalle : []).filter((e) => N(e.cantidad) > 0).sort((a, b) => String(a.eta || '9999').localeCompare(String(b.eta || '9999')));
-  const proximo = det.find((e) => e.eta && e.eta >= hoy) || det.find((e) => e.eta) || null;
+  const proximo = proximoEmbarque(tr?.embarques_detalle, hoy);
   return {
     disponible: N(inv?.disponible), inventario: N(inv?.inventario), enCamino: N(tr?.cantidad),
     proximoArribo: proximo ? { fecha: proximo.eta, piezas: N(proximo.cantidad), po: proximo.po } : null,

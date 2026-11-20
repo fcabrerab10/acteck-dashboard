@@ -1,3 +1,4 @@
+import { estadoCobertura, PERFILES, TONOS, ETIQUETAS } from '../../../lib/cobertura.js';
 // Inventario global · constantes y formateadores compartidos (V3).
 
 // Mapping oficial (archivo "Almacenes 2026.xlsx")
@@ -90,8 +91,9 @@ export const shortAlmacen = (n) => SHORT[n] || `Alm ${n}`;
 // Ojo: la cobertura por SKU es en PIEZAS (no hay costo de venta por SKU); la
 // cifra del hero es [Dias de Inv] del director, en pesos a costo. Se muestran
 // las dos con su etiqueta — no son la misma medida.
-export const COBERTURA_CRITICA = 30;
-export const COBERTURA_SOBRESTOCK = 90;
+// Umbrales y regla: src/lib/cobertura.js (única implementación del semáforo; aquí sólo el perfil «inventario»).
+export const COBERTURA_CRITICA = PERFILES.inventario.critico;
+export const COBERTURA_SOBRESTOCK = PERFILES.inventario.sobre;
 
 // ── Formateadores ──
 export const N = (v) => Number(v) || 0;
@@ -128,20 +130,9 @@ export const diasHasta = (s) => {
 };
 
 // Tono de la pill de cobertura (misma regla en tabla, drill y hero)
-export const tonoCobertura = (dias, stock) => {
-  if (!stock) return 'red';
-  if (dias == null || !isFinite(dias)) return 'gray';
-  if (dias < COBERTURA_CRITICA) return 'red';
-  if (dias > COBERTURA_SOBRESTOCK) return 'orange';
-  return 'green';
-};
-export const etiquetaCobertura = (dias, stock) => {
-  if (!stock) return 'Agotado';
-  if (dias == null || !isFinite(dias)) return 'Sin demanda';
-  if (dias < COBERTURA_CRITICA) return 'Crítica';
-  if (dias > COBERTURA_SOBRESTOCK) return 'Sobre-stock';
-  return 'Sana';
-};
+const estadoInv = (dias, stock) => estadoCobertura(dias, PERFILES.inventario, { agotado: !stock });
+export const tonoCobertura = (dias, stock) => TONOS.inventario[estadoInv(dias, stock)];
+export const etiquetaCobertura = (dias, stock) => ETIQUETAS.inventario[estadoInv(dias, stock)];
 
 // ── Búsqueda por palabras (cualquier orden, sin acentos, sin mayúsculas) ──
 // 'Inalámbrico' → 'inalambrico'. Se usa tanto para indexar la fila como para la consulta.

@@ -39,6 +39,26 @@ export function moneyCompact(n) {
   return `${s}$${Math.round(a)}`;
 }
 
+/**
+ * Compacto con UN decimal fijo en millones: $1.0M · $820K · $950 (nulo/NaN → $0). Es el formato que usaban, cada una
+ * con su copia, las frases de Análisis por cliente, Sell Out por sucursal, Propuestas, S&OP (USD) y la ficha del
+ * cliente propio (2026-11-20: una sola implementación; el texto que pinta cada pantalla NO cambió).
+ *   signo: 'interno' → el menos va después del $ ($-1.5M), como lo pintaban Propuestas, S&OP y la ficha del cliente;
+ *          cualquier otro texto (p. ej. '−') → ese signo delante (−$1.5M), como las frases de Análisis y sucursales.
+ * OJO: no es `moneyCompact` (que recorta «.0» y pinta «—» en nulos). Unificar los dos es decisión de diseño pendiente.
+ */
+export function moneyCompact1(n, { signo = 'interno' } = {}) {
+  const x = n == null || n === '' || Number.isNaN(Number(n)) ? 0 : Number(n);
+  const a = Math.abs(x);
+  if (signo === 'interno') {
+    if (a >= 1e6) return `$${(x / 1e6).toFixed(1)}M`;
+    if (a >= 1e3) return `$${Math.round(x / 1e3)}K`;
+    return `$${Math.round(x)}`;
+  }
+  const s = a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${Math.round(a / 1e3)}K` : `$${Math.round(a)}`;
+  return (x < 0 ? signo : '') + s;
+}
+
 /** 1,234,567 — entero con separador de miles es-MX. Nulo/NaN → '—'. */
 export function int(n) {
   if (!esNumero(n)) return '—';

@@ -1,8 +1,8 @@
 // Pagos · lo que pintan los paneles «Cálculo» y «Marketing», ya armado (puro: sin React ni red).
 // Lo comparten la web (PanelCalculo.jsx, PanelMarketing.jsx) y el celular (movil/pestanas/pagos/SeccionesM.jsx).
 // Extraído de los componentes web el 2026-11-18 (congruencia web ↔ celular); las fórmulas siguen en motor.js.
-import M, { mesDeActividad } from './motor';
-import { reglaDe } from './reglas';
+import M, { mesDeActividad } from './motor.js';
+import { reglaDe } from './reglas.js';
 
 /** Meses que ofrece el panel de Cálculo: el del período y los dos anteriores del mismo año. */
 export function mesesCalculo(mes) {
@@ -29,17 +29,9 @@ export function bloquesCalculo({ clientes = [], reglas = [], datosMotor = {}, an
     const cuota = datosMotor.cuotaMes?.[cliente]?.[per] || 0;
     const sellOut = datosMotor.sellOutMes?.[cliente]?.[per] || 0;
 
-    let rebate = null;
-    if (rReb?.frecuencia === 'mensual') {
-      rebate = M.rebateMensual({ cliente, anio, mes, sellIn, cuota, regla: rReb });
-    } else if (rReb?.frecuencia === 'trimestral' && rReb.modo === 'niveles') {
-      const ms = M.mesesDeQ(q);
-      const siQ = ms.reduce((s, m) => s + (datosMotor.sellInMes?.[cliente]?.[M.periodoMes(anio, m)] || 0), 0);
-      const cuQ = ms.reduce((s, m) => s + (datosMotor.cuotaMes?.[cliente]?.[M.periodoMes(anio, m)] || 0), 0);
-      rebate = M.rebateTrimestralNiveles({ cliente, anio, q, sellInQ: siQ, cuotaQ: cuQ, regla: rReb });
-    } else if (rReb?.frecuencia === 'trimestral') {
-      rebate = M.rebateTrimestralCategorias({ cliente, anio, q, porCategoria: datosMotor.sellInQCategorias?.[cliente]?.[M.periodoQ(anio, q)], regla: rReb });
-    }
+    // Mismo enrutador que el cierre (motor.js#rebateDelPeriodo). El panel conserva sus dos particularidades:
+    // calcula el trimestral con el Q en curso, y una regla trimestral sin `modo` la trata como «por categoría».
+    const rebate = M.rebateDelPeriodo({ cliente, regla: rReb, anio, mes, datos: datosMotor, soloQCerrado: false, trimestralSinModo: 'por_categoria' });
 
     const spiff = rSpiff?.base === 'sell_out'
       ? M.spiffSellOut({ cliente, anio, mes, sellOut, cuotaSellIn: cuota, regla: rSpiff })
