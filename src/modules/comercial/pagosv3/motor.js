@@ -49,19 +49,68 @@ export function nivelDe(tiers, alcance) {
   return orden.find((t) => num(alcance) >= num(t.min_alcance)) || null;
 }
 
+/**
+ * NÚCLEO ÚNICO del rebate por niveles (2026-11-20). Lo usan el cálculo del cierre (cron), el panel «Cálculo» de Pagos
+ * (web y celular) y el «rebate en progreso» de la ficha del cliente: alcance = base ÷ cuota; paga el % del nivel más
+ * alto alcanzado sólo si el alcance llega al mínimo (0.90 si la regla no trae uno).
+ *   decimales: 2 = centavos (propuestas de pago) · 0 = pesos enteros (la ficha del cliente en el celular).
+ */
+export function rebatePorNiveles({ base, cuota, tiers, minimo, decimales = 2 }) {
+  const alcance = num(cuota) > 0 ? num(base) / num(cuota) : 0;
+  const min = num(minimo) || 0.90;
+  const tier = nivelDe(tiers || [], alcance);
+  const cumple = alcance >= min && !!tier;
+  const pct = cumple ? num(tier.pct) : 0;
+  const bruto = num(base) * pct;
+  return { alcance, minimo: min, tier, cumple, pct, monto: decimales === 0 ? Math.round(bruto) : redondear(bruto) };
+}
+
+/** Alcance mínimo que pide la regla: la mensual lo guarda en `alcance_minimo_pago`, la trimestral en `requiere_alcance_minimo`. */
+export const minimoDeRegla = (regla) => (regla?.frecuencia === 'mensual' ? regla?.alcance_minimo_pago : regla?.requiere_alcance_minimo);
+
+/**
+ * Qué cálculo le toca a una regla de rebate: 'mensual' | 'niveles' | 'por_categoria' | null.
+ * `trimestralSinModo` decide una regla trimestral guardada SIN `modo` (las copias no coincidían y se conservó cada una):
+ * el cierre y la ficha del cliente la tratan como 'niveles'; el panel «Cálculo» como 'por_categoria'.
+ */
+export function modoRebate(regla, { trimestralSinModo = 'niveles' } = {}) {
+  if (!regla) return null;
+  if (regla.frecuencia === 'mensual') return 'mensual';
+  if (regla.frecuencia !== 'trimestral') return null;
+  if (regla.modo === 'por_categoria' || regla.modo === 'niveles') return regla.modo;
+  return trimestralSinModo;
+}
+
+/** Sell in y cuota del trimestre = suma de sus 3 meses (los que aún no llegan suman su cuota y 0 de venta). */
+export function basesDelQ({ anio, q, sellInDe, cuotaDe }) {
+  const meses = mesesDeQ(q);
+  return { sellInQ: meses.reduce((s, m) => s + num(sellInDe(anio, m)), 0), cuotaQ: meses.reduce((s, m) => s + num(cuotaDe(anio, m)), 0) };
+}
+
 const prop = (o) => ({ aplica: false, motivo: null, monto: 0, detalle: {}, ...o });
+
+/**
+ * Propuesta de rebate de un cliente para (anio, mes) con su regla. ÚNICO enrutador (cron y paneles).
+ *   soloQCerrado: true → el trimestral sólo se calcula en el mes que cierra el Q (cron); false → con el Q en curso (paneles).
+ */
+export function rebateDelPeriodo({ cliente, regla, anio, mes, datos = {}, soloQCerrado = true, trimestralSinModo = 'niveles' }) {
+  const modo = modoRebate(regla, { trimestralSinModo });
+  if (!modo) return null;
+  const sellInDe = (a, m) => datos.sellInMes?.[cliente]?.[periodoMes(a, m)];
+  const cuotaDe = (a, m) => datos.cuotaMes?.[cliente]?.[periodoMes(a, m)];
+  if (modo === 'mensual') return rebateMensual({ cliente, anio, mes, sellIn: sellInDe(anio, mes), cuota: cuotaDe(anio, mes), regla });
+  if (soloQCerrado && mes % 3 !== 0) return null;
+  const q = qDeMes(mes);
+  if (modo === 'por_categoria') return rebateTrimestralCategorias({ cliente, anio, q, porCategoria: datos.sellInQCategorias?.[cliente]?.[periodoQ(anio, q)], regla });
+  const { sellInQ, cuotaQ } = basesDelQ({ anio, q, sellInDe, cuotaDe });
+  return rebateTrimestralNiveles({ cliente, anio, q, sellInQ, cuotaQ, regla });
+}
 
 // ───────────────────────── Rebate mensual · Dicotech ─────────────────────────
 // Se calcula el día 2 del mes siguiente sobre el sell in del mes cerrado (sin IVA).
 export function rebateMensual({ cliente = 'dicotech', anio, mes, sellIn, cuota, regla }) {
   const r = regla || {};
-  const tiers = r.tiers || [];
-  const alcanceMin = num(r.alcance_minimo_pago) || 0.90;
-  const alcance = num(cuota) > 0 ? num(sellIn) / num(cuota) : 0;
-  const tier = nivelDe(tiers, alcance);
-  const cumple = alcance >= alcanceMin && !!tier;
-  const pct = cumple ? num(tier.pct) : 0;
-  const monto = redondear(num(sellIn) * pct);
+  const { alcance, minimo: alcanceMin, tier, cumple, pct, monto } = rebatePorNiveles({ base: sellIn, cuota, tiers: r.tiers, minimo: r.alcance_minimo_pago });
   return prop({
     clave: `rebate:${cliente}:${periodoMes(anio, mes)}`,
     cliente, tipo: 'rebate', origen: 'auto',
@@ -82,12 +131,7 @@ export function rebateMensual({ cliente = 'dicotech', anio, mes, sellIn, cuota, 
 // ───────────────────────── Rebate trimestral por niveles · PCEL ─────────────────────────
 export function rebateTrimestralNiveles({ cliente = 'pcel', anio, q, sellInQ, cuotaQ, regla }) {
   const r = regla || {};
-  const alcance = num(cuotaQ) > 0 ? num(sellInQ) / num(cuotaQ) : 0;
-  const minimo = num(r.requiere_alcance_minimo) || 0.90;
-  const tier = nivelDe(r.tiers || [], alcance);
-  const cumple = alcance >= minimo && !!tier;
-  const pct = cumple ? num(tier.pct) : 0;
-  const monto = redondear(num(sellInQ) * pct);
+  const { alcance, minimo, tier, cumple, pct, monto } = rebatePorNiveles({ base: sellInQ, cuota: cuotaQ, tiers: r.tiers, minimo: r.requiere_alcance_minimo });
   const ultimoMes = q * 3;
   return prop({
     clave: `rebate:${cliente}:${periodoQ(anio, q)}`,
@@ -333,19 +377,9 @@ export function calcularPeriodo({ anio, mes, clientes = ['digitalife', 'pcel', '
     const cuota = datos.cuotaMes?.[cliente]?.[per];
 
     // Rebate
-    if (rReb?.frecuencia === 'mensual') {
-      out.push(rebateMensual({ cliente, anio, mes, sellIn, cuota, regla: rReb }));
-    } else if (rReb?.frecuencia === 'trimestral' && mes % 3 === 0) {
-      // El Q cierra con este mes → se calcula el día 2 del mes siguiente.
-      if (rReb.modo === 'por_categoria') {
-        out.push(rebateTrimestralCategorias({ cliente, anio, q, porCategoria: datos.sellInQCategorias?.[cliente]?.[periodoQ(anio, q)], regla: rReb }));
-      } else {
-        const meses = mesesDeQ(q);
-        const sellInQ = meses.reduce((s, m) => s + num(datos.sellInMes?.[cliente]?.[periodoMes(anio, m)]), 0);
-        const cuotaQ = meses.reduce((s, m) => s + num(datos.cuotaMes?.[cliente]?.[periodoMes(anio, m)]), 0);
-        out.push(rebateTrimestralNiveles({ cliente, anio, q, sellInQ, cuotaQ, regla: rReb }));
-      }
-    }
+    // El trimestral sólo cuando el Q cierra con este mes (se calcula el día 2 del mes siguiente).
+    const rebate = rebateDelPeriodo({ cliente, regla: rReb, anio, mes, datos, soloQCerrado: true, trimestralSinModo: 'niveles' });
+    if (rebate) out.push(rebate);
 
     // SPIFF
     if (rSpiff?.base === 'sell_out') {
@@ -390,6 +424,7 @@ export default {
   rebateMensual, rebateTrimestralNiveles, rebateTrimestralCategorias,
   spiffSellIn, spiffSellOut, dinamicaVendedores, pagosFijos, marketingDelMes,
   apoyoProteccionPrecio, abonoFondo, calcularPeriodo, nivelDe, fechaPagoDeMes,
+  rebatePorNiveles, rebateDelPeriodo, modoRebate, minimoDeRegla, basesDelQ,
   periodoMes, periodoQ, qDeMes, mesesDeQ, mesSiguiente, redondear,
   MESES_CORTOS, MESES_LARGOS,
 };

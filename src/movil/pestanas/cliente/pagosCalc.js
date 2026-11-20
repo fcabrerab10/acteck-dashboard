@@ -1,7 +1,7 @@
 // Pagos del cliente propio en el celular · cálculo puro. Pruebas: scripts/test-cliente-propio-movil.mjs. 2026-10-06.
 // Uso interno (Fernando y Karolina): rebates, apoyos, marketing, fondos. Las reglas y el flujo son los de pagosv3.
 import { ETAPAS } from '../../../modules/comercial/pagosv3/estados';
-import { nivelDe, qDeMes, mesesDeQ, periodoMes } from '../../../modules/comercial/pagosv3/motor';
+import { periodoMes } from '../../../modules/comercial/pagosv3/motor';
 
 const N = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? 0 : Number(v));
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -37,37 +37,8 @@ const TIPO_TXT = { rebate: 'rebate', spiff: 'SPIFF', apoyo_producto: 'apoyos', p
 const CAT_TXT = { pagosFijos: 'fijos', pagosVariables: 'variables', promociones: 'apoyos', rebates: 'rebate', spiffs: 'SPIFF', marketing: 'marketing' };
 export const tipoCorto = (p) => TIPO_TXT[p.tipo] || CAT_TXT[p.categoria] || String(p.categoria || p.tipo || 'otros').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 
-/**
- * Cómo va el rebate con la regla del cliente: mensual (Dicotech), trimestral por niveles (PCEL) o por categoría (Digitalife).
- *   fact: [{ anio, mes, monto }] del cliente · cuotas: [{ anio, mes, cuota_min }] · regla: config de pagos_reglas/REGLAS_DEFAULT
- */
-export function rebateProgreso({ fact = [], cuotas = [], regla, anio, mes } = {}) {
-  if (!regla) return null;
-  const si = (a, m) => fact.filter((r) => N(r.anio) === a && N(r.mes) === m).reduce((s, r) => s + N(r.monto), 0);
-  const cu = (a, m) => cuotas.filter((r) => N(r.anio) === a && N(r.mes) === m).reduce((s, r) => s + N(r.cuota_min), 0);
-  if (regla.frecuencia === 'mensual') {
-    const sellIn = si(anio, mes), cuota = cu(anio, mes);
-    const alcance = cuota > 0 ? sellIn / cuota : 0;
-    const tier = nivelDe(regla.tiers || [], alcance);
-    const min = N(regla.alcance_minimo_pago) || 0.9;
-    const pct = alcance >= min && tier ? N(tier.pct) : 0;
-    return { periodo: MESES_LARGO[mes - 1], alcance, pct, monto: Math.round(sellIn * pct), base: sellIn, cuota, nivel: tier?.label || null, minimo: min, modo: 'mensual', nombre: regla.nombre_oficial || 'Rebate' };
-  }
-  const q = qDeMes(mes);
-  const meses = mesesDeQ(q);
-  const sellInQ = meses.reduce((s, m) => s + si(anio, m), 0);
-  const cuotaQ = meses.reduce((s, m) => s + cu(anio, m), 0);
-  if (regla.modo === 'por_categoria') {
-    const pcts = regla.por_categoria || {};
-    const lista = Object.entries(pcts).map(([c, p]) => `${c} ${(N(p) * 100).toFixed(0)} %`).join(' · ');
-    return { periodo: `Q${q}`, alcance: cuotaQ > 0 ? sellInQ / cuotaQ : null, pct: null, monto: null, base: sellInQ, cuota: cuotaQ, nivel: lista, modo: 'por_categoria', nombre: 'Rebate por categoría' };
-  }
-  const alcance = cuotaQ > 0 ? sellInQ / cuotaQ : 0;
-  const tier = nivelDe(regla.tiers || [], alcance);
-  const min = N(regla.requiere_alcance_minimo) || 0.9;
-  const pct = alcance >= min && tier ? N(tier.pct) : 0;
-  return { periodo: `Q${q}`, alcance, pct, monto: Math.round(sellInQ * pct), base: sellInQ, cuota: cuotaQ, nivel: tier?.label || null, minimo: min, modo: 'niveles', nombre: 'Rebate' };
-}
+// «Rebate en progreso»: la regla vive en modules/comercial/pagosv3/progreso.js (mismo núcleo que el cierre y el panel).
+export { rebateProgreso } from '../../../modules/comercial/pagosv3/progreso';
 
 /** Pagado por mes del año (y del anterior) para la gráfica de línea. */
 export function serieMensualPagos(pagos = [], anio) {
