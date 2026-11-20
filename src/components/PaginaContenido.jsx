@@ -136,7 +136,9 @@ export default function PaginaContenido({
 
   if (pagina === 'configuracion') {
     if (!puedeVerConfig) return <SinAcceso motivo="Solo el Super Admin puede ver Administración." />;
-    return <Configuracion session={{ user: authUser, perfil }} />;
+    const conf = <Configuracion session={{ user: authUser, perfil }} />;
+    // Administración también lleva la cabecera común (sus secciones suben a la fila de controles).
+    return sinCabecera ? conf : <ProveedorCabecera><CabeceraPantalla seccion={seccionDe('configuracion', null)} />{conf}</ProveedorCabecera>;
   }
 
   const conCabecera = !sinCabecera && !['inicio', 'ciudad'].includes(pagina);

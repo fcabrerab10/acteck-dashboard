@@ -43,15 +43,16 @@ export default function BotonPrepararVisita({ clienteKey, nombre, anio, variante
     : listo ? `Visita lista · ${cuando(listo)}` : 'Preparar visita';
 
   const hero = variante === 'hero';
+  const cab = variante === 'cabecera'; // pastilla clara para la cabecera común de la pantalla
   const base = {
     position: 'relative', overflow: 'hidden',
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    height: hero ? 26 : 40, padding: hero ? '0 10px' : '0 14px', borderRadius: hero ? 999 : 12,
-    border: 0, cursor: estado.corriendo ? 'progress' : 'pointer',
+    height: hero ? 26 : cab ? 'max(28px, var(--tap-min, 0px))' : 40, padding: hero ? '0 10px' : cab ? '0 12px' : '0 14px', borderRadius: hero || cab ? 999 : 12,
+    border: cab ? `1px solid ${theme.border}` : 0, cursor: estado.corriendo ? 'progress' : 'pointer',
     background: hero ? 'rgba(255,255,255,0.14)' : theme.surface,
     color: hero ? (theme.textOnInverse || '#F5F5F7') : theme.text,
-    fontFamily: TYPO.fontText, fontSize: hero ? 11 : 13.5, fontWeight: 600, letterSpacing: '-0.005em',
-    width: hero ? undefined : '100%', justifyContent: hero ? undefined : 'center',
+    fontFamily: TYPO.fontText, fontSize: hero ? 11 : cab ? 12 : 13.5, fontWeight: cab ? 500 : 600, whiteSpace: 'nowrap', letterSpacing: '-0.005em',
+    width: hero || cab ? undefined : '100%', justifyContent: hero || cab ? undefined : 'center',
     transition: `background ${DUR.state}ms ${EASE}`,
   };
 
@@ -72,7 +73,7 @@ export default function BotonPrepararVisita({ clienteKey, nombre, anio, variante
         }} />
       )}
       <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        {listo && !estado.corriendo ? <Check size={hero ? 11 : 15} strokeWidth={2.4} /> : <Download size={hero ? 11 : 15} strokeWidth={2.2} />}
+        {listo && !estado.corriendo ? <Check size={hero ? 11 : cab ? 13 : 15} strokeWidth={2.4} /> : <Download size={hero ? 11 : cab ? 13 : 15} strokeWidth={2.2} />}
         {etiqueta}
       </span>
     </button>
