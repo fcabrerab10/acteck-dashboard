@@ -444,18 +444,19 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   hoy = fechaHoy(hoy);
   if (!m) return [];
   const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
-  const hoyIso = m.hoyIso || `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
-  const diasAtras = (f) => Math.round((new Date(`${hoyIso}T12:00:00`) - new Date(`${String(f).slice(0, 10)}T12:00:00`)) / 86400000);
+  // 4.3.30: «hoy» del modelo y fechas de camiones/arribos con `fechaIso()` (« 2026-10-03» o un Date ya cuentan; ilegible se salta, antes «hace NaN d»).
+  const hoyIso = fechaIso(m.hoyIso) || isoLocal(hoy);
+  const diasAtras = (f) => dias(f, hoyIso);
   const cuando = (f) => { const n = diasAtras(f); return n <= 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} d`; };
   const out = [];
   for (const c of m.camiones || []) {
-    if (!c?.fecha) continue; const f = String(c.fecha).slice(0, 10); if (f > hoyIso) continue;
+    const f = fechaIso(c?.fecha); if (!f || f > hoyIso) continue;
     out.push(c.envio
       ? { id: `envio-${c.folio}`, icono: '🚚', texto: `Salió ${c.folio} a ${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''}`, clave: `${f} 00:01`, cuando: cuando(f), ir: { tipo: 'ciudad', ciudad: c.ciudad } }
       : { id: `factura-${c.folio}`, icono: '🧾', texto: `Factura ${c.folio} · ${c.cliente} · ${pesos(c.monto)}`, clave: `${f} 00:01`, cuando: cuando(f), grande: Number(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
   }
   for (const b of [...(m.puerto?.tarimas || []), ...(m.puerto?.barcos || [])]) {
-    if (!b?.arribo) continue; const f = String(b.arribo).slice(0, 10); if (f > hoyIso) continue;
+    const f = fechaIso(b?.arribo); if (!f || f > hoyIso) continue;
     out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${(Number(b.piezas) || 0).toLocaleString('es-MX')} pz`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
   }
   // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.
@@ -755,7 +756,7 @@ export function tarjetaDe(tag, modelo) {
     // Contenedor en el mar (interior del puerto, 3.90.34): proveedor, ETA, piezas y POs (`v_embarques_contenedor`). ETA vencida sin arribo = rojo.
     const b = [...sn(m.puerto.barcos), ...sn(m.puerto.tarimas)].find((x) => x.id === tag.id);
     if (b) {
-      const f = b.arribo || b.eta; const fc = f ? new Date(`${String(f).slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : null;
+      const f = fechaIso(b.arribo) || fechaIso(b.eta); const fc = f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : 's/f'; // 4.3.30: sin «Invalid Date»
       const cuando = b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias < 0 ? `${fc} · ${-b.llegaEnDias} d tarde` : b.llegaEnDias === 0 ? `${fc} · hoy` : `${fc} · en ${b.llegaEnDias} d`;
       t.numeros = [['Proveedor', b.supplier || '—'], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', listaCorta(b.listaPos) || (b.pos ? num(b.pos) : '—')]];
       t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';

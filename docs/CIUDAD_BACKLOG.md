@@ -214,6 +214,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.27) Torre de pronóstico: `resumenTorre()` lee fechas de arribo y «hoy» con `fechaIso()` (« 2026-10-08» con espacios ya no sale atrasado, una fecha ilegible no suma piezas, un Date sí cuenta) y las líneas de propuesta que no son lista ya no cuentan como línea.
   - [x] (4.3.28) Banco: `resumenBanco()` lee «hoy» y las fechas de pago con `fechaIso()` (hoy inválido usa hoy: antes ningún pago contaba; « 2026-10-09» o un Date ya cuentan; programada ilegible cae a la de compromiso), el estado con espacios/mayúsculas («Rechazado », « pagado ») y una regla que lanza error o no es función ya no tira el banco.
   - [x] (4.3.29) Días entre fechas (camiones de facturas, envíos lentos de la cadena, barcos y tarimas del puerto, «hace N d» del camión) con `fechaIso()`: una fecha con espacios (« 2026-10-03») o un Date ya cuenta (antes NaN: el camión o el barco desaparecía); ilegible sigue sin contar.
+  - [x] (4.3.30) Bitácora en vivo y tarjeta del barco con `fechaIso()`: «hoy» del modelo con espacios, fechas de facturas/envíos/arribos con espacios o Date ya cuentan y una ilegible se salta (antes «hace NaN d»); la tarjeta del contenedor con ETA ilegible dice «s/f» en vez de «Invalid Date».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -229,6 +230,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-20 00:56 · v4.3.30 · Pulido: bitácora en vivo y tarjeta del barco aguantan fechas sucias (sin «hace NaN d» ni «Invalid Date»); +1 prueba.
 - 2026-11-20 00:36 · v4.3.29 · Pulido: días entre fechas (camiones, cadena, puerto) usan `fechaIso()`: fechas con espacios o Date ya no desaparecen el camión/barco; +1 prueba.
 - 2026-11-20 00:16 · v4.3.28 · Pulido: banco aguanta fechas y estados sucios en pagos, «hoy» inválido y reglas que fallan (`resumenBanco()` usa `fechaIso()`); +1 prueba.
 - 2026-11-19 23:56 · v4.3.27 · Pulido: torre de pronóstico con fechas de arribo sucias (espacios, ilegibles, Date) y líneas que no son lista; `resumenTorre()` usa `fechaIso()`.

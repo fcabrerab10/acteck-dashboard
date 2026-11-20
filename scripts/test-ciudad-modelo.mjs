@@ -1099,3 +1099,16 @@ test('4.3.29 · días entre fechas aguantan espacios y Date (camiones y barcos)'
   assert.ok(z, 'el contenedor con fechas con espacios sigue en el puerto');
   if (z && 'progreso' in z) assert.ok(Number.isFinite(z.progreso), 'progreso del barco numérico');
 });
+
+test('bitácora y tarjeta del barco con fechas sucias (4.3.30)', () => {
+  const h = new Date('2026-10-07T11:00:00');
+  const m = { hoyIso: ' 2026-10-07 ',
+    camiones: [{ folio: 'F1', cliente: 'A', ciudad: 'GDL', monto: 10, fecha: ' 2026-10-05' }, { folio: 'F2', cliente: 'B', ciudad: 'GDL', monto: 10, fecha: 'pendiente' }, { folio: 'F3', cliente: 'C', ciudad: 'GDL', monto: 10, fecha: new Date('2026-10-06T09:00:00') }],
+    puerto: { barcos: [{ id: 'Z1', piezas: 5, arribo: ' 2026-10-06' }, { id: 'Z2', arribo: '2026-99-99' }], tarimas: [] } };
+  const b = bitacoraEventos(m, h);
+  assert.ok(!b.some((x) => /NaN/.test(x.cuando)), 'sin «hace NaN d»');
+  assert.deepEqual(b.map((x) => x.texto.split(' ')[0] + ' ' + x.cuando).sort(), ['Factura ayer', 'Factura hace 2 d', 'Llegó ayer'].sort());
+  assert.ok(Array.isArray(bitacoraEventos({ hoyIso: 'basura', camiones: [{ folio: 'X', fecha: '2026-10-01' }] }, h)));
+  const t = tarjetaDe({ tipo: 'barco', id: 'Z2' }, { puerto: { barcos: [{ id: 'Z2', eta: 'pendiente', llegaEnDias: 3 }], tarimas: [] } });
+  assert.ok(t && !JSON.stringify(t).includes('Invalid Date'), 'sin «Invalid Date» en la tarjeta');
+});
