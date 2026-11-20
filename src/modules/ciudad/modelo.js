@@ -210,7 +210,8 @@ export function vistaCiudad(caja, op) {
 // Nivel para el botón: 'base' (campus), 'ciudad' (cerca de la ciudad a la que viajaste) o 'lejos' (mapa o en medio).
 export function nivelVista(v, base, ciudad = null) {
   if (enLaBase(v, base)) return 'base';
-  if (ciudad && Number.isFinite(ciudad.zoom) && enLaBase(v, ciudad)) return 'ciudad';
+  // Ciudad con centro ilegible ya no cuenta (antes enLaBase() daba «true» sin datos y el botón decía «ciudad» siempre).
+  if (ciudad && [ciudad.zoom, ciudad.cx, ciudad.cz].every(Number.isFinite) && v && [v.zoom, v.cx, v.cz].every(Number.isFinite) && enLaBase(v, ciudad)) return 'ciudad';
   return 'lejos';
 }
 // Minimapa (paso 2): plano chico norte arriba de ancho × alto px con el contorno EXTREMOS_MEXICO, un punto por ciudad y el
@@ -621,13 +622,15 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 
 // Barra superior tipo recursos (3.90.42): toma la salida de `calcular()` de Inicio (mismos números) y arma los 4 recursos,
 // cada uno con el edificio al que lleva al tocarlo. Lo que no venga se omite. Cobertura sin ritmo (NaN/∞) → sin «d» (3.90.86).
+// POs en tránsito: número (o texto numérico) > 0, redondeado y en singular para 1; «0», NaN o basura → sin texto (antes «0 POs» / «NaN POs»).
+const posTexto = (p) => { const n = Math.round(Number(typeof p === 'string' ? p.trim() : p)); return p != null && p !== '' && typeof p !== 'boolean' && Number.isFinite(n) && n > 0 ? `${n} PO${n === 1 ? '' : 's'}` : null; };
 export function recursosBarra(r) {
   if (!r) return [];
   const n = (v) => Number(v) || 0; const out = [];
   if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, tono: pct == null ? null : pct >= 100 ? 'verde' : pct >= 80 ? 'ambar' : 'rojo', ir: { tipo: 'oficina' } }); }
   if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: r.inv.cobertura != null && r.inv.cobertura !== '' && Number.isFinite(Number(r.inv.cobertura)) ? `${Math.round(Number(r.inv.cobertura))} d` : null, ir: { tipo: 'cedis' } });
   if (r.cartera) out.push({ clave: 'cartera', icono: '🏦', etiqueta: 'Cartera vencida', valor: n(r.cartera.vencido), tono: n(r.cartera.vencido) > 0 ? 'rojo' : 'verde', ir: { tipo: 'banco' } });
-  if (r.enCamino) out.push({ clave: 'embarques', icono: '🚢', etiqueta: 'En tránsito', valor: n(r.enCamino.valor), extra: r.enCamino.pos ? `${r.enCamino.pos} POs` : null, ir: { tipo: 'puerto' } });
+  if (r.enCamino) out.push({ clave: 'embarques', icono: '🚢', etiqueta: 'En tránsito', valor: n(r.enCamino.valor), extra: posTexto(r.enCamino.pos), ir: { tipo: 'puerto' } });
   return out;
 }
 

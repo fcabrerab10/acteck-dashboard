@@ -1027,3 +1027,12 @@ test('datosEnFecha y camionesTemporada aguantan listas que no son lista (4.3.22)
   assert.deepEqual(r.cartera, [1], 'la foto de hoy queda igual');
   for (const cam of ['x', 3, { folio: 1 }, true]) assert.equal(camionesTemporada({ camiones: cam }, new Date(2026, 10, 14)).size, 0, `camiones ${JSON.stringify(cam)}`);
 });
+
+test('Pulido: nivelVista sin centro de ciudad y POs en tránsito legibles en la barra', () => {
+  const b = { cx: 0, cz: 0, zoom: 30 }, lejos = { cx: 500, cz: 500, zoom: 20 };
+  for (const c of [{ zoom: 20 }, { cx: 'x', cz: 1, zoom: 20 }, { cx: NaN, cz: 0, zoom: 20 }]) assert.equal(nivelVista(lejos, b, c), 'lejos', `ciudad ${JSON.stringify(c)} no cuenta`);
+  assert.equal(nivelVista(lejos, b, { cx: 500, cz: 500, zoom: 20 }), 'ciudad', 'ciudad válida sigue');
+  const extra = (pos) => recursosBarra({ enCamino: { valor: 1, pos } })[0].extra;
+  assert.equal(extra(3), '3 POs'); assert.equal(extra(1), '1 PO', 'singular'); assert.equal(extra(' 4 '), '4 POs'); assert.equal(extra(2.6), '3 POs');
+  for (const p of [0, '0', NaN, 'x', null, undefined, '', -2, true, Infinity]) assert.equal(extra(p), null, `pos ${String(p)}`);
+});
