@@ -208,6 +208,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.21) `posDe()` con lon/lat ilegibles (null, texto, NaN) cae en el origen en vez de dar x/z NaN (objeto fuera de la escena); `hexCss()` con color inválido (tono desconocido, texto, negativo) da gris en vez de «#000NaN» (CSS inválido en la tira de la cadena y la leyenda).
   - [x] (4.3.22) Barra de tiempo: `datosEnFecha()` (corre con los datos crudos, antes de `sinNulos()`) acepta facturas, envíos, contenedores y ventas mensuales que no son lista (texto, objeto, número: quedan vacías) en vez de lanzar error; `camionesTemporada()` igual con `camiones`.
   - [x] (4.3.23) `nivelVista()` ya no dice «ciudad» con una ciudad o cámara sin centro legible (antes `enLaBase()` daba true sin datos); la barra de recursos dice «1 PO» en singular y ya no muestra «0 POs» / «NaN POs» con POs en tránsito ilegibles.
+  - [x] (4.3.24) Capa de cuota: `cuotaRitmo()` suma la cuota en texto como número (antes «1000» se concatenaba y el % salía disparatado), ignora cuotas ilegibles y lee `hoyIso` con `fechaHoy()`; `cuotasPorCuenta()` empata la cuenta aunque traiga espacios (« ct » = «ct») y salta la vacía.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -223,6 +224,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 22:56 · v4.3.24 · Pulido: capa de cuota aguanta cuota en texto y cuenta con espacios (`cuotaRitmo()` / `cuotasPorCuenta()`); +1 prueba.
 - 2026-11-19 22:36 · v4.3.23 · Pulido: `nivelVista()` sin centro legible ya no dice «ciudad»; POs en tránsito en singular y sin «0/NaN POs» en la barra de recursos; +1 prueba.
 - 2026-11-19 22:16 · v4.3.22 · Pulido: barra de tiempo y camiones de temporada aguantan listas crudas que no son lista (`comoLista()`); +1 prueba.
 - 2026-11-19 15:56 · v4.3.21 · Pulido: `posDe()` y `hexCss()` aguantan entradas inválidas (sin posiciones NaN ni «#000NaN»); +1 prueba.

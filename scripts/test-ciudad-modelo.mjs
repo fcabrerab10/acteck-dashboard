@@ -1036,3 +1036,13 @@ test('Pulido: nivelVista sin centro de ciudad y POs en tránsito legibles en la 
   assert.equal(extra(3), '3 POs'); assert.equal(extra(1), '1 PO', 'singular'); assert.equal(extra(' 4 '), '4 POs'); assert.equal(extra(2.6), '3 POs');
   for (const p of [0, '0', NaN, 'x', null, undefined, '', -2, true, Infinity]) assert.equal(extra(p), null, `pos ${String(p)}`);
 });
+
+test('Pulido: cuota en texto y cuenta con espacios en la capa de cuota', () => {
+  const m = { hoyIso: '2026-09-15', cuotas: new Map([['a', { venta: 100, cuota: '1000' }], ['b', { venta: 50, cuota: '500' }], ['c', { venta: 9, cuota: 'x' }]]) };
+  const r = cuotaRitmo(m, ['a', 'b', 'c']);
+  assert.equal(r.cuota, 1500, 'cuotas en texto se suman como número'); assert.equal(r.pct, 10); assert.equal(r.n, 2, 'cuota ilegible no cuenta');
+  assert.equal(cuotaRitmo({ ...m, hoyIso: ' 2026-09-15 ' }, ['a']).ritmo, 50, 'hoyIso con espacios se lee');
+  assert.equal(cuotaRitmo({ cuotas: new Map([['a', { venta: 1, cuota: 'x' }]]) }, ['a']), null);
+  const q = cuotasPorCuenta([{ cliente_erp: 10, cuenta_sellout: ' a ', cuota_venta: 100 }, { cliente_erp: 11, cuenta_sellout: 'a', cuota_venta: 50 }, { cliente_erp: 12, cuenta_sellout: '  ', cuota_venta: 9 }], [{ cliente: 10, fact_neta: 30 }, { cliente: 12, fact_neta: 5 }]);
+  assert.deepEqual([...q.keys()], ['a'], 'cuenta con espacios = la misma; vacía no cuenta'); assert.deepEqual(q.get('a'), { venta: 30, cuota: 150 });
+});

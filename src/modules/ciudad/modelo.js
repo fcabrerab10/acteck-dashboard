@@ -475,10 +475,12 @@ export function celebraciones(m, max = 5) {
 // del mes de las cuentas con cuota (sumadas, el % se saca al final) contra el ritmo esperado al día de hoy. null = ninguna tiene cuota.
 export function cuotaRitmo(m, cuentas = []) {
   // 3.90.85: fecha inválida → hoy y venta faltante → 0 (antes salía «NaN %» y el tono rojo).
-  const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h0 = m?.hoyIso ? new Date(`${m.hoyIso}T12:00:00`) : new Date(); const h = Number.isNaN(h0.getTime()) ? new Date() : h0;
+  // 4.3.24: cuota en texto se suma como número (antes «1000» se concatenaba y el % salía disparatado); hoyIso con `fechaHoy()`.
+  const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h = fechaHoy(m?.hoyIso);
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
-  const cs = [...new Set(comoLista(cuentas))].filter((c) => q.get(c)?.cuota > 0); if (!cs.length) return null;
-  const venta = cs.reduce((s, c) => s + (Number(q.get(c).venta) || 0), 0), cuo = cs.reduce((s, c) => s + q.get(c).cuota, 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
+  const cuotaDe = (c) => { const v = Number(q.get(c)?.cuota); return Number.isFinite(v) && v > 0 ? v : 0; };
+  const cs = [...new Set(comoLista(cuentas))].filter((c) => cuotaDe(c) > 0); if (!cs.length) return null;
+  const venta = cs.reduce((s, c) => s + (Number(q.get(c).venta) || 0), 0), cuo = cs.reduce((s, c) => s + cuotaDe(c), 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
   return { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', pct, ritmo: Math.round(ritmo * 100), n: cs.length, venta, cuota: cuo };
 }
 
@@ -488,8 +490,9 @@ export function cuotaRitmo(m, cuentas = []) {
 export function cuotasPorCuenta(cuotas = [], ventas = []) {
   const cuentaDe = new Map(); const out = new Map();
   for (const r of comoLista(cuotas)) {
-    if (!r?.cuenta_sellout) continue; const k = String(r.cliente_erp ?? '').trim(); if (k) cuentaDe.set(k, r.cuenta_sellout);
-    const o = out.get(r.cuenta_sellout) || { venta: 0, cuota: 0 }; o.cuota += Number(r.cuota_venta) || 0; out.set(r.cuenta_sellout, o);
+    const cu = String(r?.cuenta_sellout ?? '').trim(); if (!cu) continue; // 4.3.24: « ct » = «ct» (antes otra cuenta o sin color)
+    const k = String(r.cliente_erp ?? '').trim(); if (k) cuentaDe.set(k, cu);
+    const o = out.get(cu) || { venta: 0, cuota: 0 }; o.cuota += Number(r.cuota_venta) || 0; out.set(cu, o);
   }
   for (const v of comoLista(ventas)) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += Number(v.fact_neta) || 0; }
   return out;
