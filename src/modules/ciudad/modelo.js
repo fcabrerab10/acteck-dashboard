@@ -443,7 +443,8 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   max = cuantos(max, 12);
   hoy = fechaHoy(hoy);
   if (!m) return [];
-  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  // 4.3.33: montos con `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; negativos «-$5 K» en vez de «$-5000»).
+  const pesos = pesosCorto;
   // 4.3.30: «hoy» del modelo y fechas de camiones/arribos con `fechaIso()` (« 2026-10-03» o un Date ya cuentan; ilegible se salta, antes «hace NaN d»).
   const hoyIso = fechaIso(m.hoyIso) || isoLocal(hoy);
   const diasAtras = (f) => dias(f, hoyIso);
@@ -460,7 +461,8 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
     out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${(Number(b.piezas) || 0).toLocaleString('es-MX')} pz`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
   }
   // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.
-  const fechaHora = (ts) => { const t = new Date(ts); if (Number.isNaN(t.getTime())) return null; const p2 = (n) => String(n).padStart(2, '0'); return { f: `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`, h: `${p2(t.getHours())}:${p2(t.getMinutes())}` }; };
+  // 4.3.33: con `instante()`: 'AAAA-MM-DD' sola es ese día local (antes UTC: el pago salía «ayer»), espacios y Date cuentan.
+  const fechaHora = (ts) => { const t = instante(ts); if (!t) return null; const p2 = (n) => String(n).padStart(2, '0'); return { f: `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`, h: `${p2(t.getHours())}:${p2(t.getMinutes())}` }; };
   for (const p of m.pagosHechos || []) {
     const fh = p?.pagado_at ? fechaHora(p.pagado_at) : null; if (!fh || fh.f > hoyIso) continue;
     out.push({ id: `pago-${p.id ?? `${p.pagado_at}-${p.cliente}`}`, icono: '💸', texto: `Pago registrado${p.cliente ? ` · ${p.cliente}` : ''}${p.concepto ? ` · ${p.concepto}` : ''} · ${pesos(p.monto)}`, clave: `${fh.f} ${fh.h}`, cuando: fh.f === hoyIso ? fh.h : cuando(fh.f), grande: Number(p.monto) >= 500000, ir: { tipo: 'banco' }, tarjeta: { tipo: 'banco' } });

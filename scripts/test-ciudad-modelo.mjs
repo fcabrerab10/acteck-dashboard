@@ -1136,3 +1136,18 @@ test('4.3.32 · la reunión en curso de la oficina aguanta fecha nula y duració
   const m2 = construirModelo({ reunionesHoy: [{ titulo: 'Neg', fecha: ` ${ini} `, duracion_min: -30 }] }, h2);
   assert.equal(m2.oficina.reunionEnCurso?.titulo, 'Neg', 'duración negativa → 60 min y fecha con espacios cuenta');
 });
+
+test('4.3.33 · bitácora: montos con pesosCorto y pagos con fecha sola, espacios o Date', () => {
+  const h = new Date(2026, 10, 19, 10, 0);
+  const m = { hoyIso: '2026-11-19', pagosHechos: [
+    { id: 1, pagado_at: '2026-11-19', monto: 999600 },
+    { id: 2, pagado_at: ' 2026-11-18T15:30:00 ', monto: -5000 },
+    { id: 3, pagado_at: new Date(2026, 10, 19, 9, 5), monto: 100 },
+    { id: 4, pagado_at: 'pendiente', monto: 1 }] };
+  const b = bitacoraEventos(m, h), por = (id) => b.find((x) => x.id === `pago-${id}`);
+  assert.equal(por(1)?.cuando, '00:00', 'fecha sola es hoy local (antes «ayer» por UTC)');
+  assert.ok(por(1).texto.endsWith('$1.0 M'), por(1).texto);
+  assert.equal(por(2)?.cuando, 'ayer'); assert.ok(por(2).texto.endsWith('-$5 K'), por(2).texto);
+  assert.equal(por(3)?.cuando, '09:05', 'un Date cuenta');
+  assert.equal(por(4), undefined, 'ilegible se salta');
+});
