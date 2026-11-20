@@ -1160,3 +1160,8 @@ test('plural(): singular con 1, plural con 0/varios y n ilegible; la cadena dice
   const vol = (k) => r.tramos.find((x) => x.clave === k);
   assert.match(vol('mar').volumen, /^1 barco ·/); assert.match(vol('cedis').volumen, /· 1 día$/); assert.equal(vol('tienda').motivo, '1 tienda sin venta este mes');
 });
+test('plural() con plurales irregulares de las etiquetas de edificios (andén, tráiler, reunión, vendedor)', () => {
+  assert.equal(plural(1, 'andén', 'andenes'), '1 andén'); assert.equal(plural(4, 'andén', 'andenes'), '4 andenes');
+  assert.equal(plural(1, 'reunión', 'reuniones'), '1 reunión'); assert.equal(plural(2, 'tráiler', 'tráileres'), '2 tráileres');
+  assert.equal(plural(1, 'vendedor', 'vendedores'), '1 vendedor'); assert.equal(plural(NaN, 'día'), '0 días'); assert.equal(plural(1, 'SKU'), '1 SKU');
+});

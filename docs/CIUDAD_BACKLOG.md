@@ -220,6 +220,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.33) Bitácora en vivo: los montos usan `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; negativos «-$5 K») y la hora de los pagos/sincronización usa `instante()` (un `pagado_at` 'AAAA-MM-DD' ya no sale «ayer» por UTC; espacios y Date cuentan; ilegible se salta).
   - [x] (4.3.34) `plural()` pura y probada: la cadena de suministro y la tarjeta de racks dicen «1 barco», «1 día», «1 tienda sin venta», «1 marca» (antes «1 barcos», «1 días»…).
   - [x] (4.3.35) `Ciudad.jsx` usa `plural()`: buscador «1 tienda» y panel de la oficina «1 persona · 1 reunión». Harness sin errores (no dibuja `Ciudad.jsx`; el build valida el JSX).
+  - [x] (4.3.36) Globos de los edificios con `plural()`: oficina «1 persona · 1 reunión», CEDIS y racks «1 día», «1 SKU de 1 marca», patio «1 andén · 1 tráiler · 1 envío reciente», puerto «1 contenedor navegando», ciudad «1 tienda · 1 vendedor»; resumen del panel «de 1 tienda activas». Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -235,6 +236,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-20 04:26 · v4.3.36 · globos de oficina, CEDIS, racks, patio, puerto y ciudad en singular con 1 (`plural()`); +1 prueba.
 - 2026-11-20 03:08 · v4.3.35 · buscador y panel de la oficina en singular con 1 («1 tienda», «1 reunión»).
 - 2026-11-20 03:05 · v4.3.34 · `plural()`: cadena y racks en singular con 1 («1 barco», «1 día»); +1 prueba.
 - 2026-11-20 01:56 · v4.3.33 · bitácora: montos con `pesosCorto()` y pagos con fecha sola/espacios/Date sin corrimiento UTC; +1 prueba.

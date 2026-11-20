@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad } from '../modelo.js';
+import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -29,7 +29,7 @@ export function oficina(ctx) {
   const salaVent = new THREE.Mesh(G(3, 1.4, .12), modelo.oficina.reunionEnCurso ? vOn : vm); salaVent.position.set(-6, 1.9, -.7); casco.add(salaVent);
   if (oscuro && modelo.oficina.reunionEnCurso) { const l = new THREE.PointLight(0xFFD66B, 1.4, 14); l.position.set(-6, 3, .5); g.add(l); }
   for (const [x, z] of [[6, 5.5], [-6, 5.5], [6.2, -5.8]]) arbol(ctx, g, x, z, 1.1);
-  add(g, { tipo: 'oficina', titulo: 'Oficina Acteck', sub: `${modelo.oficina.personas.length + modelo.oficina.genericos} personas · ${modelo.oficina.reuniones} reunión${modelo.oficina.reuniones === 1 ? '' : 'es'} hoy`, pagina: 'agenda' });
+  add(g, { tipo: 'oficina', titulo: 'Oficina Acteck', sub: `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')} hoy`, pagina: 'agenda' });
   try { interiorOficina(ctx, g, casco, ofiPos); } catch (e) { console.warn('[ciudad] interior oficina', e); } // capa nueva: si falla, la oficina sigue cerrada
   // gente: equipo con nombre + genéricos, caminando entre oficina, sala y CEDIS
   const rutasOf = [[0, 5.5], [-6, 1.2], [3, 7], [9, 2], [12, -3], [0, 5.5]];
@@ -251,7 +251,7 @@ export function cedis(ctx) {
   for (let i = 0; i < modelo.cedis.racks; i++) { const col = i % 2 ? 0xC58A3A : 0xD49A4A; for (let k = 0; k < 1 + (i % 3); k++) { const c = box(1.3, 1, 1.3, col); c.position.set(-9 + (i % 5) * 2.2, .75 + k * 1.05, 6.5 + Math.floor(i / 5) * 2); g.add(c); instanciar(ctx, c); } } // racks, claraboyas y portones: InstancedMesh con el tag del CEDIS (3.90.20)
   modelo.puerto.tarimas.slice(0, 6).forEach((tp, i) => { const c = box(1.3, 1, 1.3, 0xA86A2E); c.position.set(6 + (i % 3) * 2, .75, 6 + Math.floor(i / 3) * 2); c.userData.detalle = 'fino'; g.add(c); instanciar(ctx, c, { tipo: 'barco', id: tp.id, titulo: `Contenedor ${tp.id}`, sub: `descargando · ${(Number(tp.piezas) || 0).toLocaleString('es-MX')} pz`, pagina: 'inventarioGlobal' }); }); // tarimas: capa fina (3.90.7); cada una tocable con la tarjeta del contenedor (3.90.36)
   for (const [x, z] of [[-10.5, -6.5], [10.5, -6.5]]) arbol(ctx, g, x, z, 1.2);
-  add(g, { tipo: 'cedis', titulo: 'CEDIS', sub: `$${(modelo.cedis.valor / 1e6).toFixed(1)} M · ${Math.round(modelo.cedis.dias)} días · ${modelo.puerto.tarimas.length} contenedor${modelo.puerto.tarimas.length === 1 ? '' : 'es'} descargando`, pagina: 'inventarioGlobal' });
+  add(g, { tipo: 'cedis', titulo: 'CEDIS', sub: `$${(modelo.cedis.valor / 1e6).toFixed(1)} M · ${plural(modelo.cedis.dias, 'día')} · ${plural(modelo.puerto.tarimas.length, 'contenedor', 'contenedores')} descargando`, pagina: 'inventarioGlobal' });
   try { interiorCedis(ctx, g, casco, cedisPos); } catch (e) { console.warn('[ciudad] interior CEDIS', e); } // capa nueva: si falla, el CEDIS sigue cerrado
   // montacargas
   const mc = new THREE.Group(); const cuerpo = box(1.6, 1, 1.1, ACC.naranja); mc.add(cuerpo); const mastil = box(.2, 2.2, .2, 0x444444); mastil.position.set(.9, 1.1, 0); mc.add(mastil); const carga = box(1, .8, 1, 0xC58A3A); carga.position.set(1.4, .6, 0); mc.add(carga);
@@ -279,7 +279,7 @@ function interiorCedis(ctx, g, casco, cedisPos) {
       const repisa = box(2.6, .08, 1.1, 0xE58A2E); repisa.position.set(0, .1 + k * .95, 0); rg.add(repisa);
       const caja = box(2.2, .7, .9, COL_RACK[i % COL_RACK.length]); caja.position.set(0, .5 + k * .95, 0); rg.add(caja);
     }
-    add(rg, { tipo: 'rack', marca: r.marca, titulo: capital(r.marca), sub: `$${fmtK(r.valor)} · ${r.dias == null ? 'sin demanda' : `${r.dias} días`} · ${r.skus} SKU${r.skus === 1 ? '' : 's'}${r.marcas ? ` de ${r.marcas} marcas` : ''}`, pagina: 'inventarioGlobal' });
+    add(rg, { tipo: 'rack', marca: r.marca, titulo: capital(r.marca), sub: `$${fmtK(r.valor)} · ${r.dias == null ? 'sin demanda' : plural(r.dias, 'día')} · ${plural(r.skus, 'SKU')}${r.marcas ? ` de ${plural(r.marcas, 'marca')}` : ''}`, pagina: 'inventarioGlobal' });
     rg.traverse((o) => { if (o.isMesh) dentro.push(o); });
     const et = etiqueta(ctx, capital(r.marca), '#1D1D1F'); et.position.set(rg.position.x, .56 + alto + 1, rg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);
   });
@@ -324,7 +324,7 @@ export function campusCalles(ctx, cedisPos) {
     const cabina = box(1.8, 2, 2.1, ACC.azul); cabina.position.set(x0 + 7.3, 1.2, z); tr.add(cabina); instanciar(ctx, cabina); // tráileres formados: caja y cabina instanciadas, cada una con el tag de su envío
     add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${cam.cliente} · ${nombreCiudad(cam.ciudad)}${cam.piezas ? ` · ${cam.piezas.toLocaleString('es-MX')} pz` : ''}`, pagina: 'sellIn' });
   }
-  add(pg, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `${pt.andenes.length} andenes · ${formados} tráiler${formados === 1 ? '' : 'es'} cargando · ${(modelo.camiones || []).length} envíos recientes`, pagina: 'sellIn' });
+  add(pg, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `${plural(pt.andenes.length, 'andén', 'andenes')} · ${plural(formados, 'tráiler', 'tráileres')} cargando · ${plural((modelo.camiones || []).length, 'envío reciente', 'envíos recientes')}`, pagina: 'sellIn' });
   // detalle del campus (3.90.11): estacionamiento con un coche por persona del equipo, barda, jardín y faroles
   const { oscuro } = ctx; const dg = new THREE.Group(); const est = c.estacionamiento;
   const lote = box(est.ancho, .22, est.largo, P.calle); lote.castShadow = false; lote.position.set(est.x, .11, est.z); dg.add(lote);
@@ -358,7 +358,7 @@ export function puerto(ctx) {
   const muelle = box(10, .6, 4, P.banqueta); muelle.position.set(0, .3, 2); g.add(muelle);
   const grua = new THREE.Group(); const pata1 = box(.5, 7, .5, ACC.rojo); pata1.position.set(-2, 3.5, 0); const pata2 = pata1.clone(); pata2.position.x = 2; const viga = box(7, .5, .5, ACC.rojo); viga.position.set(0, 7.2, 0); grua.add(pata1, pata2, viga); instanciar(ctx, pata1); instanciar(ctx, pata2); grua.position.set(0, .6, 2); g.add(grua);
   for (let i = 0; i < 3; i++) { const c = box(2.2, 1, 1.2, [ACC.azul, ACC.naranja, ACC.verde][i]); c.position.set(-3 + i * 3, 1.1, 1.2); g.add(c); }
-  add(g, { tipo: 'puerto', titulo: 'Puerto de Manzanillo', sub: `${modelo.puerto.barcos.length} contenedores navegando · ${modelo.puerto.totalPiezas.toLocaleString('es-MX')} pz`, pagina: 'inventarioGlobal' });
+  add(g, { tipo: 'puerto', titulo: 'Puerto de Manzanillo', sub: `${plural(modelo.puerto.barcos.length, 'contenedor', 'contenedores')} navegando · ${modelo.puerto.totalPiezas.toLocaleString('es-MX')} pz`, pagina: 'inventarioGlobal' });
   return puertoPos;
 }
 
@@ -379,7 +379,7 @@ export function distritos(ctx, cedisPos) {
     distritoPos.set(d.ciudad, { x: base.x, z: base.z, ancho, largo }); // con medidas: la Vista Ciudad las encuadra
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const piso = box(1, .3, 1, P.banqueta); piso.scale.set(ancho, 1, largo); piso.position.y = .15; g.add(piso); // caja unitaria escalada: todos los pisos van en un InstancedMesh
-    piso.userData.tag = { tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${d.tiendas.length} tiendas vendieron este mes · ${d.cuentas.length} cliente${d.cuentas.length === 1 ? '' : 's'}${d.vendedores.length ? ` · ${d.vendedores.length} vendedores` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; instanciar(ctx, piso); // tocable por su tag en userData.tags (3.90.18)
+    piso.userData.tag = { tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length} de ${plural(d.tiendas.length, 'tienda')} vendieron este mes · ${plural(d.cuentas.length, 'cliente')}${d.vendedores.length ? ` · ${plural(d.vendedores.length, 'vendedor', 'vendedores')}` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; instanciar(ctx, piso); // tocable por su tag en userData.tags (3.90.18)
     const calleH = new THREE.Mesh(new THREE.PlaneGeometry(ancho + 2, 1.4), M(P.calle, { roughness: 1 })); calleH.rotation.x = -Math.PI / 2; calleH.position.set(0, .32, largo / 2 + .9); g.add(calleH); calleH.userData.detalle = 'cerca';
     d.tiendas.forEach((t, i) => {
       const c = i % cols, f = Math.floor(i / cols);
