@@ -3,6 +3,7 @@
 // proyectada mes a mes (6 m, stock + tránsito por ETA + compra simulada − demanda proyectada) y "Quién lo compra"
 // (useQuienLoCompra de inventario/compartir.js). Costos sólo con `sensible`. Sin Tailwind; sólo tokens de tema + kit.
 import React, { useEffect, useMemo, useState } from 'react';
+import { estadoCobertura, PERFILES, ETIQUETAS } from '../../../lib/cobertura.js';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { EASE, DUR } from '../../../lib/motion';
@@ -196,7 +197,8 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
   const cbmU = Number(uc.cbmUnitario || 0);
   const tipoCargaShort = uc.tipoCarga ? String(uc.tipoCarga).slice(0, 8) : '—';
   const cob = r.coberturaDiasErp;
-  const cobColor = cob == null ? null : cob < 30 ? theme.red : cob < 60 ? theme.orange : theme.green;
+  const cobEstado = estadoCobertura(cob, PERFILES.sop, { soloNull: true });
+  const cobColor = { sinDato: null, critico: theme.red, justo: theme.orange, sano: theme.green }[cobEstado];
 
   return (
     <div style={{ padding: 10, background: theme.bg, display: 'flex', flexDirection: 'column', gap: 8, fontFamily: TYPO.fontText, animation: `sopDrillOpen ${DUR.page}ms ${EASE} both`, transformOrigin: 'top' }}>
@@ -223,7 +225,7 @@ export default function DrillSku({ r, enExport, cantidadEnExport, onAgregarSolic
           <MiniKpi label="Tránsito" value={fmtInt(r.traCant)} u="pz" sub={r.traCant > 0 ? 'en camino' : 'sin POs'} borderLeft />
           <MiniKpi label="Próximo arribo" value={r.traEta ? fmtFechaC(r.traEta).split(' ').slice(0, 2).join(' ') : '—'} sub={r.traEta ? 'próxima OC' : 'sin OC'} borderLeft dim={!r.traEta} />
           <MiniKpi label="Demanda 3m" value={fmtInt(r.demandaMesErp)} u="pz/m" sub={`${erpClientes.length} clientes ERP`} borderLeft />
-          <MiniKpi label="Días inv." value={cob == null ? '∞' : Math.round(cob)} u={cob == null ? '' : 'd'} sub={cob == null ? 'sin demanda' : cob < 30 ? 'crítica' : cob < 60 ? 'tensa' : 'holgura sana'} color={cobColor} borderLeft />
+          <MiniKpi label="Días inv." value={cob == null ? '∞' : Math.round(cob)} u={cob == null ? '' : 'd'} sub={ETIQUETAS.sopDrill[cobEstado]} color={cobColor} borderLeft />
           <MiniKpi label="Sugerido" value={r.sugerido > 0 ? fmtInt(r.sugerido) : '—'} u={r.sugerido > 0 ? 'pz' : ''} sub={r.sugerido > 0 ? `${r.contenedoresSugeridos || 1} cnt` : 'sin brecha'} color={r.sugerido > 0 ? theme.orange : null} borderLeft dim={r.sugerido <= 0} />
         </div>
       </div>

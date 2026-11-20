@@ -1,3 +1,4 @@
+import { estadoCobertura, PERFILES } from '../../../lib/cobertura.js';
 // Producto 360 (2026-10-05) · cálculo puro: quién lo desplaza (cuentas de sell out), quién lo compra (clientes del ERP),
 // quiénes dejaron de comprarlo, inventario en cuentas en semanas y serie sell in vs sell out. Sin red; pruebas en
 // scripts/test-producto360.mjs. Los % y promedios se calculan al agregar, nunca se suman.
@@ -13,6 +14,8 @@ export function mesesCerrados(anio, mes, n = 3) {
   return out;
 }
 
+// Inventario en la cuenta (semanas): regla en src/lib/cobertura.js, perfil «cuentaSemanas» (<2 riesgo · >12 sobre). Con stock y sin ritmo = sano.
+const ESTADO_CUENTA = { agotado: 'agotado', critico: 'riesgo', sobre: 'sobre', sano: 'sano', justo: 'sano', sinDato: 'sano' };
 /**
  * Cuentas que desplazan el SKU en (anio, mes). filas = mv_sellout_cuenta_sku_mes del SKU (todas las cuentas, 13+ meses):
  * { cuenta, anio, mes, piezas, importe }. inventario = v_sellout_inventario_cuenta_sku del SKU: { cuenta, piezas, valor }.
@@ -36,7 +39,7 @@ export function quienLoDesplaza(filas, { anio, mes, inventario = [], nombres = {
   return [...por.values()].map((g) => {
     const inv = invPor.get(g.cuenta);
     const semanas = inv && g.ritmo > 0 ? N(inv.piezas) / (g.ritmo / 4.33) : null;
-    const estado = !inv ? null : N(inv.piezas) <= 0 ? 'agotado' : semanas != null && semanas < 2 ? 'riesgo' : semanas != null && semanas > 12 ? 'sobre' : 'sano';
+    const estado = !inv ? null : ESTADO_CUENTA[estadoCobertura(semanas, PERFILES.cuentaSemanas, { agotado: N(inv.piezas) <= 0, soloNull: true })];
     return { ...g, deltaPz: delta(g.piezas, g.prevPz), deltaImp: delta(g.importe, g.prevImp), share: total ? (g.piezas / total) * 100 : 0, inv: inv ? { piezas: N(inv.piezas), valor: N(inv.valor), semanas: semanas == null ? null : Math.round(semanas * 10) / 10, estado } : null };
   }).filter((g) => g.piezas > 0 || g.prevPz > 0 || g.inv).sort((a, b) => b.piezas - a.piezas || b.prevPz - a.prevPz);
 }

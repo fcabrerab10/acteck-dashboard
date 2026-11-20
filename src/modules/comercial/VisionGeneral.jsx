@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { estadoCobertura, PERFILES, TONOS, ETIQUETAS } from '../../lib/cobertura.js';
 import { supabase } from '../../lib/supabase';
 import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import SinAcceso from '../../components/SinAcceso';
@@ -235,7 +236,7 @@ function MiniKpiRow({ inventario }) {
   const dias = inv.dias_inv != null ? Math.round(inv.dias_inv) : null;
   const diasCap = dias == null ? null : Math.min(180, dias);
   const ringPct = diasCap == null ? 0 : Math.min(1, diasCap / 120);
-  const ringCol = dias == null ? theme.textMuted : (dias < 60 ? red : dias > 120 ? theme.orange : green);
+  const ringCol = { sinDato: theme.textMuted, critico: red, sobre: theme.orange, sano: green }[estadoCobertura(dias, PERFILES.visionGeneral, { soloNull: true })];
   const R = 15, C = 2 * Math.PI * R;
   const ringDash = C, ringOffset = C * (1 - ringPct);
 
@@ -1107,10 +1108,8 @@ function InventarioSection({ inventario, caminoResumen }) {
   const skus     = m.skus_con_stock || 0;
   const agotados = Number(inventario?.skus_agotados) || 0;
   const diasCob  = m.dias_inv != null ? Math.round(m.dias_inv) : null;
-  const cob = diasCob == null ? { l: '—', tone: 'gray', col: undefined }
-    : diasCob < 60 ? { l: 'Bajo', tone: 'red', col: red }
-    : diasCob > 120 ? { l: 'Alto', tone: 'orange', col: orange }
-    : { l: 'Sano', tone: 'green', col: green };
+  const cobEstado = estadoCobertura(diasCob, PERFILES.visionGeneral, { soloNull: true });
+  const cob = { l: ETIQUETAS.visionGeneral[cobEstado], tone: TONOS.direccion[cobEstado], col: { critico: red, sobre: orange, sano: green }[cobEstado] };
 
   const camino = (caminoResumen || []).filter((r) => BUCKETS_EN_CAMINO.includes(r.bucket_estatus));
   const valorTransito  = camino.reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);

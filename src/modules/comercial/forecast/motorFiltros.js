@@ -4,6 +4,7 @@
 // Los conteos de cada grupo se calculan con TODOS los demás filtros aplicados: "si además marco esto, quedan N".
 import { normalizar, tokens as tokensDe, coincide } from '../sellin/textos';
 import { COBERTURA_CRITICA, COBERTURA_SOBRESTOCK } from '../inventario/constantes';
+import { estadoCobertura, PERFILES } from '../../../lib/cobertura.js';
 
 export const FILTROS_VACIOS = () => ({ tokens: [], proveedor: new Set(), familia: new Set(), marca: new Set(), cliente: new Set(), roadmap: new Set(), estado: new Set(), soloSugerido: false });
 
@@ -25,9 +26,10 @@ export const claveRoadmap = (r) => String(r.roadmapEstado || '').trim().toUpperC
 export function estadosDe(r) {
   const out = [];
   if (Number(r.brecha || 0) > 0) out.push('brecha');
-  const cob = r.coberturaDiasErp;
-  if (cob != null && isFinite(cob) && cob < COBERTURA_CRITICA) out.push('critico');
-  if (cob != null && isFinite(cob) && cob > COBERTURA_SOBRESTOCK) out.push('sobrestock');
+  // Mismo perfil que Inventario (src/lib/cobertura.js). Aquí no hay «agotado»: un SKU sin stock con demanda cuenta como crítico.
+  const cob = estadoCobertura(r.coberturaDiasErp, PERFILES.inventario);
+  if (cob === 'critico') out.push('critico');
+  if (cob === 'sobre') out.push('sobrestock');
   if (Number(r.inv || 0) > 0 && !(Number(r.demandaMesErp || 0) > 0)) out.push('sinDemanda');
   if (r.esCritico) out.push('marcado');
   return out;

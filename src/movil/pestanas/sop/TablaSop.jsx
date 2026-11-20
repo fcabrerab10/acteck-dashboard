@@ -1,6 +1,7 @@
 // S&OP del celular · tabla por SKU (Días · Venta/mes · Stock · Llega · Sug.). Propia (no TablaAnual) porque aquí el 0
 // significa algo: «Agotado» en Días y «0» en Stock se pintan, no se tapan con «—». Tocar un encabezado ordena desc → asc.
 import React, { useMemo, useState } from 'react';
+import { estadoCobertura, PERFILES } from '../../../lib/cobertura.js';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { MONO } from '../../util';
@@ -18,7 +19,8 @@ export default function TablaSop({ columnas = [], filas = [], ordenInicial = nul
   const tocar = (i) => setOrden((o) => (!o || o.col !== i ? { col: i, dir: 'desc' } : o.dir === 'desc' ? { col: i, dir: 'asc' } : null));
   const th = { fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: theme.textMuted, padding: '6px 4px', textAlign: 'right', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '7px 4px', textAlign: 'right', fontFamily: MONO, fontSize: 12, fontVariantNumeric: 'tabular-nums', borderTop: `1px solid ${theme.border}`, whiteSpace: 'nowrap', color: theme.text };
-  const colorDias = (f) => (f.dias == null ? theme.textMuted : f.dias <= 0 ? theme.red : f.dias < 30 ? theme.red : f.dias < 60 ? theme.orange : theme.text);
+  const COLOR_DIAS = { sinDato: theme.textMuted, agotado: theme.red, critico: theme.red, justo: theme.orange, sano: theme.text, sobre: theme.text };
+  const colorDias = (f) => COLOR_DIAS[estadoCobertura(f.dias, PERFILES.sop, { agotado: f.dias != null && f.dias <= 0, soloNull: true })];
   return (
     <div style={{ background: theme.surface, borderRadius: 14, padding: '4px 10px 6px', overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>

@@ -6,6 +6,8 @@
 //               tabla por SKU. Lo que llega se agrupa por PO desde v_transito_sku.embarques_detalle (arribosPorPo).
 //   Mis clientes → forecast capturado (Proyectos y forecast) − inventario del cliente − nuestro stock − tránsito
 //               = lo que hay que pedirle a Compras, por SKU y por cliente (calcularMisClientes). Aquí NO se captura nada.
+import { estadoCobertura, PERFILES, TONOS } from '../../../lib/cobertura.js';
+
 const N = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? 0 : Number(v));
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -28,7 +30,8 @@ export function mesesDesde(hoy = new Date(), n = 6, desde = 0) {
 
 /** Cobertura en días de una fila del motor: la del ERP (3 meses reales) y si no la del horizonte. */
 export const diasCobertura = (r) => (r?.coberturaDiasErp != null ? N(r.coberturaDiasErp) : r?.coberturaDias != null ? N(r.coberturaDias) : null);
-export const tonoCobertura = (dias, inv = 0) => (inv <= 0 || dias === 0 ? 'red' : dias == null ? 'gray' : dias < 30 ? 'red' : dias < 60 ? 'orange' : 'green');
+// Regla en src/lib/cobertura.js, perfil «sop» (<30 urge · <60 justo · holgado). OJO: no es el perfil de Inventario (30/90).
+export const tonoCobertura = (dias, inv = 0) => TONOS.sop[estadoCobertura(dias, PERFILES.sop, { agotado: inv <= 0 || dias === 0, soloNull: true })];
 
 /**
  * Arribos por PO desde v_transito_sku (`transito` = filas con embarques_detalle) · mismo criterio que el S&OP web:
