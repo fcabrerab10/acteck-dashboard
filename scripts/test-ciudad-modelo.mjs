@@ -1061,3 +1061,13 @@ test('Pulido: cuota en texto y cuenta con espacios en la capa de cuota', () => {
   const q = cuotasPorCuenta([{ cliente_erp: 10, cuenta_sellout: ' a ', cuota_venta: 100 }, { cliente_erp: 11, cuenta_sellout: 'a', cuota_venta: 50 }, { cliente_erp: 12, cuenta_sellout: '  ', cuota_venta: 9 }], [{ cliente: 10, fact_neta: 30 }, { cliente: 12, fact_neta: 5 }]);
   assert.deepEqual([...q.keys()], ['a'], 'cuenta con espacios = la misma; vacía no cuenta'); assert.deepEqual(q.get('a'), { venta: 30, cuota: 150 });
 });
+test('Pulido: torre de pronóstico con fechas de arribo sucias (4.3.27)', () => {
+  const hoyIso = '2026-10-07';
+  const r = resumenTorre([{ estatus: 'activa', forecast_propuesta_lineas: { confirmado: true } }, { estatus: 'activa', forecast_propuesta_lineas: 'x' }],
+    [{ fecha_arribo: ' 2026-10-08', piezas_a_reservar: '4' }, { fecha_arribo: 'pendiente', piezas_a_reservar: 9 }, { fecha_arribo: '2026-99-99', piezas_a_reservar: 9 }, { fecha_arribo: new Date(2026, 9, 6, 12), piezas_a_reservar: 1 }], hoyIso);
+  assert.equal(r.lineas, 0, 'líneas que no son lista no cuentan');
+  assert.equal(r.arribos7, 1, 'fecha con espacios es próxima, no atrasada'); assert.equal(r.atrasados, 1, 'un Date de ayer cuenta atrasado');
+  assert.equal(r.piezas7, 5, 'fechas ilegibles no suman piezas');
+  assert.deepEqual(resumenTorre([], [{ fecha_arribo: '2026-10-06' }], ' 2026-10-07 '), resumenTorre([], [{ fecha_arribo: '2026-10-06' }], hoyIso), 'hoy con espacios se lee');
+  assert.equal(resumenTorre([], [{ fecha_arribo: '2026-10-06' }], new Date(2026, 9, 7, 12)).atrasados, 1, 'hoy como Date');
+});

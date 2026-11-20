@@ -275,13 +275,14 @@ export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISO
  *  y avisos de arribo (`forecast_avisos`) de ayer a 7 días. Un aviso con fecha ya pasada = atrasado. */
 export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().toISOString().slice(0, 10)) {
   // Pulido (3.110.4): líneas nulas y una fecha inválida ya no tiran el modelo (la fecha mala usa hoy).
-  const base = Date.parse(`${String(hoyIso).slice(0, 10)}T00:00:00Z`); const t0 = Number.isFinite(base) ? base : Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
-  hoyIso = new Date(t0).toISOString().slice(0, 10);
-  const ps = comoLista(propuestas).filter((p) => p && p.estatus !== 'borrador'); const lineas = ps.flatMap((p) => p.forecast_propuesta_lineas || []).filter(Boolean);
+  // Pulido (4.3.27): fechas con `fechaIso()` — « 2026-10-08» (espacios) ya no sale atrasado, una fecha ilegible no cuenta
+  // y un Date sí; hoy con espacios/Date se lee; líneas que no son lista (objeto, texto) ya no cuentan como línea.
+  hoyIso = fechaIso(hoyIso) ?? fechaIso(fechaHoy(hoyIso)); const t0 = Date.parse(`${hoyIso}T00:00:00Z`);
+  const ps = comoLista(propuestas).filter((p) => p && p.estatus !== 'borrador'); const lineas = ps.flatMap((p) => comoLista(p.forecast_propuesta_lineas)).filter(Boolean);
   const mas7 = new Date(t0 + 7 * 86400000).toISOString().slice(0, 10);
-  const av = comoLista(avisos).filter((a) => a?.fecha_arribo && String(a.fecha_arribo).slice(0, 10) <= mas7);
-  const atrasados = av.filter((a) => String(a.fecha_arribo).slice(0, 10) < hoyIso);
-  return { abiertas: ps.filter((p) => !p.cerrado_at).length, lineas: lineas.length, confirmadas: lineas.filter((l) => l.confirmado).length, compradas: lineas.filter((l) => l.comprado_at).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, a) => s + N(a.piezas_a_reservar), 0), atrasados: atrasados.length };
+  const av = comoLista(avisos).map((a) => [a, fechaIso(a?.fecha_arribo)]).filter(([, f]) => f && f <= mas7);
+  const atrasados = av.filter(([, f]) => f < hoyIso);
+  return { abiertas: ps.filter((p) => !p.cerrado_at).length, lineas: lineas.length, confirmadas: lineas.filter((l) => l.confirmado).length, compradas: lineas.filter((l) => l.comprado_at).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, [a]) => s + N(a.piezas_a_reservar), 0), atrasados: atrasados.length };
 }
 
 // «Hoy en Acteck» (etapa 4, 3.90.46): misiones del día para la lista con «Ir». Junta las alertas de las burbujas (banco,

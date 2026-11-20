@@ -211,6 +211,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.24) Capa de cuota: `cuotaRitmo()` suma la cuota en texto como número (antes «1000» se concatenaba y el % salía disparatado), ignora cuotas ilegibles y lee `hoyIso` con `fechaHoy()`; `cuotasPorCuenta()` empata la cuenta aunque traiga espacios (« ct » = «ct») y salta la vacía.
   - [x] (4.3.25) `aPx()` / `pxAEscena()` (proyección del terreno y de `posDe()`) con lon/lat o X/Y ilegibles (null, texto, NaN, Infinity, objetos) caen en el origen en vez de dar NaN (contorno de México o un objeto fuera de la escena); un número en texto se lee.
   - [x] (4.3.26) Pines y acceso rápido: `pinCiudad()` / `ciudadesTop()` aceptan distritos y tiendas que no son lista (antes lanzaban error o NaN en el orden), la ciudad del camión empata con `norm()` (« León » = «LEON») y un distrito sin ciudad ya no junta los camiones sin ciudad (antes undefined === undefined).
+  - [x] (4.3.27) Torre de pronóstico: `resumenTorre()` lee fechas de arribo y «hoy» con `fechaIso()` (« 2026-10-08» con espacios ya no sale atrasado, una fecha ilegible no suma piezas, un Date sí cuenta) y las líneas de propuesta que no son lista ya no cuentan como línea.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -226,6 +227,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-19 23:56 · v4.3.27 · Pulido: torre de pronóstico con fechas de arribo sucias (espacios, ilegibles, Date) y líneas que no son lista; `resumenTorre()` usa `fechaIso()`.
 - 2026-11-19 23:36 · v4.3.26 · Pulido: pines de ciudad y acceso rápido aguantan distritos/tiendas no-lista, empatan la ciudad del camión con `norm()` y ya no juntan camiones sin ciudad; +2 pruebas.
 - 2026-11-19 23:17 · v4.3.25 · Pulido: proyección `aPx()` / `pxAEscena()` aguanta coordenadas ilegibles (caen en el origen, sin NaN en el terreno ni en objetos); +1 prueba.
 - 2026-11-19 22:56 · v4.3.24 · Pulido: capa de cuota aguanta cuota en texto y cuenta con espacios (`cuotaRitmo()` / `cuotasPorCuenta()`); +1 prueba.
