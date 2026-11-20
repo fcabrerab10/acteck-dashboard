@@ -866,7 +866,8 @@ export function fechaIso(x) {
   const s = x.trim().slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
 }
-const dias = (a, b) => Math.round((new Date(`${String(b).slice(0, 10)}T12:00:00`) - new Date(`${String(a).slice(0, 10)}T12:00:00`)) / 86400000);
+// Días entre dos fechas con `fechaIso()` (4.3.29): « 2026-10-03» con espacios o un Date ya cuentan (antes NaN: el camión o el barco desaparecía); ilegible → NaN.
+const dias = (a, b) => { const x = fechaIso(a), y = fechaIso(b); return x && y ? Math.round((new Date(`${y}T12:00:00`) - new Date(`${x}T12:00:00`)) / 86400000) : NaN; };
 const nombreCorto = (s) => { const p = norm(s).split(/\s+/).filter(Boolean); if (!p.length) return ''; const cap = (w) => w.charAt(0) + w.slice(1).toLowerCase(); return p.length >= 3 ? `${cap(p[0])} ${cap(p[p.length - 2])}` : p.map(cap).join(' '); };
 
 // Barra de tiempo (etapa 6, paso 1): momentos a los que se puede regresar la ciudad (Hoy / Ayer / Hace 7 días / Inicio de mes,

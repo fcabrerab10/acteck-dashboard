@@ -1086,3 +1086,16 @@ test('banco (4.3.28): fechas y estados sucios en pagos, hoy inválido y reglas q
   assert.deepEqual(resumenBanco([], [{ estado: 'autorizado', monto: 3 }], hoyIso, rotas), { carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 1, montoVencido: 3 }, 'una regla que lanza no tira el banco');
   assert.equal(resumenBanco([], pagos, hoyIso, { venceEn: 1, estaVencido: 'x' }).pagosSemana, 0, 'reglas que no son función no cuentan');
 });
+
+test('4.3.29 · días entre fechas aguantan espacios y Date (camiones y barcos)', () => {
+  const facturas = [{ cliente_key: 'x', folio: 'E', fecha: ' 2026-10-03', monto: 5 }, { cliente_key: 'x', folio: 'D', fecha: new Date(2026, 9, 4, 9), monto: 4 }, { cliente_key: 'x', folio: 'B', fecha: 'pendiente', monto: 3 }, { cliente_key: 'x', folio: 'V', fecha: '2026-09-01', monto: 2 }];
+  const m = construirModelo({ ...d, facturas }, hoy);
+  const folios = m.camiones.map((c) => c.folio).filter((f) => typeof f === 'string' && f.length === 1);
+  assert.deepEqual(folios.sort(), ['D', 'E'], 'fecha con espacios y Date salen como camión; ilegible y vieja no');
+  assert.ok(m.camiones.every((c) => Number.isFinite(c.progreso)), 'progreso siempre numérico');
+  const m2 = construirModelo({ ...d, contenedores: [{ contenedor: 'Z9', estatus: 'NAVEGANDO', piezas: 1, etd: ' 2026-09-10', eta_puerto: '2026-10-20 ', arribo_cedis: ' 2026-10-25' }] }, hoy);
+  const todos = [...(m2.puerto?.barcos || []), ...(m2.puerto?.tarimas || [])];
+  const z = todos.find((x) => JSON.stringify(x).includes('Z9'));
+  assert.ok(z, 'el contenedor con fechas con espacios sigue en el puerto');
+  if (z && 'progreso' in z) assert.ok(Number.isFinite(z.progreso), 'progreso del barco numérico');
+});
