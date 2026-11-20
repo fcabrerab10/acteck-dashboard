@@ -17,7 +17,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaGlobal } from '../../lib/permisos';
 import { int, moneyCompact } from '../../lib/format';
-import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando, toast } from '../../components/kit';
+import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando, toast, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
 import { exportarExcel } from '../../lib/exportar';
@@ -49,6 +49,7 @@ const MEDIDAS = [
 
 export default function ProyectosAbasto({ inicial = null }) {
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, la barra de control sube ahí
   const perfil = usePerfil();
   const puedeEditar = puedeEditarPestanaGlobal(perfil, 'forecast_reservas');
   const rootRef = useRef(null);
@@ -188,8 +189,9 @@ export default function ProyectosAbasto({ inicial = null }) {
       </div>
 
       {/* Barra de control */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        {puedeEditar && <Boton primario icon={Plus} onClick={() => setHojaProyecto({ nuevo: true, mesClave: horizonte[0].clave })}>Nuevo proyecto</Boton>}
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {!enCabecera && puedeEditar && <Boton primario icon={Plus} onClick={() => setHojaProyecto({ nuevo: true, mesClave: horizonte[0].clave })}>Nuevo proyecto</Boton>}
+        <ControlesCabecera>
         <Segmented options={VISTAS} value={vista} onChange={setVista} />
         <span style={{ display: 'inline-flex', gap: 5 }}>
           {CLIENTES.map((c) => {
@@ -202,8 +204,12 @@ export default function ProyectosAbasto({ inicial = null }) {
           })}
         </span>
         <Pill tone={soloConfirmados ? 'green' : 'gray'} onClick={() => setSoloConfirmados((v) => !v)} style={{ cursor: 'pointer' }}>Sólo confirmados</Pill>
+        </ControlesCabecera>
         <span style={{ flex: 1 }} />
+        <AccionesCabecera>
         <ExportMenu titulo="Proyectos y abasto" subtitulo={`${r.proyectos} proyectos · ${int(r.piezas)} pz`} excel={excelCompras} pdf={{ ref: rootRef }} />
+        {enCabecera && puedeEditar && <Boton primario icon={Plus} onClick={() => setHojaProyecto({ nuevo: true, mesClave: horizonte[0].clave })}>Nuevo proyecto</Boton>}
+        </AccionesCabecera>
       </div>
 
       {/* Contenido */}

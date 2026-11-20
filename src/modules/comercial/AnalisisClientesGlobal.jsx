@@ -11,7 +11,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { useAlertas } from '../../lib/alertas';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando, ListaDetalle, Boton } from '../../components/kit';
+import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Cargando, ListaDetalle, Boton, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import { usePrefsDispositivo } from '../../lib/dispositivo';
 import { resumenLista } from './analisis/calculoLista'; // mismo motor que el celular (en riesgo · nuevos del año)
 import { moneyCompact } from '../../lib/format';
@@ -31,6 +31,7 @@ const ORIGENES = [{ id: 'todos', label: 'Todos' }, { id: 'propios', label: 'Prop
 export default function AnalisisClientesGlobal({ inicial = null }) {
   const perfil = usePerfil();
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, período y Exportar suben ahí
   const verSensible = puedeVerSensible(perfil);
   const rootRef = useRef(null);
   const hoy = new Date();
@@ -210,8 +211,9 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <ControlesCabecera>
           <Segmented options={MODOS} value={modo} onChange={setModo} />
           <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} style={sel} title="Año (comparativo contra el anterior)">
             {(anios.length ? anios : [anio]).map((y) => <option key={y} value={y}>{y} vs {y - 1}</option>)}
@@ -220,8 +222,9 @@ export default function AnalisisClientesGlobal({ inicial = null }) {
             {Array.from({ length: mesAuto }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{modo === 'mes' ? MESES[m - 1] : `ene–${MESES[m - 1].toLowerCase()}`}{m === mesAuto ? ' · último' : ''}</option>)}
           </select>
           <span style={{ fontSize: 10.5, color: theme.textMuted }}>{modo === 'mes' ? `Mes · ${mesLbl} ${anio}` : `Acumulado · enero a ${mesLbl.toLowerCase()} ${anio}`}{esParcial ? ' · mes en curso' : ''}</span>
+          </ControlesCabecera>
         </div>
-        <ExportMenu titulo="Análisis por cliente" subtitulo={periodoLbl} excel={excelClientes} pdf={{ ref: rootRef }} />
+        <AccionesCabecera><ExportMenu titulo="Análisis por cliente" subtitulo={periodoLbl} excel={excelClientes} pdf={{ ref: rootRef }} /></AccionesCabecera>
       </div>
 
       <Hero eyebrow={`Dirección Comercial · Análisis por cliente · ${periodoLbl}`} dot={false}

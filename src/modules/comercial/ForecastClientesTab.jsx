@@ -26,7 +26,7 @@ import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal, puedeVerSensible } fro
 import { compartirArchivo } from '../../lib/compartirArchivo';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Panel, Boton, Pill, Cargando, Segmented, toast } from '../../components/kit';
+import { Hero, KpiCard, Panel, Boton, Pill, Cargando, Segmented, toast, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import { useMedidasInventario } from '../../lib/queries';
 import { HojaLateral } from '../../components/perfil/comun';
@@ -67,6 +67,7 @@ export default function ForecastClientesTab() {
 
 function ForecastPantalla({ perfil, sensible }) {
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, selectores y Exportar suben ahí
   const rootRef = useRef(null);
   const data = useForecastData();
   const sol = useSolicitudes(perfil);
@@ -404,11 +405,13 @@ function ForecastPantalla({ perfil, sensible }) {
   );
 
   const segmented = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', gap: 10 }}>
+      <ControlesCabecera>
       <Segmented value={vista} onChange={setVista} options={[
         { id: 'forecast', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><LayoutList size={12} /> Forecast</span>, title: 'Detalle por SKU · planeación de compras' },
         { id: 'reuniones', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><CalendarDays size={12} /> Reuniones</span>, title: 'Repositorio de la reunión mensual de S&OP' },
       ]} />
+      </ControlesCabecera>
     </div>
   );
 
@@ -487,7 +490,7 @@ function ForecastPantalla({ perfil, sensible }) {
       <MisClientesPanel data={data} rows={rowsAll} sensible={sensible} puedeEditar={puedeEditarSol} onAgregarSolicitud={(sku, piezas) => { const row = rowsAll.find((r) => r.sku === sku); if (!row) { toast.info(`${sku} no está en el universo del S&OP`); return; } const ppc = Number(row.piezasPorContenedor) || 0; setSkuParaAgregar({ ...row, sugerido: piezas, contenedoresSugeridos: ppc > 0 ? Math.ceil(piezas / ppc) : 0 }); }} />
 
       <Panel titulo="Detalle por SKU" meta={`${fmtInt(rowsOrdenados.length)} SKUs · click en la fila para el drill · píldora verde = en export${sortCol ? '' : ' · orden del Reporte'}`}
-        acciones={<ExportMenu titulo="S&OP" subtitulo={`Detalle por SKU · horizonte ${HORIZONTE} meses`} excel={excelTabla} pdf={{ ref: rootRef }} deshabilitado={!rowsOrdenados.length} />}
+        acciones={<AccionesCabecera><ExportMenu titulo="S&OP" subtitulo={`Detalle por SKU · horizonte ${HORIZONTE} meses`} excel={excelTabla} pdf={{ ref: rootRef }} deshabilitado={!rowsOrdenados.length} /></AccionesCabecera>}
         padding="6px">
         <TablaForecast rows={rowsOrdenados} expandedSku={expandedSku} setExpandedSku={setExpandedSku}
           sortCol={sortCol} sortDir={sortDir} onSort={onSort}

@@ -16,7 +16,7 @@ import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
-import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, Filtros, SkeletonPantalla, toast, elevation } from '../../components/kit';
+import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, Filtros, SkeletonPantalla, toast, elevation, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import { EASE, DUR } from '../../lib/motion';
 import { inventarioDesdeVista, tooltip } from '../../lib/medidas';
 import useInventarioDatos from './inventario/useInventarioDatos';
@@ -55,6 +55,7 @@ export default function InventarioGlobal() {
 
 function InventarioGlobalPantalla({ sensible }) {
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, selectores y Exportar suben ahí
   const rootRef = useRef(null); // raíz para exportar PDF
   const { filas, loading, enriqueciendo, descripciones, transito, leadTime, demanda, historico, medidas, mesesRef, cargarTodas, cargandoTodas } = useInventarioDatos();
   // Medidas oficiales del director: Inv Actual, Dias de Inv, Inv Total, Costo Promedio.
@@ -392,16 +393,19 @@ function InventarioGlobalPantalla({ sensible }) {
   return (
     <div ref={rootRef} data-stagger style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Alcance */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '0 2px' }}>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '0 2px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>Dirección Comercial · Snapshot actual</span>
-          {enriqueciendo && <Pill tone="gray" size="xs" dot>cargando tránsito, lead time y demanda…</Pill>}
+          {!enCabecera && <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>Dirección Comercial · Snapshot actual</span>}
+          {!enCabecera && enriqueciendo && <Pill tone="gray" size="xs" dot>cargando tránsito, lead time y demanda…</Pill>}
         </div>
+        <ControlesCabecera>
         {/* El primer viaje sólo trae el universo de [Inv Actual]; el resto de almacenes se
             baja aquí, la primera vez que alguien los pide (useInventarioDatos.cargarTodas). */}
         <Segmented value={soloComerciales ? 'com' : 'todos'}
           onChange={(v) => { if (v !== 'com') cargarTodas(); setSoloComerciales(v === 'com'); }}
           options={[{ id: 'com', label: 'Sólo comerciales' }, { id: 'todos', label: cargandoTodas ? 'Todos los almacenes…' : 'Todos los almacenes' }]} />
+        {enCabecera && enriqueciendo && <Pill tone="gray" size="xs" dot>cargando tránsito, lead time y demanda…</Pill>}
+        </ControlesCabecera>
       </div>
 
       {/* Hero narrativo */}
@@ -455,7 +459,7 @@ function InventarioGlobalPantalla({ sensible }) {
       {/* Detalle principal · tabla SKU × almacén */}
       <Panel titulo="SKUs por almacén" meta={`${fmtInt(filasTabla.length)} SKUs · click en una fila abre el desglose por almacén`}
         padding={0}
-        acciones={<ExportMenu titulo="Inventario" subtitulo={`${fmtInt(filasTabla.length)} SKUs · ${ALMACENES_GRID.length} almacenes`} excel={handleExport} pdf={{ ref: rootRef }} deshabilitado={exportando || filasTabla.length === 0} size="md" />}>
+        acciones={<AccionesCabecera><ExportMenu titulo="Inventario" subtitulo={`${fmtInt(filasTabla.length)} SKUs · ${ALMACENES_GRID.length} almacenes`} excel={handleExport} pdf={{ ref: rootRef }} deshabilitado={exportando || filasTabla.length === 0} size="md" /></AccionesCabecera>}>
         <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}` }}>
           <Filtros
             grupos={gruposFiltro}

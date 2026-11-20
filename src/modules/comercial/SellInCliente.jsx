@@ -21,7 +21,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { useRoadmap, fetchAll, fetchAllQ, cachedQuery } from '../../lib/queries';
 import { cuotas as cuotasMedida, tooltip } from '../../lib/medidas';
-import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Cargando, toast, GraficaLineas } from '../../components/kit';
+import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Cargando, toast, GraficaLineas, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import SinAcceso from '../../components/SinAcceso';
 import ComparadorPeriodos from './ComparadorPeriodos';
@@ -108,6 +108,7 @@ export default function SellInCliente({ clienteKey = null }) {
 
 function SellInGlobal({ sensible }) {
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, el período y Exportar suben ahí
   const rootRef = useRef(null);
   const hoy = new Date();
   const anio = hoy.getFullYear(), anioPrev = anio - 1, mesHoy = hoy.getMonth() + 1;
@@ -404,10 +405,12 @@ function SellInGlobal({ sensible }) {
   return (
     <div ref={rootRef} data-stagger style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Período: Mes · YTD + mes (manda en hero, KPIs, composición y columnas de comparación) */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '0 2px' }}>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '0 2px' }}>
+        <ControlesCabecera>
         <Segmented value={modo} onChange={setModo} options={[{ id: 'mes', label: 'Mes' }, { id: 'ytd', label: 'YTD', title: 'Acumulado de enero al mes elegido' }]} />
         <Segmented value={mesActual} onChange={(m) => setMesActual(Number(m))} style={{ maxWidth: '100%', overflowX: 'auto' }}
           options={MESES.slice(0, mesHoy).map((l, i) => ({ id: i + 1, label: l, title: `${MESES_LARGO[i]} ${anio}${i + 1 === mesHoy ? ' · en curso' : ''}` }))} />
+        </ControlesCabecera>
       </div>
 
       {/* Hero */}
@@ -495,7 +498,7 @@ function SellInGlobal({ sensible }) {
             {segAnios}
             <Segmented value={consolidado ? 'todos' : 'clave'} onChange={(v) => setConsolidado(v === 'todos')}
               options={[{ id: 'todos', label: 'Todos los canales', title: 'Todos los clientes y canales del ERP' }, { id: 'clave', label: 'Clientes clave', title: 'Sólo Digitalife, PCEL y Dicotech' }]} />
-            <ExportMenu titulo="Sell In consolidado" subtitulo={aniosSelOrd.join(' · ')} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} />
+            <AccionesCabecera><ExportMenu titulo="Sell In consolidado" subtitulo={aniosSelOrd.join(' · ')} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} /></AccionesCabecera>
           </div>
         )}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

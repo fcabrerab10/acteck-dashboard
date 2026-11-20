@@ -326,10 +326,13 @@ export default function PagosUnificados({ clienteKey = null, extra = null }) {
         ]}
       >
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {puedeAlgo && <Boton icon={Plus} onClick={() => setFormApoyo(true)} title="Apoyo económico a un producto que se alentó; entra al flujo de pagos con sus productos">Apoyo por producto</Boton>}
-          {puedeAlgo && <Boton icon={Plus} onClick={() => setFormManual(true)}>Pago manual</Boton>}
-          {puedeAlgo && porSolicitar.length > 0 && <Boton icon={Send} onClick={solicitarCalculados}>Solicitar los calculados ({porSolicitar.length})</Boton>}
-          <ExportMenu titulo={`Pagos · ${nombreSel} · ${MESES[mes - 1]} ${anio}`} subtitulo={frase} excel={exportarLote} pdf={{ ref: rootRef }} />
+          {/* Con cabecera común los botones suben ahí; sin ella (paneles múltiples) se quedan en el Hero. */}
+          <AccionesCabecera>
+            {puedeAlgo && <Boton icon={Plus} onClick={() => setFormApoyo(true)} title="Apoyo económico a un producto que se alentó; entra al flujo de pagos con sus productos">Apoyo por producto</Boton>}
+            {puedeAlgo && <Boton icon={Plus} onClick={() => setFormManual(true)}>Pago manual</Boton>}
+            {puedeAlgo && porSolicitar.length > 0 && <Boton icon={Send} onClick={solicitarCalculados}>Solicitar los calculados ({porSolicitar.length})</Boton>}
+            <ExportMenu titulo={`Pagos · ${nombreSel} · ${MESES[mes - 1]} ${anio}`} subtitulo={frase} excel={exportarLote} pdf={{ ref: rootRef }} />
+          </AccionesCabecera>
           <FrescuraPill pantalla="pagos" clienteKey={clienteSel} inverso />
           {!DB_CONFIGURED && <Pill tone="orange" size="xs">Solo lectura</Pill>}
         </div>

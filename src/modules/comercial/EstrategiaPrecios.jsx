@@ -8,7 +8,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Panel, Cargando, Segmented } from '../../components/kit';
+import { Hero, KpiCard, Panel, Cargando, Segmented, AccionesCabecera } from '../../components/kit';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import { fecha as fmtFecha } from '../../lib/format';
@@ -134,7 +134,7 @@ function Pantalla({ sensible }) {
         onNavegar={(d) => window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: d }))} />
 
       <Panel titulo="Buscar y filtrar" meta={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs · ${listas.length} de ${listasTodas.length} listas en la tabla${listasTodas.length > listas.length ? ' (usa el filtro "Listas" para ver las demás; el drill y el Excel las llevan todas)' : ''}${orden ? ' · ordenado por columna' : ''}`}
-        acciones={<ExportMenu titulo="Lista de Precios" subtitulo={`${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} />}>
+        acciones={<AccionesCabecera><ExportMenu titulo="Lista de Precios" subtitulo={`${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`} excel={excel} pdf={{ ref: rootRef }} deshabilitado={!filas.length} /></AccionesCabecera>}>
         <Filtros grupos={grupos} toggles={toggles} activos={activos} onToggle={toggleSet} onToggleFlag={toggleFlag}
           onLimpiar={() => setF((p) => ({ ...FILTROS_VACIOS(), q: p.q, tokens: p.tokens }))}
           resumen={`${fmtInt(filas.length)} de ${fmtInt(todas.length)} SKUs`}
