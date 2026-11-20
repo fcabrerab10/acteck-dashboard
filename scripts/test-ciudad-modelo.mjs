@@ -169,6 +169,8 @@ test('pin de ciudad en la Vista Mapa: tiendas activas físicas y camiones llegan
   assert.deepEqual([p.activas, p.llegando], [2, 2]); assert.equal(p.texto, 'CDMX · 🏬 2 · 🚚 2');
   assert.equal(pinCiudad({ ciudad: 'SAN LUIS POTOSI', tiendas: [] }).texto, 'San Luis Potosí · 🏬 0', 'sin camiones no se muestra el camión');
   assert.equal(pinCiudad(null, null).activas, 0, 'datos vacíos no rompen');
+  assert.equal(pinCiudad({ ciudad: 'LEON', tiendas: 'x' }, [{ ciudad: ' León ' }]).texto, 'León · 🏬 0 · 🚚 1', 'tiendas no-lista no rompen; ciudad empata con norm');
+  assert.equal(pinCiudad({ tiendas: [] }, [{}, { ciudad: null }]).llegando, 0, 'distrito sin ciudad no junta camiones sin ciudad');
   const m = construirModelo(d, hoy); for (const x of m.distritos) assert.ok(pinCiudad(x, m.camiones).texto.length > 0);
   assert.equal(m.distritos.reduce((s, x) => s + pinCiudad(x, m.camiones).llegando, 0), m.camiones.filter((c) => m.distritos.some((x) => x.ciudad === c.ciudad)).length, 'cada camión cuenta en una sola ciudad');
   assert.ok(DETALLE.pin > DETALLE.fino && DETALLE.pin < ZOOM_MAX && vistaMapa().zoom > DETALLE.pin, 'en la Vista Mapa se ven los pines');
@@ -207,6 +209,8 @@ test('acceso rápido: 5 ciudades con más actividad', () => {
   assert.deepEqual(ciudadesTop(mod).map((c) => c.ciudad), ['LEON', 'CIUDAD DE MEXICO', 'QUERETARO'], 'por actividad, empate por tiendas, sin actividad fuera');
   assert.equal(ciudadesTop(mod)[1].nombre, 'CDMX'); assert.equal(ciudadesTop(mod, 1).length, 1);
   assert.deepEqual(ciudadesTop(null), [], 'datos vacíos no rompen');
+  assert.deepEqual(ciudadesTop({ distritos: 'x' }), [], 'distritos no-lista no rompen');
+  assert.deepEqual(ciudadesTop({ distritos: [{ ciudad: 'LEON', tiendas: {} }], camiones: [{ ciudad: 'LEON' }] }).map((c) => [c.ciudad, c.tiendas, c.actividad]), [['LEON', 0, 1]], 'tiendas no-lista cuentan 0');
   const m = construirModelo(d, hoy); const top = ciudadesTop(m); assert.ok(top.length <= 5 && top.every((c) => m.distritos.some((x) => x.ciudad === c.ciudad)));
 });
 test('minimapa: plano chico con contorno, ciudades y marcador de la cámara', () => {

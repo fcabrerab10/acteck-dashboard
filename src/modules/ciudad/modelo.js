@@ -187,15 +187,17 @@ export function nombreCiudad(ciudad) {
 }
 export function pinCiudad(distrito, camiones = []) {
   const nombre = nombreCiudad(distrito?.ciudad);
-  const activas = (distrito?.tiendas || []).filter((t) => t?.vendio && !t.virtual).length;
-  const llegando = comoLista(camiones).filter((c) => c && c.ciudad === distrito?.ciudad).length;
+  // tiendas que no son lista ya no lanzan error; la ciudad empata con norm() (espacios/acentos/mayúsculas) y una ciudad vacía
+  // no junta camiones (antes un camión sin ciudad contaba en un distrito sin ciudad: undefined === undefined)
+  const activas = comoLista(distrito?.tiendas).filter((t) => t?.vendio && !t.virtual).length, k = norm(distrito?.ciudad);
+  const llegando = k ? comoLista(camiones).filter((c) => c && norm(c.ciudad) === k).length : 0;
   return { activas, llegando, texto: [nombre, `🏬 ${activas}`, llegando ? `🚚 ${llegando}` : null].filter(Boolean).join(' · ') };
 }
 // Acceso rápido (minimapa, paso 1): las n ciudades con más actividad = tiendas activas + camiones llegando (empate: más tiendas).
 export function ciudadesTop(modelo, n = 5) {
   n = Math.max(0, Math.floor(Number(n))); if (!Number.isFinite(n)) n = 5; // n en texto/decimal/basura (antes NaN → lista vacía)
-  const ds = (modelo?.distritos || []).filter(Boolean);
-  return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); return { ciudad: d.ciudad, nombre: p.texto.split(' · ')[0], activas: p.activas, llegando: p.llegando, actividad: p.activas + p.llegando, tiendas: (d.tiendas || []).length }; })
+  const ds = comoLista(modelo?.distritos).filter(Boolean); // distritos/tiendas que no son lista: vacío, no error ni NaN en el orden
+  return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); return { ciudad: d.ciudad, nombre: p.texto.split(' · ')[0], activas: p.activas, llegando: p.llegando, actividad: p.activas + p.llegando, tiendas: comoLista(d.tiendas).length }; })
     .filter((c) => c.ciudad && c.actividad > 0).sort((x, y) => y.actividad - x.actividad || y.tiendas - x.tiendas).slice(0, n);
 }
 // Botón único Base/Mapa: estás «en la base» si la cámara está cerca del encuadre de la Vista Base (centro a menos de medio
