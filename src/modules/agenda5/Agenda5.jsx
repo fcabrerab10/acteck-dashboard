@@ -4,7 +4,7 @@
 // Fernando ve todas; David Millán no entra), Hoy con lista + reloj del día + mes completo en pequeño.
 // Módulos: Hoy · Bandeja · Pendientes · Reuniones (minutas de la V4 dentro del nuevo armazón) · Ideas · Registro del día ·
 // Semana · Equipo. Captura rápida con N o ⌘⇧N en lenguaje natural (agenda5/interpretar.js).
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sun, Inbox, CheckSquare, Users, Lightbulb, BookOpen, CalendarRange, UserCheck, ChevronDown, Send, Building2, MoreHorizontal } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -28,6 +28,8 @@ import Mande from '../agenda6/Mande';
 import PorCliente from '../agenda6/PorCliente';
 import Captura6 from '../agenda6/Captura6';
 import OrganizaDia from '../agenda6/OrganizaDia';
+import { AgendaDividida, cabeDividida, useAncho } from '../agenda6/Dividida';
+import { usePrefsDispositivo } from '../../lib/dispositivo';
 import Bandeja from './Bandeja';
 import Pendientes from './Pendientes';
 import ReunionesV5 from './Reuniones';
@@ -58,6 +60,7 @@ export default function Agenda5({ onNavegar, inicial = null }) {
   const [propietario, setPropietario] = useState(null);
   const [captura, setCaptura] = useState(!!inicial?.captura); // el correo de la Agenda trae #/ir/agenda?captura=1
   const [hojaItem, setHojaItem] = useState(null);
+  const [hojaModal, setHojaModal] = useState(false); // abierto desde «Organiza tu día»: siempre en hoja, encima del pop-up
   const [minutaId, setMinutaId] = useState(inicial?.reunionId || null);
   const [formReunion, setFormReunion] = useState(null);
   const [menuPersona, setMenuPersona] = useState(false);
@@ -65,6 +68,16 @@ export default function Agenda5({ onNavegar, inicial = null }) {
   const hoy = useMemo(() => new Date(), []);
 
   useEffect(() => { if (uid && !propietario) setPropietario(uid); }, [uid, propietario]);
+  // Vista dividida (2026-11-20): con la preferencia `dividida` y ancho suficiente, el detalle del pendiente va en línea a la
+  // derecha de la lista (Hoy · Pendientes · Lo que mandé · Por cliente). Sin ella, la HojaLateral de siempre.
+  const prefsDisp = usePrefsDispositivo();
+  const [refCont, anchoCont] = useAncho();
+  const divide = cabeDividida({ dividida: prefsDisp.dividida, ancho: anchoCont - 208, modulo });
+  const enLinea = divide && !!hojaItem && !hojaModal;
+  // Al cambiar de módulo con el detalle en línea abierto, se cierra (no debe saltar a hoja en un módulo sin vista dividida).
+  const eraEnLinea = useRef(false);
+  useEffect(() => { if (eraEnLinea.current) setHojaItem(null); }, [modulo, propietario]);
+  useEffect(() => { eraEnLinea.current = enLinea; });
   const yo = useMemo(() => d.personas.find((p) => p.user_id === uid) || null, [d.personas, uid]);
   // A quién puedo ver: yo + (si soy super admin) todos; si no, además los super admin (sólo lectura).
   const visibles = useMemo(() => d.personas.filter((p) => p.user_id === uid || perfil?.es_super_admin || p.es_super_admin), [d.personas, uid, perfil]);
@@ -91,14 +104,15 @@ export default function Agenda5({ onNavegar, inicial = null }) {
 
   const conteos = { bandeja: bandejaDe(d.items, propietario, hoy).length, hoy: hoyDe(d.items, propietario, hoy, { reuniones: d.reuniones, google: d.google }).deHoy.length, pendientes: Object.values(pendientesDe(d.items, propietario, hoy)).reduce((s, l) => s + l.length, 0) };
   conteos.hoy6 = conteos.hoy + (hoyDe(d.items, propietario, hoy).deAyer.length);
-  const comunes = { d, uid, propietario, personasPorId: d.personasPorId, puedeEditar, onAbrirItem: (it) => setHojaItem(it), onCapturar: (texto) => { setCapturaInicial(typeof texto === 'string' ? texto : ''); setCaptura(true); }, onAbrirReunion: (r) => { setModulo('reuniones'); setMinutaId(r.id); } };
+  const comunes = { d, uid, propietario, personasPorId: d.personasPorId, puedeEditar, onAbrirItem: (it) => { setHojaModal(false); setHojaItem(it); }, onCapturar: (texto) => { setCapturaInicial(typeof texto === 'string' ? texto : ''); setCaptura(true); }, onAbrirReunion: (r) => { setModulo('reuniones'); setMinutaId(r.id); } };
   const comentariosPor = comentariosPorItem(d.comentarios || []);
   const minuta = minutaId ? d.reuniones.find((r) => r.id === minutaId) : null;
 
+  const hojaItemEl = (linea) => <HojaItem key={linea ? hojaItem.id : 'hoja'} enLinea={linea} item={d.porId.get(hojaItem.id) || hojaItem} personas={d.personas} personasPorId={d.personasPorId} porId={d.porId} reuniones={d.reuniones} hoy={hoy} subtareas={d.subtareas} comentariosPor={comentariosPor} items={d.items} puedeEditar={puedeEditar} onClose={() => setHojaItem(null)} onAbrirMinuta={(rid) => { setHojaItem(null); setModulo('reuniones'); setMinutaId(rid); }} />;
   const nav = { borderRadius: 9, padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, cursor: 'pointer', color: theme.text, transition: `background ${DUR.state}ms ${EASE}`, border: 0, background: 'transparent', width: '100%', textAlign: 'left', fontFamily: TYPO.fontText };
   let grupoAnt = null;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '208px minmax(0, 1fr)', gap: 0, minHeight: 'min(640px, calc(100dvh - 140px))', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', fontFamily: TYPO.fontText, color: theme.text }}>
+    <div ref={refCont} style={{ display: 'grid', gridTemplateColumns: '208px minmax(0, 1fr)', gap: 0, minHeight: 'min(640px, calc(100dvh - 140px))', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', fontFamily: TYPO.fontText, color: theme.text }}>
       <aside style={{ background: theme.surface2 || theme.surfaceHover || 'rgba(120,120,128,0.06)', borderRight: `1px solid ${theme.border}`, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div style={{ position: 'relative', marginBottom: 8 }}>
           <button type="button" onClick={() => setMenuPersona((v) => !v)} style={{ ...nav, background: theme.surface, border: `1px solid ${theme.border}`, padding: '8px 10px' }}>
@@ -123,6 +137,7 @@ export default function Agenda5({ onNavegar, inicial = null }) {
       </aside>
       <main style={{ padding: '16px 18px', minWidth: 0, animation: `agIn ${DUR.content}ms ${EASE} both` }} key={modulo + propietario}>
         <style>{`@keyframes agIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }`}</style>
+        <AgendaDividida itemId={enLinea ? hojaItem.id : null} detalle={enLinea ? hojaItemEl(true) : null}>
         {modulo === 'hoy6' && <Hoy6 {...comunes} horas={horas} persona={persona} onIrA={setModulo} onOrganizar={(estado) => setOrganiza({ estado })} />}
         {modulo === 'mande' && <Mande {...comunes} />}
         {modulo === 'clientes' && <PorCliente {...comunes} />}
@@ -137,10 +152,11 @@ export default function Agenda5({ onNavegar, inicial = null }) {
         {modulo === 'registro' && <Registro {...comunes} persona={persona} />}
         {modulo === 'semana' && <Semana {...comunes} />}
         {modulo === 'equipo' && <Equipo {...comunes} personas={d.personas} yo={yo} perfil={perfil} onVerAgenda={(p) => { setPropietario(p.user_id); setModulo('hoy'); }} />}
+        </AgendaDividida>
       </main>
       <Captura6 abierto={captura} onClose={() => setCaptura(false)} personas={d.personas} propietario={propietario} uid={uid} hoy={hoy} inicial={capturaInicial} />
-      {organiza && <OrganizaDia abierto onClose={() => setOrganiza(null)} d={d} uid={uid} propietario={propietario} hoy={hoy} hoyIso={isoDia(hoy)} horas={horas} estado={organiza.estado} puedeEditar={puedeEditar} nombre={persona?.nombre?.split(' ')[0]} onAbrirItem={(it) => setHojaItem(it)} />}
-      {hojaItem && <HojaItem item={d.porId.get(hojaItem.id) || hojaItem} personas={d.personas} personasPorId={d.personasPorId} porId={d.porId} reuniones={d.reuniones} hoy={hoy} subtareas={d.subtareas} comentariosPor={comentariosPor} items={d.items} puedeEditar={puedeEditar} onClose={() => setHojaItem(null)} onAbrirMinuta={(rid) => { setHojaItem(null); setModulo('reuniones'); setMinutaId(rid); }} />}
+      {organiza && <OrganizaDia abierto onClose={() => setOrganiza(null)} d={d} uid={uid} propietario={propietario} hoy={hoy} hoyIso={isoDia(hoy)} horas={horas} estado={organiza.estado} puedeEditar={puedeEditar} nombre={persona?.nombre?.split(' ')[0]} onAbrirItem={(it) => { setHojaModal(true); setHojaItem(it); }} />}
+      {hojaItem && !enLinea && hojaItemEl(false)}
       {formReunion && <FormReunion inicial={formReunion} personas={d.personas} google={{ ...d.googleEstado, eventos: d.google }} onClose={() => setFormReunion(null)} onCreada={(r) => { setFormReunion(null); if (r?.id) { setModulo('reuniones'); setMinutaId(r.id); } }} />}
     </div>
   );

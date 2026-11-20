@@ -1,7 +1,9 @@
 // Agenda · hoja lateral de una tarea o punto: título con etiquetas, notas, fecha/hora, prioridad, estado,
 // "en qué quedó", reunión de origen (abre la minuta), veces arrastrado, borrar.
+// Vista dividida (2026-11-20): con `enLinea` el MISMO contenido se pinta sin hoja, para ir a la derecha de la lista
+// (Hoy · Pendientes · Lo que mandé · Por cliente); × lo cierra. Quien lo monta en línea debe darle key={item.id}.
 import React, { useState } from 'react';
-import { Trash2, Check, CalendarDays, ListPlus } from 'lucide-react';
+import { Trash2, Check, CalendarDays, ListPlus, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { HojaLateral, Grupo, Fila } from '../../../components/perfil/comun';
@@ -15,7 +17,7 @@ import { relativo } from '../../../lib/format';
 import Subtareas from './Subtareas';
 import Hilo from './Comentarios';
 
-export default function HojaItem({ item, personas, personasPorId, porId, reuniones, hoy, puedeEditar, onClose, onAbrirMinuta, subtareas = [], comentariosPor, items = [] }) {
+export default function HojaItem({ item, personas, personasPorId, porId, reuniones, hoy, puedeEditar, onClose, onAbrirMinuta, subtareas = [], comentariosPor, items = [], enLinea = false }) {
   const { theme } = useTheme();
   const [texto, setTexto] = useState(() => textoConEtiquetas(item, personas));
   const [notas, setNotas] = useState(item.notas || '');
@@ -39,9 +41,27 @@ export default function HojaItem({ item, personas, personasPorId, porId, reunion
   const campo = { border: `1px solid ${theme.border}`, borderRadius: 8, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 12.5, padding: '5px 8px', outline: 'none' };
   const lbl = { fontFamily: TYPO.fontDisplay, fontSize: 10.5, letterSpacing: '0.07em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, marginBottom: 6, display: 'block' };
 
-  return (
-    <HojaLateral abierto onClose={onClose} theme={theme} ancho={480} titulo={item.tipo === 'punto' ? 'Punto de reunión' : 'Tarea'} sub={`${ESTADO_LABEL[item.estado]}${item.fecha_limite ? ` · ${cuando(item.fecha_limite, hoy)}` : ''}${item.created_at ? ` · creada ${relativo(item.created_at)}` : ''}`}
-      acciones={puedeEditar && <Boton icon={item.estado === 'hecha' ? undefined : Check} primario={item.estado !== 'hecha'} onClick={() => guardar(item.estado === 'hecha' ? { estado: 'abierta', completado_en: null } : { estado: 'hecha', completado_en: new Date().toISOString() })}>{item.estado === 'hecha' ? 'Reabrir' : 'Hecha'}</Boton>}>
+  const titulo = item.tipo === 'punto' ? 'Punto de reunión' : 'Tarea';
+  const sub = `${ESTADO_LABEL[item.estado]}${item.fecha_limite ? ` · ${cuando(item.fecha_limite, hoy)}` : ''}${item.created_at ? ` · creada ${relativo(item.created_at)}` : ''}`;
+  const acciones = puedeEditar && <Boton icon={item.estado === 'hecha' ? undefined : Check} primario={item.estado !== 'hecha'} onClick={() => guardar(item.estado === 'hecha' ? { estado: 'abierta', completado_en: null } : { estado: 'hecha', completado_en: new Date().toISOString() })}>{item.estado === 'hecha' ? 'Reabrir' : 'Hecha'}</Boton>;
+  // El marco se llama como función (no como componente) para que el cuerpo no se desmonte en cada render.
+  const Marco = enLinea
+    ? ({ children }) => (
+      <section data-item-en-linea={item.id} aria-label={titulo} style={{ fontFamily: TYPO.fontText, minWidth: 0 }}
+        onKeyDown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.target?.blur?.(); onClose?.(); } }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px 10px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{titulo}</div>
+            <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{sub}</div>
+          </div>
+          {acciones}
+          <button type="button" onClick={onClose} aria-label="Cerrar detalle" title="Cerrar (Esc)" style={{ width: 40, height: 40, flexShrink: 0, display: 'grid', placeItems: 'center', border: 0, borderRadius: 999, background: 'transparent', color: theme.textMuted, cursor: 'pointer' }}><X size={17} /></button>
+        </div>
+        {children}
+      </section>)
+    : ({ children }) => (<HojaLateral abierto onClose={onClose} theme={theme} ancho={480} titulo={titulo} sub={sub} acciones={acciones}>{children}</HojaLateral>);
+
+  return Marco({ children: (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 4px 24px', fontFamily: TYPO.fontText }}>
         <div>
           <span style={lbl}>Título · #cliente @persona /categoría</span>
@@ -100,6 +120,5 @@ export default function HojaItem({ item, personas, personasPorId, porId, reunion
           </div>
         )}
       </div>
-    </HojaLateral>
-  );
+  ) });
 }

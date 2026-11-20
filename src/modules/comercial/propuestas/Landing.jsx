@@ -2,6 +2,8 @@
 // TarjetaCliente (cuota / facturado / gap / última propuesta; "Nueva propuesta" entra directo a Armar, "Continuar"
 // retoma el borrador abierto) · KPIs (Borradores · Enviadas · Cerradas · Conversión ⌀) · Segmented Todas · Borrador ·
 // Enviada · Cerrada + cliente + buscador, y las propuestas agrupadas por mes objetivo (anio/mes) con TarjetaPropuesta.
+// Vista dividida (2026-11-20): con la preferencia por dispositivo `dividida` y el contenedor ≥ 900 px, en vez de las
+// tarjetas por mes va la lista a la izquierda y el detalle en lectura a la derecha (./PropuestasDivididas.jsx).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, Settings2, RefreshCw } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
@@ -14,6 +16,9 @@ import { CLIENTES, ESTADOS, MES_FULL, MES_ACTUAL } from './constantes';
 import { fetchKpisClientes } from './datos';
 import TarjetaPropuesta from './TarjetaPropuesta';
 import TarjetaCliente from './TarjetaCliente';
+import PropuestasDivididas, { cabeDivididaPropuestas } from './PropuestasDivididas';
+import { usePrefsDispositivo } from '../../../lib/dispositivo';
+import { useAncho } from '../../../lib/useAncho';
 
 export const SILUETA_LANDING = [
   { tipo: 'hero', stats: 3 }, { tipo: 'kpis', n: 4 }, { tipo: 'fila', items: 3, alto: 30 },
@@ -40,6 +45,8 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
   const [busqueda, setBusqueda] = useState('');
   const [kpisCli, setKpisCli] = useState({});
   const importRef = useRef(null), spiffRef = useRef(null);
+  const prefsDisp = usePrefsDispositivo();
+  const [refCont, anchoCont] = useAncho();
   useEffect(() => { fetchKpisClientes().then(setKpisCli).catch((e) => console.warn('[Propuestas] kpis clientes', e)); }, []);
 
   const porEstado = useMemo(() => Object.fromEntries(ESTADOS.map((e) => [e.id, propuestas.filter((p) => p.estado === e.id).length])), [propuestas]);
@@ -53,6 +60,7 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
     });
   }, [propuestas, filtroCli, filtroEst, busqueda]);
   const grupos = useMemo(() => agruparPorMes(filtradas), [filtradas]);
+  const dividir = cabeDivididaPropuestas({ dividida: prefsDisp.dividida, ancho: anchoCont, n: filtradas.length });
 
   const mesActualKey = `${MES_ACTUAL.anio}-${String(MES_ACTUAL.mes).padStart(2, '0')}`;
   const delMes = propuestas.filter((p) => `${p.anio}-${String(p.mes).padStart(2, '0')}` === mesActualKey);
@@ -70,7 +78,7 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
   const prop12 = serie12.reduce((s, d) => s + (d.propuesto || 0), 0), fact12 = serie12.reduce((s, d) => s + (d.facturado || 0), 0);
 
   return (
-    <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div ref={refCont} data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Hero
         eyebrow={`Dirección Comercial · Propuestas · ${MES_FULL[MES_ACTUAL.mes - 1]} ${MES_ACTUAL.anio}`}
         titulo="Cierra el mes con una propuesta ganadora."
@@ -127,7 +135,11 @@ export default function Landing({ propuestas, efectividades, cargando, ocupado, 
           </div>
         </Panel>
       )}
-      {grupos.map((g) => {
+      {dividir && (
+        <PropuestasDivididas propuestas={grupos.flatMap((g) => g.items)} efectividades={efectividades} ocupado={ocupado}
+          onAbrir={onAbrir} onEliminar={onEliminar} onDuplicar={onDuplicar} onCompartir={onCompartir} onExcelFinal={onExcelFinal} />
+      )}
+      {!dividir && grupos.map((g) => {
         const totalGrupo = g.items.reduce((s, r) => s + (Number(r.resumen?.total) || 0), 0);
         const enviadas = g.items.filter((r) => r.estado !== 'borrador').length;
         return (

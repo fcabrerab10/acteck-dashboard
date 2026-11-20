@@ -45,7 +45,7 @@ export function FilaTarea({ item, personasPorId, uid, onToggle, onAbrir, onCrono
   const hecha = item.estado === 'hecha';
   const otros = (item.responsables || []).filter((u) => u !== uid).map((u) => personasPorId?.get(u)).filter(Boolean);
   return (
-    <div onClick={() => onAbrir?.(item)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compacta ? '6px 8px' : '8px 10px', borderRadius: 11, background: theme.surface, border: `1px solid transparent`, cursor: 'pointer', transition: `background ${DUR.state}ms ${EASE}, opacity 300ms`, opacity: hecha ? 0.6 : 1 }}
+    <div onClick={() => onAbrir?.(item)} data-agenda-item={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compacta ? '6px 8px' : '8px 10px', borderRadius: 11, background: theme.surface, border: `1px solid transparent`, cursor: 'pointer', transition: `background ${DUR.state}ms ${EASE}, opacity 300ms`, opacity: hecha ? 0.6 : 1 }}
       onMouseEnter={(e) => { e.currentTarget.style.background = theme.surfaceHover || 'rgba(120,120,128,0.10)'; }} onMouseLeave={(e) => { e.currentTarget.style.background = theme.surface; }}>
       <Palomita hecha={hecha} onClick={() => onToggle?.(item, !hecha)} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: theme.text, textDecoration: hecha ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.titulo}</span>
