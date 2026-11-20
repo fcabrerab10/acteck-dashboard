@@ -10,7 +10,7 @@ import SinAcceso from '../../components/SinAcceso';
 // Modo visita: baja todo lo del cliente para poder verlo sin señal (src/lib/modoVisita.js).
 import BotonPrepararVisita from '../../components/BotonPrepararVisita';
 import { moneyCompact as $c, fecha } from '../../lib/format';
-import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, usePersistTrimestres, mesesDeTrimestres } from '../../components/kit';
+import { Hero, KpiCard, Pill, Panel, SkeletonPantalla, usePersistTrimestres, mesesDeTrimestres, AccionesCabecera, useEnCabecera } from '../../components/kit';
 import { configDe, MESES, qDe, META_INV_DIAS } from './home/config';
 import { useHomeData } from './home/useHomeData';
 import { calcular, serieMensual, splitPor, topSkus } from './home/calc';
@@ -25,6 +25,7 @@ const toneDe = (v) => (v == null ? 'gray' : v >= 0 ? 'green' : 'red');
 export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, onNavegar }) {
   const perfil = usePerfil();
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, «Preparar visita» sube ahí
   const cfg = useMemo(() => configDe(clienteKey, cliente), [clienteKey, cliente]);
   const hoy = new Date(), anio = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
   const [rango, setRango] = usePersistTrimestres(`home:${clienteKey}`, () => new Set([qDe(mesActual)]));           // gráfica SI vs SO
@@ -67,7 +68,7 @@ export default function HomeClienteV3({ cliente, clienteKey, onUploadComplete, o
       <Hero eyebrow={`Resumen · ${cfg.nombre} · ${MESES[mesActual - 1]} ${anio}`} titulo={r.titulo} sub={r.sub} dot={r.recos.some((x) => x.tone === 'red')} stats={stats}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {r.recos.slice(0, 4).map((x, i) => <Pill key={i} tone={x.tone} dot title={x.s}>{x.t}</Pill>)}
-          <BotonPrepararVisita clienteKey={clienteKey} nombre={cfg.nombre} anio={anio} />
+          <AccionesCabecera><BotonPrepararVisita clienteKey={clienteKey} nombre={cfg.nombre} anio={anio} variante={enCabecera ? 'cabecera' : 'hero'} /></AccionesCabecera>
           <Pill tone="inverse" size="xs" title="Última actualización de cada fuente">
             SI {r.mesSiUlt ? MESES[r.mesSiUlt - 1] : '—'} · SO {r.ultimaFechaSo ? fecha(r.ultimaFechaSo) : r.mesSoUlt ? MESES[r.mesSoUlt - 1] : '—'} · Inv {r.inv.semana ? `S${r.inv.semana}` : '—'} · Cartera {r.cartera.semana ? `S${r.cartera.semana}` : '—'}
           </Pill>

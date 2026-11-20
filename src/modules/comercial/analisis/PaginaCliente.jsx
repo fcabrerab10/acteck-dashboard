@@ -14,7 +14,7 @@ import { ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 import { useRoadmap } from '../../../lib/queries';
-import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Boton, HeatCell, GraficaLineas, Cargando } from '../../../components/kit';
+import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Boton, HeatCell, GraficaLineas, Cargando, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../../components/kit';
 import { tooltip } from '../../../lib/medidas';
 import ComparadorPeriodos from '../ComparadorPeriodos';
 import ExportMenu from '../../../components/ExportMenu';
@@ -42,6 +42,7 @@ const TABS = [{ id: 'resumen', label: 'Resumen' }, { id: 'sellin', label: 'Sell 
 // controles de la tabla — Mes/YTD, año y mes — viven también en la barra de la página y cambian el estado de la pestaña.
 export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible, alertas = [], cuotas, onVolver, tabInicial = 'resumen', periodo = null }) {
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, regresar · pestañas · período · Exportar suben ahí
   const [tab, setTab] = useState(tabInicial);
   const rootRef = useRef(null);
   const mesLbl = MESES[mesMax - 1];
@@ -71,8 +72,9 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <Boton icon={ArrowLeft} onClick={onVolver}>Análisis por cliente</Boton>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <ControlesCabecera>
+        <Boton icon={ArrowLeft} onClick={onVolver}>{enCabecera ? 'Todos los clientes' : 'Análisis por cliente'}</Boton>
         <Segmented options={TABS} value={tab} onChange={setTab} />
         {periodo ? (
           <>
@@ -86,11 +88,14 @@ export default function PaginaCliente({ cliente, anio, mesMax, modo, verSensible
           </>
         ) : <span style={{ fontSize: 10.5, color: theme.textMuted }}>{anio} vs {anio - 1} · {modo === 'mes' ? `mes ${mesLbl}` : `YTD ene–${mesLbl.toLowerCase()}`}</span>}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          {enCabecera && <span style={{ fontSize: 12, fontWeight: 600, color: theme.text }}>{cliente.nombre}</span>}
           <Pill tone={toneCanal(cliente.canal)} size="xs">{labelCanal(cliente.canal)}</Pill>
           {cliente.propio && <Pill tone="inverse" size="xs">propio</Pill>}
           {cliente.ocasional && <Pill tone="orange" size="xs">compra ocasional</Pill>}
-          <ExportMenu titulo={cliente.nombre} subtitulo={`Nº ${cliente.cliente} · ${anio}`} excel={excel} pdf={{ ref: rootRef }} />
+          {!enCabecera && <ExportMenu titulo={cliente.nombre} subtitulo={`Nº ${cliente.cliente} · ${anio}`} excel={excel} pdf={{ ref: rootRef }} />}
         </span>
+        </ControlesCabecera>
+        {enCabecera && <AccionesCabecera><ExportMenu titulo={cliente.nombre} subtitulo={`Nº ${cliente.cliente} · ${anio}`} excel={excel} pdf={{ ref: rootRef }} /></AccionesCabecera>}
       </div>
 
       <Hero eyebrow={`Análisis por cliente · ${cliente.nombre} · Nº ${cliente.cliente}`} dot={false} titulo={titular} sub={sub}

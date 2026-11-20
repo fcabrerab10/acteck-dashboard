@@ -15,7 +15,7 @@ import { useFuentesConfig } from '../settings/importador/fuentesConfig';
 import { useEstadoImportador } from '../settings/importador/useImportadorData';
 import { resumirDatos } from '../../components/perfil/PestanaDatos';
 import SinAcceso from '../../components/SinAcceso';
-import { Hero, Segmented, Cargando } from '../../components/kit';
+import { Hero, Segmented, Cargando, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import WizardNuevoUsuario from './WizardNuevoUsuario';
 import UsuariosPermisos from './UsuariosPermisos';
 import SeccionDatos from './SeccionDatos';
@@ -33,6 +33,7 @@ const SECCIONES = [
 
 export default function Configuracion({ session }) {
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, las secciones suben a su fila de controles
   const perfil = session?.perfil;
   const miUserId = session?.user?.id || perfil?.user_id || null;
   const [seccion, setSeccion] = useState('usuarios');
@@ -91,9 +92,11 @@ export default function Configuracion({ session }) {
         {error && <div style={{ fontSize: 11, color: muted, marginTop: 4 }}>No se pudieron leer los usuarios: {error.message}</div>}
       </Hero>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <ControlesCabecera>
         <Segmented size="md" options={SECCIONES} value={seccion} onChange={setSeccion} />
         <span style={{ fontSize: 11, color: theme.textMuted, marginLeft: 'auto' }}>Tus preferencias personales (tema, menú, notificaciones) están en tu avatar.</span>
+        </ControlesCabecera>
       </div>
 
       {seccion === 'usuarios' && (

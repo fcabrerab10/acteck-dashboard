@@ -18,7 +18,7 @@ import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/per
 import { clientes as CLIENTES } from '../../lib/constants';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Pill, Segmented, Panel, Boton, SkeletonPantalla, toast } from '../../components/kit';
+import { Hero, KpiCard, Pill, Segmented, Panel, Boton, SkeletonPantalla, toast, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import {
   TIPOS, MARCAS, REDES_SOCIALES, MESES, MESES_CORTOS, tipoMeta, parseFecha, mesAnioDe, fechaCorta, isoHoy, diasEntre,
   fmtMXN, fmtNum, money, esCerrada, emptyForm,
@@ -36,6 +36,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   // Permiso granular por (clienteKey, 'marketing').
   const canEdit = puedeEditarPestanaCliente(perfil, ckPerm, 'marketing');
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, año · vista · mes y los botones suben ahí
   const rootRef = useRef(null);
   const ck = clienteKey || cliente;
   const clienteLabel = CLIENTES?.[ck]?.nombre || cliente || ck;
@@ -365,7 +366,8 @@ export default function MarketingCliente({ cliente, clienteKey }) {
 
       {/* 3 · Barra de control */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <ControlesCabecera>
           <Segmented value={anio} onChange={(y) => { setAnio(Number(y)); setDiaSeleccionado(null); }} options={[anioActual - 1, anioActual].map((y) => ({ id: y, label: String(y) }))} />
           <Segmented value={calVista} onChange={(v) => { setCalVista(v); setDiaSeleccionado(null); }} options={[{ id: 'mes', label: 'Mes' }, { id: 'anual', label: 'Anual', badge: anual.total || undefined }]} />
           {calVista === 'mes' && (
@@ -380,7 +382,9 @@ export default function MarketingCliente({ cliente, clienteKey }) {
               })}
             </div>
           )}
+          </ControlesCabecera>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AccionesCabecera>
             {canEdit && totales.sinPago > 0 && totales.inversionSinPago > 0 && (
               <Boton icon={Lock} onClick={cerrarMes} title={`Genera un pago consolidado de ${fmtMXN(totales.inversionSinPago)} por ${totales.sinPago} actividad(es) de ${mesLabel}`}>
                 Cerrar mes · {money(totales.inversionSinPago)}
@@ -388,6 +392,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
             )}
             <ExportMenu titulo="Marketing" subtitulo={`${clienteLabel} · ${anio}`} excel={excelActividades} pdf={{ ref: rootRef }} deshabilitado={!actividadesAnio.length} />
             {canEdit && <Boton primario icon={Plus} onClick={openNew}>Actividad</Boton>}
+            </AccionesCabecera>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

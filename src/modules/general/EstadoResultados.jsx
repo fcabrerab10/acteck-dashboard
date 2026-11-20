@@ -14,7 +14,7 @@ import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
-import { Segmented, Panel, Cargando } from '../../components/kit';
+import { Segmented, Panel, Cargando, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import { cargarLibro, cargarAniosLibro } from './resultados/libro';
 import {
   MESES_LBL, MESES_FULL, indexar, mesesConLibro, estado, mesAMes, indicadores, cincoAnios, carteraPorMes, balance,
@@ -105,20 +105,27 @@ const periodoLabel = (anio, mes, periodo) => (periodo === 'acum' ? `enero a ${ME
 /** Vista pura (SSR en scripts/test-libro-financiero.mjs). */
 export function EstadoLibroVista({ datos, anio, anios = [], mes, meses, periodo, onAnio, onMes, onPeriodo, acciones }) {
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común: el título ya está arriba; selectores y Exportar suben ahí
+  const subtitulo = <span style={{ fontSize: 12, color: theme.textMuted }}>REVKO Technology · {periodoLabel(anio, mes, periodo)} · miles de pesos · libro mensual de los consultores</span>;
   const { est, mm, ind, cinco, cartera, bal, gastosCuenta } = datos;
   const titulo = periodo === 'acum' ? `Acumulado · enero a ${MESES_FULL[mes - 1]}` : `${MESES_FULL[mes - 1][0].toUpperCase()}${MESES_FULL[mes - 1].slice(1)}`;
   return (
     <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 20px 32px', fontFamily: TYPO.fontText, color: theme.text }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', fontFamily: TYPO.fontDisplay }}>Estado de Resultados</h1>
-          <span style={{ fontSize: 12, color: theme.textMuted }}>REVKO Technology · {periodoLabel(anio, mes, periodo)} · miles de pesos · libro mensual de los consultores</span>
-        </div>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        {!enCabecera && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', fontFamily: TYPO.fontDisplay }}>Estado de Resultados</h1>
+            {subtitulo}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {anios.length > 1 && <Segmented value={anio} onChange={onAnio} options={anios.map((a) => ({ id: a, label: String(a) }))} />}
-          <Segmented value={mes} onChange={onMes} options={meses.map((m) => ({ id: m, label: MESES_LBL[m - 1] }))} />
-          <Segmented value={periodo} onChange={onPeriodo} options={[{ id: 'acum', label: 'Acumulado' }, { id: 'mes', label: 'Mes' }]} />
-          {acciones}
+          <ControlesCabecera>
+            {anios.length > 1 && <Segmented value={anio} onChange={onAnio} options={anios.map((a) => ({ id: a, label: String(a) }))} />}
+            <Segmented value={mes} onChange={onMes} options={meses.map((m) => ({ id: m, label: MESES_LBL[m - 1] }))} />
+            <Segmented value={periodo} onChange={onPeriodo} options={[{ id: 'acum', label: 'Acumulado' }, { id: 'mes', label: 'Mes' }]} />
+            {enCabecera && subtitulo}
+          </ControlesCabecera>
+          <AccionesCabecera>{acciones}</AccionesCabecera>
         </div>
       </div>
 

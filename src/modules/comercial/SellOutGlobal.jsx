@@ -18,7 +18,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import ExportMenu from '../../components/ExportMenu';
 import FrescuraPill from '../../components/FrescuraPill';
-import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Boton, Cargando, toast } from '../../components/kit';
+import { Hero, KpiCard, Pill, DeltaPill, Segmented, TablaCompacta, Panel, Boton, Cargando, toast, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import { moneyCompact } from '../../lib/format';
 import { GraficaLineas } from '../../components/kit';
 import Buscador from './sellin/Buscador';
@@ -44,6 +44,7 @@ const money = (n) => (n == null || !Number.isFinite(Number(n)) ? '—' : `$${Mat
 export default function SellOutGlobal() {
   const perfil = usePerfil();
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, selectores y botones suben ahí
   const rootRef = useRef(null);
 
   const { data: cuentas = [], isLoading: cargandoCuentas } = useCuentas();
@@ -243,8 +244,9 @@ export default function SellOutGlobal() {
 
   return (
     <div ref={rootRef} data-stagger style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <ControlesCabecera>
           <select value={`${anio}-${mes}`} onChange={(e) => { const [a, m] = e.target.value.split('-').map(Number); setAnio(a); setMes(m); setMesTocado(true); }} style={sel} title="Mes del sell out">
             {opcionesMes.map((o) => <option key={`${o.anio}-${o.mes}`} value={`${o.anio}-${o.mes}`}>{MESES[o.mes - 1]} {o.anio}</option>)}
           </select>
@@ -252,10 +254,13 @@ export default function SellOutGlobal() {
             {(anios.length ? anios : [anio]).map((y) => <option key={y} value={y}>{y} vs {y - 1}</option>)}
           </select>
           <Segmented options={CANAL_SEG} value={canalSel} onChange={setCanalSel} />
+          </ControlesCabecera>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <AccionesCabecera>
           <Boton icon={Share2} onClick={compartir}>Compartir resumen del mes</Boton>
           <ExportMenu titulo="Sell Out consolidado" subtitulo={periodoLbl} excel={excel} pdf={{ ref: rootRef }} />
+          </AccionesCabecera>
         </div>
       </div>
 

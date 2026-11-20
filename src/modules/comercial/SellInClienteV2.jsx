@@ -13,7 +13,7 @@ import { useRoadmap, useFacturacion, useFacturacionAll, useCuotasMensuales } fro
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres } from '../../components/kit';
+import { Cargando, Panel, GraficaLineas, SelectorTrimestres, usePersistTrimestres, etiquetaTrimestres, AccionesCabecera } from '../../components/kit';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente, puedeVerSensible } from '../../lib/permisos';
@@ -918,7 +918,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
           <strong style={{ color: theme.text, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
         <SelectorUnidad unidad={unidad} onChange={onUnidad} />
-        <ExportMenu titulo="Sell In" subtitulo={`${clienteLabel} · ${aniosSel.join(' · ')}`} excel={excelSKU} pdf={{ ref: pdfRef }} deshabilitado={!rows.length} />
+        <AccionesCabecera><ExportMenu titulo="Sell In" subtitulo={`${clienteLabel} · ${aniosSel.join(' · ')}`} excel={excelSKU} pdf={{ ref: pdfRef }} deshabilitado={!rows.length} /></AccionesCabecera>
       </div>
       <div ref={contRef} style={{ overflow: 'auto', maxHeight: '65vh' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>

@@ -19,7 +19,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, SkeletonPantalla, GraficaLineas, EASE, DUR } from '../../components/kit';
+import { Hero, KpiCard, Pill, Segmented, TablaCompacta, Panel, Boton, SkeletonPantalla, GraficaLineas, EASE, DUR, AccionesCabecera } from '../../components/kit';
 
 const NOMBRES_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -478,6 +478,8 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
               <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Folio o referencia…"
                 style={{ border: 0, outline: 0, background: 'transparent', flex: 1, minWidth: 0, fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} />
             </label>
+            {/* Exportar sube a la cabecera común (lleva las facturas del filtro activo, como siempre). */}
+            <AccionesCabecera>
             <ExportMenu
               titulo="Crédito y Cobranza"
               subtitulo={`${nombreCliente} · facturas con saldo · semana ${estado.semana}`}
@@ -504,6 +506,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
                 }],
               })}
             />
+            </AccionesCabecera>
           </div>
         }
       >

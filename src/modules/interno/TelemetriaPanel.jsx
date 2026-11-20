@@ -9,7 +9,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { relativo } from '../../lib/format';
 import SinAcceso from '../../components/SinAcceso';
-import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando, GraficaLineas } from '../../components/kit';
+import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando, GraficaLineas, AccionesCabecera, ControlesCabecera, useEnCabecera } from '../../components/kit';
 import { serieActividadDias } from '../../movil/pestanas/equipo/calculo';
 import { useDatosEquipo, useUmbralInactividad, useIndicesPorUsuario } from './equipo/datos.js';
 import { resumenTelemetria, resumenAcciones, cumplimientoAgenda, inactividad, evaluacionPendiente, pulsoEquipo, ordenarPersonas, UMBRALES_INACTIVIDAD, inicioSemana } from './equipo/calculo.js';
@@ -24,6 +24,7 @@ export default function TelemetriaPanel() {
   const perfil = usePerfil();
   const esAdmin = perfil?.rol === 'super_admin' || perfil?.es_super_admin === true;
   const { theme } = useTheme();
+  const enCabecera = useEnCabecera(); // con cabecera común, el umbral y «Actualizar» suben ahí
   const [umbral, setUmbral] = useUmbralInactividad();
   const [selId, setSelId] = useState(null);       // persona elegida → calendario del mes debajo de las tarjetas
   const [hojaAbierta, setHojaAbierta] = useState(false); // ficha completa (hoja lateral) bajo demanda
@@ -91,11 +92,13 @@ export default function TelemetriaPanel() {
           badge={evalsPendientes.length && hoy.getDate() > 3 ? { l: 'venció el día 3', tone: 'orange' } : undefined} />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <div style={enCabecera ? { display: 'none' } : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <ControlesCabecera>
         <span style={sub}>Umbral de inactividad</span>
         <Segmented value={umbral} onChange={setUmbral} options={UMBRALES_INACTIVIDAD.map((n) => ({ id: n, label: `${n} días hábiles`, title: `Avisar al superar ${n} días hábiles sin entrar o sin cerrar pendientes` }))} />
         <span style={{ ...sub, marginLeft: 'auto' }}>{datos.cargadoAt ? `actualizado ${relativo(datos.cargadoAt)}` : ''}</span>
-        <Boton icon={RefreshCw} onClick={() => refetch()}>Actualizar</Boton>
+        </ControlesCabecera>
+        <AccionesCabecera><Boton icon={RefreshCw} onClick={() => refetch()}>Actualizar</Boton></AccionesCabecera>
       </div>
 
       {/* 2026-10-06 (del celular): actividad por día de las últimas 4 semanas. */}

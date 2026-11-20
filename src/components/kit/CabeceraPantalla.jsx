@@ -20,6 +20,9 @@ function Portal({ donde, children }) {
   if (!ctx) return <>{children}</>;          // sin cabecera (panel múltiple, celular): se pinta donde está
   return el ? createPortal(children, el) : null;
 }
+// ¿Hay cabecera común arriba? (false en paneles múltiples, celular, SSR suelto o embebida en Inicio: ahí los
+// controles se pintan en su lugar de siempre). Sirve para quitar estilos «inversos» de lo que sube del Hero.
+export function useEnCabecera() { return !!useContext(Ctx); }
 export const AccionesCabecera = ({ children }) => <Portal donde="acciones">{children}</Portal>;
 export const ControlesCabecera = ({ children }) => <Portal donde="controles">{children}</Portal>;
 
@@ -37,9 +40,9 @@ export default function CabeceraPantalla({ seccion }) {
           {seccion.grupo && <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: seccion.color }}>{seccion.grupo}</div>}
           <h1 style={{ margin: 0, fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, color: theme.text }}>{seccion.titulo}</h1>
         </div>
-        <div ref={setAcc} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', paddingRight: 'var(--hueco-avatar, 0px)' }} />
+        <div ref={setAcc} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0, maxWidth: '100%', paddingRight: 'var(--hueco-avatar, 0px)' }} />
       </div>
-      <div ref={setCon} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 3 }} />
+      <div ref={setCon} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%', position: 'sticky', top: 0, zIndex: 3 }} />
     </div>
   );
 }

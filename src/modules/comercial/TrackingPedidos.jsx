@@ -9,7 +9,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal, puedeEditarPestanaGlobal } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
-import { Hero, KpiCard, Panel, Segmented, Boton, Pill, Cargando, toast } from '../../components/kit';
+import { Hero, KpiCard, Panel, Segmented, Boton, Pill, Cargando, toast, AccionesCabecera } from '../../components/kit';
 import { compartir } from '../../lib/whatsapp';
 import { useTrackingDatos } from './tracking/datos';
 import { calcularTodo, embudo as calcEmbudo, resumen as calcResumen, backorderPorSku, surtirHoy as calcSurtir, tiemposPorCliente, facturasSinOC as calcSinOC, FILTROS_VACIOS, fraseHero, subHero, pasaFiltros } from './tracking/calculo';
@@ -85,9 +85,12 @@ export default function TrackingPedidos() {
               { k: 'Días a entrega', v: fmtDias(res.diasEntrega), sub: `meta ${META_ENTREGA}${deltaDias != null ? ` · ${deltaDias <= 0 ? '↓' : '↑'} ${Math.abs(deltaDias).toFixed(1)} vs 90 d prev.` : ''}`, color: res.diasEntrega != null && res.diasEntrega > META_ENTREGA ? (theme.orange || '#FF9500') : undefined },
             ]}>
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              {puedeEditar && <Boton primario icon={Plus} onClick={() => setHoja({ tipo: 'nuevo' })} title="Desde la OC del cliente o desde una factura del ERP">Nuevo pedido</Boton>}
-              {puedeEditar && <Boton icon={Plus} onClick={() => setHoja({ tipo: 'cotizacion' })}>Cotización</Boton>}
-              <Boton icon={Share2} onClick={compartirEstatus}>Compartir estatus</Boton>
+              {/* Con cabecera común los botones suben ahí (el primario al final, a la derecha); sin ella se quedan en el Hero. */}
+              <AccionesCabecera>
+                {puedeEditar && <Boton primario icon={Plus} onClick={() => setHoja({ tipo: 'nuevo' })} title="Desde la OC del cliente o desde una factura del ERP">Nuevo pedido</Boton>}
+                {puedeEditar && <Boton icon={Plus} onClick={() => setHoja({ tipo: 'cotizacion' })}>Cotización</Boton>}
+                <Boton icon={Share2} onClick={compartirEstatus}>Compartir estatus</Boton>
+              </AccionesCabecera>
               <Pill tone="inverse" size="xs" style={{ background: 'transparent', color: theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)' }}>
                 {data?.sync?.error ? `ERP sin sincronizar: ${data.sync.error}` : `ERP al corte de las ${cargadoTxt}${isFetching ? ' · actualizando…' : ''}`}
               </Pill>

@@ -4,7 +4,7 @@ export { default as KpiCard } from './KpiCard';
 export { default as Trazo } from './Trazo';
 export { default as Vacio } from './Vacio';
 export { default as ListaDetalle } from './ListaDetalle';
-export { default as CabeceraPantalla, AccionesCabecera, ControlesCabecera, ProveedorCabecera } from './CabeceraPantalla';
+export { default as CabeceraPantalla, AccionesCabecera, ControlesCabecera, ProveedorCabecera, useEnCabecera } from './CabeceraPantalla';
 export { default as Pill, DeltaPill, toneColors } from './Pill';
 export { default as Segmented } from './Segmented';
 export { default as TablaCompacta } from './TablaCompacta';
