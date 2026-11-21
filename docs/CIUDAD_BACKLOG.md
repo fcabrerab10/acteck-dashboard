@@ -233,6 +233,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.9) Burbuja del banco con `plural()`: pagos vencidos que vienen en texto («1») dicen «1 pago vencido» (antes «1 pagos vencidos»).
   - [x] (4.7.10) Burbujas del CEDIS y del puerto, motivo de camiones lentos y capas de cuota/cartera con `plural()`: «1» en texto o 1.4 ya no dice «1 pedidos de cliente detenidos» / «1.4 pedidos», miles con coma es-MX («1,200 pedidos»).
   - [x] (4.7.11) Globos de la escena con `pesosCorto()`: banco, racks, tiendas, clientes finales, vendedores y camiones de factura ya no dicen «$-5 K» con negativos (ahora «-$5 K»), igual que tarjetas y bitácora; `fmtK` ya no se usa en la escena. Harness sin errores.
+  - [x] (4.7.12) CEDIS con `pesosCorto()`: el globo del CEDIS y el resumen del panel (CEDIS y tarjetas de valor) ya no dicen «$0.0 M» con montos chicos ni «$-0.5 M» con negativos (ahora «$85 K», «-$500 K», «1.2 B»); se quitó `fmtM` de `Ciudad.jsx`. Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -248,6 +249,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 01:16 · v4.7.12 · globo del CEDIS y resumen del panel con `pesosCorto()` (sin «$0.0 M» ni «$-0.5 M»); adiós `fmtM`.
 - 2026-11-21 00:56 · v4.7.11 · globos de la escena (banco, racks, tiendas, clientes finales, vendedores, camiones) con `pesosCorto()`: negativos «-$5 K» en vez de «$-5 K».
 - 2026-11-21 00:36 · v4.7.10 · burbujas CEDIS/puerto, camiones lentos y capas de cuota/cartera con `plural()` (conteos en texto/decimal); +5 pruebas.
 - 2026-11-21 00:17 · v4.7.9 · burbuja del banco: «1 pago vencido» aunque el conteo venga en texto; +1 prueba.
