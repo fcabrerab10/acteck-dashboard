@@ -1134,9 +1134,9 @@ export function construirModelo(d, hoy = new Date()) {
     const m = (d.cuentaMes || []).filter((r) => r.cuenta === c.cuenta);
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
-    tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: c.nombre, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
+    tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: String(c.nombre || '').trim() || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
     const sede = SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA'; // 3.90.56: y una tienda por estado donde vende a clientes finales
-    for (const r of repartoPorEstado(c.cuenta, d.clientesFinales, { anio, mes, anioPrev, mesPrev, sede })) tienda(r.ciudad, { cuenta: c.cuenta, nombreCuenta: c.nombre, sucursal: `Clientes en ${r.ciudad.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase())}`, importe: r.importe, previo: r.previo, vendio: r.importe > 0 || (hoy.getDate() <= 10 && r.previo > 0), vendioMes: r.importe > 0, virtual: false, reparto: true, vendedores: 0 });
+    for (const r of repartoPorEstado(c.cuenta, d.clientesFinales, { anio, mes, anioPrev, mesPrev, sede })) tienda(r.ciudad, { cuenta: c.cuenta, nombreCuenta: String(c.nombre || '').trim() || c.cuenta, sucursal: `Clientes en ${r.ciudad.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase())}`, importe: r.importe, previo: r.previo, vendio: r.importe > 0 || (hoy.getDate() <= 10 && r.previo > 0), vendioMes: r.importe > 0, virtual: false, reparto: true, vendedores: 0 });
   }
   // vendedores de los mayoristas → en la ciudad de su sucursal (o la sede de la cuenta)
   const vm = new Map();

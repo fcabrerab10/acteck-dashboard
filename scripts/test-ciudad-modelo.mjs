@@ -1285,3 +1285,8 @@ test('unirTexto(): une con « · » y salta vacíos, null, NaN y «undefined» (
   assert.equal(unirTexto(['x', null], 3), 'x · 3');
   assert.equal(unirTexto(), '');
 });
+test('construirModelo(): una cuenta sin nombre usa su clave en la tienda (globo sin «null · Matriz»)', () => {
+  const m = construirModelo({ ...d, cuentas: d.cuentas.map((c) => (c.cuenta === 'ct' ? { ...c, nombre: null } : c)) }, hoy);
+  const ts = m.distritos.flatMap((x) => x.tiendas).filter((t) => t.cuenta === 'ct');
+  assert.ok(ts.length); for (const t of ts) assert.equal(t.nombreCuenta, 'ct');
+});

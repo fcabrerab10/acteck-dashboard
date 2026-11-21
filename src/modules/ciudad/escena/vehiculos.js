@@ -20,7 +20,7 @@ export function barcos(ctx, puertoPos) {
     else { const a = Math.min(ru.avance, .9); g.position.set(ini.x + lx * a, 0, ini.z + lz * a); }
     g.rotation.y = -Math.atan2(lz, lx);
     const estado = ru.modo === 'atracado' ? 'en el puerto · descargando' : ru.modo === 'esperando' ? 'en el puerto · esperando muelle' : llegaBarco(b.llegaEnDias);
-    add(g, { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}`, sub: unirTexto(b.naviera || b.supplier, `${numero(b.piezas).toLocaleString('es-MX')} pz`, estado), pagina: 'inventarioGlobal', barco: b });
+    add(g, { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id ?? ''}`.trim(), sub: unirTexto(b.naviera || b.supplier, `${numero(b.piezas).toLocaleString('es-MX')} pz`, estado), pagina: 'inventarioGlobal', barco: b });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.22: piezas del barco como instancias dinámicas (tag de su contenedor)
     const base = g.position.clone();
     const quieto = ru.muelle != null; // atracado o en fila: no deriva
