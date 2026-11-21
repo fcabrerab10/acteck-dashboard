@@ -989,6 +989,12 @@ test('barra de tiempo, temporada y vistas aguantan fechas ilegibles y opciones n
 test('navidad en singular y top de ciudades con n inválido', () => {
   assert.equal(eventosCalendario(new Date(2026, 11, 24)).find((e) => e.id === 'navidad').texto, 'Temporada navideña · falta 1 día');
   assert.equal(eventosCalendario(new Date(2026, 11, 23)).find((e) => e.id === 'navidad').texto, 'Temporada navideña · faltan 2 días');
+  assert.equal(eventosCalendario(new Date(2026, 9, 30)).find((e) => e.id === 'cierre').texto, 'Mañana cierra el mes');
+  assert.equal(eventosCalendario(new Date(2026, 9, 29)).find((e) => e.id === 'cierre').texto, 'Cierre de mes en 2 días');
+  assert.equal(eventosCalendario(new Date(2026, 10, 12)).find((e) => e.id === 'buenfin').texto, 'Buen Fin empieza mañana (13–16 nov)');
+  assert.equal(eventosCalendario(new Date(2026, 10, 11)).find((e) => e.id === 'buenfin').texto, 'Buen Fin en 2 días (13–16 nov)');
+  assert.equal(eventosCalendario(new Date(2026, 10, 14)).find((e) => e.id === 'buenfin').texto, 'Buen Fin · hasta el lunes 16');
+  assert.equal(eventosCalendario(new Date(2026, 10, 16)).find((e) => e.id === 'buenfin').texto, 'Buen Fin · hoy es el último día');
   const mod = { distritos: [{ ciudad: 'LEON', tiendas: [{ vendio: true }] }, { ciudad: 'QUERETARO', tiendas: [{ vendio: true }] }], camiones: [] };
   const base = ciudadesTop(mod).length;
   assert.equal(ciudadesTop(mod, '1').length, Math.min(1, base)); assert.equal(ciudadesTop(mod, 1.7).length, Math.min(1, base));
