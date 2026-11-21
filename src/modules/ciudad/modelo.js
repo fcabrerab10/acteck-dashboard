@@ -675,6 +675,11 @@ export function porcentaje(v, { signo = false } = {}) {
   const k = Math.round(Number(v)); if (!Number.isFinite(k)) return '—';
   const z = k === 0 ? 0 : k; return `${signo && z > 0 ? '+' : ''}${z.toLocaleString('es-MX')} %`;
 }
+// DSO de la cartera (4.7.26): días redondeados en singular/plural con miles es-MX («DSO 45 días», «DSO 1 día»);
+// 0, negativo o ilegible no pone texto (antes «DSO 45.678 d» / «DSO 0 d» en el aviso de cartera del panel).
+export function dsoTexto(v) {
+  const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
+}
 export function plural(n, uno, varios = `${uno}s`) {
   const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
   return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;
