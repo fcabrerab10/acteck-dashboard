@@ -310,7 +310,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
       texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
   }
-  for (const t of m.puerto?.tarimas || []) if (t) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${(Number(t.piezas) || 0).toLocaleString('es-MX')} pz`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
+  for (const t of m.puerto?.tarimas || []) if (t) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${numero(t.piezas).toLocaleString('es-MX')} pz`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
   const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
@@ -354,7 +354,7 @@ export function rumboBarcos(barcos = []) {
 // Sólo usa lo que ya trae el modelo (mismos umbrales que las tarjetas: CEDIS 90/120 días, envío > 5 días en ámbar).
 export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   if (!m) return { tramos: [], atasco: null };
-  const n = (v) => Number(v) || 0; const pz = (v) => plural(n(v), 'pz');
+  const n = numero; const pz = (v) => plural(n(v), 'pz');
   const barcos = (m.puerto?.barcos || []).filter(Boolean);
   const mar = barcos.filter((b) => !(b.llegaEnDias != null && b.llegaEnDias <= 0)), enPuerto = barcos.filter((b) => b.llegaEnDias != null && b.llegaEnDias <= 0);
   const tarde = enPuerto.filter((b) => b.llegaEnDias < -3).length;
@@ -461,7 +461,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   }
   for (const b of [...(m.puerto?.tarimas || []), ...(m.puerto?.barcos || [])]) {
     const f = fechaIso(b?.arribo); if (!f || f > hoyIso) continue;
-    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${(Number(b.piezas) || 0).toLocaleString('es-MX')} pz`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
+    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${numero(b.piezas).toLocaleString('es-MX')} pz`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
   }
   // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.
   // 4.3.33: con `instante()`: 'AAAA-MM-DD' sola es ese día local (antes UTC: el pago salía «ayer»), espacios y Date cuentan.
@@ -641,7 +641,7 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
 export function topSkus(filas = [], n = 5) {
   const m = new Map();
   n = Number.isFinite(Number(n)) && Number(n) >= 0 ? Math.floor(Number(n)) : 5;
-  for (const r of Array.isArray(filas) ? filas : []) { const k = String(r?.sku ?? '').trim().toUpperCase(); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += Number(r.importe) || 0; o.cantidad += Number(r.cantidad) || 0; m.set(k, o); }
+  for (const r of Array.isArray(filas) ? filas : []) { const k = String(r?.sku ?? '').trim().toUpperCase(); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += numero(r.importe); o.cantidad += numero(r.cantidad); m.set(k, o); }
   return [...m.values()].filter((o) => o.importe > 0 || o.cantidad > 0).sort((a, b) => b.importe - a.importe || b.cantidad - a.cantidad).slice(0, n);
 }
 // Cifra corta (3.90.83): 999 600 ya no sale «1000 K» sino «1.0 M», 999.6 → «1 K», negativos con signo y basura → 0.
@@ -771,7 +771,7 @@ export function tarjetaDe(tag, modelo) {
   if (!tag) return null;
   // 4.3.9: mismo formato que el resto (999 600 → «$1.0 M», no «$1000 K»; negativos «-$5 K») y listas sin nulos.
   const pesos = pesosCorto, sn = (l) => (Array.isArray(l) ? l : []).filter(Boolean);
-  const num = (v) => (Number(v) || 0).toLocaleString('es-MX');
+  const num = (v) => numero(v).toLocaleString('es-MX');
   const t = { titulo: tag.titulo || '', sub: tag.sub || '', estado: null, numeros: [], pagina: tag.pagina || null };
   const m = modelo || {};
   if (tag.tipo === 'oficina' && m.oficina) {
@@ -784,14 +784,14 @@ export function tarjetaDe(tag, modelo) {
     t.numeros = ag.length ? ag.slice(0, 5).map((r) => [`${r.hora}${r.estado === 'en curso' ? ' · ahora' : r.estado === 'hecha' ? ' · ✓' : ''}`, r.titulo]) : [['Reuniones hoy', 'ninguna']];
     t.estado = ag.some((r) => r.estado === 'en curso') ? 'ambar' : 'verde';
   } else if ((tag.tipo === 'cedis' || tag.tipo === 'montacargas') && m.cedis) {
-    const c = m.cedis, d = Number(c.dias) || 0;
+    const c = m.cedis, d = numero(c.dias);
     t.numeros = [['Inventario', pesos(c.valor)], ['Días de inventario', num(Math.round(d))], ['Piezas', num(c.piezas)], ['SKUs con stock', num(c.skus)]];
     t.estado = d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'rack') {
     const r = sn(m.cedis?.racksMarca).find((x) => x.marca === tag.marca);
     if (r) {
-      const tot = sn(m.cedis.racksMarca).reduce((s2, x) => s2 + (Number(x.valor) || 0), 0);
-      t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(r.valor / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${plural(r.marcas, 'marca')}` : 'SKUs con stock', num(r.skus)]];
+      const tot = sn(m.cedis.racksMarca).reduce((s2, x) => s2 + numero(x.valor), 0);
+      t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(numero(r.valor) / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${plural(r.marcas, 'marca')}` : 'SKUs con stock', num(r.skus)]];
       t.estado = r.dias == null ? null : r.dias > 120 ? 'rojo' : r.dias > 90 ? 'ambar' : 'verde'; // mismos umbrales que el CEDIS
     }
   } else if (tag.tipo === 'barco' && m.puerto) {
@@ -818,7 +818,7 @@ export function tarjetaDe(tag, modelo) {
   } else if (tag.tipo === 'ciudad') {
     const d = sn(m.distritos).find((x) => x.ciudad === tag.ciudad) || tag.distrito;
     if (d) {
-      const ts = sn(d.tiendas), act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + (Number(x.importe) || 0), 0), r = ts.length ? act / ts.length : 0;
+      const ts = sn(d.tiendas), act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + numero(x.importe), 0), r = ts.length ? act / ts.length : 0;
       t.numeros = [['Tiendas activas', `${act} de ${ts.length}`], ['Venta del mes', pesos(venta)], ['Clientes', num(sn(d.cuentas).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num(sn(d.vendedores).length)]];
       const cq = cuotaRitmo(m, ts.map((x) => x.cuenta)); if (cq) { t.numeros.splice(2, 0, ['Cuota del mes', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
       t.estado = !ts.length ? null : r >= 0.6 ? 'verde' : r >= 0.3 ? 'ambar' : 'rojo';

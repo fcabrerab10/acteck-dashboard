@@ -1253,3 +1253,13 @@ test('4.7.17 capa de ventas/cartera y pensamientos leen montos en texto', () => 
   const c = capaCiudades(m, 'cartera'); assert.equal(c.porCiudad.get('GDL').tono, 'rojo'); assert.equal(c.porCiudad.get('GDL').valor, 5000); assert.equal(c.porCiudad.get('LEON').tono, 'verde');
   const p = pensamientos(m); assert.ok(p.some((x) => x.texto === 'Tengo pagos vencidos' && x.cuenta === 'a'), JSON.stringify(p));
 });
+
+test('4.7.18 tarjetas, top SKUs y piezas leen montos en texto', () => {
+  const m = { cedis: { valor: '$85,000', dias: ' 95 ', piezas: '1,200', skus: '30', racksMarca: [{ marca: 'A', valor: '$750', piezas: '10' }, { marca: 'B', valor: '$250' }] },
+    puerto: { barcos: [{ id: 'C1', piezas: '1,200', llegaEnDias: 3 }], tarimas: [] }, distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a', vendio: true, importe: '$1,200' }, { cuenta: 'a', importe: '800' }] }] };
+  const ce = tarjetaDe({ tipo: 'cedis' }, m); assert.deepEqual(ce.numeros[1], ['Días de inventario', '95']); assert.deepEqual(ce.numeros[2], ['Piezas', '1,200']); assert.equal(ce.estado, 'ambar');
+  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'A' }, m).numeros[0][1].endsWith('· 75 %'), true);
+  assert.deepEqual(tarjetaDe({ tipo: 'barco', id: 'C1' }, m).numeros[2], ['Piezas', '1,200']);
+  assert.equal(tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL' }, m).numeros[1][1], pesosCorto(2000));
+  const t = topSkus([{ sku: 'x', importe: '$1,000', cantidad: '2' }, { sku: 'y', importe: '500' }]); assert.equal(t[0].importe, 1000); assert.equal(t[0].cantidad, 2); assert.equal(t[1].importe, 500);
+});

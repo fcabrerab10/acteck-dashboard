@@ -239,6 +239,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.15) `numero()` pura y probada (el `N()` interno del modelo): banco, torre, CEDIS, racks, puerto, ventas y cartera de las ciudades leen montos/conteos en texto con «$», comas o espacios («$5,000») como número (antes valían 0 y no sumaban); vacío, booleano, objeto o Infinity → 0.
   - [x] (4.7.16) Capa de cuota, celebraciones y reparto por estado con `numero()`: `cuotasPorCuenta()` (cuota_venta, fact_neta), `cuotaRitmo()`, `celebraciones()` y `repartoPorEstado()` leen «$1,000» / « 2,500 » como número (antes la cuota en texto con «$» no contaba y la venta valía 0).
   - [x] (4.7.17) Capa de ventas/cartera de las ciudades y pensamientos de las tiendas con `numero()`: importe/previo y cartera vencida en texto («$5,000», « 1,200 ») ya cuentan (antes la venta valía 0, el % salía vacío y la cuenta con vencido en texto salía «Sin cartera vencida»).
+  - [x] (4.7.18) Tarjetas del CEDIS, racks, contenedor y ciudad, top SKUs, cadena de suministro y bitácora (piezas de tarimas/arribos) con `numero()`: piezas, días, valor e importe en texto («1,200», «$85,000», « 95 ») ya cuentan (antes 0: CEDIS en verde con 95 días, «0 pz», % del rack en 0).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -254,6 +255,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 03:16 · v4.7.18 · tarjetas (CEDIS, racks, contenedor, ciudad), top SKUs y piezas de la cadena/bitácora leen montos en texto con `numero()`; +1 prueba.
 - 2026-11-21 02:56 · v4.7.17 · capa de ventas/cartera y pensamientos leen montos en texto («$5,000») con `numero()`; +1 prueba.
 - 2026-11-21 02:36 · v4.7.16 · capa de cuota, celebraciones y reparto por estado leen montos en texto («$1,000») con `numero()`; +5 pruebas.
 - 2026-11-21 02:16 · v4.7.15 · `numero()` (antes `N()`): montos en texto («$5,000», « 1,200 ») ya suman en banco, torre, CEDIS, puerto y ciudades; +1 prueba.
