@@ -1245,3 +1245,11 @@ test('numero() lee montos en texto (4.7.15)', () => {
   const b = resumenBanco([{ vencido: '$5,000' }, { vencido: '1,500' }, { vencido: 'x' }], [], '2026-11-21');
   assert.equal(b.carteraVencida, 6500); assert.equal(b.cuentasVencidas, 2);
 });
+
+test('4.7.17 capa de ventas/cartera y pensamientos leen montos en texto', () => {
+  const m = { hoyIso: '2026-11-15', kpis: { cartera: [{ cuenta: 'a', vencido: '$5,000' }, { cuenta: 'b', vencido: ' 0 ' }] }, cuotas: new Map(),
+    distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a', sucursal: 'S1', importe: '$1,200', previo: '1,000' }] }, { ciudad: 'LEON', tiendas: [{ cuenta: 'b', sucursal: 'S2', importe: '$800', previo: '$1,000' }] }] };
+  const v = capaCiudades(m, 'ventas'); assert.equal(v.porCiudad.get('GDL').valor, 20); assert.equal(v.porCiudad.get('GDL').tono, 'verde'); assert.equal(v.porCiudad.get('LEON').valor, -20);
+  const c = capaCiudades(m, 'cartera'); assert.equal(c.porCiudad.get('GDL').tono, 'rojo'); assert.equal(c.porCiudad.get('GDL').valor, 5000); assert.equal(c.porCiudad.get('LEON').tono, 'verde');
+  const p = pensamientos(m); assert.ok(p.some((x) => x.texto === 'Tengo pagos vencidos' && x.cuenta === 'a'), JSON.stringify(p));
+});

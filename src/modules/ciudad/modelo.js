@@ -416,7 +416,7 @@ export function pensamientos(m, max = 5) {
   max = cuantos(max, 5);
   if (!m) return [];
   // 4.3.3: salta cartera/distritos/tiendas nulos y un hoyIso inválido usa hoy (antes lanzaba error o ritmo NaN).
-  const venc = new Set((m.kpis?.cartera || []).filter((c) => Number(c?.vencido) > 0).map((c) => c.cuenta));
+  const venc = new Set((m.kpis?.cartera || []).filter((c) => numero(c?.vencido) > 0).map((c) => c.cuenta));
   const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = fechaHoy(m.hoyIso);
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   const out = [];
@@ -424,7 +424,7 @@ export function pensamientos(m, max = 5) {
     if (!d) continue; let mejor = null;
     for (const t of d.tiendas || []) {
       if (!t || t.reparto) continue; // «Clientes en …» (3.90.56) no es una tienda que piense
-      const act = Number(t.importe) || 0, prev = Number(t.previo) || 0, cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cu = q.get(t.cuenta);
+      const act = numero(t.importe), prev = numero(t.previo), cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cu = q.get(t.cuenta);
       const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: `${t.nombreCuenta || t.cuenta} · ${t.sucursal}` };
       let p = null;
       if (venc.has(t.cuenta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
@@ -532,7 +532,7 @@ export function capaCiudades(m, capa) {
   const distritos = (m.distritos || []).filter((d) => d?.ciudad).map((d) => ({ ...d, tiendas: (d.tiendas || []).filter(Boolean) }));
   if (capa === 'ventas') {
     for (const d of distritos) {
-      const act = d.tiendas.reduce((s, t) => s + (Number(t.importe) || 0), 0), prev = d.tiendas.reduce((s, t) => s + (Number(t.previo) || 0), 0);
+      const act = d.tiendas.reduce((s, t) => s + numero(t.importe), 0), prev = d.tiendas.reduce((s, t) => s + numero(t.previo), 0); // 4.7.17: «$5,000» en texto cuenta
       const pct = prev > 0 ? Math.round((act / prev - 1) * 100) : null;
       const tono = pct == null ? (act > 0 ? 'verde' : 'gris') : pct >= 0 ? 'verde' : pct >= -20 ? 'ambar' : 'rojo';
       porCiudad.set(d.ciudad, { tono, valor: pct, texto: `${pesos(act)}${pct == null ? '' : ` · ${pct > 0 ? '+' : ''}${pct} % vs mes anterior`}` });
@@ -547,7 +547,7 @@ export function capaCiudades(m, capa) {
     }
     return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
-  const venc = new Map((m.kpis?.cartera || []).filter((c) => c && Number(c.vencido) > 0).map((c) => [c.cuenta, Number(c.vencido)]));
+  const venc = new Map((m.kpis?.cartera || []).filter((c) => c && numero(c.vencido) > 0).map((c) => [c.cuenta, numero(c.vencido)])); // 4.7.17: «$5,000» ya es vencido
   for (const d of distritos) {
     const cuentas = [...new Set(d.tiendas.map((t) => t.cuenta))], malas = cuentas.filter((c) => venc.has(c));
     const monto = malas.reduce((s, c) => s + venc.get(c), 0);
