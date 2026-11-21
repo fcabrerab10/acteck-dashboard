@@ -679,7 +679,8 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 const posTexto = (p) => { const n = Math.round(Number(typeof p === 'string' ? p.trim() : p)); return p != null && p !== '' && typeof p !== 'boolean' && Number.isFinite(n) && n > 0 ? `${n} PO${n === 1 ? '' : 's'}` : null; };
 export function recursosBarra(r) {
   if (!r) return [];
-  const n = (v) => Number(v) || 0; const out = [];
+  // 4.7.14: montos en texto con «$», comas o espacios («$5,000») se leen como número (antes 0: cartera «verde» y % de ventas 0).
+  const n = (v) => { const k = typeof v === 'string' ? Number(v.replace(/[\s$,]/g, '')) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) && !(typeof v === 'string' && !v.trim()) ? k : 0; }; const out = [];
   if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, tono: pct == null ? null : pct >= 100 ? 'verde' : pct >= 80 ? 'ambar' : 'rojo', ir: { tipo: 'oficina' } }); }
   if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: r.inv.cobertura != null && r.inv.cobertura !== '' && Number.isFinite(Number(r.inv.cobertura)) ? `${Math.round(Number(r.inv.cobertura))} d` : null, ir: { tipo: 'cedis' } });
   if (r.cartera) out.push({ clave: 'cartera', icono: '🏦', etiqueta: 'Cartera vencida', valor: n(r.cartera.vencido), tono: n(r.cartera.vencido) > 0 ? 'rojo' : 'verde', ir: { tipo: 'banco' } });
