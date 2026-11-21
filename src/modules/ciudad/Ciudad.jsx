@@ -12,7 +12,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
 import { crearAmbiente } from './sonido';
-import { COLOR_CUENTA, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto } from './modelo';
+import { COLOR_CUENTA, piezasTexto, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -327,7 +327,7 @@ function TopSkusTienda({ cuenta, sucursal, theme, oscuro }) {
       <div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>Top SKUs · {data?.periodo || 'este mes'}</div>
       {isLoading ? <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>Cargando…</div>
         : !data?.lista?.length ? <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>Sin venta por SKU</div>
-        : data.lista.map((r) => <div key={r.sku} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</span><span style={{ color: theme.textMuted, flex: 'none' }}>{pesosCorto(r.importe)} · {Math.round(r.cantidad).toLocaleString('es-MX')} pz</span></div>)}
+        : data.lista.map((r) => <div key={r.sku} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</span><span style={{ color: theme.textMuted, flex: 'none' }}>{pesosCorto(r.importe)} · {piezasTexto(r.cantidad)}</span></div>)}
     </div>
   );
 }

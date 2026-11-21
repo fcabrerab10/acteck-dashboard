@@ -310,7 +310,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
       texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
   }
-  for (const t of m.puerto?.tarimas || []) if (t) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${numero(t.piezas).toLocaleString('es-MX')} pz`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
+  for (const t of m.puerto?.tarimas || []) if (t) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${piezasTexto(t.piezas)}`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
   const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
@@ -461,7 +461,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   }
   for (const b of [...(m.puerto?.tarimas || []), ...(m.puerto?.barcos || [])]) {
     const f = fechaIso(b?.arribo); if (!f || f > hoyIso) continue;
-    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${numero(b.piezas).toLocaleString('es-MX')} pz`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
+    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${piezasTexto(b.piezas)}`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
   }
   // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.
   // 4.3.33: con `instante()`: 'AAAA-MM-DD' sola es ese día local (antes UTC: el pago salía «ayer»), espacios y Date cuentan.
@@ -680,6 +680,9 @@ export function porcentaje(v, { signo = false } = {}) {
 export function dsoTexto(v) {
   const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
 }
+// Piezas (4.7.27): enteras con miles es-MX («1,200 pz»; antes «1,200.5 pz» con decimales y texto «$1,200» sí cuenta);
+// ilegible → «0 pz». Globos del contenedor/tarima/tráiler, misión de descarga, bitácora de arribos y globo del puerto.
+export function piezasTexto(v) { return `${Math.round(numero(v)).toLocaleString('es-MX')} pz`; }
 export function plural(n, uno, varios = `${uno}s`) {
   const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
   return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;

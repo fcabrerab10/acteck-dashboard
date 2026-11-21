@@ -248,6 +248,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.24) `porcentaje()` pura y probada: capa de ventas («+2,250 % vs mes anterior», antes «2250 %»), cuota del mes en la capa, tarjetas de ciudad/tienda y banderín de la manzana, pensamientos de las tiendas y % del rack usan miles es-MX y signo; ilegible dice «—» en vez de «NaN %». Harness sin errores.
   - [x] (4.7.25) Barra de recursos con `porcentaje()`: «Ventas del mes · 1,250 %» (antes «1250%» pegado; ilegible no pinta barra) y cobertura «1,200 d»; panel de la Ciudad con miles es-MX en tiendas, ciudades, contenedores y camiones («1,200 de 3,400 vendieron»). Harness sin errores.
   - [x] (4.7.26) `dsoTexto()` pura y probada: el aviso de cartera vencida del panel dice «DSO 46 días» / «DSO 1 día» (antes «DSO 45.678 d») y sin DSO (0 o ilegible) ya no pone «DSO 0 d». Harness sin errores.
+  - [x] (4.7.27) `piezasTexto()` pura y probada: globos del contenedor, tarima, tráiler y puerto, misión de descarga, bitácora de arribos y top SKUs de la tienda dicen piezas enteras con miles es-MX («1,201 pz»; antes «1,200.5 pz», y en la tienda «NaN pz» con cantidad en texto). Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -263,6 +264,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 05:57 · v4.7.27 · `piezasTexto()`: piezas enteras con miles es-MX en globos del puerto/patio, misión, bitácora y top SKUs; +1 prueba.
 - 2026-11-21 05:36 · v4.7.26 · `dsoTexto()`: DSO del aviso de cartera del panel redondeado y en días («DSO 46 días»), sin «DSO 0 d»; +1 prueba.
 - 2026-11-21 05:17 · v4.7.25 · Barra de recursos con `porcentaje()` («1,250 %») y cobertura «1,200 d»; panel con miles es-MX; +1 prueba.
 - 2026-11-21 04:56 · v4.7.24 · `porcentaje()`: % de capas, tarjetas, banderín de cuota, pensamientos y racks con miles es-MX, signo y «—» si es ilegible; +1 prueba. Se movió la nota 4.7.23 de «Necesita a Fernando» a Pulido.
