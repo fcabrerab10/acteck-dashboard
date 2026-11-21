@@ -1335,3 +1335,11 @@ test('haceDias(): hoy/ayer/hace N d con miles es-MX y redondeo; ilegible → vac
   assert.equal(haceDias(2.6), 'hace 3 d'); assert.equal(haceDias(1200), 'hace 1,200 d'); assert.equal(haceDias(' 5 '), 'hace 5 d');
   for (const x of [null, undefined, '', NaN, 'abc', Infinity, true, {}]) assert.equal(haceDias(x), '');
 });
+test('cadena con miles es-MX: puerto, camiones y tiendas («1,200 en ruta», «1,200 de 1,500 vendieron»)', () => {
+  const barcos = Array.from({ length: 1200 }, () => ({ llegaEnDias: -1, piezas: 1 }));
+  const camiones = Array.from({ length: 1200 }, () => ({ piezas: 1 }));
+  const tiendas = Array.from({ length: 1500 }, (_, i) => ({ vendio: i < 1200 }));
+  const r = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos }, cedis: { dias: 30 }, camiones, distritos: [{ tiendas }] });
+  const t = Object.fromEntries(r.tramos.map((x) => [x.clave, x.volumen]));
+  assert.match(t.puerto, /^1,200 con ETA vencida/); assert.match(t.camion, /^1,200 en ruta/); assert.equal(t.tienda, '1,200 de 1,500 vendieron');
+});

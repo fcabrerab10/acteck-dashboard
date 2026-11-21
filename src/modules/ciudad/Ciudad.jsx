@@ -197,7 +197,7 @@ export default function Ciudad({ onNavegar }) {
           {calendario.map((ev) => <span key={ev.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 9, fontSize: 11.5, fontWeight: 600, background: ev.nivel === 'ambar' ? 'rgba(255,159,10,.2)' : theme.border, color: theme.text }}>{ev.icono} {ev.texto}</span>)}
         </div>}
         {misiones.length > 0 && <>
-          <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>Hoy en Acteck · {misiones.filter((x) => !x.hecha).length} pendiente{misiones.filter((x) => !x.hecha).length === 1 ? '' : 's'}</div>
+          <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, marginBottom: 4 }}>Hoy en Acteck · {plural(misiones.filter((x) => !x.hecha).length, 'pendiente')}</div>
           {misiones.map((mi) => (
             <div key={mi.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', opacity: mi.hecha ? 0.55 : 1 }}>
               {mi.nivel ? <i style={{ width: 7, height: 7, borderRadius: 4, flex: 'none', background: mi.nivel === 'rojo' ? theme.red : (theme.orange || '#FF9F0A') }} /> : <i style={{ width: 7, flex: 'none' }} />}

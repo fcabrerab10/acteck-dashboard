@@ -74,7 +74,7 @@ function interiorOficina(ctx, g, casco, ofiPos) {
   const pie = box(.3, .75, .3, 0x5A4636); pie.position.set(0, .4, 0); sg.add(pie);
   for (const [x, z] of [[-.8, -1], [0, -1], [.8, -1], [-.8, 1], [0, 1], [.8, 1]]) { const s2 = box(.45, .5, .45, enCurso ? ACC.naranja : 0x9AA3B2); s2.position.set(x, .25, z); sg.add(s2); }
   const prox = ag.find((r) => r.estado !== 'hecha');
-  add(sg, { tipo: 'sala', titulo: 'Sala de juntas', sub: !ag.length ? 'sin reuniones hoy' : prox ? `${prox.estado === 'en curso' ? 'ahora' : prox.hora}: ${prox.titulo}` : `${ag.length} reunión${ag.length === 1 ? '' : 'es'} hoy · todas hechas`, pagina: 'agenda' });
+  add(sg, { tipo: 'sala', titulo: 'Sala de juntas', sub: !ag.length ? 'sin reuniones hoy' : prox ? `${prox.estado === 'en curso' ? 'ahora' : prox.hora}: ${prox.titulo}` : `${plural(ag.length, 'reunión', 'reuniones')} hoy · todas hechas`, pagina: 'agenda' });
   sg.traverse((o) => { if (o.isMesh) dentro.push(o); });
   const mallasCasco = []; casco.traverse((o) => { if (o.isMesh) mallasCasco.push(o); });
   const poner = (on) => {
