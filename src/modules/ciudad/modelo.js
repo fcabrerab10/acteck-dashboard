@@ -7,7 +7,10 @@
 // Regla de Fernando: NADA escala por el tamaño del cliente; lo que se ve es actividad (luces, movimiento).
 
 
-const N = (v) => Number(v) || 0;
+// 4.7.15: `numero()` lee montos y conteos en texto con «$», comas o espacios («$5,000», « 1,200 ») como número (antes 0:
+// cartera, inventario, piezas y ventas de esas filas no sumaban); vacío, booleano, objeto, NaN o Infinity → 0.
+export const numero = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };
+const N = numero;
 // (4.3.19) Lo que no es lista (null, texto, número, objeto) → []: una consulta que regresa algo raro no tumba la capa.
 export const comoLista = (x) => (Array.isArray(x) ? x : []);
 // (4.3.20) Cuántos mostrar: número o texto ≥ 0 → entero (3.7 → 3); NaN, negativo, null o basura → la omisión. Antes un
