@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1173,4 +1173,16 @@ test('cadenaSuministro() en singular: «1 pz», «1 recién llegado», «1 barco
   assert.equal(t('cedis').volumen, '1 pz · 10 días'); assert.equal(t('camion').volumen, '1 en ruta · 1 pz');
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [], tarimas: 'x' }, cedis: { piezas: 1500 }, camiones: [], distritos: [] });
   assert.equal(v.tramos.find((x) => x.clave === 'puerto').volumen, '0 con ETA vencida · 0 recién llegados'); assert.match(v.tramos.find((x) => x.clave === 'cedis').volumen, /^1,500 pzs/);
+});
+
+test('enMinutos(): «empieza ya» en 0, minutos y horas; ilegible o negativa vacía; misión y burbuja de reunión', () => {
+  assert.equal(enMinutos(0), 'empieza ya'); assert.equal(enMinutos(5), 'en 5 min'); assert.equal(enMinutos('12'), 'en 12 min');
+  assert.equal(enMinutos(60), 'en 1 h'); assert.equal(enMinutos(65), 'en 1 h 5 min'); assert.equal(enMinutos(0.4), 'empieza ya');
+  assert.equal(enMinutos(-3), ''); assert.equal(enMinutos('x'), ''); assert.equal(enMinutos(null), ''); assert.equal(enMinutos(Infinity), '');
+  const hoy = new Date(2026, 9, 8, 10, 0);
+  const m = { oficina: { agenda: [{ hora: '10:00', titulo: 'Junta', ini: 600, estado: 'próxima' }] } };
+  const mi = misionesDelDia(m, hoy).find((x) => x.id.startsWith('reunion-'));
+  assert.equal(mi.texto, '10:00 · Junta · empieza ya');
+  const b = burbujasAtencion(m, hoy).find((x) => x.lugar === 'oficina');
+  assert.equal(b.texto, 'Junta empieza ya');
 });

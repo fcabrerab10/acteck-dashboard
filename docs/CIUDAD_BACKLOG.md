@@ -224,6 +224,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.37) Tarjetas de la escena con `plural()`: vendedor en ruta «1 cliente», estacionamiento «de 1 cajón», tienda «1 vendedor» (antes «1 clientes», «1 vendedores»). Harness sin errores.
   - [x] (4.3.38) Globo de las casas de clientes finales con `plural()`: «1 cliente compró» y «vía 1 mayorista» (antes «1 clientes compraron»); cuentas faltantes ya no lanzan error. Harness sin errores.
   - [x] (4.7.2) Cadena de suministro en singular con `plural()`: «1 pz» (antes «1 pzs»), «1 recién llegado», «1 barco con más de 3 días de atraso»; tarimas del puerto que no son lista (o con nulos) ya no truenan ni cuentan.
+  - [x] (4.7.3) `enMinutos()` pura y probada: la misión y la burbuja de la reunión dicen «empieza ya» a la hora exacta (antes «en 0 min») y una cuenta ≥ 60 min diría «en 1 h 5 min»; ilegible o negativa no pone texto.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -239,6 +240,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-20 22:36 · v4.7.3 · reuniones a la hora exacta dicen «empieza ya» (antes «en 0 min»), `enMinutos()` probado.
 - 2026-11-20 22:16 · v4.7.2 · cadena de suministro en singular («1 pz», «1 recién llegado»); tarimas que no son lista no truenan.
 - 2026-11-20 06:05 · v4.3.38 · globo de clientes finales en singular con 1 (`plural()`).
 - 2026-11-20 04:55 · v4.3.37 · tarjetas de vendedor en ruta, estacionamiento y tienda en singular con 1 (`plural()`); +1 prueba.

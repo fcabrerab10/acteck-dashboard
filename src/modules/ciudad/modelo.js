@@ -305,7 +305,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   for (const r of m.oficina?.agenda || []) {
     if (!r) continue; const ini = Number.isFinite(r.ini) ? r.ini : null; const hecha = r.estado === 'hecha', falta = ini == null ? NaN : ini - ahora;
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
-      texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · en ${falta} min` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
+      texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
   }
   for (const t of m.puerto?.tarimas || []) if (t) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${(Number(t.piezas) || 0).toLocaleString('es-MX')} pz`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
   const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
@@ -641,6 +641,14 @@ export function topSkus(filas = [], n = 5) {
 }
 // Cifra corta (3.90.83): 999 600 ya no sale «1000 K» sino «1.0 M», 999.6 → «1 K», negativos con signo y basura → 0.
 // Singular/plural (4.3.34): «1 barco», «2 barcos», «0 barcos»; n ilegible cuenta como 0. `varios` por omisión = uno + 's'.
+// Cuenta regresiva corta (4.7.3): 0 → «empieza ya» (antes «en 0 min»), 1..59 → «en N min», ≥ 60 → «en 1 h 5 min»; ilegible o negativa → ''.
+export function enMinutos(min) {
+  if (min == null || (typeof min === 'string' && !min.trim())) return '';
+  const k = Math.round(Number(min)); if (!Number.isFinite(k) || k < 0) return '';
+  if (k === 0) return 'empieza ya';
+  const h = Math.floor(k / 60), r = k % 60;
+  return h ? `en ${h} h${r ? ` ${r} min` : ''}` : `en ${k} min`;
+}
 export function plural(n, uno, varios = `${uno}s`) {
   const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
   return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;
@@ -687,7 +695,7 @@ export function burbujasAtencion(m, hoy = new Date()) {
   if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: `${oc} pedido${oc === 1 ? '' : 's'} de cliente detenido${oc === 1 ? '' : 's'}` });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   const prox = (m.oficina?.agenda || []).find((r) => r && r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
-  if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${prox.titulo} en ${prox.ini - ahora} min` });
+  if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${prox.titulo} ${enMinutos(prox.ini - ahora)}` });
   return out.map((x) => ({ ...x, tag: { tipo: x.lugar } })).sort((a, c) => (a.nivel === 'rojo' ? 0 : 1) - (c.nivel === 'rojo' ? 0 : 1));
 }
 
