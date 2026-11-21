@@ -650,17 +650,19 @@ export function topSkus(filas = [], n = 5) {
 // 4.7.5: cuándo llega un barco en palabras («llega hoy», «llega mañana», «llega en 3 d», «2 d tarde»); sin ETA o ilegible → 'sin ETA'.
 export function llegaBarco(dias) {
   if (dias == null || (typeof dias === 'string' && !dias.trim())) return 'sin ETA';
-  const k = Math.round(Number(dias)); if (!Number.isFinite(k)) return 'sin ETA';
-  if (k < 0) return `${-k} d tarde`;
-  return k === 0 ? 'llega hoy' : k === 1 ? 'llega mañana' : `llega en ${k} d`;
+  // 4.7.29: «1,200» en texto se lee y los días salen con miles es-MX («llega en 1,200 d», «1,200 d tarde»).
+  const k = Math.round(Number(typeof dias === 'string' ? dias.replace(/[,\s]/g, '') : dias)); if (!Number.isFinite(k) || typeof dias === 'boolean') return 'sin ETA';
+  const m = (n) => n.toLocaleString('es-MX');
+  if (k < 0) return `${m(-k)} d tarde`;
+  return k === 0 ? 'llega hoy' : k === 1 ? 'llega mañana' : `llega en ${m(k)} d`;
 }
 
 export function enMinutos(min) {
   if (min == null || (typeof min === 'string' && !min.trim())) return '';
-  const k = Math.round(Number(min)); if (!Number.isFinite(k) || k < 0) return '';
+  const k = Math.round(Number(typeof min === 'string' ? min.replace(/[,\s]/g, '') : min)); if (!Number.isFinite(k) || k < 0 || typeof min === 'boolean') return '';
   if (k === 0) return 'empieza ya';
   const h = Math.floor(k / 60), r = k % 60;
-  return h ? `en ${h} h${r ? ` ${r} min` : ''}` : `en ${k} min`;
+  return h ? `en ${h.toLocaleString('es-MX')} h${r ? ` ${r} min` : ''}` : `en ${k} min`;
 }
 /** Une partes de un texto con « · » saltando las vacías (null, undefined, '', espacios, NaN, false, 'null'/'undefined'):
  *  el globo del contenedor/camión ya no dice «null · 1,200 pz» ni «salió undefined» (4.7.21). */
