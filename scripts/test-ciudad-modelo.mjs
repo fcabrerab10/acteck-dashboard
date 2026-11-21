@@ -1166,3 +1166,11 @@ test('plural() con plurales irregulares de las etiquetas de edificios (andén, t
   assert.equal(plural(1, 'reunión', 'reuniones'), '1 reunión'); assert.equal(plural(2, 'tráiler', 'tráileres'), '2 tráileres');
   assert.equal(plural(1, 'vendedor', 'vendedores'), '1 vendedor'); assert.equal(plural(NaN, 'día'), '0 días'); assert.equal(plural(1, 'SKU'), '1 SKU');
 });
+test('cadenaSuministro() en singular: «1 pz», «1 recién llegado», «1 barco con más de 3 días»; tarimas que no son lista no truenan', () => {
+  const r = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [{ llegaEnDias: -5, piezas: 1 }], tarimas: [{ id: 'T1' }, null] }, cedis: { dias: 10, piezas: 1 }, camiones: [{ piezas: 1 }], distritos: [] });
+  const t = (k) => r.tramos.find((x) => x.clave === k);
+  assert.equal(t('puerto').volumen, '1 con ETA vencida · 1 recién llegado'); assert.equal(t('puerto').motivo, '1 barco con más de 3 días de atraso');
+  assert.equal(t('cedis').volumen, '1 pz · 10 días'); assert.equal(t('camion').volumen, '1 en ruta · 1 pz');
+  const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [], tarimas: 'x' }, cedis: { piezas: 1500 }, camiones: [], distritos: [] });
+  assert.equal(v.tramos.find((x) => x.clave === 'puerto').volumen, '0 con ETA vencida · 0 recién llegados'); assert.match(v.tramos.find((x) => x.clave === 'cedis').volumen, /^1,500 pzs/);
+});

@@ -351,7 +351,7 @@ export function rumboBarcos(barcos = []) {
 // Sólo usa lo que ya trae el modelo (mismos umbrales que las tarjetas: CEDIS 90/120 días, envío > 5 días en ámbar).
 export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   if (!m) return { tramos: [], atasco: null };
-  const n = (v) => Number(v) || 0; const pz = (v) => `${Math.round(n(v)).toLocaleString('es-MX')} pzs`;
+  const n = (v) => Number(v) || 0; const pz = (v) => plural(n(v), 'pz');
   const barcos = (m.puerto?.barcos || []).filter(Boolean);
   const mar = barcos.filter((b) => !(b.llegaEnDias != null && b.llegaEnDias <= 0)), enPuerto = barcos.filter((b) => b.llegaEnDias != null && b.llegaEnDias <= 0);
   const tarde = enPuerto.filter((b) => b.llegaEnDias < -3).length;
@@ -363,7 +363,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const cf = (m.distritos || []).reduce((s, x) => ({ n: s.n + n(x?.clientesFinales?.n), imp: s.imp + n(x?.clientesFinales?.importe) }), { n: 0, imp: 0 });
   const tramos = [
     { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
-    { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length} con ETA vencida · ${(m.puerto?.tarimas || []).length} recién llegados`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${tarde} barco${tarde === 1 ? '' : 's'} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
+    { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length} con ETA vencida · ${plural(comoLista(m.puerto?.tarimas).filter(Boolean).length, 'recién llegado')}`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
     { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${plural(d, 'día')}`, estado: d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde', motivo: d > 90 ? `${plural(d, 'día')} de inventario` : null },
     { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${lentos} envío${lentos === 1 ? '' : 's'} con más de 5 días en camino` : null },
     { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas} de ${tiendas.length} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
