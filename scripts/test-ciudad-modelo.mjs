@@ -796,6 +796,12 @@ test('nombreCiudad: acentos, conectores y CDMX', () => {
   for (const k of Object.keys(CIUDADES)) { const n = nombreCiudad(k); assert.ok(n.length > 0 && n.length <= 20, k); assert.equal(norm(n === 'CDMX' ? 'CIUDAD DE MEXICO' : n), k, `${k} ida y vuelta`); }
 });
 
+test('cifraCorta / pesosCorto: miles de millones en «B» y texto con $ / comas', () => {
+  assert.equal(cifraCorta(1e12), '1000.0 B'); assert.equal(cifraCorta(1.24e9), '1.2 B'); assert.equal(cifraCorta(999.96e6), '1.0 B'); assert.equal(cifraCorta(999.9e6), '999.9 M');
+  assert.equal(cifraCorta('$1,200'), '1 K'); assert.equal(cifraCorta(' 2,500 '), '3 K'); assert.equal(cifraCorta('-15,400'), '-15 K'); assert.equal(cifraCorta('1500'), '2 K');
+  assert.equal(cifraCorta(true), '0'); assert.equal(cifraCorta([]), '0'); assert.equal(cifraCorta({}), '0'); assert.equal(cifraCorta('  '), '0'); assert.equal(cifraCorta('abc'), '0');
+  assert.equal(pesosCorto(-2.5e9), '-$2.5 B'); assert.equal(pesosCorto('$3,400,000'), '$3.4 M');
+});
 test('cifraCorta / pesosCorto: redondeo en el borde K→M y negativos', () => {
   assert.equal(cifraCorta(999600), '1.0 M'); assert.equal(cifraCorta(999400), '999 K'); assert.equal(cifraCorta(999.6), '1 K');
   assert.equal(cifraCorta(1.25e6), '1.3 M'); assert.equal(cifraCorta(15400), '15 K'); assert.equal(cifraCorta(42.4), '42');

@@ -661,9 +661,12 @@ export function plural(n, uno, varios = `${uno}s`) {
   const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
   return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;
 }
+// Texto con «$», comas de miles o espacios («$1,200», « 2,500 ») se lee como número; ≥ mil millones sale «1.2 B» como el
+// `moneyCompact` del dashboard (antes «1000.0 M»). Booleanos y basura → '0'.
 export function cifraCorta(v) {
-  const n = Number(v); if (!Number.isFinite(n)) return '0';
+  const n = typeof v === 'string' ? Number(v.replace(/[\s$,]/g, '')) : typeof v === 'number' ? v : NaN; if (!Number.isFinite(n) || (typeof v === 'string' && !v.trim())) return '0';
   const a = Math.abs(n); const s = n < 0 && Math.round(a) > 0 ? '-' : '';
+  if (a >= 999.95e6) return `${s}${(a / 1e9).toFixed(1)} B`;
   if (a >= 999500) return `${s}${(a / 1e6).toFixed(1)} M`;
   if (a >= 999.5) return `${s}${Math.round(a / 1e3)} K`;
   return `${s}${Math.round(a)}`;
