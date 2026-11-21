@@ -456,24 +456,25 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   for (const c of m.camiones || []) {
     const f = fechaIso(c?.fecha); if (!f || f > hoyIso) continue;
     out.push(c.envio
-      ? { id: `envio-${c.folio}`, icono: '🚚', texto: `Salió ${c.folio} a ${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''}`, clave: `${f} 00:01`, cuando: cuando(f), ir: { tipo: 'ciudad', ciudad: c.ciudad } }
-      : { id: `factura-${c.folio}`, icono: '🧾', texto: `Factura ${c.folio} · ${c.cliente} · ${pesos(c.monto)}`, clave: `${f} 00:01`, cuando: cuando(f), grande: numero(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
+      ? { id: `envio-${c.folio}`, icono: '🚚', texto: unirTexto(`Salió ${unirTexto(c.folio) || 'un envío'}${unirTexto(c.cliente) ? ` a ${unirTexto(c.cliente)}` : ''}`, c.paqueteria), clave: `${f} 00:01`, cuando: cuando(f), ir: { tipo: 'ciudad', ciudad: c.ciudad } }
+      : { id: `factura-${c.folio}`, icono: '🧾', texto: unirTexto(unirTexto(c.folio) ? `Factura ${unirTexto(c.folio)}` : 'Factura', c.cliente, pesos(c.monto)), clave: `${f} 00:01`, cuando: cuando(f), grande: numero(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
   }
   for (const b of [...(m.puerto?.tarimas || []), ...(m.puerto?.barcos || [])]) {
     const f = fechaIso(b?.arribo); if (!f || f > hoyIso) continue;
-    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: `Llegó ${b.id} al CEDIS · ${piezasTexto(b.piezas)}`, clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
+    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: unirTexto(`Llegó ${unirTexto(b.id) || 'un contenedor'} al CEDIS`, piezasTexto(b.piezas)), clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
   }
+  // 4.7.31: textos con `unirTexto()`: cliente, folio, contenedor, concepto, estado o título vacíos/nulos ya no dicen «null».
   // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.
   // 4.3.33: con `instante()`: 'AAAA-MM-DD' sola es ese día local (antes UTC: el pago salía «ayer»), espacios y Date cuentan.
   const fechaHora = (ts) => { const t = instante(ts); if (!t) return null; const p2 = (n) => String(n).padStart(2, '0'); return { f: `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`, h: `${p2(t.getHours())}:${p2(t.getMinutes())}` }; };
   for (const p of m.pagosHechos || []) {
     const fh = p?.pagado_at ? fechaHora(p.pagado_at) : null; if (!fh || fh.f > hoyIso) continue;
-    out.push({ id: `pago-${p.id ?? `${p.pagado_at}-${p.cliente}`}`, icono: '💸', texto: `Pago registrado${p.cliente ? ` · ${p.cliente}` : ''}${p.concepto ? ` · ${p.concepto}` : ''} · ${pesos(p.monto)}`, clave: `${fh.f} ${fh.h}`, cuando: fh.f === hoyIso ? fh.h : cuando(fh.f), grande: numero(p.monto) >= 500000, ir: { tipo: 'banco' }, tarjeta: { tipo: 'banco' } });
+    out.push({ id: `pago-${p.id ?? `${p.pagado_at}-${p.cliente}`}`, icono: '💸', texto: unirTexto('Pago registrado', p.cliente, p.concepto, pesos(p.monto)), clave: `${fh.f} ${fh.h}`, cuando: fh.f === hoyIso ? fh.h : cuando(fh.f), grande: numero(p.monto) >= 500000, ir: { tipo: 'banco' }, tarjeta: { tipo: 'banco' } });
   }
   const sy = m.ultimaSync?.created_at ? fechaHora(m.ultimaSync.created_at) : null;
-  if (sy && sy.f <= hoyIso) out.push({ id: 'sync', icono: '🔄', texto: `Se actualizaron los datos${m.ultimaSync.status ? ` · ${m.ultimaSync.status}` : ''}`, clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
+  if (sy && sy.f <= hoyIso) out.push({ id: 'sync', icono: '🔄', texto: unirTexto('Se actualizaron los datos', m.ultimaSync.status), clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
-  for (const r of m.oficina?.agenda || []) if (r && r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${r.titulo}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
+  for (const r of m.oficina?.agenda || []) if (r && r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${unirTexto(r.titulo) || 'una reunión'}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
   const vistos = new Set();
   return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ir: null, ...x }));
 }

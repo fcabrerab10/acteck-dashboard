@@ -1343,3 +1343,15 @@ test('cadena con miles es-MX: puerto, camiones y tiendas («1,200 en ruta», «1
   const t = Object.fromEntries(r.tramos.map((x) => [x.clave, x.volumen]));
   assert.match(t.puerto, /^1,200 con ETA vencida/); assert.match(t.camion, /^1,200 en ruta/); assert.equal(t.tienda, '1,200 de 1,500 vendieron');
 });
+test('bitácora sin «null»: cliente, folio, contenedor, concepto, estado o título vacíos', () => {
+  const h = new Date('2026-10-07T11:00:00');
+  const m = { hoyIso: '2026-10-07',
+    camiones: [{ folio: null, cliente: null, monto: 1000, fecha: '2026-10-07' }, { envio: true, folio: ' E9 ', cliente: null, paqueteria: null, fecha: '2026-10-06' }, { envio: true, folio: null, cliente: 'pcel', paqueteria: 'DHL', fecha: '2026-10-05' }],
+    puerto: { tarimas: [{ id: null, piezas: 1200, arribo: '2026-10-04' }] },
+    pagosHechos: [{ id: 1, cliente: null, concepto: '  ', monto: 10, pagado_at: '2026-10-07T10:15:00' }],
+    ultimaSync: { status: null, created_at: '2026-10-07T10:40:00' },
+    oficina: { agenda: [{ ini: 600, hora: '10:00', titulo: null, estado: 'hecha' }] } };
+  const tx = bitacoraEventos(m, h).map((x) => x.texto);
+  assert.deepEqual(tx, ['Se actualizaron los datos', 'Pago registrado · $10', 'Fue una reunión', 'Factura · $1 K', 'Salió E9', 'Salió un envío a pcel · DHL', 'Llegó un contenedor al CEDIS · 1,200 pz']);
+  for (const t of tx) assert.doesNotMatch(t, /null|undefined|NaN/);
+});
