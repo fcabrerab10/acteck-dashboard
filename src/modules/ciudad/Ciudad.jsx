@@ -258,7 +258,7 @@ export default function Ciudad({ onNavegar }) {
         </svg>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', pointerEvents: 'auto' }}>
-        {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} en ruta`], ['Clientes finales', `${k.clientesFinales.toLocaleString('es-MX')} · 2 meses`], ['CEDIS', `${pesosCorto(modelo.cedis.valor)} · ${Math.round(modelo.cedis.dias)} d`], ['Oficina', `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')}`]].map(([l, v]) => (
+        {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} en ruta`], ['Clientes finales', `${k.clientesFinales.toLocaleString('es-MX')} · 2 meses`], ['CEDIS', `${pesosCorto(modelo.cedis.valor)} · ${plural(modelo.cedis.dias, 'día')}`], ['Oficina', `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')}`]].map(([l, v]) => (
           <div key={l} style={{ ...card, padding: '8px 12px', minWidth: 110 }}><div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</div></div>
         ))}
       </div>
