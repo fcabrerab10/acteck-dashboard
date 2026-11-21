@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, pesosCorto, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, numero, unirTexto } from '../modelo.js';
+import { COLOR_CUENTA, pesosCorto, porcentaje, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, numero, unirTexto } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -413,7 +413,7 @@ export function distritos(ctx, cedisPos) {
     // Banderín de cuota vs ritmo (3.90.61): verde-ámbar-rojo en la esquina de la manzana, de cerca y sin prender la capa; se toca = tarjeta de la ciudad.
     try { const cq = cuotaRitmo(modelo, d.tiendas.filter((t) => !t.reparto).map((t) => t.cuenta)); if (cq) { const tono = CAPA_TONOS[cq.tono];
       const asta = box(.1, 3.4, .1, 0x6b6e76); asta.position.set(-ancho / 2 - .5, 1.7, -largo / 2 + .8); const ban = box(1, .6, .06, tono, { emissive: tono, emissiveIntensity: oscuro ? 1 : .25 }); ban.position.set(-ancho / 2 - .5 + .55, 3.05, -largo / 2 + .8);
-      const tagB = { ...piso.userData.tag, sub: `${cq.pct} % de la cuota del mes · ritmo ${cq.ritmo} %` };
+      const tagB = { ...piso.userData.tag, sub: `${porcentaje(cq.pct)} de la cuota del mes · ritmo ${porcentaje(cq.ritmo)}` };
       for (const pz of [asta, ban]) { pz.userData.detalle = 'fino'; pz.userData.tag = tagB; interact.push(pz); g.add(pz); } } } catch (e) { console.warn('[ciudad] banderín de cuota', e); } // falla sola
     // árboles y farol
     arbol(ctx, g, -ancho / 2 - 1.2, -largo / 2 - 1.2, .9); arbol(ctx, g, ancho / 2 + 1.2, largo / 2 + 1.2, 1); if (n > 6) arbol(ctx, g, ancho / 2 + 1.2, -largo / 2 - 1.2, .8);

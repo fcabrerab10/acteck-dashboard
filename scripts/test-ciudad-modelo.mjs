@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, porcentaje } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1305,4 +1305,13 @@ test('tarjetaDe(): torre, tienda, camión y vendedor leen texto/Date y dicen sin
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F2' }, m).numeros[3][1], '—');
   const v = tarjetaDe({ tipo: 'vendedorErp', titulo: 'Ana' }, m); assert.equal(v.numeros[3][1], 'B'); assert.equal(v.estado, 'verde');
   assert.equal(tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL' }, m).numeros[0][1], '1 de 1');
+});
+
+test('porcentaje(): miles es-MX, signo opcional y «—» con lo ilegible; capa de ventas y pensamientos lo usan', () => {
+  assert.equal(porcentaje(45), '45 %'); assert.equal(porcentaje(1250), '1,250 %'); assert.equal(porcentaje(12.6), '13 %');
+  assert.equal(porcentaje(-0.4), '0 %'); assert.equal(porcentaje(-25), '-25 %'); assert.equal(porcentaje('80'), '80 %');
+  assert.equal(porcentaje(30, { signo: true }), '+30 %'); assert.equal(porcentaje(0, { signo: true }), '0 %'); assert.equal(porcentaje(-5, { signo: true }), '-5 %');
+  for (const x of [null, undefined, '', NaN, 'abc', Infinity, true, {}]) assert.equal(porcentaje(x), '—');
+  const m = { distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a', importe: 2350, previo: 100 }] }] };
+  assert.match(capaCiudades(m, 'ventas').porCiudad.get('GDL').texto, /\+2,250 % vs mes anterior$/);
 });

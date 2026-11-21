@@ -429,8 +429,8 @@ export function pensamientos(m, max = 5) {
       let p = null;
       if (venc.has(t.cuenta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
       else if (prev > 0 && act <= 0) p = { tono: 'rojo', peso: 1, texto: 'Este mes no he vendido nada' };
-      else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Vendo ${-cambio} % menos que el mes pasado` };
-      else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${cambio} % arriba del mes pasado!` };
+      else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Vendo ${porcentaje(-cambio)} menos que el mes pasado` };
+      else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${porcentaje(cambio)} arriba del mes pasado!` };
       else if (cu?.cuota > 0 && cu.venta / cu.cuota >= ritmo) p = { tono: 'verde', peso: 4, texto: 'Voy arriba de mi cuota' };
       if (p && (!mejor || p.peso < mejor.peso)) mejor = { ...quien, ...p };
     }
@@ -535,7 +535,7 @@ export function capaCiudades(m, capa) {
       const act = d.tiendas.reduce((s, t) => s + numero(t.importe), 0), prev = d.tiendas.reduce((s, t) => s + numero(t.previo), 0); // 4.7.17: «$5,000» en texto cuenta
       const pct = prev > 0 ? Math.round((act / prev - 1) * 100) : null;
       const tono = pct == null ? (act > 0 ? 'verde' : 'gris') : pct >= 0 ? 'verde' : pct >= -20 ? 'ambar' : 'rojo';
-      porCiudad.set(d.ciudad, { tono, valor: pct, texto: `${pesos(act)}${pct == null ? '' : ` · ${pct > 0 ? '+' : ''}${pct} % vs mes anterior`}` });
+      porCiudad.set(d.ciudad, { tono, valor: pct, texto: `${pesos(act)}${pct == null ? '' : ` · ${porcentaje(pct, { signo: true })} vs mes anterior`}` });
     }
     return { capa, titulo: 'Sell out vs mes anterior', leyenda: [{ tono: 'verde', texto: 'Igual o arriba' }, { tono: 'ambar', texto: 'Hasta −20 %' }, { tono: 'rojo', texto: 'Más de −20 %' }, { tono: 'gris', texto: 'Sin venta' }], porCiudad };
   }
@@ -543,7 +543,7 @@ export function capaCiudades(m, capa) {
     // Avance del mes de las cuentas con tiendas en la ciudad (venta ÷ cuota, sumadas) contra el ritmo esperado al día de hoy.
     for (const d of distritos) {
       const c = cuotaRitmo(m, d.tiendas.map((t) => t.cuenta));
-      porCiudad.set(d.ciudad, c ? { tono: c.tono, valor: c.pct, texto: `${c.pct} % de la cuota del mes (${plural(c.n, 'cuenta')}) · ritmo ${c.ritmo} %` } : { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' });
+      porCiudad.set(d.ciudad, c ? { tono: c.tono, valor: c.pct, texto: `${porcentaje(c.pct)} de la cuota del mes (${plural(c.n, 'cuenta')}) · ritmo ${porcentaje(c.ritmo)}` } : { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' });
     }
     return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
@@ -667,6 +667,13 @@ export function enMinutos(min) {
 export function unirTexto(...partes) {
   return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))
     .filter((x) => x && x !== 'null' && x !== 'undefined' && x !== 'NaN').join(' · ');
+}
+// Porcentaje legible (4.7.24): entero redondeado con miles es-MX («1,250 %»), `signo` antepone «+» a los positivos
+// (sell out vs mes anterior) y lo ilegible (null, NaN, texto basura) dice «—» en vez de «NaN %» o «null %».
+export function porcentaje(v, { signo = false } = {}) {
+  if (v == null || v === '' || typeof v === 'boolean') return '—';
+  const k = Math.round(Number(v)); if (!Number.isFinite(k)) return '—';
+  const z = k === 0 ? 0 : k; return `${signo && z > 0 ? '+' : ''}${z.toLocaleString('es-MX')} %`;
 }
 export function plural(n, uno, varios = `${uno}s`) {
   const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
@@ -797,7 +804,7 @@ export function tarjetaDe(tag, modelo) {
     const r = sn(m.cedis?.racksMarca).find((x) => x.marca === tag.marca);
     if (r) {
       const tot = sn(m.cedis.racksMarca).reduce((s2, x) => s2 + numero(x.valor), 0);
-      t.numeros = [['Inventario', `${pesos(r.valor)} · ${tot > 0 ? Math.round(numero(r.valor) / tot * 100) : 0} %`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${plural(r.marcas, 'marca')}` : 'SKUs con stock', num(r.skus)]];
+      t.numeros = [['Inventario', `${pesos(r.valor)} · ${porcentaje(tot > 0 ? numero(r.valor) / tot * 100 : 0)}`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${plural(r.marcas, 'marca')}` : 'SKUs con stock', num(r.skus)]];
       t.estado = r.dias == null ? null : r.dias > 120 ? 'rojo' : r.dias > 90 ? 'ambar' : 'verde'; // mismos umbrales que el CEDIS
     }
   } else if (tag.tipo === 'barco' && m.puerto) {
@@ -826,7 +833,7 @@ export function tarjetaDe(tag, modelo) {
     if (d) {
       const ts = sn(d.tiendas), act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + numero(x.importe), 0), r = ts.length ? act / ts.length : 0;
       t.numeros = [['Tiendas activas', `${num(act)} de ${num(ts.length)}`], ['Venta del mes', pesos(venta)], ['Clientes', num(sn(d.cuentas).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num(sn(d.vendedores).length)]];
-      const cq = cuotaRitmo(m, ts.map((x) => x.cuenta)); if (cq) { t.numeros.splice(2, 0, ['Cuota del mes', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
+      const cq = cuotaRitmo(m, ts.map((x) => x.cuenta)); if (cq) { t.numeros.splice(2, 0, ['Cuota del mes', `${porcentaje(cq.pct)} · ritmo ${porcentaje(cq.ritmo)}`]); t.cuota = cq.tono; } // 3.90.60
       t.estado = !ts.length ? null : r >= 0.6 ? 'verde' : r >= 0.3 ? 'ambar' : 'rojo';
     }
   } else if (tag.tipo === 'tienda') {
@@ -836,7 +843,7 @@ export function tarjetaDe(tag, modelo) {
       t.numeros = [['Este mes', pesos(s.importe)], ['Mes anterior', pesos(s.previo)]];
       if (numero(s.vendedores) > 0) t.numeros.push(['Vendedores', num(s.vendedores)]);
       const venc = numero(s.cartera?.vencido); if (venc > 0) t.numeros.push(['Cartera vencida', pesos(venc)]); // 4.7.23: «$5,000» en texto ya cuenta
-      const cq = cuotaRitmo(m, [s.cuenta]); if (cq) { t.numeros.splice(2, 0, ['Cuota de la cuenta', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
+      const cq = cuotaRitmo(m, [s.cuenta]); if (cq) { t.numeros.splice(2, 0, ['Cuota de la cuenta', `${porcentaje(cq.pct)} · ritmo ${porcentaje(cq.ritmo)}`]); t.cuota = cq.tono; } // 3.90.60
       t.estado = venc > 0 ? 'rojo' : s.vendioMes ? 'verde' : s.vendio ? 'ambar' : 'rojo';
     }
   } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {
