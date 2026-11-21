@@ -662,6 +662,12 @@ export function enMinutos(min) {
   const h = Math.floor(k / 60), r = k % 60;
   return h ? `en ${h} h${r ? ` ${r} min` : ''}` : `en ${k} min`;
 }
+/** Une partes de un texto con « · » saltando las vacías (null, undefined, '', espacios, NaN, false, 'null'/'undefined'):
+ *  el globo del contenedor/camión ya no dice «null · 1,200 pz» ni «salió undefined» (4.7.21). */
+export function unirTexto(...partes) {
+  return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))
+    .filter((x) => x && x !== 'null' && x !== 'undefined' && x !== 'NaN').join(' · ');
+}
 export function plural(n, uno, varios = `${uno}s`) {
   const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
   return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;

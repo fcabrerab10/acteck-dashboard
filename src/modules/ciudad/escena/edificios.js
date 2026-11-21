@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, pesosCorto, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, numero } from '../modelo.js';
+import { COLOR_CUENTA, pesosCorto, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, numero, unirTexto } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -322,7 +322,7 @@ export function campusCalles(ctx, cedisPos) {
     const cam = modelo.camiones[i]; const z = cedisPos.z + pt.andenes[i]; const x0 = cedisPos.x + 11;
     const tr = new THREE.Group(); const caja = box(6, 2.4, 2.2, 0xF2F2F2); caja.position.set(x0 + 3.2, 1.6, z); tr.add(caja); instanciar(ctx, caja);
     const cabina = box(1.8, 2, 2.1, ACC.azul); cabina.position.set(x0 + 7.3, 1.2, z); tr.add(cabina); instanciar(ctx, cabina); // tráileres formados: caja y cabina instanciadas, cada una con el tag de su envío
-    add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${cam.cliente} · ${nombreCiudad(cam.ciudad)}${cam.piezas ? ` · ${cam.piezas.toLocaleString('es-MX')} pz` : ''}`, pagina: 'sellIn' });
+    add(tr, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `cargando para ${unirTexto(cam.cliente || 'cliente', cam.ciudad ? nombreCiudad(cam.ciudad) : '', numero(cam.piezas) ? `${numero(cam.piezas).toLocaleString('es-MX')} pz` : '')}`, pagina: 'sellIn' });
   }
   add(pg, { tipo: 'patio', titulo: 'Patio de maniobras', sub: `${plural(pt.andenes.length, 'andén', 'andenes')} · ${plural(formados, 'tráiler', 'tráileres')} cargando · ${plural((modelo.camiones || []).length, 'envío reciente', 'envíos recientes')}`, pagina: 'sellIn' });
   // detalle del campus (3.90.11): estacionamiento con un coche por persona del equipo, barda, jardín y faroles

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { instanciar, geo } from './instancias.js';
-import { circuitoVendedor, pesosCorto, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural, llegaBarco } from '../modelo.js';
+import { circuitoVendedor, pesosCorto, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural, llegaBarco, unirTexto, numero } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
@@ -20,7 +20,7 @@ export function barcos(ctx, puertoPos) {
     else { const a = Math.min(ru.avance, .9); g.position.set(ini.x + lx * a, 0, ini.z + lz * a); }
     g.rotation.y = -Math.atan2(lz, lx);
     const estado = ru.modo === 'atracado' ? 'en el puerto · descargando' : ru.modo === 'esperando' ? 'en el puerto · esperando muelle' : llegaBarco(b.llegaEnDias);
-    add(g, { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}`, sub: `${b.naviera || b.supplier} · ${b.piezas.toLocaleString('es-MX')} pz · ${estado}`, pagina: 'inventarioGlobal', barco: b });
+    add(g, { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}`, sub: unirTexto(b.naviera || b.supplier, `${numero(b.piezas).toLocaleString('es-MX')} pz`, estado), pagina: 'inventarioGlobal', barco: b });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.22: piezas del barco como instancias dinámicas (tag de su contenedor)
     const base = g.position.clone();
     const quieto = ru.muelle != null; // atracado o en fila: no deriva
@@ -45,7 +45,7 @@ export function camiones(ctx, rutas) {
     [[-1.1, .5], [-1.1, -.5], [1.4, .5], [1.4, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCamion', () => new THREE.CylinderGeometry(.28, .28, .22, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); g.add(r); });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.4: el tag lo pone add() y se lee al plantar
     if (oscuro) { const f = new THREE.PointLight(0xFFF2C0, .9, 7); f.position.set(2.2, .8, 0); g.add(f); }
-    add(g, { tipo: 'camion', folio: c.folio, titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}${promo ? ` · ${promo.texto}` : ''}`, sub: c.envio ? `${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''} · salió ${c.fecha} · va a ${nombreCiudad(c.ciudad)}` : `${c.cliente} · ${pesosCorto(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${nombreCiudad(c.ciudad)}`, pagina: 'ordenesCompra' });
+    add(g, { tipo: 'camion', folio: c.folio, titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}${promo ? ` · ${promo.texto}` : ''}`, sub: c.envio ? unirTexto(c.cliente, c.paqueteria, c.fecha ? `salió ${c.fecha}` : '', c.ciudad ? `va a ${nombreCiudad(c.ciudad)}` : '') : unirTexto(c.cliente, pesosCorto(c.monto), `${numero(c.piezas).toLocaleString('es-MX')} pz`, c.ciudad ? `va a ${nombreCiudad(c.ciudad)}` : ''), pagina: 'ordenesCompra' });
     animados.push((t) => { const p = (c.progreso + t * .025 + i * .07) % 1; const pt = curva.getPointAt(p); const q = curva.getPointAt(Math.min(1, p + .01)); g.position.set(pt.x, .1, pt.z); g.rotation.y = -Math.atan2(q.z - pt.z, q.x - pt.x); });
   });
 }

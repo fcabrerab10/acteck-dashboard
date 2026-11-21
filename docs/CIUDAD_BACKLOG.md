@@ -242,6 +242,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.18) Tarjetas del CEDIS, racks, contenedor y ciudad, top SKUs, cadena de suministro y bitácora (piezas de tarimas/arribos) con `numero()`: piezas, días, valor e importe en texto («1,200», «$85,000», « 95 ») ya cuentan (antes 0: CEDIS en verde con 95 días, «0 pz», % del rack en 0).
   - [x] (4.7.19) Burbujas y bitácora con `numero()`: la burbuja del banco lee cartera vencida y pagos vencidos en texto («$5,000», « 1 »; antes no salía), los pedidos detenidos del CEDIS en texto («1,200») ya cuentan y una factura o pago de «$750,000» en texto ya sale «grande» en la bitácora.
   - [x] (4.7.20) Salidas de hoy del CEDIS con `fechaIso()`: una factura con fecha con espacios (« 2026-10-07T10:00») o Date ya cuenta (antes se comparaba como texto y no contaba); facturas que no son lista o nulas no truenan. El montacargas usa `numero()`/`plural()` («1 salida», «1,200 salidas» en texto ya cuenta). Harness sin errores.
+  - [x] (4.7.21) `unirTexto()` pura y probada: los globos del contenedor («naviera · 1,200 pz · llega hoy»), del camión de factura/envío y del tráiler en el patio saltan naviera/proveedor, cliente, paquetería, fecha o ciudad vacíos (antes «null · 820 pz», «salió undefined») y las piezas en texto o nulas usan `numero()` (antes un null tronaba el globo). Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -257,6 +258,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 04:17 · v4.7.21 · Globos de contenedor, camión y tráiler con `unirTexto()`: sin «null · …» ni «salió undefined»; piezas con `numero()`.
 - 2026-11-21 03:56 · v4.7.20 · salidas de hoy del CEDIS leen la fecha con `fechaIso()` y el montacargas usa `numero()`/`plural()`; +1 prueba.
 - 2026-11-21 03:16 · v4.7.18 · tarjetas (CEDIS, racks, contenedor, ciudad), top SKUs y piezas de la cadena/bitácora leen montos en texto con `numero()`; +1 prueba.
 - 2026-11-21 02:56 · v4.7.17 · capa de ventas/cartera y pensamientos leen montos en texto («$5,000») con `numero()`; +1 prueba.
