@@ -232,6 +232,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.8) Burbuja del banco («Cartera vencida») y capa de ventas/cartera de las ciudades usan `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; miles de millones «B»; negativos «-$5 K»).
   - [x] (4.7.9) Burbuja del banco con `plural()`: pagos vencidos que vienen en texto («1») dicen «1 pago vencido» (antes «1 pagos vencidos»).
   - [x] (4.7.10) Burbujas del CEDIS y del puerto, motivo de camiones lentos y capas de cuota/cartera con `plural()`: «1» en texto o 1.4 ya no dice «1 pedidos de cliente detenidos» / «1.4 pedidos», miles con coma es-MX («1,200 pedidos»).
+  - [x] (4.7.11) Globos de la escena con `pesosCorto()`: banco, racks, tiendas, clientes finales, vendedores y camiones de factura ya no dicen «$-5 K» con negativos (ahora «-$5 K»), igual que tarjetas y bitácora; `fmtK` ya no se usa en la escena. Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -247,6 +248,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 00:56 · v4.7.11 · globos de la escena (banco, racks, tiendas, clientes finales, vendedores, camiones) con `pesosCorto()`: negativos «-$5 K» en vez de «$-5 K».
 - 2026-11-21 00:36 · v4.7.10 · burbujas CEDIS/puerto, camiones lentos y capas de cuota/cartera con `plural()` (conteos en texto/decimal); +5 pruebas.
 - 2026-11-21 00:17 · v4.7.9 · burbuja del banco: «1 pago vencido» aunque el conteo venga en texto; +1 prueba.
 - 2026-11-21 00:16 · v4.7.8 · burbuja del banco y capa de ventas/cartera con `pesosCorto()` (sin «$1000 K»); +1 prueba.

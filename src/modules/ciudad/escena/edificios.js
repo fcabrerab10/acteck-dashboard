@@ -1,11 +1,11 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural } from '../modelo.js';
+import { COLOR_CUENTA, pesosCorto, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
-import { etiqueta, fmtK, capital } from './etiquetas.js';
+import { etiqueta, capital } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
 
 // Oficina + sala de juntas + equipo caminando entre oficina, sala y CEDIS.
@@ -210,7 +210,7 @@ export function banco(ctx) {
   const letrero = box(3.4, .7, .25, alerta ? ACC.rojo : ACC.verde, { emissive: alerta ? ACC.rojo : ACC.verde, emissiveIntensity: oscuro ? 1.5 : .3 }); letrero.position.set(0, 3.55, 1.95); g.add(letrero);
   if (alerta) { const asta = box(.12, 2.4, .12, 0x8E8E93); asta.position.set(2.6, 6.2, -.8); g.add(asta); const bandera = box(1.2, .7, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .2 }); bandera.position.set(3.2, 7, -.8); g.add(bandera); }
   for (const [x, z] of [[-4.6, 2.4], [4.6, 2.4]]) arbol(ctx, g, x, z, .9);
-  const pesos = (v) => `$${fmtK(v)}`;
+  const pesos = (v) => `${pesosCorto(v)}`;
   add(g, { tipo: 'banco', titulo: 'Banco · Tesorería', sub: `cartera vencida ${pesos(r.carteraVencida || 0)} · ${r.pagosSemana || 0} pago${r.pagosSemana === 1 ? '' : 's'} esta semana${r.pagosVencidos ? ` · ${r.pagosVencidos} vencido${r.pagosVencidos === 1 ? '' : 's'}` : ''}`, pagina: 'pagos' });
   return { x: b.x, z: b.z };
 }
@@ -279,7 +279,7 @@ function interiorCedis(ctx, g, casco, cedisPos) {
       const repisa = box(2.6, .08, 1.1, 0xE58A2E); repisa.position.set(0, .1 + k * .95, 0); rg.add(repisa);
       const caja = box(2.2, .7, .9, COL_RACK[i % COL_RACK.length]); caja.position.set(0, .5 + k * .95, 0); rg.add(caja);
     }
-    add(rg, { tipo: 'rack', marca: r.marca, titulo: capital(r.marca), sub: `$${fmtK(r.valor)} · ${r.dias == null ? 'sin demanda' : plural(r.dias, 'día')} · ${plural(r.skus, 'SKU')}${r.marcas ? ` de ${plural(r.marcas, 'marca')}` : ''}`, pagina: 'inventarioGlobal' });
+    add(rg, { tipo: 'rack', marca: r.marca, titulo: capital(r.marca), sub: `${pesosCorto(r.valor)} · ${r.dias == null ? 'sin demanda' : plural(r.dias, 'día')} · ${plural(r.skus, 'SKU')}${r.marcas ? ` de ${plural(r.marcas, 'marca')}` : ''}`, pagina: 'inventarioGlobal' });
     rg.traverse((o) => { if (o.isMesh) dentro.push(o); });
     const et = etiqueta(ctx, capital(r.marca), '#1D1D1F'); et.position.set(rg.position.x, .56 + alto + 1, rg.position.z); et.userData.prioridad = 2; et.userData.minZoom = -1; raiz.add(et); etiquetas.push(et);
   });
@@ -387,7 +387,7 @@ export function distritos(ctx, cedisPos) {
       const col = COLOR_CUENTA[t.cuenta] || ACC.gris;
       const tg = new THREE.Group(); tg.position.set(x, .3, z);
       (ctx.tiendaPos ||= new Map()).set(`${t.cuenta}|${t.sucursal}`, { x: base.x + x, z: base.z + z }); // pensamientos (3.90.52)
-      const tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes $${fmtK(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior $${fmtK(t.previo)}` : ''}${t.vendedores ? ` · ${plural(t.vendedores, 'vendedor', 'vendedores')}` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida $${fmtK(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
+      const tag = { tipo: 'tienda', titulo: `${t.nombreCuenta} · ${t.sucursal}`, sub: `${t.vendioMes ? `vendió este mes ${pesosCorto(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior ${pesosCorto(t.previo)}` : ''}${t.vendedores ? ` · ${plural(t.vendedores, 'vendedor', 'vendedores')}` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida ${pesosCorto(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
       const cuerpo = new THREE.Mesh(geo(ctx, 'tiendaBisel', () => cajaBiselada(2, 1.9, 2, .12)), M(P.tienda)); cuerpo.castShadow = cuerpo.receiveShadow = true; cuerpo.position.y = .95; tg.add(cuerpo); // kit low-poly (3.90.68): esquinas biseladas
       // ventanas laterales: de noche se prenden (todas si la tienda vendió, una sí y una no si no); de día, vidrio oscuro
       const prendida = (k) => noche && (t.vendio || (i + k) % 2 === 0);
@@ -408,7 +408,7 @@ export function distritos(ctx, cedisPos) {
       g.add(tg);
       tg.traverse((o) => { if (o.isMesh && !o.userData.tag) { o.userData.tag = tag; interact.push(o); } }); // sólo palo y bandera siguen sueltos
     });
-    const tagCasa = d.casas ? { tipo: 'clientesFinales', titulo: `Clientes finales · ${nombreCiudad(d.ciudad)}`, sub: `${plural(d.clientesFinales.n, 'cliente')} ${Math.round(Number(d.clientesFinales.n)) === 1 ? 'compró' : 'compraron'} en los últimos 2 meses · $${fmtK(d.clientesFinales.importe)} · vía ${plural((d.clientesFinales.cuentas || []).length, 'mayorista')}`, pagina: 'sellOut', ciudad: d.ciudad } : null;
+    const tagCasa = d.casas ? { tipo: 'clientesFinales', titulo: `Clientes finales · ${nombreCiudad(d.ciudad)}`, sub: `${plural(d.clientesFinales.n, 'cliente')} ${Math.round(Number(d.clientesFinales.n)) === 1 ? 'compró' : 'compraron'} en los últimos 2 meses · ${pesosCorto(d.clientesFinales.importe)} · vía ${plural((d.clientesFinales.cuentas || []).length, 'mayorista')}`, pagina: 'sellOut', ciudad: d.ciudad } : null;
     for (let i = 0; i < (d.casas || 0); i++) { const cg = new THREE.Group(); const cuerpo = box(1.1, .9, 1.1, P.tienda); cuerpo.position.y = .45; cg.add(cuerpo); const dosAguas = i % 2 === 1; const techo = new THREE.Mesh(dosAguas ? geo(ctx, 'dosAguas', () => techoDosAguas(.72, 1.3)) : (ctx.conoCasa ||= new THREE.ConeGeometry(.95, .7, 4)), M(P.tiendaTecho)); if (dosAguas) techo.position.y = .9; else { techo.rotation.y = Math.PI / 4; techo.position.y = 1.25; } techo.castShadow = true; cg.add(techo); const v = new THREE.Mesh(G(.3, .3, .08), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.2 : .1 })); v.position.set(.2, .5, .56); cg.add(v); cg.position.set(-ancho / 2 - 2.2, .3, -largo / 2 + .8 + i * 1.6); g.add(cg); for (const pz of [cuerpo, techo, v]) { pz.userData.detalle = 'cerca'; instanciar(ctx, pz, tagCasa); } } // de muy lejos las casitas no se distinguen
     // Banderín de cuota vs ritmo (3.90.61): verde-ámbar-rojo en la esquina de la manzana, de cerca y sin prender la capa; se toca = tarjeta de la ciudad.
     try { const cq = cuotaRitmo(modelo, d.tiendas.filter((t) => !t.reparto).map((t) => t.cuenta)); if (cq) { const tono = CAPA_TONOS[cq.tono];
@@ -420,7 +420,7 @@ export function distritos(ctx, cedisPos) {
     const farol = box(.12, 2.6, .12, 0x6b6e76); farol.position.set(ancho / 2 + .6, 1.3, largo / 2 + .6); g.add(farol); const foco = new THREE.Mesh(geo(ctx, 'foco', () => new THREE.SphereGeometry(.22, 8, 6)), M(P.ventanaOn, { emissive: P.ventanaOn, emissiveIntensity: oscuro ? 1.6 : .2 })); foco.position.set(ancho / 2 + .6, 2.7, largo / 2 + .6); g.add(foco);
     for (const pz of [farol, foco]) { pz.userData.detalle = 'fino'; instanciar(ctx, pz); } // faroles: un InstancedMesh por pieza y capa fina (3.90.7)
     // vendedores del cliente en su ciudad
-    d.vendedores.forEach((v, i) => { const per = persona(ctx, COLOR_CUENTA[v.cuenta] || ACC.gris, .85); per.position.set(base.x - ancho / 2 + 1 + i * 1.6, .3, base.z + largo / 2 + 2.6); add(per, { tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${v.activo ? 'vendiendo este mes' : 'sin venta reciente'} · $${fmtK(v.importe)} en el año`, pagina: 'sellOut', cuenta: v.cuenta }); aMapa(per); const ruta = [[0, 0], [ancho * .6, 0], [ancho * .6, 1.2], [0, 1.2]]; animados.push((t) => caminar(per, ruta, t * .15 + i * .9, { x: base.x - ancho / 2 + 1 + i * 1.6, z: base.z + largo / 2 + 2.6 })); });
+    d.vendedores.forEach((v, i) => { const per = persona(ctx, COLOR_CUENTA[v.cuenta] || ACC.gris, .85); per.position.set(base.x - ancho / 2 + 1 + i * 1.6, .3, base.z + largo / 2 + 2.6); add(per, { tipo: 'vendedor', titulo: v.nombre, sub: `${v.nombreCuenta} · ${v.activo ? 'vendiendo este mes' : 'sin venta reciente'} · ${pesosCorto(v.importe)} en el año`, pagina: 'sellOut', cuenta: v.cuenta }); aMapa(per); const ruta = [[0, 0], [ancho * .6, 0], [ancho * .6, 1.2], [0, 1.2]]; animados.push((t) => caminar(per, ruta, t * .15 + i * .9, { x: base.x - ancho / 2 + 1 + i * 1.6, z: base.z + largo / 2 + 2.6 })); });
     raiz.add(aMapa(g));
     if (n >= 3) { const cuantos = paseantesDistrito(n, ctx.ligera); for (let i = 0; i < cuantos; i++) { const per = persona(ctx, [0x9AA0AB, 0xC9B79C, 0x7A8AA6, 0xB58A7A][i % 4], .8); const o = { x: base.x - ancho / 2 + 1 + i * 2.4, z: base.z + largo / 2 + 1.1 }; per.position.set(o.x, .3, o.z); raiz.add(aMapa(per)); const ruta = [[0, 0], [ancho - 2, 0], [ancho - 2, .9], [0, .9]]; animados.push((t) => caminar(per, ruta, t * .12 + i * 1.7 + n, o)); } }
     // etiqueta de ciudad (sprite de texto)

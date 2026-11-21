@@ -1,9 +1,8 @@
 // Acteck Ciudad · vehículos: barcos (contenedores navegando a Manzanillo), camiones (facturas y envíos) y coches del equipo comercial.
 import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
-import { fmtK } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
-import { circuitoVendedor, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural, llegaBarco } from '../modelo.js';
+import { circuitoVendedor, pesosCorto, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural, llegaBarco } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
@@ -46,7 +45,7 @@ export function camiones(ctx, rutas) {
     [[-1.1, .5], [-1.1, -.5], [1.4, .5], [1.4, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCamion', () => new THREE.CylinderGeometry(.28, .28, .22, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); g.add(r); });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.4: el tag lo pone add() y se lee al plantar
     if (oscuro) { const f = new THREE.PointLight(0xFFF2C0, .9, 7); f.position.set(2.2, .8, 0); g.add(f); }
-    add(g, { tipo: 'camion', folio: c.folio, titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}${promo ? ` · ${promo.texto}` : ''}`, sub: c.envio ? `${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''} · salió ${c.fecha} · va a ${nombreCiudad(c.ciudad)}` : `${c.cliente} · $${fmtK(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${nombreCiudad(c.ciudad)}`, pagina: 'ordenesCompra' });
+    add(g, { tipo: 'camion', folio: c.folio, titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}${promo ? ` · ${promo.texto}` : ''}`, sub: c.envio ? `${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''} · salió ${c.fecha} · va a ${nombreCiudad(c.ciudad)}` : `${c.cliente} · ${pesosCorto(c.monto)} · ${c.piezas.toLocaleString('es-MX')} pz · va a ${nombreCiudad(c.ciudad)}`, pagina: 'ordenesCompra' });
     animados.push((t) => { const p = (c.progreso + t * .025 + i * .07) % 1; const pt = curva.getPointAt(p); const q = curva.getPointAt(Math.min(1, p + .01)); g.position.set(pt.x, .1, pt.z); g.rotation.y = -Math.atan2(q.z - pt.z, q.x - pt.x); });
   });
 }
