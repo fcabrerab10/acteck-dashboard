@@ -365,7 +365,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
     { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length} con ETA vencida · ${plural(comoLista(m.puerto?.tarimas).filter(Boolean).length, 'recién llegado')}`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
     { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${plural(d, 'día')}`, estado: d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde', motivo: d > 90 ? `${plural(d, 'día')} de inventario` : null },
-    { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${lentos} envío${lentos === 1 ? '' : 's'} con más de 5 días en camino` : null },
+    { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
     { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas} de ${tiendas.length} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
     { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${cf.n.toLocaleString('es-MX')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
   ];
@@ -538,7 +538,7 @@ export function capaCiudades(m, capa) {
     // Avance del mes de las cuentas con tiendas en la ciudad (venta ÷ cuota, sumadas) contra el ritmo esperado al día de hoy.
     for (const d of distritos) {
       const c = cuotaRitmo(m, d.tiendas.map((t) => t.cuenta));
-      porCiudad.set(d.ciudad, c ? { tono: c.tono, valor: c.pct, texto: `${c.pct} % de la cuota del mes (${c.n} cuenta${c.n === 1 ? '' : 's'}) · ritmo ${c.ritmo} %` } : { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' });
+      porCiudad.set(d.ciudad, c ? { tono: c.tono, valor: c.pct, texto: `${c.pct} % de la cuota del mes (${plural(c.n, 'cuenta')}) · ritmo ${c.ritmo} %` } : { tono: 'gris', valor: null, texto: 'Sus cuentas no tienen cuota este mes' });
     }
     return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
@@ -546,7 +546,7 @@ export function capaCiudades(m, capa) {
   for (const d of distritos) {
     const cuentas = [...new Set(d.tiendas.map((t) => t.cuenta))], malas = cuentas.filter((c) => venc.has(c));
     const monto = malas.reduce((s, c) => s + venc.get(c), 0);
-    porCiudad.set(d.ciudad, { tono: malas.length ? 'rojo' : 'verde', valor: monto, texto: malas.length ? `${malas.length} cuenta${malas.length === 1 ? '' : 's'} con vencido · ${pesos(monto)}` : 'Sin cartera vencida' });
+    porCiudad.set(d.ciudad, { tono: malas.length ? 'rojo' : 'verde', valor: monto, texto: malas.length ? `${plural(malas.length, 'cuenta')} con vencido · ${pesos(monto)}` : 'Sin cartera vencida' });
   }
   return { capa, titulo: 'Cartera vencida de sus cuentas', leyenda: [{ tono: 'verde', texto: 'Al corriente' }, { tono: 'rojo', texto: 'Con vencido' }], porCiudad };
 }
@@ -700,10 +700,10 @@ export function burbujasAtencion(m, hoy = new Date()) {
   const barcos = (m.puerto?.barcos || []).filter(Boolean); // 4.3.3: renglones nulos no truenan
   const tarde = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias < 0).length;
   const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;
-  if (tarde) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'rojo', texto: `${tarde} contenedor${tarde === 1 ? '' : 'es'} con ETA vencida` });
-  else if (pronto) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'ambar', texto: `${pronto} contenedor${pronto === 1 ? ' llega' : 'es llegan'} en ≤ 3 días` });
-  const oc = Number(m.ocDetenidas) || 0; // alerta `oc_detenida` (pedidos de cliente detenidos) → CEDIS
-  if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: `${oc} pedido${oc === 1 ? '' : 's'} de cliente detenido${oc === 1 ? '' : 's'}` });
+  if (tarde) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'rojo', texto: `${plural(tarde, 'contenedor', 'contenedores')} con ETA vencida` });
+  else if (pronto) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'ambar', texto: `${pronto === 1 ? '1 contenedor llega' : `${plural(pronto, 'contenedor', 'contenedores')} llegan`} en ≤ 3 días` });
+  const oc = Math.round(Number(m.ocDetenidas)) || 0; // alerta `oc_detenida` (pedidos de cliente detenidos) → CEDIS
+  if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: plural(oc, 'pedido de cliente detenido', 'pedidos de cliente detenidos') /* 4.7.10: oc decimal/texto con plural() */ });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   const prox = (m.oficina?.agenda || []).find((r) => r && r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
   if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${prox.titulo} ${enMinutos(prox.ini - ahora)}` });

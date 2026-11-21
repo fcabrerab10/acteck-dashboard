@@ -441,6 +441,12 @@ test('burbuja del CEDIS por pedidos de cliente detenidos', () => {
   const h = new Date('2026-10-05T11:00:00');
   assert.deepEqual(burbujasAtencion({ ocDetenidas: 2 }, h).map((x) => [x.lugar, x.nivel, x.texto]), [['cedis', 'rojo', '2 pedidos de cliente detenidos']]);
   assert.equal(burbujasAtencion({ ocDetenidas: 1 }, h)[0].texto, '1 pedido de cliente detenido');
+  // 4.7.10: conteo en texto o decimal ya no dice «1 pedidos …» / «1.4 pedidos»; muchos con miles es-MX
+  assert.equal(burbujasAtencion({ ocDetenidas: '1' }, h)[0].texto, '1 pedido de cliente detenido');
+  assert.equal(burbujasAtencion({ ocDetenidas: 1.4 }, h)[0].texto, '1 pedido de cliente detenido');
+  assert.equal(burbujasAtencion({ ocDetenidas: 1200 }, h)[0].texto, '1,200 pedidos de cliente detenidos');
+  assert.equal(burbujasAtencion({ puerto: { barcos: [{ llegaEnDias: 1 }, { llegaEnDias: 2 }] } }, h)[0].texto, '2 contenedores llegan en ≤ 3 días');
+  assert.equal(burbujasAtencion({ puerto: { barcos: [{ llegaEnDias: -1 }, { llegaEnDias: -3 }] } }, h)[0].texto, '2 contenedores con ETA vencida');
   assert.equal(construirModelo({ ...d, alertasOc: [{ tipo: 'oc_detenida' }, { tipo: 'oc_detenida' }] }, hoy).ocDetenidas, 2);
   assert.equal(construirModelo(d, hoy).ocDetenidas, 0);
 });
