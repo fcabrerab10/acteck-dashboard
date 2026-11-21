@@ -1290,3 +1290,19 @@ test('construirModelo(): una cuenta sin nombre usa su clave en la tienda (globo 
   const ts = m.distritos.flatMap((x) => x.tiendas).filter((t) => t.cuenta === 'ct');
   assert.ok(ts.length); for (const t of ts) assert.equal(t.nombreCuenta, 'ct');
 });
+test('tarjetaDe(): torre, tienda, camión y vendedor leen texto/Date y dicen singular (4.7.23)', () => {
+  const m = {
+    hoyIso: '2026-10-09',
+    torre: { abiertas: 1, confirmadas: 1, lineas: 2, compradas: 0, arribos7: '2', atrasados: '1' },
+    distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'ct', nombreCuenta: 'CT', sucursal: 'Matriz', importe: 5, previo: 0, vendio: true, vendedores: '0', cartera: { vencido: '$5,000' } }] }],
+    camiones: [{ folio: 'F1', fecha: new Date('2026-10-07T12:00:00'), cliente: 'X', monto: 1, piezas: 2 }, { folio: 'F2', fecha: 'pendiente', cliente: 'Y' }],
+    vendedoresRuta: [{ nombre: 'Ana', totalMes: '$100', total: 0, clientes: 2, destinos: [{ cliente: null }, { cliente: ' B ' }] }],
+  };
+  const to = tarjetaDe({ tipo: 'torre' }, m); assert.equal(to.numeros[3][1], '2 · 1 atrasado'); assert.equal(to.estado, 'rojo');
+  const ti = tarjetaDe({ tipo: 'tienda', ciudad: 'GDL', cuenta: 'ct', titulo: 'CT · Matriz' }, m);
+  assert.ok(ti.numeros.some((x) => x[0] === 'Cartera vencida')); assert.ok(!ti.numeros.some((x) => x[0] === 'Vendedores')); assert.equal(ti.estado, 'rojo');
+  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros[3][1], '2026-10-07 · hace 2 d');
+  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F2' }, m).numeros[3][1], '—');
+  const v = tarjetaDe({ tipo: 'vendedorErp', titulo: 'Ana' }, m); assert.equal(v.numeros[3][1], 'B'); assert.equal(v.estado, 'verde');
+  assert.equal(tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL' }, m).numeros[0][1], '1 de 1');
+});

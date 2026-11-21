@@ -819,13 +819,13 @@ export function tarjetaDe(tag, modelo) {
     t.estado = b.pagosVencidos > 0 || b.carteraVencida > 0 ? 'rojo' : b.pagosSemana > 0 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'torre' && m.torre) {
     const r = m.torre;
-    t.numeros = [['Propuestas abiertas', num(r.abiertas)], ['SKUs confirmados', `${num(r.confirmadas)} de ${num(r.lineas)}`], ['Comprados', num(r.compradas)], ['Arribos 7 días', `${num(r.arribos7)}${r.atrasados ? ` · ${num(r.atrasados)} atrasado${r.atrasados === 1 ? '' : 's'}` : ''}`]];
-    t.estado = r.atrasados > 0 ? 'rojo' : r.arribos7 > 0 ? 'ambar' : 'verde';
+    t.numeros = [['Propuestas abiertas', num(r.abiertas)], ['SKUs confirmados', `${num(r.confirmadas)} de ${num(r.lineas)}`], ['Comprados', num(r.compradas)], ['Arribos 7 días', `${num(r.arribos7)}${numero(r.atrasados) > 0 ? ` · ${plural(numero(r.atrasados), 'atrasado')}` : ''}`]]; // 4.7.23: «1» en texto = singular
+    t.estado = numero(r.atrasados) > 0 ? 'rojo' : numero(r.arribos7) > 0 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'ciudad') {
     const d = sn(m.distritos).find((x) => x.ciudad === tag.ciudad) || tag.distrito;
     if (d) {
       const ts = sn(d.tiendas), act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + numero(x.importe), 0), r = ts.length ? act / ts.length : 0;
-      t.numeros = [['Tiendas activas', `${act} de ${ts.length}`], ['Venta del mes', pesos(venta)], ['Clientes', num(sn(d.cuentas).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num(sn(d.vendedores).length)]];
+      t.numeros = [['Tiendas activas', `${num(act)} de ${num(ts.length)}`], ['Venta del mes', pesos(venta)], ['Clientes', num(sn(d.cuentas).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num(sn(d.vendedores).length)]];
       const cq = cuotaRitmo(m, ts.map((x) => x.cuenta)); if (cq) { t.numeros.splice(2, 0, ['Cuota del mes', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
       t.estado = !ts.length ? null : r >= 0.6 ? 'verde' : r >= 0.3 ? 'ambar' : 'rojo';
     }
@@ -834,22 +834,23 @@ export function tarjetaDe(tag, modelo) {
     const s = sn(d?.tiendas).find((x) => x.cuenta === tag.cuenta && `${x.nombreCuenta} · ${x.sucursal}` === tag.titulo);
     if (s) {
       t.numeros = [['Este mes', pesos(s.importe)], ['Mes anterior', pesos(s.previo)]];
-      if (s.vendedores) t.numeros.push(['Vendedores', num(s.vendedores)]);
-      if (s.cartera?.vencido > 0) t.numeros.push(['Cartera vencida', pesos(s.cartera.vencido)]);
+      if (numero(s.vendedores) > 0) t.numeros.push(['Vendedores', num(s.vendedores)]);
+      const venc = numero(s.cartera?.vencido); if (venc > 0) t.numeros.push(['Cartera vencida', pesos(venc)]); // 4.7.23: «$5,000» en texto ya cuenta
       const cq = cuotaRitmo(m, [s.cuenta]); if (cq) { t.numeros.splice(2, 0, ['Cuota de la cuenta', `${cq.pct} % · ritmo ${cq.ritmo} %`]); t.cuota = cq.tono; } // 3.90.60
-      t.estado = s.cartera?.vencido > 0 ? 'rojo' : s.vendioMes ? 'verde' : s.vendio ? 'ambar' : 'rojo';
+      t.estado = venc > 0 ? 'rojo' : s.vendioMes ? 'verde' : s.vendio ? 'ambar' : 'rojo';
     }
   } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {
     const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];
     const pr = p.presencia; if (pr) t.numeros.unshift(['Ahora', pr.estado === 'viaje' ? `De viaje · ${pr.titulo}` : pr.estado === 'reunion' ? `En reunión · ${pr.titulo}` : 'Disponible']);
-    t.estado = p.actividad ? 'verde' : p.pendientes > p.hechas ? 'ambar' : 'verde';
+    t.estado = p.actividad ? 'verde' : numero(p.pendientes) > numero(p.hechas) ? 'ambar' : 'verde';
   } else if (tag.tipo === 'camion') {
     // Camión (etapa 5, 3.90.54): factura (cliente, monto, piezas) o envío del Tracking (paquetería), cuándo salió y destino.
     // Envío con más de 5 días en camino = ámbar.
     const c = sn(m.camiones).find((x) => x.folio === tag.folio);
     if (c) {
       const nd = c.fecha ? dias(c.fecha, m.hoyIso || new Date().toISOString().slice(0, 10)) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
-      const salio = c.fecha ? `${String(c.fecha).slice(0, 10)}${n == null ? '' : n <= 0 ? ' · hoy' : n === 1 ? ' · ayer' : ` · hace ${n} d`}` : '—';
+      const fs = fechaIso(c.fecha); // 4.7.23: un Date ya no sale «Wed Oct 07»; ilegible → «—»
+      const salio = fs ? `${fs}${n == null ? '' : n <= 0 ? ' · hoy' : n === 1 ? ' · ayer' : ` · hace ${n} d`}` : '—';
       const destino = String(c.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) || '—';
       t.numeros = c.envio ? [['Cliente', c.cliente || '—'], ['Paquetería', c.paqueteria || '—'], ['Salió', salio], ['Destino', destino]] : [['Cliente', c.cliente || '—'], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], ['Salió', salio]];
       t.estado = c.envio && n != null && n > 5 ? 'ambar' : 'verde';
@@ -857,7 +858,7 @@ export function tarjetaDe(tag, modelo) {
   } else if (tag.tipo === 'vendedorErp') {
     // Vendedor del ERP en ruta (etapa 5, 3.90.53): ventas del mes y del año (`v_ventas_vendedor_cliente_mes`) y a quién visita.
     const v = sn(m.vendedoresRuta).find((x) => x.nombre === tag.titulo);
-    if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', sn(v.destinos).map((x) => x.cliente).slice(0, 3).join(' → ') || '—']]; t.estado = v.totalMes > 0 ? 'verde' : 'ambar'; }
+    if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', sn(v.destinos).map((x) => unirTexto(x.cliente)).filter(Boolean).slice(0, 3).join(' → ') || '—']]; t.estado = numero(v.totalMes) > 0 ? 'verde' : 'ambar'; }
   } else if (tag.tipo === 'barco' && tag.barco) {
     const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', b.eta || '—'], ['Llega a CEDIS', b.arribo || '—']];
     if (b.estatus) t.numeros.push(['Estatus', b.estatus]);

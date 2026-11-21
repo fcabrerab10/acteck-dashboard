@@ -256,9 +256,11 @@ Principios que no se rompen en ninguna etapa:
 - Burbuja «inventario bajo de un SKU A»: la alerta `stock_vs_transito` está apagada para todos (def 'off') y no hay clasificación ABC a la mano; decidir la fuente (¿prender la alerta?) y el agente la conecta al CEDIS.
 - Inventario en tienda (Tienda visitable): no hay vista de inventario por sucursal (sólo `v_sellout_inventario_cuenta_sku` por cuenta); si existe una, el agente la agrega a la tarjeta de la tienda.
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
+  - [x] (4.7.23) Tarjetas con `numero()`/`fechaIso()`: torre «1 atrasado» con «1» en texto (y estado rojo), tienda con cartera vencida en texto («$5,000») ya sale y en rojo, sin «Vendedores 0»; camión con fecha Date ya no dice «Wed Oct 07» (ilegible → «—»); ruta del vendedor sin destinos nulos; «Tiendas activas» con miles es-MX.
 
 ## Hecho
 
+- 2026-11-21 04:24 · v4.7.23 · Tarjetas de torre, tienda, camión, vendedor y ciudad leen texto/Date con `numero()`/`fechaIso()`; +1 prueba.
 - 2026-11-21 04:20 · v4.7.22 · Globos del banco, torre, tienda, vendedor y tarimas sin «null»/«undefined» y con `plural()`; +1 prueba.
 - 2026-11-21 04:17 · v4.7.21 · Globos de contenedor, camión y tráiler con `unirTexto()`: sin «null · …» ni «salió undefined»; piezas con `numero()`.
 - 2026-11-21 03:56 · v4.7.20 · salidas de hoy del CEDIS leen la fecha con `fechaIso()` y el montacargas usa `numero()`/`plural()`; +1 prueba.
