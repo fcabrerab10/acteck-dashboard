@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, pesosCorto, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural } from '../modelo.js';
+import { COLOR_CUENTA, pesosCorto, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, numero } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -257,7 +257,7 @@ export function cedis(ctx) {
   const mc = new THREE.Group(); const cuerpo = box(1.6, 1, 1.1, ACC.naranja); mc.add(cuerpo); const mastil = box(.2, 2.2, .2, 0x444444); mastil.position.set(.9, 1.1, 0); mc.add(mastil); const carga = box(1, .8, 1, 0xC58A3A); carga.position.set(1.4, .6, 0); mc.add(carga);
   [[-.5, .5], [-.5, -.5], [.5, .5], [.5, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaMc', () => new THREE.CylinderGeometry(.3, .3, .25, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); mc.add(r); });
   mc.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // montacargas: instancias dinámicas (3.90.22)
-  mc.position.set(cedisPos.x - 2, 0, cedisPos.z + 5); const salidas = Number(modelo.cedis.salidasHoy) || 0; add(mc, { tipo: 'montacargas', titulo: 'Montacargas', sub: salidas ? `moviendo tarimas · ${salidas} salida${salidas === 1 ? '' : 's'} hoy` : 'estacionado · sin salidas hoy', pagina: 'inventarioGlobal' });
+  mc.position.set(cedisPos.x - 2, 0, cedisPos.z + 5); const salidas = Math.round(numero(modelo.cedis?.salidasHoy)); add(mc, { tipo: 'montacargas', titulo: 'Montacargas', sub: salidas > 0 ? `moviendo tarimas · ${plural(salidas, 'salida')} hoy` : 'estacionado · sin salidas hoy', pagina: 'inventarioGlobal' });
   if (salidas) animados.push((t) => { const p = (t * .18) % 1; const x = cedisPos.x - 6 + Math.abs(Math.sin(p * Math.PI * 2)) * 12; mc.position.x = x; mc.rotation.y = Math.cos(p * Math.PI * 2) > 0 ? 0 : Math.PI; });
   return cedisPos;
 }

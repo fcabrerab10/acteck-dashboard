@@ -335,6 +335,8 @@ test('días de inventario por marca y salidas de hoy del CEDIS', () => {
   const m = construirModelo({ ...d, facturas: [{ cliente_key: 'x', folio: 1, fecha: '2026-10-07' }, { cliente_key: 'x', folio: 2, fecha: '2026-10-06' }], inventarioSku: filas, marcasSku: marcas, demandaSku: piv }, h);
   assert.equal(m.cedis.salidasHoy, 1, 'salidas de hoy en hora local'); assert.equal(m.cedis.racksMarca[0].dias, 45);
   assert.equal(construirModelo(d, hoy).cedis.salidasHoy >= 0, true);
+  const fs = [{ folio: 3, fecha: ' 2026-10-07T10:00:00' }, { folio: 4, fecha: new Date(2026, 9, 7, 9) }, { folio: 5, fecha: 'pendiente' }, null, { folio: 6, fecha: '2026-10-06' }];
+  assert.equal(construirModelo({ ...d, facturas: fs }, h).cedis.salidasHoy, 2, '(4.7.20) espacios y Date cuentan; ilegible y nulo no');
 });
 
 test('tarjeta del contenedor en el mar: proveedor, ETA, piezas y POs', () => {

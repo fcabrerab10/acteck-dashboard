@@ -1078,7 +1078,7 @@ export function construirModelo(d, hoy = new Date()) {
   // ── CEDIS ──
   const inv = (d.inventario || [])[0] || {};
   const hoyLocal = `${anio}-${String(mes).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`; // salidas de HOY en Guadalajara (hoyIso es UTC: de noche ya es mañana)
-  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: N(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null, racksMarca: racksPorMarca(d.inventarioSku, d.marcasSku, 8, d.demandaSku ? demanda3Meses(d.demandaSku, hoy) : null), salidasHoy: (d.facturas || []).filter((f) => String(f.fecha || '').slice(0, 10) === hoyLocal).length };
+  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: N(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null, racksMarca: racksPorMarca(d.inventarioSku, d.marcasSku, 8, d.demandaSku ? demanda3Meses(d.demandaSku, hoy) : null), salidasHoy: comoLista(d.facturas).filter((f) => fechaIso(f?.fecha) === hoyLocal).length }; // (4.7.20) fecha con espacios o Date cuenta
 
   // ── Puerto: contenedores en camino o llegando ──
   const barcos = []; const tarimas = [];
