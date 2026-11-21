@@ -451,7 +451,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   // 4.3.30: «hoy» del modelo y fechas de camiones/arribos con `fechaIso()` (« 2026-10-03» o un Date ya cuentan; ilegible se salta, antes «hace NaN d»).
   const hoyIso = fechaIso(m.hoyIso) || isoLocal(hoy);
   const diasAtras = (f) => dias(f, hoyIso);
-  const cuando = (f) => { const n = diasAtras(f); return n <= 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} d`; };
+  const cuando = (f) => haceDias(diasAtras(f)) || 'hoy';
   const out = [];
   for (const c of m.camiones || []) {
     const f = fechaIso(c?.fecha); if (!f || f > hoyIso) continue;
@@ -677,6 +677,13 @@ export function porcentaje(v, { signo = false } = {}) {
 }
 // DSO de la cartera (4.7.26): días redondeados en singular/plural con miles es-MX («DSO 45 días», «DSO 1 día»);
 // 0, negativo o ilegible no pone texto (antes «DSO 45.678 d» / «DSO 0 d» en el aviso de cartera del panel).
+// Antigüedad en días (4.7.28): «hoy» (0 o futuro), «ayer», «hace 1,200 d» con miles es-MX y redondeada (antes «hace 1200 d»,
+// «hace 2.6 d»); ilegible → ''. Bitácora (camiones/arribos) y tarjeta del camión.
+export function haceDias(v) {
+  if (v == null || v === '' || typeof v === 'boolean') return '';
+  const k = Math.round(numero(v)); if (!Number.isFinite(Number(String(v).replace(/[$,\s]/g, '')))) return '';
+  return k <= 0 ? 'hoy' : k === 1 ? 'ayer' : `hace ${k.toLocaleString('es-MX')} d`;
+}
 export function dsoTexto(v) {
   const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
 }
@@ -866,7 +873,7 @@ export function tarjetaDe(tag, modelo) {
     if (c) {
       const nd = c.fecha ? dias(c.fecha, m.hoyIso || new Date().toISOString().slice(0, 10)) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
       const fs = fechaIso(c.fecha); // 4.7.23: un Date ya no sale «Wed Oct 07»; ilegible → «—»
-      const salio = fs ? `${fs}${n == null ? '' : n <= 0 ? ' · hoy' : n === 1 ? ' · ayer' : ` · hace ${n} d`}` : '—';
+      const salio = fs ? unirTexto([fs, haceDias(n)]) || fs : '—';
       const destino = String(c.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) || '—';
       t.numeros = c.envio ? [['Cliente', c.cliente || '—'], ['Paquetería', c.paqueteria || '—'], ['Salió', salio], ['Destino', destino]] : [['Cliente', c.cliente || '—'], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], ['Salió', salio]];
       t.estado = c.envio && n != null && n > 5 ? 'ambar' : 'verde';
