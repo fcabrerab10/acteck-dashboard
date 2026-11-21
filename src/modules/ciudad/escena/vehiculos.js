@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { fmtK } from './etiquetas.js';
 import { instanciar, geo } from './instancias.js';
-import { circuitoVendedor, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural } from '../modelo.js';
+import { circuitoVendedor, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural, llegaBarco } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
@@ -20,7 +20,7 @@ export function barcos(ctx, puertoPos) {
     if (ru.muelle != null) { const atras = ru.muelle * 6.5; g.position.set(fin.x - lx / largo * atras, 0, fin.z - lz / largo * atras); } // la fila se forma mar adentro
     else { const a = Math.min(ru.avance, .9); g.position.set(ini.x + lx * a, 0, ini.z + lz * a); }
     g.rotation.y = -Math.atan2(lz, lx);
-    const estado = ru.modo === 'atracado' ? 'en el puerto · descargando' : ru.modo === 'esperando' ? 'en el puerto · esperando muelle' : b.llegaEnDias == null ? 'sin ETA' : `llega en ${b.llegaEnDias} d`;
+    const estado = ru.modo === 'atracado' ? 'en el puerto · descargando' : ru.modo === 'esperando' ? 'en el puerto · esperando muelle' : llegaBarco(b.llegaEnDias);
     add(g, { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}`, sub: `${b.naviera || b.supplier} · ${b.piezas.toLocaleString('es-MX')} pz · ${estado}`, pagina: 'inventarioGlobal', barco: b });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.22: piezas del barco como instancias dinámicas (tag de su contenedor)
     const base = g.position.clone();

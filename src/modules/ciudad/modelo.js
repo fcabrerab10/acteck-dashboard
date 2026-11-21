@@ -642,6 +642,14 @@ export function topSkus(filas = [], n = 5) {
 // Cifra corta (3.90.83): 999 600 ya no sale «1000 K» sino «1.0 M», 999.6 → «1 K», negativos con signo y basura → 0.
 // Singular/plural (4.3.34): «1 barco», «2 barcos», «0 barcos»; n ilegible cuenta como 0. `varios` por omisión = uno + 's'.
 // Cuenta regresiva corta (4.7.3): 0 → «empieza ya» (antes «en 0 min»), 1..59 → «en N min», ≥ 60 → «en 1 h 5 min»; ilegible o negativa → ''.
+// 4.7.5: cuándo llega un barco en palabras («llega hoy», «llega mañana», «llega en 3 d», «2 d tarde»); sin ETA o ilegible → 'sin ETA'.
+export function llegaBarco(dias) {
+  if (dias == null || (typeof dias === 'string' && !dias.trim())) return 'sin ETA';
+  const k = Math.round(Number(dias)); if (!Number.isFinite(k)) return 'sin ETA';
+  if (k < 0) return `${-k} d tarde`;
+  return k === 0 ? 'llega hoy' : k === 1 ? 'llega mañana' : `llega en ${k} d`;
+}
+
 export function enMinutos(min) {
   if (min == null || (typeof min === 'string' && !min.trim())) return '';
   const k = Math.round(Number(min)); if (!Number.isFinite(k) || k < 0) return '';
