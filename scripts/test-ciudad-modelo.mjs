@@ -1193,6 +1193,11 @@ test('enMinutos(): «empieza ya» en 0, minutos y horas; ilegible o negativa vac
   assert.equal(b.texto, 'Junta empieza ya');
 });
 
+test('tarjetaDe(barco): ETA en palabras (mañana, hoy, tarde)', () => {
+  const m = { puerto: { barcos: [{ id: 'b1', eta: '2026-11-21', llegaEnDias: 1 }, { id: 'b2', eta: '2026-11-20', llegaEnDias: 0 }, { id: 'b3', eta: '2026-11-18', llegaEnDias: -2 }, { id: 'b4', llegaEnDias: null }], tarimas: [] } };
+  const eta = (id) => tarjetaDe({ tipo: 'barco', id }, m).numeros.find((x) => x[0] === 'ETA puerto')[1];
+  assert.match(eta('b1'), /· mañana$/); assert.match(eta('b2'), /· hoy$/); assert.match(eta('b3'), /· 2 d tarde$/); assert.equal(eta('b4'), 'sin ETA');
+});
 test('llegaBarco(): hoy, mañana, en N d, tarde y sin ETA', () => {
   assert.equal(llegaBarco(0), 'llega hoy'); assert.equal(llegaBarco(1), 'llega mañana'); assert.equal(llegaBarco(5), 'llega en 5 d'); assert.equal(llegaBarco(' 3 '), 'llega en 3 d');
   assert.equal(llegaBarco(-2), '2 d tarde'); assert.equal(llegaBarco(0.3), 'llega hoy');

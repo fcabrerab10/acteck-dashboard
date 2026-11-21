@@ -790,7 +790,7 @@ export function tarjetaDe(tag, modelo) {
     const b = [...sn(m.puerto.barcos), ...sn(m.puerto.tarimas)].find((x) => x.id === tag.id);
     if (b) {
       const f = fechaIso(b.arribo) || fechaIso(b.eta); const fc = f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : 's/f'; // 4.3.30: sin «Invalid Date»
-      const cuando = b.llegaEnDias == null ? 'sin ETA' : b.llegaEnDias < 0 ? `${fc} · ${-b.llegaEnDias} d tarde` : b.llegaEnDias === 0 ? `${fc} · hoy` : `${fc} · en ${b.llegaEnDias} d`;
+      const cuando = b.llegaEnDias == null ? 'sin ETA' : `${fc} · ${llegaBarco(b.llegaEnDias).replace(/^llega /, '')}`; // 4.7.6: «mañana» (antes «en 1 d»)
       t.numeros = [['Proveedor', b.supplier || '—'], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', listaCorta(b.listaPos) || (b.pos ? num(b.pos) : '—')]];
       t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';
     }
