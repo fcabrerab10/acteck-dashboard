@@ -240,6 +240,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.16) Capa de cuota, celebraciones y reparto por estado con `numero()`: `cuotasPorCuenta()` (cuota_venta, fact_neta), `cuotaRitmo()`, `celebraciones()` y `repartoPorEstado()` leen «$1,000» / « 2,500 » como número (antes la cuota en texto con «$» no contaba y la venta valía 0).
   - [x] (4.7.17) Capa de ventas/cartera de las ciudades y pensamientos de las tiendas con `numero()`: importe/previo y cartera vencida en texto («$5,000», « 1,200 ») ya cuentan (antes la venta valía 0, el % salía vacío y la cuenta con vencido en texto salía «Sin cartera vencida»).
   - [x] (4.7.18) Tarjetas del CEDIS, racks, contenedor y ciudad, top SKUs, cadena de suministro y bitácora (piezas de tarimas/arribos) con `numero()`: piezas, días, valor e importe en texto («1,200», «$85,000», « 95 ») ya cuentan (antes 0: CEDIS en verde con 95 días, «0 pz», % del rack en 0).
+  - [x] (4.7.19) Burbujas y bitácora con `numero()`: la burbuja del banco lee cartera vencida y pagos vencidos en texto («$5,000», « 1 »; antes no salía), los pedidos detenidos del CEDIS en texto («1,200») ya cuentan y una factura o pago de «$750,000» en texto ya sale «grande» en la bitácora.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -403,3 +404,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-10-06 10:48 · v3.86.1 · Medidor `?fps` en el harness + `stats()` en la escena; árboles con `InstancedMesh` y geometrías compartidas (−187 llamadas de dibujo, −224 geometrías; ya no son tocables).
 - 2026-10-05 15:20 · v3.76.8 · `escena.js` partido en `escena/` (camara, luz-clima, terreno, edificios, gente, vehiculos, etiquetas, interaccion) con un `ctx` compartido; `escena.js` sólo orquesta. Sin cambios visibles (harness día/noche sin errores). `preparar-harness.mjs` copia también `escena/`.
 - 2026-10-05 15:40 · v3.76.9 · Dibujar sólo cuando hace falta: pausa total con la pestaña oculta (`visibilitychange`), modo calma a ~10 fps tras 15 s sin gestos y con la cámara quieta, cualquier gesto vuelve a 60 (medido en harness con reloj simulado: 60 → 10 → 60 fps). `devicePixelRatio` ya estaba topado en 2.
+- 2026-11-21 03:36 · v4.7.19 · Burbujas del banco/CEDIS y bitácora («grande») leen montos en texto con `numero()`.

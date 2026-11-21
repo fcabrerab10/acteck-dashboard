@@ -457,7 +457,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
     const f = fechaIso(c?.fecha); if (!f || f > hoyIso) continue;
     out.push(c.envio
       ? { id: `envio-${c.folio}`, icono: '🚚', texto: `Salió ${c.folio} a ${c.cliente}${c.paqueteria ? ` · ${c.paqueteria}` : ''}`, clave: `${f} 00:01`, cuando: cuando(f), ir: { tipo: 'ciudad', ciudad: c.ciudad } }
-      : { id: `factura-${c.folio}`, icono: '🧾', texto: `Factura ${c.folio} · ${c.cliente} · ${pesos(c.monto)}`, clave: `${f} 00:01`, cuando: cuando(f), grande: Number(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
+      : { id: `factura-${c.folio}`, icono: '🧾', texto: `Factura ${c.folio} · ${c.cliente} · ${pesos(c.monto)}`, clave: `${f} 00:01`, cuando: cuando(f), grande: numero(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
   }
   for (const b of [...(m.puerto?.tarimas || []), ...(m.puerto?.barcos || [])]) {
     const f = fechaIso(b?.arribo); if (!f || f > hoyIso) continue;
@@ -468,7 +468,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   const fechaHora = (ts) => { const t = instante(ts); if (!t) return null; const p2 = (n) => String(n).padStart(2, '0'); return { f: `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`, h: `${p2(t.getHours())}:${p2(t.getMinutes())}` }; };
   for (const p of m.pagosHechos || []) {
     const fh = p?.pagado_at ? fechaHora(p.pagado_at) : null; if (!fh || fh.f > hoyIso) continue;
-    out.push({ id: `pago-${p.id ?? `${p.pagado_at}-${p.cliente}`}`, icono: '💸', texto: `Pago registrado${p.cliente ? ` · ${p.cliente}` : ''}${p.concepto ? ` · ${p.concepto}` : ''} · ${pesos(p.monto)}`, clave: `${fh.f} ${fh.h}`, cuando: fh.f === hoyIso ? fh.h : cuando(fh.f), grande: Number(p.monto) >= 500000, ir: { tipo: 'banco' }, tarjeta: { tipo: 'banco' } });
+    out.push({ id: `pago-${p.id ?? `${p.pagado_at}-${p.cliente}`}`, icono: '💸', texto: `Pago registrado${p.cliente ? ` · ${p.cliente}` : ''}${p.concepto ? ` · ${p.concepto}` : ''} · ${pesos(p.monto)}`, clave: `${fh.f} ${fh.h}`, cuando: fh.f === hoyIso ? fh.h : cuando(fh.f), grande: numero(p.monto) >= 500000, ir: { tipo: 'banco' }, tarjeta: { tipo: 'banco' } });
   }
   const sy = m.ultimaSync?.created_at ? fechaHora(m.ultimaSync.created_at) : null;
   if (sy && sy.f <= hoyIso) out.push({ id: 'sync', icono: '🔄', texto: `Se actualizaron los datos${m.ultimaSync.status ? ` · ${m.ultimaSync.status}` : ''}`, clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
@@ -701,14 +701,14 @@ export function burbujasAtencion(m, hoy = new Date()) {
   if (!m) return [];
   const pesos = pesosCorto; // 4.7.8: antes 999 600 salía «$1000 K» y los negativos «$-5000»
   const out = []; const b = m.banco;
-  if (b && Number(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
-  else if (b && Number(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: plural(b.pagosVencidos, 'pago vencido', 'pagos vencidos') }); // 4.7.9: «1» en texto ya no dice «1 pagos vencidos»
+  if (b && numero(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
+  else if (b && numero(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: plural(b.pagosVencidos, 'pago vencido', 'pagos vencidos') }); // 4.7.9: «1» en texto ya no dice «1 pagos vencidos»
   const barcos = (m.puerto?.barcos || []).filter(Boolean); // 4.3.3: renglones nulos no truenan
   const tarde = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias < 0).length;
   const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;
   if (tarde) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'rojo', texto: `${plural(tarde, 'contenedor', 'contenedores')} con ETA vencida` });
   else if (pronto) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'ambar', texto: `${pronto === 1 ? '1 contenedor llega' : `${plural(pronto, 'contenedor', 'contenedores')} llegan`} en ≤ 3 días` });
-  const oc = Math.round(Number(m.ocDetenidas)) || 0; // alerta `oc_detenida` (pedidos de cliente detenidos) → CEDIS
+  const oc = Math.round(numero(m.ocDetenidas)); // 4.7.19: «1,200» en texto cuenta; alerta `oc_detenida` (pedidos de cliente detenidos) → CEDIS
   if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: plural(oc, 'pedido de cliente detenido', 'pedidos de cliente detenidos') /* 4.7.10: oc decimal/texto con plural() */ });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   const prox = (m.oficina?.agenda || []).find((r) => r && r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);

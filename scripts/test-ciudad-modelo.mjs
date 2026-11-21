@@ -1263,3 +1263,16 @@ test('4.7.18 tarjetas, top SKUs y piezas leen montos en texto', () => {
   assert.equal(tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL' }, m).numeros[1][1], pesosCorto(2000));
   const t = topSkus([{ sku: 'x', importe: '$1,000', cantidad: '2' }, { sku: 'y', importe: '500' }]); assert.equal(t[0].importe, 1000); assert.equal(t[0].cantidad, 2); assert.equal(t[1].importe, 500);
 });
+
+test('4.7.19: burbujas y bitácora leen montos en texto con numero()', () => {
+  const h = new Date('2026-10-07T11:00:00');
+  assert.equal(burbujasAtencion({ banco: { carteraVencida: '$5,000' } }, h)[0].texto, `Cartera vencida ${pesosCorto(5000)}`);
+  assert.equal(burbujasAtencion({ banco: { carteraVencida: '', pagosVencidos: ' 1 ' } }, h)[0].texto, '1 pago vencido');
+  assert.deepEqual(burbujasAtencion({ banco: { carteraVencida: 'basura', pagosVencidos: '0' } }, h), []);
+  assert.equal(burbujasAtencion({ ocDetenidas: '1,200' }, h)[0].texto, '1,200 pedidos de cliente detenidos');
+  assert.deepEqual(burbujasAtencion({ ocDetenidas: 'nada' }, h), []);
+  const m = { hoyIso: '2026-10-07', camiones: [{ folio: 'F1', cliente: 'A', ciudad: 'GDL', monto: '$750,000', fecha: '2026-10-06' }, { folio: 'F2', cliente: 'B', ciudad: 'GDL', monto: '1,000', fecha: '2026-10-06' }],
+    pagosHechos: [{ id: 1, cliente: 'C', monto: ' 600,000 ', pagado_at: '2026-10-07T09:00:00' }] };
+  const b = bitacoraEventos(m, h); const por = Object.fromEntries(b.map((x) => [x.id, x.grande]));
+  assert.equal(por['factura-F1'], true); assert.equal(por['factura-F2'], false); assert.equal(por['pago-1'], true);
+});
