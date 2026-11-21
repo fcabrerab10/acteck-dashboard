@@ -521,7 +521,7 @@ export function cuotasPorCuenta(cuotas = [], ventas = []) {
 export const CAPA_TONOS = { verde: 0x34c759, ambar: 0xff9f0a, rojo: 0xff3b30, gris: 0x8e8e93 };
 export function capaCiudades(m, capa) {
   if (!m || !['ventas', 'cartera', 'cuota'].includes(capa)) return null;
-  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  const pesos = pesosCorto; // 4.7.8: antes 999 600 salía «$1000 K» y los negativos «$-5000»
   const porCiudad = new Map();
   // Distritos y tiendas nulos se saltan (4.3.6): antes un renglón null tumbaba la capa y el disco de cada ciudad.
   const distritos = (m.distritos || []).filter((d) => d?.ciudad).map((d) => ({ ...d, tiendas: (d.tiendas || []).filter(Boolean) }));
@@ -693,7 +693,7 @@ export function recursosBarra(r) {
 export function burbujasAtencion(m, hoy = new Date()) {
   hoy = fechaHoy(hoy);
   if (!m) return [];
-  const pesos = (v) => { const n = Number(v) || 0; return n >= 1e6 ? `$${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `$${Math.round(n / 1e3)} K` : `$${Math.round(n)}`; };
+  const pesos = pesosCorto; // 4.7.8: antes 999 600 salía «$1000 K» y los negativos «$-5000»
   const out = []; const b = m.banco;
   if (b && Number(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
   else if (b && Number(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `${b.pagosVencidos} pago${b.pagosVencidos === 1 ? '' : 's'} vencido${b.pagosVencidos === 1 ? '' : 's'}` });

@@ -1209,3 +1209,9 @@ test('llegaBarco(): hoy, mañana, en N d, tarde y sin ETA', () => {
   assert.equal(llegaBarco(-2), '2 d tarde'); assert.equal(llegaBarco(0.3), 'llega hoy');
   assert.equal(llegaBarco(null), 'sin ETA'); assert.equal(llegaBarco(''), 'sin ETA'); assert.equal(llegaBarco('x'), 'sin ETA'); assert.equal(llegaBarco(Infinity), 'sin ETA');
 });
+test('burbujasAtencion() / capaCiudades(): montos con pesosCorto (sin «$1000 K»)', () => {
+  assert.equal(burbujasAtencion({ banco: { carteraVencida: 999600 } }, new Date(2026, 10, 21, 12))[0].texto, 'Cartera vencida $1.0 M');
+  assert.equal(burbujasAtencion({ banco: { carteraVencida: 2.5e9 } }, new Date(2026, 10, 21, 12))[0].texto, 'Cartera vencida $2.5 B');
+  const c = capaCiudades({ distritos: [{ ciudad: 'GUADALAJARA', tiendas: [{ importe: 999600, previo: 0 }] }] }, 'ventas');
+  assert.match(c.porCiudad.get('GUADALAJARA').texto, /^\$1\.0 M/);
+});
