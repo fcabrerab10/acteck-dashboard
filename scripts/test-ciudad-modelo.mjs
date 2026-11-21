@@ -510,6 +510,14 @@ test('capa de cuota por ciudad', () => {
   for (const capa of ['ventas', 'cartera', 'cuota']) assert.deepEqual([...capaCiudades(conNulos, capa).porCiudad], [...capaCiudades(m, capa).porCiudad], `capa ${capa} con nulos`);
   assert.equal(cuotasPorCuenta(null, null).size, 0);
   assert.equal(cuotasPorCuenta([{ cliente_erp: ' 10 ', cuenta_sellout: 'a', cuota_venta: 5 }], [{ cliente: '10', fact_neta: 3 }, { cliente: 10, fact_neta: 'x' }]).get('a').venta, 3, 'cliente con espacios');
+  // 4.7.16: montos en texto con «$», comas o espacios suman en cuota, ritmo, celebraciones y reparto por estado
+  assert.deepEqual(cuotasPorCuenta([{ cliente_erp: 1, cuenta_sellout: 'a', cuota_venta: '$1,000' }], [{ cliente: 1, fact_neta: ' 2,500 ' }]).get('a'), { venta: 2500, cuota: 1000 }, 'cuota/venta en texto');
+  { const mq = { hoyIso: '2026-11-15', cuotas: new Map([['a', { venta: '$1,000', cuota: '$2,000' }]]) };
+    assert.equal(cuotaRitmo(mq, ['a'])?.pct, 50, 'cuotaRitmo con texto');
+    assert.equal(celebraciones({ cuotas: new Map([['a', { venta: '$3,000', cuota: '2,000' }]]) }).cuota?.pct, 150, 'celebración con texto');
+    const ce = celebraciones({ distritos: [{ ciudad: 'X', tiendas: [{ cuenta: 'a', sucursal: 's1', vendioMes: true, importe: '$500' }, { cuenta: 'a', sucursal: 's2', vendioMes: true, importe: '$1,200' }, { cuenta: 'a', sucursal: 's3', vendioMes: true, importe: 9, previo: '$5' }] }] });
+    assert.deepEqual(ce.tiendas.map((t) => [t.sucursal, t.importe]), [['s2', 1200], ['s1', 500]], 'tiendas nuevas con texto'); }
+  assert.deepEqual(repartoPorEstado('x', [{ cuenta: 'x', estado: 'NUEVO LEON', anio: 2026, mes: 10, importe: '$1,500' }], { anio: 2026, mes: 10, anioPrev: 2026, mesPrev: 9 }).map((o) => o.importe), [1500], 'reparto con texto');
 });
 
 test('bitácora en vivo: eventos recientes', () => {

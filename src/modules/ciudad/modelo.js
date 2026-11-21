@@ -325,7 +325,7 @@ export function repartoPorEstado(cuenta, filas = [], op) {
   for (const r of comoLista(filas)) {
     if (clave(r?.cuenta) !== cta) continue; const est = norm(r.estado);
     const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad || ciudad === sede) continue;
-    const a = Number(r.anio), ms = Number(r.mes), imp = Number(r.importe) || 0; const o = por.get(ciudad) || { ciudad, importe: 0, previo: 0 };
+    const a = Number(r.anio), ms = Number(r.mes), imp = numero(r.importe); const o = por.get(ciudad) || { ciudad, importe: 0, previo: 0 };
     if (a === anio && ms === mes) o.importe += imp; else if (a === anioPrev && ms === mesPrev) o.previo += imp; else continue;
     por.set(ciudad, o);
   }
@@ -484,8 +484,9 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
 export function celebraciones(m, max = 5) {
   max = cuantos(max, 5);
   const q = m?.cuotas instanceof Map ? [...m.cuotas.values()].filter(Boolean) : [];
-  const venta = q.reduce((s, x) => s + (Number(x.venta) || 0), 0), cuo = q.reduce((s, x) => s + (Number(x.cuota) || 0), 0);
-  const tiendas = (m?.distritos || []).filter(Boolean).flatMap((d) => (d.tiendas || []).filter((t) => t && !t.reparto && t.vendioMes && !(Number(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: Number(t.importe) || 0 })))
+  // 4.7.16: montos en texto («$5,000») con `numero()` (antes 0: no celebraba la cuota ni ordenaba tiendas).
+  const venta = q.reduce((s, x) => s + numero(x.venta), 0), cuo = q.reduce((s, x) => s + numero(x.cuota), 0);
+  const tiendas = (m?.distritos || []).filter(Boolean).flatMap((d) => (d.tiendas || []).filter((t) => t && !t.reparto && t.vendioMes && !(numero(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: numero(t.importe) })))
     .sort((a, b) => b.importe - a.importe).slice(0, max);
   return { cuota: cuo > 0 && venta >= cuo ? { pct: Math.round(venta / cuo * 100) } : null, tiendas };
 }
@@ -497,9 +498,10 @@ export function cuotaRitmo(m, cuentas = []) {
   // 4.3.24: cuota en texto se suma como número (antes «1000» se concatenaba y el % salía disparatado); hoyIso con `fechaHoy()`.
   const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h = fechaHoy(m?.hoyIso);
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
-  const cuotaDe = (c) => { const v = Number(q.get(c)?.cuota); return Number.isFinite(v) && v > 0 ? v : 0; };
+  // 4.7.16: cuota y venta en texto con «$», comas o espacios («$1,000») se leen con `numero()` (antes la cuota «$1,000» no contaba).
+  const cuotaDe = (c) => { const v = numero(q.get(c)?.cuota); return v > 0 ? v : 0; };
   const cs = [...new Set(comoLista(cuentas))].filter((c) => cuotaDe(c) > 0); if (!cs.length) return null;
-  const venta = cs.reduce((s, c) => s + (Number(q.get(c).venta) || 0), 0), cuo = cs.reduce((s, c) => s + cuotaDe(c), 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
+  const venta = cs.reduce((s, c) => s + numero(q.get(c).venta), 0), cuo = cs.reduce((s, c) => s + cuotaDe(c), 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
   return { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', pct, ritmo: Math.round(ritmo * 100), n: cs.length, venta, cuota: cuo };
 }
 
@@ -511,9 +513,9 @@ export function cuotasPorCuenta(cuotas = [], ventas = []) {
   for (const r of comoLista(cuotas)) {
     const cu = String(r?.cuenta_sellout ?? '').trim(); if (!cu) continue; // 4.3.24: « ct » = «ct» (antes otra cuenta o sin color)
     const k = String(r.cliente_erp ?? '').trim(); if (k) cuentaDe.set(k, cu);
-    const o = out.get(cu) || { venta: 0, cuota: 0 }; o.cuota += Number(r.cuota_venta) || 0; out.set(cu, o);
+    const o = out.get(cu) || { venta: 0, cuota: 0 }; o.cuota += numero(r.cuota_venta); out.set(cu, o); // 4.7.16: «$1,000» ya suma
   }
-  for (const v of comoLista(ventas)) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += Number(v.fact_neta) || 0; }
+  for (const v of comoLista(ventas)) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += numero(v.fact_neta); }
   return out;
 }
 

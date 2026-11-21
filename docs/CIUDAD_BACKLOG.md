@@ -237,6 +237,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.13) Panel de la Ciudad: los días del CEDIS usan `plural()` como el globo («1 día», «12 días»; antes «12 d» y «NaN d» sin ritmo); se quitó `fmtK` (ya nadie lo usaba) de `escena/etiquetas.js`. Harness sin errores.
   - [x] (4.7.14) Barra de recursos: `recursosBarra()` lee montos en texto con «$», comas o espacios («$5,000»): antes valían 0, la cartera vencida salía en verde y el % de ventas contra cuota en 0.
   - [x] (4.7.15) `numero()` pura y probada (el `N()` interno del modelo): banco, torre, CEDIS, racks, puerto, ventas y cartera de las ciudades leen montos/conteos en texto con «$», comas o espacios («$5,000») como número (antes valían 0 y no sumaban); vacío, booleano, objeto o Infinity → 0.
+  - [x] (4.7.16) Capa de cuota, celebraciones y reparto por estado con `numero()`: `cuotasPorCuenta()` (cuota_venta, fact_neta), `cuotaRitmo()`, `celebraciones()` y `repartoPorEstado()` leen «$1,000» / « 2,500 » como número (antes la cuota en texto con «$» no contaba y la venta valía 0).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -252,6 +253,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 02:36 · v4.7.16 · capa de cuota, celebraciones y reparto por estado leen montos en texto («$1,000») con `numero()`; +5 pruebas.
 - 2026-11-21 02:16 · v4.7.15 · `numero()` (antes `N()`): montos en texto («$5,000», « 1,200 ») ya suman en banco, torre, CEDIS, puerto y ciudades; +1 prueba.
 - 2026-11-21 01:55 · v4.7.14 · barra de recursos: montos en texto («$5,000») ya no valen 0 (cartera vencida en verde, % de ventas 0); +2 pruebas.
 - 2026-11-21 01:36 · v4.7.13 · panel: días del CEDIS con `plural()` (sin «NaN d»); adiós `fmtK`.
