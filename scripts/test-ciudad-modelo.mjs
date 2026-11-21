@@ -426,6 +426,8 @@ test('barra superior de recursos con los números de Inicio', () => {
     assert.equal(b2[0].valor, 800000); assert.equal(b2[0].pct, 80); assert.equal(b2[0].tono, 'ambar'); assert.equal(b2[1].valor, 5000); assert.equal(b2[1].tono, 'rojo');
     for (const v of ['', '  ', 'x', true, null, [5], NaN, Infinity]) assert.equal(recursosBarra({ cartera: { vencido: v } })[0].tono, 'verde', `vencido ${String(v)}`); }
   for (const c of [NaN, Infinity, '', 'x']) assert.equal(recursosBarra({ inv: { valor: 1, cobertura: c } })[0].extra, null, `cobertura ${c}`);
+  { const v = recursosBarra({ cur: { fact_neta: 12500 }, cuotaPeriodo: 1000 })[0]; assert.equal(v.pct, 1250); assert.equal(v.pctTexto, '1,250 %', '4.7.25'); // 4.7.25
+    assert.equal(recursosBarra({ cur: { fact_neta: 1 }, cuotaPeriodo: 0 })[0].pctTexto, null); assert.equal(recursosBarra({ inv: { valor: 1, cobertura: 1200.4 } })[0].extra, '1,200 d'); }
   assert.equal(recursosBarra({ inv: { valor: 1, cobertura: 94.6 } })[0].extra, '95 d'); assert.equal(recursosBarra({ inv: { valor: 1, cobertura: 0 } })[0].extra, '0 d');
 });
 

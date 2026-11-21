@@ -12,12 +12,13 @@ import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
 import { crearAmbiente } from './sonido';
-import { COLOR_CUENTA, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco } from './modelo';
+import { COLOR_CUENTA, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
 // Táctil (3.90.79): botones de al menos 40 px y letra más grande; el buscador a 16 px para que iOS no haga zoom al escribir.
 const TACTIL_CSS = '.ciudad-tactil button{min-height:40px;min-width:40px;font-size:14px!important}.ciudad-tactil input{font-size:16px!important}';
+const miles = (v) => numero(v).toLocaleString('es-MX'); // 4.7.25: panel con miles es-MX («1,200 de 3,400 vendieron»)
 let recorridoMostrado = false; // sin localStorage (privado): el recorrido sale una vez por sesión
 const capital = (s) => String(s || '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
 
@@ -258,7 +259,7 @@ export default function Ciudad({ onNavegar }) {
         </svg>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', pointerEvents: 'auto' }}>
-        {[['Tiendas', `${k.tiendasVendieron} de ${k.tiendas} vendieron`], ['Ciudades', `${k.ciudades}`], ['Contenedores', `${k.barcos} navegando`], ['Camiones', `${k.camiones} en ruta`], ['Clientes finales', `${k.clientesFinales.toLocaleString('es-MX')} · 2 meses`], ['CEDIS', `${pesosCorto(modelo.cedis.valor)} · ${plural(modelo.cedis.dias, 'día')}`], ['Oficina', `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')}`]].map(([l, v]) => (
+        {[['Tiendas', `${miles(k.tiendasVendieron)} de ${miles(k.tiendas)} vendieron`], ['Ciudades', miles(k.ciudades)], ['Contenedores', `${miles(k.barcos)} navegando`], ['Camiones', `${miles(k.camiones)} en ruta`], ['Clientes finales', `${miles(k.clientesFinales)} · 2 meses`], ['CEDIS', `${pesosCorto(modelo.cedis.valor)} · ${plural(modelo.cedis.dias, 'día')}`], ['Oficina', `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')}`]].map(([l, v]) => (
           <div key={l} style={{ ...card, padding: '8px 12px', minWidth: 110 }}><div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</div></div>
         ))}
       </div>
@@ -349,9 +350,9 @@ function BarraRecursos({ card, theme, irA, ayuda }) {
         <button key={r.clave} type="button" onClick={() => irA(r.ir)} title={`${r.etiqueta} · ir al edificio`} style={{ ...card, padding: '5px 10px', cursor: 'pointer', textAlign: 'left', color: theme.text, minWidth: 92 }}>
           <div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, whiteSpace: 'nowrap' }}>{r.icono} {r.etiqueta}</div>
           <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: r.clave === 'cartera' && r.tono === 'rojo' ? TONO.rojo : theme.text }}>
-            {pesosCorto(r.valor)}{r.pct != null && <span style={{ fontSize: 11, fontWeight: 600, color: TONO[r.tono] || theme.textMuted }}> · {r.pct}%</span>}{r.extra && <span style={{ fontSize: 11, fontWeight: 500, color: theme.textMuted }}> · {r.extra}</span>}
+            {pesosCorto(r.valor)}{r.pct != null && <span style={{ fontSize: 11, fontWeight: 600, color: TONO[r.tono] || theme.textMuted }}> · {r.pctTexto}</span>}{r.extra && <span style={{ fontSize: 11, fontWeight: 500, color: theme.textMuted }}> · {r.extra}</span>}
           </div>
-          {r.pct != null && <div style={{ height: 3, borderRadius: 2, background: theme.border, marginTop: 3, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: TONO[r.tono] || theme.accent }} /></div>}
+          {r.pct != null && Number.isFinite(r.pct) && <div style={{ height: 3, borderRadius: 2, background: theme.border, marginTop: 3, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: TONO[r.tono] || theme.accent }} /></div>}
         </button>
       ))}
     </div>

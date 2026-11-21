@@ -246,6 +246,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.22) Globos sin «null» y en singular: banco «1 pago esta semana · 1 vencido» y torre «1 propuesta abierta · 1 arribo» con `plural()` (aguantan texto/decimal); tienda y vendedor usan la clave de la cuenta si no trae nombre (antes «null · Matriz»); tarimas con `numero()` y contenedor sin id ya no dice «Contenedor undefined». Harness sin errores.
   - [x] (4.7.23) Tarjetas con `numero()`/`fechaIso()`: torre «1 atrasado» con «1» en texto (y estado rojo), tienda con cartera vencida en texto («$5,000») ya sale y en rojo, sin «Vendedores 0»; camión con fecha Date ya no dice «Wed Oct 07» (ilegible → «—»); ruta del vendedor sin destinos nulos; «Tiendas activas» con miles es-MX.
   - [x] (4.7.24) `porcentaje()` pura y probada: capa de ventas («+2,250 % vs mes anterior», antes «2250 %»), cuota del mes en la capa, tarjetas de ciudad/tienda y banderín de la manzana, pensamientos de las tiendas y % del rack usan miles es-MX y signo; ilegible dice «—» en vez de «NaN %». Harness sin errores.
+  - [x] (4.7.25) Barra de recursos con `porcentaje()`: «Ventas del mes · 1,250 %» (antes «1250%» pegado; ilegible no pinta barra) y cobertura «1,200 d»; panel de la Ciudad con miles es-MX en tiendas, ciudades, contenedores y camiones («1,200 de 3,400 vendieron»). Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -261,6 +262,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 05:17 · v4.7.25 · Barra de recursos con `porcentaje()` («1,250 %») y cobertura «1,200 d»; panel con miles es-MX; +1 prueba.
 - 2026-11-21 04:56 · v4.7.24 · `porcentaje()`: % de capas, tarjetas, banderín de cuota, pensamientos y racks con miles es-MX, signo y «—» si es ilegible; +1 prueba. Se movió la nota 4.7.23 de «Necesita a Fernando» a Pulido.
 - 2026-11-21 04:24 · v4.7.23 · Tarjetas de torre, tienda, camión, vendedor y ciudad leen texto/Date con `numero()`/`fechaIso()`; +1 prueba.
 - 2026-11-21 04:20 · v4.7.22 · Globos del banco, torre, tienda, vendedor y tarimas sin «null»/«undefined» y con `plural()`; +1 prueba.

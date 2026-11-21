@@ -699,8 +699,9 @@ export function recursosBarra(r) {
   if (!r) return [];
   // 4.7.14: montos en texto con «$», comas o espacios («$5,000») se leen como número (antes 0: cartera «verde» y % de ventas 0).
   const n = (v) => { const k = typeof v === 'string' ? Number(v.replace(/[\s$,]/g, '')) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) && !(typeof v === 'string' && !v.trim()) ? k : 0; }; const out = [];
-  if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, tono: pct == null ? null : pct >= 100 ? 'verde' : pct >= 80 ? 'ambar' : 'rojo', ir: { tipo: 'oficina' } }); }
-  if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: r.inv.cobertura != null && r.inv.cobertura !== '' && Number.isFinite(Number(r.inv.cobertura)) ? `${Math.round(Number(r.inv.cobertura))} d` : null, ir: { tipo: 'cedis' } });
+  // 4.7.25: `pctTexto` con `porcentaje()` («1,250 %»; antes «1250%» pegado) y días de cobertura con miles es-MX («1,200 d»).
+  if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, pctTexto: pct == null ? null : porcentaje(pct), tono: pct == null ? null : pct >= 100 ? 'verde' : pct >= 80 ? 'ambar' : 'rojo', ir: { tipo: 'oficina' } }); }
+  if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: r.inv.cobertura != null && r.inv.cobertura !== '' && Number.isFinite(Number(r.inv.cobertura)) ? `${Math.round(Number(r.inv.cobertura)).toLocaleString('es-MX')} d` : null, ir: { tipo: 'cedis' } });
   if (r.cartera) out.push({ clave: 'cartera', icono: '🏦', etiqueta: 'Cartera vencida', valor: n(r.cartera.vencido), tono: n(r.cartera.vencido) > 0 ? 'rojo' : 'verde', ir: { tipo: 'banco' } });
   if (r.enCamino) out.push({ clave: 'embarques', icono: '🚢', etiqueta: 'En tránsito', valor: n(r.enCamino.valor), extra: posTexto(r.enCamino.pos), ir: { tipo: 'puerto' } });
   return out;
