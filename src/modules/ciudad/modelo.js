@@ -696,7 +696,7 @@ export function burbujasAtencion(m, hoy = new Date()) {
   const pesos = pesosCorto; // 4.7.8: antes 999 600 salía «$1000 K» y los negativos «$-5000»
   const out = []; const b = m.banco;
   if (b && Number(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
-  else if (b && Number(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `${b.pagosVencidos} pago${b.pagosVencidos === 1 ? '' : 's'} vencido${b.pagosVencidos === 1 ? '' : 's'}` });
+  else if (b && Number(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: plural(b.pagosVencidos, 'pago vencido', 'pagos vencidos') }); // 4.7.9: «1» en texto ya no dice «1 pagos vencidos»
   const barcos = (m.puerto?.barcos || []).filter(Boolean); // 4.3.3: renglones nulos no truenan
   const tarde = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias < 0).length;
   const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;

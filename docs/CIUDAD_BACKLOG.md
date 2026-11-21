@@ -230,6 +230,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.3) `enMinutos()` pura y probada: la misión y la burbuja de la reunión dicen «empieza ya» a la hora exacta (antes «en 0 min») y una cuenta ≥ 60 min diría «en 1 h 5 min»; ilegible o negativa no pone texto.
   - [x] (4.7.4) Calendario comercial: «Mañana cierra el mes» (antes «en 1 día»), «Buen Fin empieza mañana» y el lunes final «Buen Fin · hoy es el último día» (antes «hasta el lunes 16» el mismo lunes).
   - [x] (4.7.8) Burbuja del banco («Cartera vencida») y capa de ventas/cartera de las ciudades usan `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; miles de millones «B»; negativos «-$5 K»).
+  - [x] (4.7.9) Burbuja del banco con `plural()`: pagos vencidos que vienen en texto («1») dicen «1 pago vencido» (antes «1 pagos vencidos»).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -245,6 +246,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 00:17 · v4.7.9 · burbuja del banco: «1 pago vencido» aunque el conteo venga en texto; +1 prueba.
 - 2026-11-21 00:16 · v4.7.8 · burbuja del banco y capa de ventas/cartera con `pesosCorto()` (sin «$1000 K»); +1 prueba.
 - 2026-11-20 23:55 · v4.7.7 · Cifras cortas: miles de millones en «B» (como el dashboard) y montos en texto con «$»/comas ya no salen «$0» en etiquetas y tarjetas.
 - 2026-11-20 23:35 · v4.7.6 · tarjeta del contenedor: ETA «mañana» en vez de «en 1 d» (`llegaBarco()`); +1 prueba.

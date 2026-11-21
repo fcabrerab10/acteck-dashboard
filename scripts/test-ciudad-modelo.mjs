@@ -1215,3 +1215,9 @@ test('burbujasAtencion() / capaCiudades(): montos con pesosCorto (sin Â«$1000 KÂ
   const c = capaCiudades({ distritos: [{ ciudad: 'GUADALAJARA', tiendas: [{ importe: 999600, previo: 0 }] }] }, 'ventas');
   assert.match(c.porCiudad.get('GUADALAJARA').texto, /^\$1\.0 M/);
 });
+test('burbujasAtencion(): pagos vencidos en singular aunque vengan en texto', () => {
+  const h = new Date(2026, 10, 21, 12);
+  assert.equal(burbujasAtencion({ banco: { pagosVencidos: '1' } }, h)[0].texto, '1 pago vencido');
+  assert.equal(burbujasAtencion({ banco: { pagosVencidos: ' 3 ' } }, h)[0].texto, '3 pagos vencidos');
+  assert.equal(burbujasAtencion({ banco: { pagosVencidos: 1 } }, h)[0].texto, '1 pago vencido');
+});
