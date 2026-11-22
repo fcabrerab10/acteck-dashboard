@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1555,4 +1555,15 @@ test('(4.7.51) clave ERP con espacios: facturas, envíos y destinos de vendedore
   assert.equal(m.vendedoresRuta[0].destinos[0].ciudad, 'HERMOSILLO', 'destino del vendedor con clave limpia');
   const z = construirModelo({ ...d, facturas: [{ cliente_key: ' zzz ', folio: 'F-9', fecha: '2026-10-03', monto: 1 }] }, hoy).camiones.find((c) => !c.envio);
   assert.equal(z.cliente, 'zzz', 'sin cuenta: la clave sale limpia');
+});
+
+test('(4.7.52) carteraPorCuenta(): con la misma cuenta dos veces gana el corte más reciente', () => {
+  const m = carteraPorCuenta([{ cliente: 'digitalife', fecha_corte: '2026-11-20', saldo_vencido: '$5,000', saldo_actual: 9000, dso: 40 }, { cliente: ' digitalife ', fecha_corte: '2026-10-01', saldo_vencido: 1, saldo_actual: 1, dso: 1 }, null, { cliente: '  ' }]);
+  assert.equal(m.size, 1); assert.deepEqual(m.get('digitalife'), { vencido: 5000, saldo: 9000, dso: 40, corte: '2026-11-20' });
+  const n = carteraPorCuenta([{ cliente: 'pcel', fecha_corte: '2026-10-01', saldo_vencido: 1 }, { cliente: 'pcel ', fecha_corte: ' 2026-11-01', saldo_vencido: 2 }]);
+  assert.equal(n.get('pcel').vencido, 2, 'el más nuevo llega después');
+  assert.equal(carteraPorCuenta([{ cliente: 'x', fecha_corte: '2026-11-01', saldo_vencido: 3 }, { cliente: 'x', fecha_corte: 'pendiente', saldo_vencido: 4 }]).get('x').vencido, 3, 'ilegible pierde');
+  assert.equal(carteraPorCuenta([{ cliente: 'x', fecha_corte: null, saldo_vencido: 3 }, { cliente: 'x', fecha_corte: '2026-11-01', saldo_vencido: 4 }]).get('x').vencido, 4, 'legible gana a ilegible');
+  assert.equal(carteraPorCuenta([{ cliente: 'x', saldo_vencido: 3 }, { cliente: 'x', saldo_vencido: 4 }]).get('x').vencido, 4, 'sin fechas: el último');
+  assert.equal(carteraPorCuenta('basura').size, 0); assert.equal(carteraPorCuenta(null).size, 0);
 });

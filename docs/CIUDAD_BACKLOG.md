@@ -273,6 +273,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.49) Cartera y clientes finales con la cuenta limpia: un renglón de cartera « digitalife » ya empata con su tienda y su sede (antes no salía en rojo ni en los KPIs con la clave limpia) y una cuenta vacía se salta; las casas de clientes finales cuentan «vía 1 mayorista» aunque la cuenta venga con espacios (antes «vía 2 mayoristas»).
   - [x] (4.7.50) Cuentas sin sucursal con la cuenta limpia: una cuenta « pcel » en la lista de cuentas ya empata sus ventas mensuales (antes la Matriz salía apagada con venta 0) y su nombre; una cuenta con espacios que ya tiene sucursales ya no saca una Matriz doble; la cuenta vacía se salta.
   - [x] (4.7.51) Clave ERP limpia (« 01234 » = «01234») en camiones de facturas y de envíos y en los destinos de los vendedores: antes una clave con espacios mandaba el camión a CDMX con la clave cruda como cliente y el vendedor sin destino; la cuenta sale con la clave limpia del mapa (sede correcta aunque `cuenta` traiga espacios).
+  - [x] (4.7.52) `carteraPorCuenta()` pura y probada: si la cartera trae la misma cuenta dos veces (« digitalife » y «digitalife», cortes distintos) gana el `fecha_corte` más reciente (antes el último renglón que llegara, podía ser el corte viejo: vencido y DSO equivocados en la tienda, el banco y los KPIs); fecha ilegible pierde contra legible.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -287,6 +288,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-22 04:16 · v4.7.52 · Cartera: con la misma cuenta dos veces gana el corte más reciente (`carteraPorCuenta()`).
 
 - 2026-11-22 03:56 · v4.7.51 · Camiones y destinos de vendedores empatan la clave ERP sin espacios (sede y nombre correctos); +1 prueba.
 - 2026-11-22 03:36 · v4.7.50 · Cuentas sin sucursal empatan cuenta/ventas mensuales sin espacios (sin Matriz apagada ni doble); +1 prueba.

@@ -1006,6 +1006,19 @@ export function fechaIso(x) {
   const s = x.trim().slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
 }
+// Cartera por cuenta (4.7.52): la vista trae un corte por `cliente`, pero « digitalife » y «digitalife» son dos renglones que
+// se juntan al limpiar la clave; antes ganaba el último que llegaba (podía ser el corte viejo). Ahora gana el de `fecha_corte`
+// más reciente (una fecha ilegible pierde contra una legible; empate → el último). Cliente vacío o renglón nulo se salta.
+export function carteraPorCuenta(filas) {
+  const out = new Map();
+  for (const c of comoLista(filas)) {
+    const k = String(c?.cliente ?? '').trim(); if (!k) continue;
+    const v = { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: N(c.dso), corte: c.fecha_corte };
+    const ya = out.get(k), fa = fechaIso(ya?.corte), fb = fechaIso(v.corte);
+    if (!ya || (fb && (!fa || fb >= fa)) || (!fa && !fb)) out.set(k, v);
+  }
+  return out;
+}
 // Días entre dos fechas con `fechaIso()` (4.3.29): « 2026-10-03» con espacios o un Date ya cuentan (antes NaN: el camión o el barco desaparecía); ilegible → NaN.
 const dias = (a, b) => { const x = fechaIso(a), y = fechaIso(b); return x && y ? Math.round((new Date(`${y}T12:00:00`) - new Date(`${x}T12:00:00`)) / 86400000) : NaN; };
 const nombreCorto = (s) => { const p = norm(s).split(/\s+/).filter(Boolean); if (!p.length) return ''; const cap = (w) => w.charAt(0) + w.slice(1).toLowerCase(); return p.length >= 3 ? `${cap(p[0])} ${cap(p[p.length - 2])}` : p.map(cap).join(' '); };
@@ -1252,7 +1265,7 @@ export function construirModelo(d, hoy = new Date()) {
     porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: cuentas.get(v.cuenta)?.nombre || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
   }
   // Cartera (propios): saldo vencido → bandera roja en su Matriz / primera tienda de la sede.
-  const carteraPor = new Map((d.cartera || []).filter((c) => String(c.cliente ?? '').trim()).map((c) => [String(c.cliente).trim(), { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: N(c.dso), corte: c.fecha_corte }])); // 4.7.49: « digitalife » = «digitalife»
+  const carteraPor = carteraPorCuenta(d.cartera); // 4.7.49: « digitalife » = «digitalife»; 4.7.52: con dos cortes gana el más reciente
   for (const [cuenta, c] of carteraPor) {
     const sede = SEDE_POR_CUENTA[cuenta] || 'GUADALAJARA';
     if (!porCiudad.has(sede)) continue;
