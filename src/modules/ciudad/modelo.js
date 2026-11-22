@@ -717,7 +717,8 @@ export function vaA(parada) {
 }
 // Porcentaje legible (4.7.24): entero redondeado con miles es-MX («1,250 %»), `signo` antepone «+» a los positivos
 // (sell out vs mes anterior) y lo ilegible (null, NaN, texto basura) dice «—» en vez de «NaN %» o «null %».
-export function porcentaje(v, { signo = false } = {}) {
+export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto → sin signo (antes lanzaba error)
+  const signo = !!(op && typeof op === 'object' && op.signo);
   // 4.7.55: texto con comas, espacios o «%» («1,250», « 45 %») se lee (antes «—»).
   if (v == null || v === '' || typeof v === 'boolean') return '—';
   const k = Math.round(Number(typeof v === 'string' ? (v.trim() ? v.replace(/[\s,%]/g, '') : NaN) : v)); if (!Number.isFinite(k)) return '—';
@@ -747,10 +748,12 @@ export function temperaturaTexto(v) {
 // Piezas (4.7.27): enteras con miles es-MX («1,200 pz»; antes «1,200.5 pz» con decimales y texto «$1,200» sí cuenta);
 // ilegible → «0 pz». Globos del contenedor/tarima/tráiler, misión de descarga, bitácora de arribos y globo del puerto.
 export function piezasTexto(v) { return `${(Math.round(numero(v)) + 0).toLocaleString('es-MX')} pz`; } // 4.7.56: -0.4 → «0 pz» (antes «-0 pz»)
-export function plural(n, uno, varios = `${uno}s`) {
+export function plural(n, uno, varios) {
+  // 4.7.62: palabra que no es texto o vacía → sólo el número (antes «0 undefineds» / «2 null»); `varios` ausente → uno + «s».
+  const u = typeof uno === 'string' && uno.trim() ? uno : '', vs = typeof varios === 'string' && varios.trim() ? varios : u ? `${u}s` : '';
   // 4.7.55: «1,200» / « 3 » en texto se leen (antes «0 pedidos»); booleanos y basura → 0 (antes true = «1 barco»).
   const k = typeof n === 'string' ? Math.round(Number(n.trim() ? n.replace(/[\s,]/g, '') : NaN)) : typeof n === 'number' ? Math.round(n) : NaN; const v = Number.isFinite(k) ? k + 0 : 0; // 4.7.56: + 0 quita el «-0» (-0.4 → «0 días», antes «-0 días»)
-  return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;
+  const w = Math.abs(v) === 1 ? u : vs; return w ? `${v.toLocaleString('es-MX')} ${w}` : v.toLocaleString('es-MX');
 }
 // Texto con «$», comas de miles o espacios («$1,200», « 2,500 ») se lee como número; ≥ mil millones sale «1.2 B» como el
 // `moneyCompact` del dashboard (antes «1000.0 M»). Booleanos y basura → '0'.

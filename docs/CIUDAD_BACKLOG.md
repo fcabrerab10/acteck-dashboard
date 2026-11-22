@@ -283,6 +283,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.59) `burbujasAtencion()`: pedidos detenidos negativos ya no dan la burbuja roja «-3 pedidos de cliente detenidos» y barcos/agenda que no son lista no lanzan error.
   - [x] (4.7.60) `rebote()` con t NaN (un `dt` inválido) termina (`fin: true`): antes el rebote al tocar quedaba activo para siempre y nunca restauraba la escala.
   - [x] (4.7.61) Bitácora: facturas, envíos y contenedores sin folio/id llevan cada uno su id (antes todos «factura-null» / «arribo-null» y el filtro de repetidos dejaba sólo uno); el contenedor sin id ya no abre la tarjeta «Contenedor null» y un folio con espacios cuenta igual que sin ellos.
+  - [x] (4.7.62) `porcentaje()` con opciones null o que no son objeto ya no lanza error (sin signo) y `plural()` sin palabra (null, vacía, número) dice sólo el número (antes «0 undefineds» / «2 null»); `varios` nulo usa la palabra + «s».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -297,6 +298,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-22 15:56 · v4.7.62 · `porcentaje()` con opciones null sin error y `plural()` sin palabra sin «undefineds»/«null»; +1 prueba.
 - 2026-11-22 15:15 · v4.7.60 · `rebote()`: t NaN termina el rebote al tocar (antes nunca se soltaba); +3 pruebas.
 - 2026-11-22 06:16 · v4.7.59 · Burbujas de atención sin pedidos detenidos negativos y sin error con barcos/agenda que no son lista.
 - 2026-11-22 05:56 · v4.7.58 · Cobertura de inventario sin «-0 d» ni días negativos en la barra de recursos.
