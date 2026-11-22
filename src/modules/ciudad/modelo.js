@@ -772,13 +772,25 @@ export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) 
 
 /** Demanda de los 3 meses cerrados anteriores a `hoy` por SKU (piezas, suma), desde el pivote `v_sellin_global_sku_anio`
  *  ({ sku, anio, piezas[12] }), igual que Inventario: Map SKU en mayúsculas → piezas. */
+/** Piezas por mes del pivote de sell in (4.7.33): lista tal cual; texto «[1,2]» (JSON) o «{1,2}» (arreglo de Postgres) → lista;
+ *  cualquier otra cosa → []. */
+export function piezasMes(x) {
+  if (Array.isArray(x)) return x;
+  if (typeof x !== 'string') return [];
+  const s = x.trim(); if (!/^[[{].*[\]}]$/s.test(s)) return [];
+  if (s[0] === '{') return /[:"]/.test(s) ? [] : s.slice(1, -1).split(',').map((v) => (/^\s*null\s*$/i.test(v) ? 0 : v.trim()));
+  try { const a = JSON.parse(s); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
 export function demanda3Meses(rows = [], hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const cerrados = [1, 2, 3].map((i) => { const f = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1); return { anio: f.getFullYear(), mes: f.getMonth() + 1 }; });
   const m = new Map();
   for (const r of comoLista(rows)) {
     const sku = String(r?.sku || '').trim().toUpperCase(); if (!sku) continue;
-    let s2 = 0; for (const c of cerrados) if (N(r.anio) === c.anio) s2 += N((r.piezas || [])[c.mes - 1]);
+    // Pulido (4.7.33): `piezas` que no es lista se lee con `piezasMes()` (texto JSON «[10,20]» o «{10,20}» de Postgres; antes se
+    // indexaban sus caracteres y «[10,20,30]» sumaba dígitos sueltos); null, objeto o basura → sin demanda. Piezas negativas no restan.
+    const pz = piezasMes(r.piezas); let s2 = 0; for (const c of cerrados) if (N(r.anio) === c.anio) s2 += Math.max(0, N(pz[c.mes - 1]));
     if (s2) m.set(sku, (m.get(sku) || 0) + s2);
   }
   return m;

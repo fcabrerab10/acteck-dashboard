@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal, piezasMes } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1369,4 +1369,15 @@ test('diaLocal: «hoy» es el día local y su rango cubre ese día (4.7.32)', ()
   for (const x of [null, 'basura', NaN, new Date('x')]) assert.match(diaLocal(x).iso, /^\d{4}-\d{2}-\d{2}$/);
   const m = construirModelo({}, new Date(2026, 10, 21, 22, 30));
   assert.equal(m.hoyIso, '2026-11-21');
+});
+
+test('demanda3Meses / piezasMes: piezas en texto (JSON o arreglo Postgres) se leen; basura, null y negativas no suman', () => {
+  const h = new Date(2026, 4, 15);
+  assert.equal(demanda3Meses([{ sku: 'A', anio: 2026, piezas: '[0,10,20,30]' }], h).get('A'), 60, 'JSON en texto');
+  assert.equal(demanda3Meses([{ sku: 'A', anio: '2026', piezas: '{0,10,NULL,30}' }], h).get('A'), 40, 'arreglo Postgres con NULL');
+  for (const p of ['1234', 'basura', null, { 1: 5 }, 42, '[mal']) assert.equal(demanda3Meses([{ sku: 'A', anio: 2026, piezas: p }], h).has('A'), false, `sin demanda: ${JSON.stringify(p)}`);
+  assert.equal(demanda3Meses([{ sku: 'A', anio: 2026, piezas: [0, -50, 10, 10] }], h).get('A'), 20, 'negativa no resta');
+  assert.deepEqual(piezasMes('[1,"2"]'), [1, '2']);
+  assert.deepEqual(piezasMes('{"x":1}'), []);
+  assert.deepEqual(piezasMes(' { 1 , 2 } '), ['1', '2']);
 });
