@@ -926,8 +926,10 @@ export function tarjetaDe(tag, modelo) {
       const nd = c.fecha ? dias(c.fecha, m.hoyIso || diaLocal().iso) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
       const fs = fechaIso(c.fecha); // 4.7.23: un Date ya no sale «Wed Oct 07»; ilegible → «—»
       const salio = fs ? unirTexto([fs, haceDias(n)]) || fs : '—';
-      const destino = String(c.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) || '—';
-      t.numeros = c.envio ? [['Cliente', c.cliente || '—'], ['Paquetería', c.paqueteria || '—'], ['Salió', salio], ['Destino', destino]] : [['Cliente', c.cliente || '—'], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], ['Salió', salio]];
+      // 4.7.41: destino con `nombreCiudad()` («LEON» → «León», «SAN LUIS POTOSI» → «San Luis Potosí», CDMX; antes «Leon»)
+      // y cliente/paquetería con `unirTexto()` (« » o «null» ya no salen como texto: «—»).
+      const destino = nombreCiudad(c.ciudad) || '—', txt = (x) => unirTexto(x) || '—';
+      t.numeros = c.envio ? [['Cliente', txt(c.cliente)], ['Paquetería', txt(c.paqueteria)], ['Salió', salio], ['Destino', destino]] : [['Cliente', txt(c.cliente)], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], ['Salió', salio]];
       t.estado = c.envio && n != null && n > 5 ? 'ambar' : 'verde';
     }
   } else if (tag.tipo === 'vendedorErp') {
@@ -936,7 +938,7 @@ export function tarjetaDe(tag, modelo) {
     if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', sn(v.destinos).map((x) => unirTexto(x.cliente)).filter(Boolean).slice(0, 3).join(' → ') || '—']]; t.estado = numero(v.totalMes) > 0 ? 'verde' : 'ambar'; }
   } else if (tag.tipo === 'barco' && tag.barco) {
     const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', b.eta || '—'], ['Llega a CEDIS', b.arribo || '—']];
-    if (b.estatus) t.numeros.push(['Estatus', b.estatus]);
+    const est = unirTexto(b.estatus); if (est) t.numeros.push(['Estatus', est]); // 4.7.41: « » / «null» ya no salen
     t.estado = b.llegaEnDias == null ? 'ambar' : 'verde';
   }
   t.numeros = t.numeros.slice(0, 4);

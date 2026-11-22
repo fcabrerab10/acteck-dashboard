@@ -1455,3 +1455,13 @@ test('leyendaCuentas(): una entrada por cuenta, sin «null» ni nombres partidos
   assert.deepEqual(leyendaCuentas(ds), [{ cuenta: '10', nombre: 'Pcel' }, { cuenta: '20', nombre: 'A|B' }, { cuenta: '30', nombre: '30' }]);
   assert.deepEqual(leyendaCuentas(null), []);
 });
+
+test('tarjeta del camión: destino con acentos y sin «null» (4.7.41)', () => {
+  const m = { hoyIso: '2026-10-08', camiones: [{ folio: 'E1', envio: true, cliente: ' null ', paqueteria: '  ', ciudad: 'SAN LUIS POTOSI', fecha: '2026-10-07' }, { folio: 'F1', cliente: ' CT ', monto: 1000, piezas: 3, fecha: '2026-10-07', ciudad: null }] };
+  const e = tarjetaDe({ tipo: 'camion', folio: 'E1' }, m);
+  assert.deepEqual(e.numeros.map(([, v]) => v).filter((v, i) => i !== 2), ['—', '—', 'San Luis Potosí']);
+  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros[0][1], 'CT');
+  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'E1' }, { ...m, camiones: [{ ...m.camiones[0], ciudad: '' }] }).numeros[3][1], '—');
+  const b = tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: '  ' } }, m); assert.equal(b.numeros.length, 3);
+  assert.deepEqual(tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: ' EN TRANSITO ' } }, m).numeros[3], ['Estatus', 'EN TRANSITO']);
+});
