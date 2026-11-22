@@ -1396,3 +1396,21 @@ test('Pulido 4.7.34: barra de recursos lee conteos en texto con comas y usa mile
   assert.equal(cob('1,200'), '1,200 d', 'cobertura en texto'); assert.equal(cob(' 45 '), '45 d'); assert.equal(cob(true), null, 'booleano no es día');
   assert.equal(recursosBarra({ cartera: { vencido: '$5,000' } })[0].valor, 5000, 'montos siguen con numero()');
 });
+
+test('títulos de reunión vacíos o nulos (4.7.36)', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  const ag = [{ titulo: null, hora: '11:10', ini: 11 * 60 + 10, estado: 'próxima' }, { titulo: '   ', hora: '16:00', ini: 16 * 60, estado: 'próxima' }];
+  const tx = misionesDelDia({ oficina: { agenda: ag } }, h).map((x) => x.texto);
+  assert.deepEqual(tx, ['11:10 · Reunión · en 10 min', '16:00 · Reunión']);
+  const b = burbujasAtencion({ oficina: { agenda: ag } }, h).find((x) => x.lugar === 'oficina');
+  assert.equal(b.texto, 'Reunión en 10 min');
+  const rs = reunionesDelDia([{ titulo: '  ', fecha: '2026-10-05T10:00:00' }, { titulo: ' Pcel ', fecha: '2026-10-05T12:00:00' }], h);
+  assert.deepEqual(rs.map((r) => r.titulo), ['Reunión', 'Pcel']);
+  const ps = [{ id: 'u1' }, { id: 'u2' }];
+  presenciaPersonas(ps, [{ titulo: ' ', fecha: '2026-10-05T10:50:00', duracion_min: 60, creado_por: 'u1' }], [{ tipo: 'viaje', titulo: null, fecha: '2026-10-05', creado_por: 'u2' }], h);
+  assert.equal(ps[0].presencia.titulo, 'Reunión'); assert.equal(ps[1].presencia.titulo, 'Viaje');
+  const t = tarjetaDe({ tipo: 'persona', persona: { nombre: 'A', pendientes: 1, hechas: 0, presencia: { estado: 'viaje', titulo: null } } }, {});
+  assert.equal(t.numeros[0][1], 'De viaje');
+  const t2 = tarjetaDe({ tipo: 'persona', persona: { nombre: 'A', presencia: { estado: 'reunion', titulo: ' Pcel ' } } }, {});
+  assert.equal(t2.numeros[0][1], 'En reunión · Pcel');
+});

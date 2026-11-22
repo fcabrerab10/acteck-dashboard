@@ -308,7 +308,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   for (const r of m.oficina?.agenda || []) {
     if (!r) continue; const ini = Number.isFinite(r.ini) ? r.ini : null; const hecha = r.estado === 'hecha', falta = ini == null ? NaN : ini - ahora;
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
-      texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
+      texto: `${unirTexto(r.hora, unirTexto(r.titulo) || 'Reunión') /* 4.7.36: título vacío/null ya no dice «null» */}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
   }
   for (const t of comoLista(m.puerto?.tarimas)) if (t) { const id = unirTexto(t.id); out.push({ id: `tarima-${id || 'sin-id'}`, icono: '📦', nivel: null, texto: `Descargar ${id || 'un contenedor'} · ${piezasTexto(t.piezas)}`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: id ? `Contenedor ${id}` : 'Contenedor' }, orden: 24 * 60 }); } // 4.7.35: sin id ya no dice «undefined»; tarimas que no son lista no truenan
   const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
@@ -604,7 +604,7 @@ export function reunionesDelDia(reuniones = [], hoy = new Date()) {
   return comoLista(reuniones).map((r) => {
     const t = instante(r?.fecha); if (!t) return null;
     const ini = t.getHours() * 60 + t.getMinutes(), fin = ini + duracionMin(r.duracion_min);
-    return { titulo: r.titulo || 'Reunión', cliente_key: r.cliente_key || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
+    return { titulo: unirTexto(r.titulo) || 'Reunión', cliente_key: r.cliente_key || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
   }).filter(Boolean).sort((a, b) => a.ini - b.ini);
 }
 
@@ -632,7 +632,7 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
   for (const p of comoLista(personas)) {
     if (!p || typeof p !== 'object') continue;
     const v = viajeHoy.find((r) => de(r, p.id)); const r = !v && enCurso.find((x) => de(x, p.id));
-    p.presencia = v ? { estado: 'viaje', titulo: v.titulo || 'Viaje' } : r ? { estado: 'reunion', titulo: r.titulo || 'Reunión' } : { estado: 'disponible', titulo: null };
+    p.presencia = v ? { estado: 'viaje', titulo: unirTexto(v.titulo) || 'Viaje' } : r ? { estado: 'reunion', titulo: unirTexto(r.titulo) || 'Reunión' } : { estado: 'disponible', titulo: null };
   }
   return personas;
 }
@@ -747,7 +747,7 @@ export function burbujasAtencion(m, hoy = new Date()) {
   if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: plural(oc, 'pedido de cliente detenido', 'pedidos de cliente detenidos') /* 4.7.10: oc decimal/texto con plural() */ });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   const prox = (m.oficina?.agenda || []).find((r) => r && r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
-  if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${prox.titulo} ${enMinutos(prox.ini - ahora)}` });
+  if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${unirTexto(prox.titulo) || 'Reunión'} ${enMinutos(prox.ini - ahora)}` });
   return out.map((x) => ({ ...x, tag: { tipo: x.lugar } })).sort((a, c) => (a.nivel === 'rojo' ? 0 : 1) - (c.nivel === 'rojo' ? 0 : 1));
 }
 
@@ -882,7 +882,7 @@ export function tarjetaDe(tag, modelo) {
     }
   } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {
     const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];
-    const pr = p.presencia; if (pr) t.numeros.unshift(['Ahora', pr.estado === 'viaje' ? `De viaje · ${pr.titulo}` : pr.estado === 'reunion' ? `En reunión · ${pr.titulo}` : 'Disponible']);
+    const pr = p.presencia; if (pr) t.numeros.unshift(['Ahora', pr.estado === 'viaje' ? unirTexto('De viaje', pr.titulo) : pr.estado === 'reunion' ? unirTexto('En reunión', pr.titulo) : 'Disponible']);
     t.estado = p.actividad ? 'verde' : numero(p.pendientes) > numero(p.hechas) ? 'ambar' : 'verde';
   } else if (tag.tipo === 'camion') {
     // Camión (etapa 5, 3.90.54): factura (cliente, monto, piezas) o envío del Tracking (paquetería), cuándo salió y destino.
