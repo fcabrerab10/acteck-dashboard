@@ -728,6 +728,11 @@ export function haceDias(v) {
 export function dsoTexto(v) {
   const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
 }
+// Pendientes de la persona (4.7.46): «1 pendiente hoy · 1,200 hechas» con `plural()`; nulo/ilegible cuenta 0
+// (antes «undefined pendientes hoy · NaN hechas» y sin miles es-MX). Globo de la persona en la oficina y de viaje.
+export function pendientesTexto(pendientes, hechas) {
+  return `${plural(numero(pendientes), 'pendiente')} hoy · ${plural(numero(hechas), 'hecha')}`;
+}
 // Temperatura (4.7.45): «24°» redondeada (0 y bajo cero valen: «-3°»); sin dato o ilegible → '' (antes «NaN° en Guadalajara»).
 export function temperaturaTexto(v) {
   const k = leeNum(v); if (k == null) return ''; const r = Math.round(k); return `${r === 0 ? 0 : r}°`;
