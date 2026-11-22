@@ -1529,3 +1529,18 @@ test('Cartera y clientes finales: la cuenta con espacios empata (4.7.49)', () =>
   const gdl = m.distritos.find((x) => x.ciudad === 'GUADALAJARA');
   assert.equal(gdl.clientesFinales.n, 3); assert.deepEqual(gdl.clientesFinales.cuentas, ['cva'], '«vía 1 mayorista», no 2');
 });
+
+test('Cuentas sin sucursal: la cuenta con espacios empata sus ventas (4.7.50)', () => {
+  const hoy = new Date(2026, 9, 20, 12);
+  const m = construirModelo({
+    cuentas: [{ cuenta: ' pcel ', nombre: 'PCEL', tiene_sellout: true }, { cuenta: ' ct ', nombre: 'CT', tiene_sellout: true }, { cuenta: '  ', tiene_sellout: true }, { cuenta: null, propio: true }],
+    cuentaMes: [{ cuenta: 'pcel', anio: 2026, mes: 10, importe: 100 }, { cuenta: ' pcel ', anio: 2026, mes: 10, importe: '50' }],
+    sucursales: [{ cuenta: 'ct', anio: 2026, mes: 10, sucursal: 'HERMOSILLO', importe: 10, vendedores: 1 }],
+  }, hoy);
+  const ts = m.distritos.flatMap((x) => x.tiendas);
+  const pcel = ts.filter((t) => t.cuenta === 'pcel');
+  assert.equal(pcel.length, 1); assert.equal(pcel[0].importe, 150); assert.equal(pcel[0].vendioMes, true); assert.equal(pcel[0].nombreCuenta, 'PCEL');
+  assert.equal(ts.filter((t) => t.cuenta === 'ct' && t.sucursal === 'Matriz').length, 0, 'ct ya tiene sucursal: sin Matriz doble');
+  assert.equal(ts.find((t) => t.cuenta === 'ct')?.nombreCuenta, 'CT');
+  assert.equal(ts.filter((t) => !String(t.cuenta ?? '').trim()).length, 0, 'cuenta vacía se salta');
+});

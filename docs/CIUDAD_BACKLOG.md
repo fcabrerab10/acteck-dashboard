@@ -271,6 +271,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.47) Sucursales se juntan por cuenta sin espacios y nombre con `norm()` (« hermosillo » = «HERMOSILLO»): antes la misma sucursal con espacios o mayúsculas distintas salía como dos tiendas encimadas con la venta partida.
   - [x] (4.7.48) Vendedores de los mayoristas se juntan por cuenta sin espacios y nombre normalizado (« juan  perez » = «JUAN PEREZ»): antes el mismo vendedor con espacios o mayúsculas distintas salía dos veces en la ciudad con la venta partida; sin nombre se salta.
   - [x] (4.7.49) Cartera y clientes finales con la cuenta limpia: un renglón de cartera « digitalife » ya empata con su tienda y su sede (antes no salía en rojo ni en los KPIs con la clave limpia) y una cuenta vacía se salta; las casas de clientes finales cuentan «vía 1 mayorista» aunque la cuenta venga con espacios (antes «vía 2 mayoristas»).
+  - [x] (4.7.50) Cuentas sin sucursal con la cuenta limpia: una cuenta « pcel » en la lista de cuentas ya empata sus ventas mensuales (antes la Matriz salía apagada con venta 0) y su nombre; una cuenta con espacios que ya tiene sucursales ya no saca una Matriz doble; la cuenta vacía se salta.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -286,6 +287,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 03:36 · v4.7.50 · Cuentas sin sucursal empatan cuenta/ventas mensuales sin espacios (sin Matriz apagada ni doble); +1 prueba.
 - 2026-11-22 02:56 · v4.7.48 · Vendedores de mayoristas juntados por cuenta/nombre normalizado (sin duplicados ni venta partida); +1 prueba.
 - 2026-11-22 02:24 · v4.7.47 · Sucursales juntadas por cuenta/nombre normalizado (sin tiendas duplicadas ni venta partida); +1 prueba.
 - 2026-11-22 01:36 · v4.7.43 · Tarjeta del camión: «Salió» con fecha corta es-MX («6 oct · ayer») (+1 prueba).

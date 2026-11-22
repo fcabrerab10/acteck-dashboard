@@ -1161,7 +1161,7 @@ export function construirModelo(d, hoy = new Date()) {
   const hoyIso = isoLocal(hoy); // 4.7.32: día local (antes UTC: de 18:00 a 23:59 en Guadalajara «hoy» ya era mañana)
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const mesPrev = mes === 1 ? 12 : mes - 1, anioPrev = mes === 1 ? anio - 1 : anio;
-  const cuentas = new Map((d.cuentas || []).map((c) => [c.cuenta, c]));
+  const cuentas = new Map((d.cuentas || []).map((c) => [String(c.cuenta ?? '').trim(), c])); // 4.7.50: « pcel » = «pcel»
 
   // ── Oficina: equipo del dashboard + genéricos ──
   const items = d.agendaHoy || [];
@@ -1229,9 +1229,11 @@ export function construirModelo(d, hoy = new Date()) {
     tienda(c?.ciudad || sede, t);
   }
   // cuentas sin sucursal: una tienda en su sede
-  for (const c of d.cuentas || []) {
+  // 4.7.50: la cuenta y sus ventas mensuales se empatan sin espacios (« pcel » = «pcel»; antes la Matriz salía apagada con venta 0, o doble si ya tenía sucursales) y la cuenta vacía se salta.
+  for (const c0 of d.cuentas || []) {
+    const cc = String(c0.cuenta ?? '').trim(); if (!cc) continue; const c = { ...c0, cuenta: cc };
     if (cuentasConSucursal.has(c.cuenta) || !c.tiene_sellout && !c.propio) continue;
-    const m = (d.cuentaMes || []).filter((r) => r.cuenta === c.cuenta);
+    const m = (d.cuentaMes || []).filter((r) => String(r.cuenta ?? '').trim() === c.cuenta);
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
     tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: String(c.nombre || '').trim() || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
