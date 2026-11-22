@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, porcentaje, dsoTexto, piezasTexto, haceDias } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1354,4 +1354,19 @@ test('bitácora sin «null»: cliente, folio, contenedor, concepto, estado o tí
   const tx = bitacoraEventos(m, h).map((x) => x.texto);
   assert.deepEqual(tx, ['Se actualizaron los datos', 'Pago registrado · $10', 'Fue una reunión', 'Factura · $1 K', 'Salió E9', 'Salió un envío a pcel · DHL', 'Llegó un contenedor al CEDIS · 1,200 pz']);
   for (const t of tx) assert.doesNotMatch(t, /null|undefined|NaN/);
+});
+
+test('diaLocal: «hoy» es el día local y su rango cubre ese día (4.7.32)', () => {
+  const noche = new Date(2026, 10, 21, 22, 30); // 22:30 local: en UTC (México) ya es el 22
+  const d = diaLocal(noche);
+  assert.equal(d.iso, '2026-11-21');
+  assert.equal(d.desde, new Date(2026, 10, 21).toISOString());
+  assert.equal(d.hasta, new Date(2026, 10, 22).toISOString());
+  assert.ok(Date.parse(d.desde) <= noche.getTime() && noche.getTime() < Date.parse(d.hasta));
+  assert.equal(diaLocal(new Date(2026, 11, 31, 23, 59)).iso, '2026-12-31');
+  assert.equal(diaLocal(new Date(2026, 11, 31, 23, 59)).hasta, new Date(2027, 0, 1).toISOString());
+  assert.equal(diaLocal('2026-10-07').iso, '2026-10-07');
+  for (const x of [null, 'basura', NaN, new Date('x')]) assert.match(diaLocal(x).iso, /^\d{4}-\d{2}-\d{2}$/);
+  const m = construirModelo({}, new Date(2026, 10, 21, 22, 30));
+  assert.equal(m.hoyIso, '2026-11-21');
 });

@@ -3,11 +3,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
-import { construirModelo, ponerPosEnPuerto, topSkus, cuotasPorCuenta } from './modelo';
+import { construirModelo, ponerPosEnPuerto, topSkus, cuotasPorCuenta, diaLocal } from './modelo';
 import { venceEn, estaVencido } from '../comercial/pagosv3/estados'; // banco: mismas reglas de vencimiento que la bandeja de Pagos
 
 const STALE = 5 * 60 * 1000;
-const iso = (d) => d.toISOString().slice(0, 10);
+const iso = (d) => diaLocal(d).iso; // día local (4.7.32; antes UTC: después de las 18:00 ya era mañana)
 
 export function useCiudadData(enabled = true) {
   return useQuery({
@@ -15,7 +15,7 @@ export function useCiudadData(enabled = true) {
     queryFn: async () => {
       const hoy = new Date();
       const anio = hoy.getFullYear();
-      const hoyIso = iso(hoy);
+      const hoyIso = iso(hoy); const dia = diaLocal(hoy);
       const hace10 = iso(new Date(hoy.getTime() - 10 * 86400000));
       const hace40 = iso(new Date(hoy.getTime() - 40 * 86400000));
       // Si una capa falla (vista sin permiso, timeout) la ciudad se dibuja sin ella en vez de no dibujarse.
@@ -31,9 +31,9 @@ export function useCiudadData(enabled = true) {
         seg(fetchAll('v_sellout_cuentas', 'cuenta,nombre,canal_sellout,erp_cliente,propio,tiene_sellout'), 'cuentas'),
         seg(fetchAll('v_erp_facturas_oc', 'cliente_key,folio,fecha,piezas,monto', (q) => q.gte('fecha', hace10)), 'facturas'),
         seg(supabase.from('agenda_items').select('propietario,responsables,estado,titulo,cuando,fecha_limite,inicio_real').or(`cuando.eq.${hoyIso},fecha_limite.eq.${hoyIso}`).then((r) => r.data || []), 'agenda'),
-        seg(supabase.from('agenda_reuniones').select('id,titulo,fecha,duracion_min,tipo,cliente_key,asistentes,creado_por').gte('fecha', `${hoyIso}T00:00:00`).lte('fecha', `${hoyIso}T23:59:59`).then((r) => r.data || []), 'reuniones'),
+        seg(supabase.from('agenda_reuniones').select('id,titulo,fecha,duracion_min,tipo,cliente_key,asistentes,creado_por').gte('fecha', dia.desde).lt('fecha', dia.hasta).then((r) => r.data || []), 'reuniones'),
         // Presencia (3.90.40): viajes que empezaron antes y siguen hoy (tipo 'viaje' con fecha_fin).
-        seg(supabase.from('agenda_reuniones').select('id,titulo,fecha,fecha_fin,tipo,asistentes,creado_por').eq('tipo', 'viaje').lt('fecha', `${hoyIso}T00:00:00`).gte('fecha_fin', `${hoyIso}T00:00:00`).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'viajes'),
+        seg(supabase.from('agenda_reuniones').select('id,titulo,fecha,fecha_fin,tipo,asistentes,creado_por').eq('tipo', 'viaje').lt('fecha', dia.desde).gte('fecha_fin', dia.desde).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'viajes'),
         // Burbujas (3.90.45): pedidos de cliente detenidos (alerta `oc_detenida`, la misma de la campana; sin snooze ni destinatario).
         seg(supabase.from('alertas').select('tipo,titulo,cliente_key').eq('tipo', 'oc_detenida').is('resuelta_at', null).is('para_usuario', null).or(`snooze_hasta.is.null,snooze_hasta.lt.${hoy.toISOString()}`).limit(200).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'alertas OC'),
         seg(fetchAll('v_sellout_cuenta_mes', 'cuenta,anio,mes,importe', (q) => q.gte('anio', anio - 1)), 'cuenta mes'),

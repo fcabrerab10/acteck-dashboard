@@ -267,7 +267,7 @@ export function fechaHoy(h) {
   return new Date();
 }
 
-export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISOString().slice(0, 10), reglas = null) {
+export function resumenBanco(cartera = [], pagos = [], hoyIso = diaLocal().iso, reglas = null) {
   // Pulido (4.3.28): «hoy» inválido usa hoy (antes NaN: ningún pago contaba); fechas de pago con `fechaIso()` (« 2026-10-09»
   // con espacios o un Date ya cuentan; una programada ilegible cae a la de compromiso); estado con espacios/mayúsculas
   // («Rechazado », « pagado») se lee; reglas que no son función o que lanzan error con un pago no tiran el banco.
@@ -283,7 +283,7 @@ export function resumenBanco(cartera = [], pagos = [], hoyIso = new Date().toISO
 
 /** Torre de pronóstico (3.90.29): propuestas de forecast no borrador (`forecast_propuestas` + líneas, como Proyectos y forecast)
  *  y avisos de arribo (`forecast_avisos`) de ayer a 7 días. Un aviso con fecha ya pasada = atrasado. */
-export function resumenTorre(propuestas = [], avisos = [], hoyIso = new Date().toISOString().slice(0, 10)) {
+export function resumenTorre(propuestas = [], avisos = [], hoyIso = diaLocal().iso) {
   // Pulido (3.110.4): líneas nulas y una fecha inválida ya no tiran el modelo (la fecha mala usa hoy).
   // Pulido (4.3.27): fechas con `fechaIso()` — « 2026-10-08» (espacios) ya no sale atrasado, una fecha ilegible no cuenta
   // y un Date sí; hoy con espacios/Date se lee; líneas que no son lista (objeto, texto) ya no cuentan como línea.
@@ -874,7 +874,7 @@ export function tarjetaDe(tag, modelo) {
     // Envío con más de 5 días en camino = ámbar.
     const c = sn(m.camiones).find((x) => x.folio === tag.folio);
     if (c) {
-      const nd = c.fecha ? dias(c.fecha, m.hoyIso || new Date().toISOString().slice(0, 10)) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
+      const nd = c.fecha ? dias(c.fecha, m.hoyIso || diaLocal().iso) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
       const fs = fechaIso(c.fecha); // 4.7.23: un Date ya no sale «Wed Oct 07»; ilegible → «—»
       const salio = fs ? unirTexto([fs, haceDias(n)]) || fs : '—';
       const destino = String(c.ciudad || '').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()) || '—';
@@ -949,6 +949,12 @@ const nombreCorto = (s) => { const p = norm(s).split(/\s+/).filter(Boolean); if 
 // Barra de tiempo (etapa 6, paso 1): momentos a los que se puede regresar la ciudad (Hoy / Ayer / Hace 7 días / Inicio de mes,
 // a la misma hora; inicio de mes = día 1 a mediodía). Se quitan los que caen en el mismo día que uno anterior.
 const isoLocal = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+// Día local 'AAAA-MM-DD' de «hoy» y su rango [desde, hasta) en ISO para filtrar columnas timestamptz (4.7.32): antes `datos.js`
+// usaba toISOString() (UTC) y de 18:00 a 23:59 en Guadalajara la Ciudad pedía la agenda, reuniones y viajes de mañana.
+export function diaLocal(h) {
+  const t = fechaHoy(h), y = t.getFullYear(), m = t.getMonth(), d = t.getDate();
+  return { iso: isoLocal(t), desde: new Date(y, m, d).toISOString(), hasta: new Date(y, m, d + 1).toISOString() };
+}
 export function momentosTiempo(hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const atras = (n) => { const t = new Date(hoy); t.setDate(t.getDate() - n); return t; };
@@ -1088,7 +1094,7 @@ export function sinNulos(d) {
 export function construirModelo(d, hoy = new Date()) {
   d = sinNulos(d);
   hoy = fechaHoy(hoy);
-  const hoyIso = hoy.toISOString().slice(0, 10);
+  const hoyIso = isoLocal(hoy); // 4.7.32: día local (antes UTC: de 18:00 a 23:59 en Guadalajara «hoy» ya era mañana)
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const mesPrev = mes === 1 ? 12 : mes - 1, anioPrev = mes === 1 ? anio - 1 : anio;
   const cuentas = new Map((d.cuentas || []).map((c) => [c.cuenta, c]));

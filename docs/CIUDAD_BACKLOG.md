@@ -253,6 +253,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.29) `llegaBarco()` / `enMinutos()` con miles es-MX («llega en 1,200 d», «1,500 d tarde», «en 1,200 h») y leen «1,200» en texto (antes «sin ETA»); booleanos ya no cuentan como 1 día/minuto.
   - [x] (4.7.30) Cadena de suministro con miles es-MX («1,200 con ETA vencida», «1,200 en ruta», «1,200 de 1,500 vendieron»; antes «1200»); sala de juntas «1 reunión hoy · todas hechas» y «Hoy en Acteck · 1 pendiente» con `plural()` (miles es-MX). Harness sin errores.
   - [x] (4.7.31) Bitácora en vivo con `unirTexto()`: factura/envío sin cliente o folio, contenedor sin id, pago sin cliente/concepto, sincronización sin estado y reunión sin título ya no dicen «null» («Factura · $1 K», «Salió un envío a pcel · DHL», «Llegó un contenedor al CEDIS», «Fue una reunión»).
+  - [x] (4.7.32) `diaLocal()` pura y probada: «hoy» es el día local de Guadalajara. Antes `datos.js` y `construirModelo()` usaban `toISOString()` (UTC) y de 18:00 a 23:59 la Ciudad pedía la agenda, reuniones y viajes de MAÑANA (sala de juntas, misiones y presencia equivocadas) y el banco/bitácora contaban «hoy» un día adelantado; las reuniones se filtran con el rango [inicio, fin) del día local.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -267,6 +268,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-21 22:17 · v4.7.32 · `diaLocal()`: agenda, reuniones, viajes y «hoy» del modelo en día local (antes UTC: después de las 18:00 era mañana); +1 prueba.
 - 2026-11-21 15:56 · v4.7.31 · Bitácora en vivo sin «null» con `unirTexto()` (cliente, folio, contenedor, concepto, estado, título vacíos); +1 prueba.
 - 2026-11-21 15:37 · v4.7.30 · Cadena de suministro con miles es-MX; sala de juntas y misiones pendientes con `plural()`; +1 prueba.
 - 2026-11-21 15:16 · v4.7.29 · `llegaBarco()`/`enMinutos()` con miles es-MX y ETA/minutos en texto con comas.
