@@ -766,13 +766,15 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 // («1,200 POs»; antes «1200 POs»); cobertura «1,200» en texto también (antes sin días). Basura, booleanos, ≤ 0 → nada.
 const leeNum = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : null; };
 const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n) > 0 ? plural(n, 'PO') : null; };
+// 4.7.58: cobertura -0.4 ya no dice «-0 d» (redondea a «0 d») y una negativa (inventario negativo) no da días: sin texto.
+const diasCobertura = (c) => { const k = leeNum(c); return k == null || Math.round(k) < 0 ? null : `${(Math.round(k) + 0).toLocaleString('es-MX')} d`; };
 export function recursosBarra(r) {
   if (!r) return [];
   // 4.7.14: montos en texto con «$», comas o espacios («$5,000») se leen como número (antes 0: cartera «verde» y % de ventas 0).
   const n = N, out = [];
   // 4.7.25: `pctTexto` con `porcentaje()` («1,250 %»; antes «1250%» pegado) y días de cobertura con miles es-MX («1,200 d»).
   if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, pctTexto: pct == null ? null : porcentaje(pct), tono: pct == null ? null : pct >= 100 ? 'verde' : pct >= 80 ? 'ambar' : 'rojo', ir: { tipo: 'oficina' } }); }
-  if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: leeNum(r.inv.cobertura) == null ? null : `${Math.round(leeNum(r.inv.cobertura)).toLocaleString('es-MX')} d`, ir: { tipo: 'cedis' } });
+  if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: diasCobertura(r.inv.cobertura), ir: { tipo: 'cedis' } });
   if (r.cartera) out.push({ clave: 'cartera', icono: '🏦', etiqueta: 'Cartera vencida', valor: n(r.cartera.vencido), tono: n(r.cartera.vencido) > 0 ? 'rojo' : 'verde', ir: { tipo: 'banco' } });
   if (r.enCamino) out.push({ clave: 'embarques', icono: '🚢', etiqueta: 'En tránsito', valor: n(r.enCamino.valor), extra: posTexto(r.enCamino.pos), ir: { tipo: 'puerto' } });
   return out;

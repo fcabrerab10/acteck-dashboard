@@ -1433,6 +1433,7 @@ test('Pulido 4.7.34: barra de recursos lee conteos en texto con comas y usa mile
   for (const p of [0.4, '-3', false, [2], {}]) assert.equal(extra(p), null, `pos ${String(p)}`);
   const cob = (c) => recursosBarra({ inv: { valor: 1, cobertura: c } })[0].extra;
   assert.equal(cob('1,200'), '1,200 d', 'cobertura en texto'); assert.equal(cob(' 45 '), '45 d'); assert.equal(cob(true), null, 'booleano no es día');
+  assert.equal(cob(-0.4), '0 d', '4.7.58 sin -0'); assert.equal(cob('-0.3'), '0 d'); assert.equal(cob(-5), null, 'negativa sin días'); assert.equal(cob(-0.6), null);
   assert.equal(recursosBarra({ cartera: { vencido: '$5,000' } })[0].valor, 5000, 'montos siguen con numero()');
 });
 
