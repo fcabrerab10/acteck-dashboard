@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { ACC } from './luz-clima.js';
 import { instanciar, geo } from './instancias.js';
-import { circuitoVendedor, pesosCorto, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural, llegaBarco, unirTexto, numero, piezasTexto } from '../modelo.js';
+import { circuitoVendedor, pesosCorto, tramoActual, rumboBarcos, camionesTemporada, nombreCiudad, plural, llegaBarco, unirTexto, numero, piezasTexto, tituloCamion, vaA } from '../modelo.js';
 
 // Barcos: entran desde el suroeste hacia el muelle según su progreso.
 export function barcos(ctx, puertoPos) {
@@ -45,7 +45,7 @@ export function camiones(ctx, rutas) {
     [[-1.1, .5], [-1.1, -.5], [1.4, .5], [1.4, -.5]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCamion', () => new THREE.CylinderGeometry(.28, .28, .22, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .3, z); g.add(r); });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); }); // 3.90.4: el tag lo pone add() y se lee al plantar
     if (oscuro) { const f = new THREE.PointLight(0xFFF2C0, .9, 7); f.position.set(2.2, .8, 0); g.add(f); }
-    add(g, { tipo: 'camion', folio: c.folio, titulo: c.envio ? `Envío · ${c.folio}` : `Factura ${c.folio}${promo ? ` · ${promo.texto}` : ''}`, sub: c.envio ? unirTexto(c.cliente, c.paqueteria, c.fecha ? `salió ${c.fecha}` : '', c.ciudad ? `va a ${nombreCiudad(c.ciudad)}` : '') : unirTexto(c.cliente, pesosCorto(c.monto), piezasTexto(c.piezas), c.ciudad ? `va a ${nombreCiudad(c.ciudad)}` : ''), pagina: 'ordenesCompra' });
+    add(g, { tipo: 'camion', folio: c.folio, titulo: tituloCamion(c, promo?.texto), sub: c.envio ? unirTexto(c.cliente, c.paqueteria, c.fecha ? `salió ${c.fecha}` : '', c.ciudad ? `va a ${nombreCiudad(c.ciudad)}` : '') : unirTexto(c.cliente, pesosCorto(c.monto), piezasTexto(c.piezas), c.ciudad ? `va a ${nombreCiudad(c.ciudad)}` : ''), pagina: 'ordenesCompra' });
     animados.push((t) => { const p = (c.progreso + t * .025 + i * .07) % 1; const pt = curva.getPointAt(p); const q = curva.getPointAt(Math.min(1, p + .01)); g.position.set(pt.x, .1, pt.z); g.rotation.y = -Math.atan2(q.z - pt.z, q.x - pt.x); });
   });
 }
@@ -63,8 +63,8 @@ export function vendedoresRuta(ctx, rutas) {
     const g = new THREE.Group(); const cuerpo = box(1.8, .7, 1, ACC.azul); cuerpo.position.y = .55; g.add(cuerpo); const techo = box(1, .5, .9, 0xDCE6F2); techo.position.set(-.1, 1.1, 0); g.add(techo);
     [[-.55, .45], [-.55, -.45], [.55, .45], [.55, -.45]].forEach(([x, z]) => { const r = new THREE.Mesh(geo(ctx, 'ruedaCoche', () => new THREE.CylinderGeometry(.22, .22, .2, 10)), M(0x222222)); r.rotation.x = Math.PI / 2; r.position.set(x, .22, z); g.add(r); });
     g.traverse((o) => { if (o.isMesh) instanciar(ctx, o, null, true); });
-    const subDe = (k) => `Equipo comercial · ${plural(v.clientes, 'cliente')} · ${k < paradas.length ? `va a ${paradas[k].cliente} (${nombreCiudad(paradas[k].ciudad)})` : 'regresa al CEDIS'}`;
-    const tag = { tipo: 'vendedorErp', titulo: v.nombre, sub: subDe(0), pagina: 'sellIn' }; let tramoVisto = 0;
+    const subDe = (k) => `Equipo comercial · ${plural(v.clientes, 'cliente')} · ${k < paradas.length ? vaA(paradas[k]) || 'en ruta' : 'regresa al CEDIS'}`;
+    const tag = { tipo: 'vendedorErp', titulo: unirTexto(v.nombre) || 'Vendedor', sub: subDe(0), pagina: 'sellIn' }; let tramoVisto = 0;
     add(g, tag);
     animados.push((t) => {
       const { i: k, q } = tramoActual((v.fase + t * .04 + i * .03) / tramos.length, paradas.length); // misma velocidad por tramo que antes

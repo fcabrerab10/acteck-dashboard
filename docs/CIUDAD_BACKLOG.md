@@ -258,6 +258,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.34) Barra de recursos: POs en tránsito y cobertura de inventario en texto con comas («1,200») ya se leen (antes sin POs / sin días) y salen con miles es-MX y `plural()` («1,200 POs»; antes «1200 POs»); booleanos ya no son «1 d». Montos con `numero()`.
   - [x] (4.7.35) Misión «Descargar» del puerto: una tarima sin id dice «Descargar un contenedor · 1,200 pz» (antes «Descargar undefined» y tarjeta «Contenedor undefined»), el id con espacios se limpia y tarimas que no son lista ya no truenan; globo de la ciudad «1,200 de 3,400 tiendas vendieron» con miles es-MX. Harness sin errores.
   - [x] (4.7.36) Títulos de reunión vacíos, con espacios o nulos dicen «Reunión» / «Viaje» con `unirTexto()`: misiones «11:10 · Reunión · en 10 min» (antes «11:10 · null»), burbuja de la oficina, sala de juntas, presencia y tarjeta de la persona («De viaje», antes «De viaje · null»).
+  - [x] (4.7.37) `tituloCamion()` / `vaA()` puras y probadas: el camión sin folio dice «Factura» / «Envío» (antes «Factura null», «Envío · null»), el vendedor sin cliente «va a León» (antes «va a null (León)») y sin nombre «Vendedor». Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -273,6 +274,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 23:56 · v4.7.37 · Camión sin folio y vendedor sin cliente/nombre ya no dicen «null» en sus globos; +1 prueba.
 - 2026-11-21 23:36 · v4.7.36 · Títulos de reunión/viaje vacíos o nulos ya no dicen «null» en misiones, burbujas, presencia y tarjeta de la persona.
 - 2026-11-21 23:17 · v4.7.35 · Misión «Descargar» sin «undefined» con tarimas sin id; globo de la ciudad con miles es-MX; +1 prueba.
 - 2026-11-21 22:56 · v4.7.34 · Barra de recursos: POs y cobertura en texto con comas se leen; «1,200 POs» con miles es-MX; +1 prueba. (El pendiente de permisos de Etapa 8 sigue esperando a Fernando.)

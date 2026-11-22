@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal, piezasMes } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal, piezasMes } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1287,6 +1287,17 @@ test('4.7.19: burbujas y bitácora leen montos en texto con numero()', () => {
     pagosHechos: [{ id: 1, cliente: 'C', monto: ' 600,000 ', pagado_at: '2026-10-07T09:00:00' }] };
   const b = bitacoraEventos(m, h); const por = Object.fromEntries(b.map((x) => [x.id, x.grande]));
   assert.equal(por['factura-F1'], true); assert.equal(por['factura-F2'], false); assert.equal(por['pago-1'], true);
+});
+test('tituloCamion() / vaA(): sin folio ni cliente ya no dicen «Factura null» ni «va a null»', () => {
+  assert.equal(tituloCamion({ folio: 'F1' }, 'Buen Fin'), 'Factura F1 · Buen Fin');
+  assert.equal(tituloCamion({ folio: null }), 'Factura');
+  assert.equal(tituloCamion({ folio: ' ', envio: true }), 'Envío');
+  assert.equal(tituloCamion({ folio: 77, envio: true }), 'Envío · 77');
+  assert.equal(tituloCamion(null, undefined), 'Factura');
+  assert.equal(vaA({ cliente: 'Pcel', ciudad: 'GUADALAJARA' }), 'va a Pcel (Guadalajara)');
+  assert.equal(vaA({ cliente: null, ciudad: 'LEON' }), 'va a León');
+  assert.equal(vaA({ cliente: ' Pcel ' }), 'va a Pcel');
+  assert.equal(vaA(null), '');
 });
 test('unirTexto(): une con « · » y salta vacíos, null, NaN y «undefined» (globo del contenedor y del camión)', () => {
   assert.equal(unirTexto('MSK', '1,200 pz', 'llega hoy'), 'MSK · 1,200 pz · llega hoy');

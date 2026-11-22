@@ -671,6 +671,17 @@ export function unirTexto(...partes) {
   return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))
     .filter((x) => x && x !== 'null' && x !== 'undefined' && x !== 'NaN').join(' · ');
 }
+// Título del camión (4.7.37): «Factura F1 · promo» / «Envío · F1»; sin folio (null, vacío, «undefined») dice sólo
+// «Factura» / «Envío» en vez de «Factura null». El folio numérico cuenta.
+export function tituloCamion(c, promo) {
+  const f = unirTexto(c?.folio);
+  return c?.envio ? unirTexto('Envío', f) : unirTexto(f ? `Factura ${f}` : 'Factura', promo);
+}
+// A dónde va el vendedor (4.7.37): «va a Cliente (Guadalajara)»; sin cliente «va a Guadalajara»; sin nada, vacío.
+export function vaA(parada) {
+  const cl = unirTexto(parada?.cliente), ci = parada?.ciudad ? nombreCiudad(parada.ciudad) : '';
+  return cl && ci ? `va a ${cl} (${ci})` : cl || ci ? `va a ${cl || ci}` : '';
+}
 // Porcentaje legible (4.7.24): entero redondeado con miles es-MX («1,250 %»), `signo` antepone «+» a los positivos
 // (sell out vs mes anterior) y lo ilegible (null, NaN, texto basura) dice «—» en vez de «NaN %» o «null %».
 export function porcentaje(v, { signo = false } = {}) {
