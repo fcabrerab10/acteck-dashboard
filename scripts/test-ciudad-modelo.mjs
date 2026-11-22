@@ -474,6 +474,12 @@ test('misiones del día («Hoy en Acteck»)', () => {
   const ms2 = misionesDelDia(m2, h);
   assert.deepEqual(ms2.map((x) => x.texto), ['10:30 · Pasada', '— · Sin hora', 'Descargar T1 · 5 pz']);
   assert.ok(!ms2.some((x) => /NaN|en -/.test(x.texto)));
+  // 4.7.35: tarima sin id ya no dice «Descargar undefined» / «Contenedor undefined»; con espacios se limpia; tarimas que no son lista no truenan.
+  const ms3 = misionesDelDia({ puerto: { tarimas: [{ piezas: 1200 }, { id: ' MSKU9 ', piezas: '3' }] } }, h);
+  assert.deepEqual(ms3.map((x) => x.texto), ['Descargar un contenedor · 1,200 pz', 'Descargar MSKU9 · 3 pz']);
+  assert.deepEqual(ms3.map((x) => x.tarjeta.titulo), ['Contenedor', 'Contenedor MSKU9']);
+  assert.ok(!ms3.some((x) => /undefined|null/.test(x.texto + x.id)));
+  assert.deepEqual(misionesDelDia({ puerto: { tarimas: 'abc' } }, h), []);
   assert.ok(Array.isArray(misionesDelDia(construirModelo(d, hoy), hoy)));
 });
 

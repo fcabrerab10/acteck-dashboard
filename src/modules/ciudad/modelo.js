@@ -310,7 +310,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
       texto: `${r.hora} · ${r.titulo}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
   }
-  for (const t of m.puerto?.tarimas || []) if (t) out.push({ id: `tarima-${t.id}`, icono: '📦', nivel: null, texto: `Descargar ${t.id} · ${piezasTexto(t.piezas)}`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: `Contenedor ${t.id}` }, orden: 24 * 60 });
+  for (const t of comoLista(m.puerto?.tarimas)) if (t) { const id = unirTexto(t.id); out.push({ id: `tarima-${id || 'sin-id'}`, icono: '📦', nivel: null, texto: `Descargar ${id || 'un contenedor'} · ${piezasTexto(t.piezas)}`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: id ? `Contenedor ${id}` : 'Contenedor' }, orden: 24 * 60 }); } // 4.7.35: sin id ya no dice «undefined»; tarimas que no son lista no truenan
   const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
