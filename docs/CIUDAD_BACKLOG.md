@@ -260,6 +260,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.36) Títulos de reunión vacíos, con espacios o nulos dicen «Reunión» / «Viaje» con `unirTexto()`: misiones «11:10 · Reunión · en 10 min» (antes «11:10 · null»), burbuja de la oficina, sala de juntas, presencia y tarjeta de la persona («De viaje», antes «De viaje · null»).
   - [x] (4.7.37) `tituloCamion()` / `vaA()` puras y probadas: el camión sin folio dice «Factura» / «Envío» (antes «Factura null», «Envío · null»), el vendedor sin cliente «va a León» (antes «va a null (León)») y sin nombre «Vendedor». Harness sin errores.
   - [x] (4.7.38) `nombrePersona()` pura y probada: la persona de la oficina sin nombre usa la parte del correo antes de «@» y sin nada dice «Persona» (antes `null` en escritorio, globo y tarjeta); nombre y puesto con espacios se limpian y el rol ya no se busca en «null null».
+  - [x] (4.7.39) `nombreTienda()` pura y probada: la tienda sin sucursal o sin nombre de cuenta ya no dice «Pcel · null» en pensamientos, buscador y lista del distrito, la tienda en línea sin sucursal dice «En línea» (antes «null (en línea)»), y la tarjeta encuentra la tienda tocada con la misma llave que su edificio (antes salía vacía). Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -275,6 +276,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 00:37 · v4.7.39 · Tiendas sin sucursal/nombre de cuenta ya no dicen «null» y su tarjeta vuelve a mostrar números; +1 prueba.
 - 2026-11-22 00:16 · v4.7.38 · Oficina: persona sin nombre usa su correo o «Persona» (antes null).
 - 2026-11-21 23:56 · v4.7.37 · Camión sin folio y vendedor sin cliente/nombre ya no dicen «null» en sus globos; +1 prueba.
 - 2026-11-21 23:36 · v4.7.36 · Títulos de reunión/viaje vacíos o nulos ya no dicen «null» en misiones, burbujas, presencia y tarjeta de la persona.
