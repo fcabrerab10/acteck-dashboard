@@ -269,6 +269,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.45) `temperaturaTexto()` pura y probada: el clima del panel dice «24° en Guadalajara» (0 y bajo cero valen) y sin temperatura sólo «Guadalajara» (antes «NaN° en Guadalajara»); las tiendas activas por ciudad del panel salen con miles es-MX («1,200 de 3,400 tiendas»). Sin prueba visual: el harness no dibuja `Ciudad.jsx`.
   - [x] (4.7.46) `pendientesTexto()` pura y probada: el globo de la persona (oficina y de viaje) dice «1 pendiente hoy · 1,200 hechas» con `plural()` (antes «undefined pendientes hoy · NaN hechas» sin dato y sin miles es-MX); el globo del camión de envío dice «salió 6 oct» con `fechaCorta()` (antes «2026-10-06» crudo; ilegible ya no sale). Harness base/mapa/oficina sin errores.
   - [x] (4.7.47) Sucursales se juntan por cuenta sin espacios y nombre con `norm()` (« hermosillo » = «HERMOSILLO»): antes la misma sucursal con espacios o mayúsculas distintas salía como dos tiendas encimadas con la venta partida.
+  - [x] (4.7.48) Vendedores de los mayoristas se juntan por cuenta sin espacios y nombre normalizado (« juan  perez » = «JUAN PEREZ»): antes el mismo vendedor con espacios o mayúsculas distintas salía dos veces en la ciudad con la venta partida; sin nombre se salta.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -284,6 +285,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 02:56 · v4.7.48 · Vendedores de mayoristas juntados por cuenta/nombre normalizado (sin duplicados ni venta partida); +1 prueba.
 - 2026-11-22 02:24 · v4.7.47 · Sucursales juntadas por cuenta/nombre normalizado (sin tiendas duplicadas ni venta partida); +1 prueba.
 - 2026-11-22 01:36 · v4.7.43 · Tarjeta del camión: «Salió» con fecha corta es-MX («6 oct · ayer») (+1 prueba).
 - 2026-11-22 01:18 · v4.7.42 · `fechaCorta()`: ETA y llegada a CEDIS del contenedor en «23 nov» (antes ISO crudo); proveedor vacío «—»; +1 prueba.

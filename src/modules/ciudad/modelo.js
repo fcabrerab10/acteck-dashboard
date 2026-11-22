@@ -1240,7 +1240,8 @@ export function construirModelo(d, hoy = new Date()) {
   }
   // vendedores de los mayoristas → en la ciudad de su sucursal (o la sede de la cuenta)
   const vm = new Map();
-  for (const r of d.vendedoresMayoristas || []) { if (N(r.anio) !== anio) continue; const k = `${r.cuenta}|${r.vendedor}`; const o = vm.get(k) || { cuenta: r.cuenta, nombre: r.vendedor, importe: 0, sucursal: r.sucursal || null, ultimoMes: 0 }; o.importe += N(r.importe); if (N(r.mes) >= o.ultimoMes && N(r.importe) > 0) { o.ultimoMes = N(r.mes); o.sucursal = r.sucursal || o.sucursal; } vm.set(k, o); }
+  // 4.7.48: el vendedor del mayorista se junta por cuenta sin espacios y `norm()` del nombre (« JUAN  PEREZ » = «Juan Perez»; antes salían dos vendedores con la venta partida) y sin nombre se salta.
+  for (const r of d.vendedoresMayoristas || []) { if (N(r.anio) !== anio) continue; const cu = typeof r.cuenta === 'string' ? r.cuenta.trim() : r.cuenta; const kv = norm(r.vendedor).replace(/\s+/g, ' '); if (!kv) continue; const k = `${cu}|${kv}`; const o = vm.get(k) || { cuenta: cu, nombre: unirTexto(r.vendedor).replace(/\s+/g, ' '), importe: 0, sucursal: r.sucursal || null, ultimoMes: 0 }; o.importe += N(r.importe); if (N(r.mes) >= o.ultimoMes && N(r.importe) > 0) { o.ultimoMes = N(r.mes); o.sucursal = r.sucursal || o.sucursal; } vm.set(k, o); }
   for (const v of vm.values()) {
     if (!v.nombre || /^(SIN|N\/?A|-)/i.test(v.nombre)) continue;
     const c = v.sucursal ? ciudadDeSucursal(v.sucursal) : null;

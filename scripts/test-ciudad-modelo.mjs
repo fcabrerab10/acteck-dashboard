@@ -1510,3 +1510,11 @@ test('Sucursales: se juntan por cuenta y nombre normalizado (4.7.47)', () => {
   const ts = her.tiendas.filter((t) => t.cuenta === 'ct');
   assert.equal(ts.length, 1); assert.equal(ts[0].importe, 175); assert.equal(ts[0].sucursal, 'HERMOSILLO');
 });
+
+test('Vendedores de mayoristas: se juntan por cuenta y nombre normalizado (4.7.48)', () => {
+  const hoy = new Date(2026, 9, 20, 12);
+  const fila = (cuenta, vendedor, importe) => ({ cuenta, anio: 2026, mes: 10, vendedor, importe, sucursal: null });
+  const m = construirModelo({ vendedoresMayoristas: [fila('ct', 'JUAN PEREZ', 100), fila(' ct ', ' juan  perez ', 50), fila('ct', null, 30), fila('ct', '   ', 20)] }, hoy);
+  const vs = m.distritos.flatMap((x) => x.vendedores).filter((v) => v.cuenta === 'ct');
+  assert.equal(vs.length, 1); assert.equal(vs[0].importe, 150); assert.equal(vs[0].nombreCompleto, 'JUAN PEREZ');
+});
