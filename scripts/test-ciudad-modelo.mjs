@@ -594,9 +594,9 @@ test('vendedores: circuito por las sedes de sus clientes y tarjeta con ventas de
 test('tarjeta del camión: factura o envío', () => {
   const m = { hoyIso: '2026-10-07', camiones: [{ folio: 'F1', cliente: 'Digitalife', ciudad: 'SAN LUIS POTOSI', monto: 1.25e6, piezas: 1200, fecha: '2026-10-06' }, { folio: 'guía 9', cliente: 'PCEL', ciudad: 'MONTERREY', fecha: '2026-09-30', envio: true, paqueteria: 'DHL', monto: 0, piezas: 0 }] };
   let tj = tarjetaDe({ tipo: 'camion', folio: 'F1', titulo: 'Factura F1' }, m);
-  assert.deepEqual(tj.numeros, [['Cliente', 'Digitalife'], ['Factura', '$1.3 M'], ['Piezas', '1,200'], ['Salió', '2026-10-06 · ayer']]); assert.equal(tj.estado, 'verde');
+  assert.deepEqual(tj.numeros, [['Cliente', 'Digitalife'], ['Factura', '$1.3 M'], ['Piezas', '1,200'], ['Salió', `${fechaCorta('2026-10-06')} · ayer`]]); assert.equal(tj.estado, 'verde');
   tj = tarjetaDe({ tipo: 'camion', folio: 'guía 9' }, m);
-  assert.deepEqual(tj.numeros, [['Cliente', 'PCEL'], ['Paquetería', 'DHL'], ['Salió', '2026-09-30 · hace 7 d'], ['Destino', 'Monterrey']]); assert.equal(tj.estado, 'ambar');
+  assert.deepEqual(tj.numeros, [['Cliente', 'PCEL'], ['Paquetería', 'DHL'], ['Salió', `${fechaCorta('2026-09-30')} · hace 7 d`], ['Destino', 'Monterrey']]); assert.equal(tj.estado, 'ambar');
   assert.deepEqual(tarjetaDe({ tipo: 'camion', folio: 'nada', titulo: 'X' }, m).numeros, []);
 });
 
@@ -1322,7 +1322,7 @@ test('tarjetaDe(): torre, tienda, camión y vendedor leen texto/Date y dicen sin
   const to = tarjetaDe({ tipo: 'torre' }, m); assert.equal(to.numeros[3][1], '2 · 1 atrasado'); assert.equal(to.estado, 'rojo');
   const ti = tarjetaDe({ tipo: 'tienda', ciudad: 'GDL', cuenta: 'ct', titulo: 'CT · Matriz' }, m);
   assert.ok(ti.numeros.some((x) => x[0] === 'Cartera vencida')); assert.ok(!ti.numeros.some((x) => x[0] === 'Vendedores')); assert.equal(ti.estado, 'rojo');
-  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros[3][1], '2026-10-07 · hace 2 d');
+  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros[3][1], `${fechaCorta('2026-10-07')} · hace 2 d`);
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F2' }, m).numeros[3][1], '—');
   const v = tarjetaDe({ tipo: 'vendedorErp', titulo: 'Ana' }, m); assert.equal(v.numeros[3][1], 'B'); assert.equal(v.estado, 'verde');
   assert.equal(tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL' }, m).numeros[0][1], '1 de 1');
@@ -1474,4 +1474,11 @@ test('fechaCorta() y tarjetas del contenedor con fecha corta (4.7.42)', () => {
   assert.deepEqual(b.numeros.slice(1, 3), [['ETA puerto', nov], ['Llega a CEDIS', '—']]);
   const m = { puerto: { barcos: [{ id: 'C1', supplier: '  ', eta: '2026-11-23', llegaEnDias: 1, piezas: 1 }], tarimas: [] } };
   const c = tarjetaDe({ tipo: 'barco', id: 'C1' }, m); assert.equal(c.numeros[0][1], '—'); assert.match(c.numeros[1][1], /^23 nov · /);
+});
+
+test('Tarjeta del camión: «Salió» con fecha corta (4.7.43)', () => {
+  const m = { hoyIso: '2026-10-07', camiones: [{ folio: 'F1', fecha: '2026-10-06', cliente: 'A', monto: 1, piezas: 1 }, { folio: 'F2', fecha: 'pendiente', cliente: 'A' }] };
+  const a = tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros.find((x) => x[0] === 'Salió')[1];
+  assert.match(a, /^6 oct · ayer$/); assert.ok(!a.includes('2026'));
+  assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F2' }, m).numeros.find((x) => x[0] === 'Salió')[1], '—');
 });
