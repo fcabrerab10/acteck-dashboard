@@ -677,6 +677,13 @@ export function tituloCamion(c, promo) {
   const f = unirTexto(c?.folio);
   return c?.envio ? unirTexto('Envío', f) : unirTexto(f ? `Factura ${f}` : 'Factura', promo);
 }
+// Nombre de la persona en la oficina (4.7.38): nombre limpio; sin nombre, la parte del correo antes de «@»
+// («ana.lopez»); sin nada, «Persona» (antes `null` en el escritorio, la tarjeta y el globo).
+export function nombrePersona(p) {
+  const n = unirTexto(p?.nombre); if (n) return n;
+  const e = unirTexto(p?.email).split('@')[0].trim();
+  return e || 'Persona';
+}
 // A dónde va el vendedor (4.7.37): «va a Cliente (Guadalajara)»; sin cliente «va a Guadalajara»; sin nada, vacío.
 export function vaA(parada) {
   const cl = unirTexto(parada?.cliente), ci = parada?.ciudad ? nombreCiudad(parada.ciudad) : '';
@@ -1131,7 +1138,8 @@ export function construirModelo(d, hoy = new Date()) {
     const mios = items.filter((it) => it.propietario === p.user_id || (Array.isArray(it.responsables) && it.responsables.includes(p.user_id)));
     const abiertas = mios.filter((it) => it.estado === 'abierta' || it.estado === 'arrastrada');
     const enCurso = abiertas.find((it) => it.inicio_real);
-    return { id: p.user_id, nombre: p.nombre || p.email, puesto: p.puesto || p.rol || '', rol: /millan|finanz/i.test(`${p.nombre} ${p.puesto}`) ? 'finanzas' : /karolina|comercial/i.test(`${p.nombre} ${p.puesto}`) ? 'comercial' : 'direccion',
+    const quien = unirTexto(p.nombre, p.puesto); // 4.7.38: sin «null» en la búsqueda del rol
+    return { id: p.user_id, nombre: nombrePersona(p), puesto: unirTexto(p.puesto) || unirTexto(p.rol), rol: /millan|finanz/i.test(quien) ? 'finanzas' : /karolina|comercial/i.test(quien) ? 'comercial' : 'direccion',
       pendientes: abiertas.length, hechas: mios.filter((it) => it.estado === 'hecha').length, actividad: enCurso ? enCurso.titulo : abiertas[0]?.titulo || null, avatar: p.avatar_url || null };
   });
   const reuniones = (d.reunionesHoy || []).filter((r) => r.tipo !== 'viaje');

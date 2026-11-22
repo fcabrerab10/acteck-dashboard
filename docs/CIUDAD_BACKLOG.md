@@ -259,6 +259,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.35) Misión «Descargar» del puerto: una tarima sin id dice «Descargar un contenedor · 1,200 pz» (antes «Descargar undefined» y tarjeta «Contenedor undefined»), el id con espacios se limpia y tarimas que no son lista ya no truenan; globo de la ciudad «1,200 de 3,400 tiendas vendieron» con miles es-MX. Harness sin errores.
   - [x] (4.7.36) Títulos de reunión vacíos, con espacios o nulos dicen «Reunión» / «Viaje» con `unirTexto()`: misiones «11:10 · Reunión · en 10 min» (antes «11:10 · null»), burbuja de la oficina, sala de juntas, presencia y tarjeta de la persona («De viaje», antes «De viaje · null»).
   - [x] (4.7.37) `tituloCamion()` / `vaA()` puras y probadas: el camión sin folio dice «Factura» / «Envío» (antes «Factura null», «Envío · null»), el vendedor sin cliente «va a León» (antes «va a null (León)») y sin nombre «Vendedor». Harness sin errores.
+  - [x] (4.7.38) `nombrePersona()` pura y probada: la persona de la oficina sin nombre usa la parte del correo antes de «@» y sin nada dice «Persona» (antes `null` en escritorio, globo y tarjeta); nombre y puesto con espacios se limpian y el rol ya no se busca en «null null».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -274,6 +275,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 00:16 · v4.7.38 · Oficina: persona sin nombre usa su correo o «Persona» (antes null).
 - 2026-11-21 23:56 · v4.7.37 · Camión sin folio y vendedor sin cliente/nombre ya no dicen «null» en sus globos; +1 prueba.
 - 2026-11-21 23:36 · v4.7.36 · Títulos de reunión/viaje vacíos o nulos ya no dicen «null» en misiones, burbujas, presencia y tarjeta de la persona.
 - 2026-11-21 23:17 · v4.7.35 · Misión «Descargar» sin «undefined» con tarimas sin id; globo de la ciudad con miles es-MX; +1 prueba.
