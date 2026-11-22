@@ -1250,7 +1250,7 @@ export function construirModelo(d, hoy = new Date()) {
     porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: cuentas.get(v.cuenta)?.nombre || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
   }
   // Cartera (propios): saldo vencido → bandera roja en su Matriz / primera tienda de la sede.
-  const carteraPor = new Map((d.cartera || []).map((c) => [c.cliente, { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: N(c.dso), corte: c.fecha_corte }]));
+  const carteraPor = new Map((d.cartera || []).filter((c) => String(c.cliente ?? '').trim()).map((c) => [String(c.cliente).trim(), { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: N(c.dso), corte: c.fecha_corte }])); // 4.7.49: « digitalife » = «digitalife»
   for (const [cuenta, c] of carteraPor) {
     const sede = SEDE_POR_CUENTA[cuenta] || 'GUADALAJARA';
     if (!porCiudad.has(sede)) continue;
@@ -1258,7 +1258,7 @@ export function construirModelo(d, hoy = new Date()) {
   }
   // Clientes finales por estado → ciudad representativa (casitas junto a la manzana).
   const cfPor = new Map();
-  for (const r of d.clientesFinales || []) { const est = norm(r.estado); if (!est || est === 'SIN ESTADO') continue; const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad) continue; const o = cfPor.get(ciudad) || { n: 0, importe: 0, cuentas: new Set() }; o.n += 1; o.importe += N(r.importe); o.cuentas.add(r.cuenta); cfPor.set(ciudad, o); }
+  for (const r of d.clientesFinales || []) { const est = norm(r.estado); if (!est || est === 'SIN ESTADO') continue; const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad) continue; const o = cfPor.get(ciudad) || { n: 0, importe: 0, cuentas: new Set() }; o.n += 1; o.importe += N(r.importe); const cu = String(r.cuenta ?? '').trim(); if (cu) o.cuentas.add(cu); cfPor.set(ciudad, o); }
   for (const [ciudad, o] of cfPor) { if (!porCiudad.has(ciudad)) porCiudad.set(ciudad, { ciudad, pos: posDe(CIUDADES[ciudad]), estado: CIUDADES[ciudad].estado, tiendas: [], vendedores: [] }); porCiudad.get(ciudad).clientesFinales = { n: o.n, importe: o.importe, cuentas: [...o.cuentas] }; }
   const distritos = [...porCiudad.values()].map((dist) => {
     dist.tiendas.sort((a, b) => b.importe - a.importe);

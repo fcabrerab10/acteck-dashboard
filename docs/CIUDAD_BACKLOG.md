@@ -270,6 +270,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.46) `pendientesTexto()` pura y probada: el globo de la persona (oficina y de viaje) dice «1 pendiente hoy · 1,200 hechas» con `plural()` (antes «undefined pendientes hoy · NaN hechas» sin dato y sin miles es-MX); el globo del camión de envío dice «salió 6 oct» con `fechaCorta()` (antes «2026-10-06» crudo; ilegible ya no sale). Harness base/mapa/oficina sin errores.
   - [x] (4.7.47) Sucursales se juntan por cuenta sin espacios y nombre con `norm()` (« hermosillo » = «HERMOSILLO»): antes la misma sucursal con espacios o mayúsculas distintas salía como dos tiendas encimadas con la venta partida.
   - [x] (4.7.48) Vendedores de los mayoristas se juntan por cuenta sin espacios y nombre normalizado (« juan  perez » = «JUAN PEREZ»): antes el mismo vendedor con espacios o mayúsculas distintas salía dos veces en la ciudad con la venta partida; sin nombre se salta.
+  - [x] (4.7.49) Cartera y clientes finales con la cuenta limpia: un renglón de cartera « digitalife » ya empata con su tienda y su sede (antes no salía en rojo ni en los KPIs con la clave limpia) y una cuenta vacía se salta; las casas de clientes finales cuentan «vía 1 mayorista» aunque la cuenta venga con espacios (antes «vía 2 mayoristas»).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -464,3 +465,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-22 01:55 · v4.7.44 · Vendedores del ERP juntados por nombre normalizado (sin coches duplicados ni ventas partidas).
 - 2026-11-22 02:16 · v4.7.45 · Clima del panel sin «NaN°» (`temperaturaTexto()`) y tiendas activas por ciudad con miles es-MX.
 - 2026-11-22 02:20 · v4.7.46 · Globo de la persona con `pendientesTexto()` (sin «undefined pendientes») y camión de envío «salió 6 oct».
+- 2026-11-22 03:16 · v4.7.49 · cartera y clientes finales empatan la cuenta aunque traiga espacios.

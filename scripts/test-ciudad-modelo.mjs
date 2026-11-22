@@ -1518,3 +1518,14 @@ test('Vendedores de mayoristas: se juntan por cuenta y nombre normalizado (4.7.4
   const vs = m.distritos.flatMap((x) => x.vendedores).filter((v) => v.cuenta === 'ct');
   assert.equal(vs.length, 1); assert.equal(vs[0].importe, 150); assert.equal(vs[0].nombreCompleto, 'JUAN PEREZ');
 });
+
+test('Cartera y clientes finales: la cuenta con espacios empata (4.7.49)', () => {
+  const hoy = new Date(2026, 9, 20, 12);
+  const m = construirModelo({
+    cartera: [{ cliente: ' digitalife ', saldo_vencido: '5000', saldo_actual: 9000 }, { cliente: '  ', saldo_vencido: 1 }, { cliente: null, saldo_vencido: 2 }],
+    clientesFinales: [{ cuenta: 'cva', anio: 2026, mes: 10, estado: 'JALISCO', importe: 10 }, { cuenta: ' cva ', anio: 2026, mes: 10, estado: 'JALISCO', importe: 5 }, { cuenta: '', anio: 2026, mes: 10, estado: 'JALISCO', importe: 1 }],
+  }, hoy);
+  assert.deepEqual(m.kpis.cartera.map((c) => c.cuenta), ['digitalife']); assert.equal(m.kpis.cartera[0].vencido, 5000);
+  const gdl = m.distritos.find((x) => x.ciudad === 'GUADALAJARA');
+  assert.equal(gdl.clientesFinales.n, 3); assert.deepEqual(gdl.clientesFinales.cuentas, ['cva'], '«vía 1 mayorista», no 2');
+});
