@@ -690,6 +690,16 @@ export function nombrePersona(p) {
 export function nombreTienda(t) {
   return unirTexto(unirTexto(t?.nombreCuenta) || t?.cuenta, t?.sucursal) || 'Tienda';
 }
+// Leyenda de cuentas (4.7.40): una entrada por cuenta (antes se repetía si el nombre venía con espacios distintos
+// y la clave chocaba en React; un nombre con «|» se partía y una cuenta nula decía «null»). Salta distritos/tiendas nulos.
+export function leyendaCuentas(distritos) {
+  const out = new Map();
+  for (const d of comoLista(distritos)) for (const t of comoLista(d?.tiendas)) {
+    const c = unirTexto(t?.cuenta); if (!c || out.has(c)) continue;
+    out.set(c, { cuenta: c, nombre: unirTexto(t.nombreCuenta) || c });
+  }
+  return [...out.values()];
+}
 // A dónde va el vendedor (4.7.37): «va a Cliente (Guadalajara)»; sin cliente «va a Guadalajara»; sin nada, vacío.
 export function vaA(parada) {
   const cl = unirTexto(parada?.cliente), ci = parada?.ciudad ? nombreCiudad(parada.ciudad) : '';

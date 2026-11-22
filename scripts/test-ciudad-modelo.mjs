@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal, piezasMes } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal, piezasMes } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1447,4 +1447,11 @@ test('nombreTienda(): sin sucursal o sin nombre de cuenta ya no dice «null» y 
   const m = { distritos: [{ ciudad: 'GUADALAJARA', tiendas: [{ cuenta: '10', nombreCuenta: 'Pcel', sucursal: null, importe: 5000, previo: 1000 }] }] };
   const t = tarjetaDe({ tipo: 'tienda', titulo: 'Pcel', cuenta: '10', ciudad: 'GUADALAJARA' }, m);
   assert.equal(t.numeros[0][0], 'Este mes');
+});
+
+test('leyendaCuentas(): una entrada por cuenta, sin «null» ni nombres partidos', () => {
+  const ds = [null, { tiendas: [{ cuenta: '10', nombreCuenta: 'Pcel' }, { cuenta: ' 10 ', nombreCuenta: ' Pcel ' }, null, { cuenta: null, nombreCuenta: 'X' }] },
+    { tiendas: [{ cuenta: '20', nombreCuenta: 'A|B' }, { cuenta: 30, nombreCuenta: null }] }, { tiendas: 'basura' }];
+  assert.deepEqual(leyendaCuentas(ds), [{ cuenta: '10', nombre: 'Pcel' }, { cuenta: '20', nombre: 'A|B' }, { cuenta: '30', nombre: '30' }]);
+  assert.deepEqual(leyendaCuentas(null), []);
 });

@@ -12,7 +12,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
 import { crearAmbiente } from './sonido';
-import { COLOR_CUENTA, nombreTienda, piezasTexto, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto } from './modelo';
+import { COLOR_CUENTA, nombreTienda, leyendaCuentas, piezasTexto, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -189,7 +189,7 @@ export default function Ciudad({ onNavegar }) {
       <BarraRecursos card={card} theme={theme} irA={(t) => escenaRef.current?.irA(t)} ayuda="Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas" />
       {/* Leyenda: color por cliente */}
       <div style={{ position: 'absolute', right: 14, top: 68, zIndex: 3, ...card, padding: '8px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 10px', maxWidth: 420, fontSize: 11 }}>
-        {[...new Set(modelo.distritos.flatMap((d) => d.tiendas.map((t) => `${t.cuenta}|${t.nombreCuenta}`)))].map((k) => { const [c, n] = k.split('|'); return <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 3, background: hexCss(COLOR_CUENTA[c] || 0x8E8E93), display: 'inline-block' }} />{n}</span>; })}
+        {leyendaCuentas(modelo.distritos).map(({ cuenta: c, nombre: n }) => { return <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 3, background: hexCss(COLOR_CUENTA[c] || 0x8E8E93), display: 'inline-block' }} />{n}</span>; })}
       </div>
       {/* «Hoy en Acteck» (3.90.46): misiones del día con «Ir» (misionesDelDia), la bitácora con «Ver» (bitacoraEventos, 3.90.50) y lo que está pasando en la ciudad */}
       <div style={{ position: 'absolute', right: 14, bottom: 14, width: 270, zIndex: 3, ...card, padding: '10px 12px', fontSize: 12, lineHeight: 1.45, maxHeight: '48%', overflowY: 'auto' }}>
