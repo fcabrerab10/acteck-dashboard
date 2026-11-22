@@ -1273,17 +1273,20 @@ export function construirModelo(d, hoy = new Date()) {
   }).sort((a, b) => b.importe - a.importe);
 
   // ── Camiones: facturas recientes del CEDIS a la sede del cliente ──
+  // 4.7.51: la clave ERP se limpia (« 1234 » = «1234») en facturas, envíos y destinos de vendedores; la cuenta sale con la clave limpia del mapa.
+  const claveErp = (x) => String(x ?? '').trim();
+  const cuentaPorErp = new Map([...cuentas.entries()].filter(([k, c]) => k && claveErp(c?.erp_cliente)).map(([k, c]) => [claveErp(c.erp_cliente), k]));
   const camiones = (d.facturas || []).filter((f) => dias(f.fecha, hoyIso) <= 10).map((f) => {
-    const cuenta = [...cuentas.values()].find((c) => c.erp_cliente && String(c.erp_cliente) === String(f.cliente_key)) || null;
-    const key = cuenta?.cuenta || f.cliente_key;
+    const ck = claveErp(f.cliente_key), kc = cuentaPorErp.get(ck), cuenta = kc ? cuentas.get(kc) : null;
+    const key = kc || ck;
     const ciudad = SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO';
     const edad = dias(f.fecha, hoyIso);
-    return { folio: f.folio, cliente: cuenta?.nombre || f.cliente_key, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + Math.max(0, edad) * 0.12) };
+    return { folio: f.folio, cliente: cuenta?.nombre || ck || f.cliente_key, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + Math.max(0, edad) * 0.12) };
   }).sort((a, b) => b.monto - a.monto).slice(0, 14);
   for (const e of d.envios || []) {
     const salida = e.fecha_envio_erp || e.fecha_surtida; const entrega = e.fecha_entrega_erp || e.fecha_entregada;
     if (!salida || entrega) continue;
-    const key = e.oc_clientes?.cliente_key || 'digitalife';
+    const key = claveErp(e.oc_clientes?.cliente_key) || 'digitalife';
     const edad = dias(salida, hoyIso); if (!Number.isFinite(edad) || edad > 20) continue; // salida ilegible: sin camión (antes progreso NaN)
     camiones.push({ folio: e.guia_rastreo ? `guía ${e.guia_rastreo}` : `envío OC ${e.oc_clientes?.numero_oc || ''}`.trim(), cliente: cuentas.get(key)?.nombre || key, ciudad: SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO', monto: 0, piezas: 0, fecha: salida, progreso: Math.min(0.9, 0.15 + Math.max(0, edad) * 0.15), envio: true, paqueteria: e.paqueteria || null });
   }
@@ -1291,11 +1294,10 @@ export function construirModelo(d, hoy = new Date()) {
   // ── Vendedores del ERP (equipo comercial): de la oficina a sus clientes ──
   // 4.7.44: el vendedor se junta por `norm()` (« JUAN  PEREZ » = «Juan Perez», espacios dobles incluidos; antes salían dos coches con la misma tarjeta) y sin nombre se salta.
   const ve = new Map();
-  for (const r of d.vendedoresErp || []) { if (N(r.anio) !== anio) continue; const kv = norm(r.vendedor).replace(/\s+/g, ' '); if (!kv) continue; const o = ve.get(kv) || { nombre: unirTexto(r.vendedor), clientes: new Map(), total: 0, totalMes: 0 }; ve.set(kv, o); o.total += N(r.fact_neta); if (N(r.mes) === mes) o.totalMes += N(r.fact_neta); const c = o.clientes.get(r.cliente_key) || { cliente_key: r.cliente_key, nombre: r.cliente_nombre, fact: 0 }; c.fact += N(r.fact_neta); o.clientes.set(r.cliente_key, c); }
-  const porErp = new Map([...cuentas.values()].filter((c) => c.erp_cliente).map((c) => [String(c.erp_cliente), c]));
+  for (const r of d.vendedoresErp || []) { if (N(r.anio) !== anio) continue; const kv = norm(r.vendedor).replace(/\s+/g, ' '); if (!kv) continue; const o = ve.get(kv) || { nombre: unirTexto(r.vendedor), clientes: new Map(), total: 0, totalMes: 0 }; ve.set(kv, o); o.total += N(r.fact_neta); if (N(r.mes) === mes) o.totalMes += N(r.fact_neta); const ck = claveErp(r.cliente_key); const c = o.clientes.get(ck) || { cliente_key: ck, nombre: r.cliente_nombre, fact: 0 }; c.fact += N(r.fact_neta); o.clientes.set(ck, c); }
   const vendedoresRuta = [...ve.values()].filter((v) => v.nombre && v.total > 0).sort((a, b) => b.total - a.total).slice(0, 10).map((v, i) => {
     const top = [...v.clientes.values()].sort((a, b) => b.fact - a.fact).slice(0, 3);
-    const destinos = top.map((c) => { const cu = porErp.get(String(c.cliente_key)) || [...cuentas.values()].find((x) => norm(x.nombre) === norm(c.nombre)); const key = cu?.cuenta || null; return { cliente: c.nombre || c.cliente_key, ciudad: (key && SEDE_POR_CUENTA[key]) || 'CIUDAD DE MEXICO', fact: c.fact }; });
+    const destinos = top.map((c) => { const ke = cuentaPorErp.get(claveErp(c.cliente_key)) || [...cuentas.entries()].find(([, x]) => norm(x?.nombre) === norm(c.nombre))?.[0]; const key = ke || null; return { cliente: c.nombre || c.cliente_key, ciudad: (key && SEDE_POR_CUENTA[key]) || 'CIUDAD DE MEXICO', fact: c.fact }; });
     return { nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, total: v.total, totalMes: v.totalMes, clientes: v.clientes.size, destinos, fase: i / 10 };
   });
 

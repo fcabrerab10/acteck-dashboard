@@ -1544,3 +1544,15 @@ test('Cuentas sin sucursal: la cuenta con espacios empata sus ventas (4.7.50)', 
   assert.equal(ts.find((t) => t.cuenta === 'ct')?.nombreCuenta, 'CT');
   assert.equal(ts.filter((t) => !String(t.cuenta ?? '').trim()).length, 0, 'cuenta vacía se salta');
 });
+test('(4.7.51) clave ERP con espacios: facturas, envíos y destinos de vendedores empatan su cuenta', () => {
+  const cuentasSp = d.cuentas.map((c) => (c.cuenta === 'ct' ? { ...c, cuenta: ' ct ', erp_cliente: ' 01234 ' } : c));
+  const m = construirModelo({ ...d, cuentas: cuentasSp,
+    facturas: [{ cliente_key: '01234 ', folio: 'F-1', fecha: '2026-10-03', piezas: 1, monto: 250000 }],
+    envios: [{ fecha_surtida: '2026-10-01', fecha_entregada: null, guia_rastreo: 'G-1', oc_clientes: { cliente_key: ' pcel ', numero_oc: 'OC-9' } }],
+    vendedoresErp: d.vendedoresErp.map((r) => ({ ...r, cliente_key: ` ${r.cliente_key} ` })) }, hoy);
+  const f = m.camiones.find((c) => !c.envio); assert.equal(f.ciudad, 'HERMOSILLO', 'factura llega a la sede de ct'); assert.equal(f.cliente, 'CT Internacional');
+  const e = m.camiones.find((c) => c.envio); assert.equal(e.ciudad, 'MONTERREY', 'envío « pcel » va a la sede de pcel'); assert.equal(e.cliente, 'PCEL');
+  assert.equal(m.vendedoresRuta[0].destinos[0].ciudad, 'HERMOSILLO', 'destino del vendedor con clave limpia');
+  const z = construirModelo({ ...d, facturas: [{ cliente_key: ' zzz ', folio: 'F-9', fecha: '2026-10-03', monto: 1 }] }, hoy).camiones.find((c) => !c.envio);
+  assert.equal(z.cliente, 'zzz', 'sin cuenta: la clave sale limpia');
+});
