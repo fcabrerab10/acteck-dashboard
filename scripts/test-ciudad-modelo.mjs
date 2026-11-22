@@ -1591,3 +1591,14 @@ test('4.7.56: plural(), piezasTexto() sin «-0» y listaCorta() con n = 0 sin es
   assert.equal(piezasTexto(-0.4), '0 pz'); assert.equal(piezasTexto('-0.3'), '0 pz'); assert.equal(piezasTexto(-5), '-5 pz');
   assert.equal(listaCorta(['a', 'b', 'c'], 0), '+3'); assert.equal(listaCorta(['a', 'b', 'c'], 2), 'a, b +1'); assert.equal(listaCorta(['a', 'b'], 2), 'a, b'); assert.equal(listaCorta([], 0), '');
 });
+
+test('fechaIso con hora y zona cuenta el día local (4.7.57)', () => {
+  const loc = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  const u = new Date(Date.UTC(2026, 10, 23, 3, 0, 0));
+  for (const s of ['2026-11-23T03:00:00Z', '2026-11-23T03:00:00.000Z', '2026-11-23 03:00:00+00', '2026-11-23T03:00:00+00:00', ' 2026-11-23T03:00+0000 '])
+    assert.equal(fechaIso(s), loc(u), s);
+  assert.equal(fechaIso('2026-11-22T21:00:00-06:00'), loc(new Date(Date.UTC(2026, 10, 23, 3))), 'offset -06:00');
+  assert.equal(fechaIso('2026-11-23T03:00:00'), '2026-11-23', 'sin zona = hora local, se queda el día');
+  assert.equal(fechaIso('2026-11-23 basura'), '2026-11-23', 'cola ilegible: se queda la fecha');
+  assert.equal(fechaIso('2026-02-30T03:00:00Z'), null, 'día imposible sigue siendo null');
+});

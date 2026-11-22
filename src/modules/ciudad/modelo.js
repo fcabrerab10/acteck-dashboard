@@ -1014,8 +1014,16 @@ const CIUDADES_LARGAS = Object.keys(CIUDADES).sort((a, b) => b.length - a.length
 export function fechaIso(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
   if (typeof x !== 'string') return null;
-  const s = x.trim().slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
+  const x0 = x.trim(), s = x0.slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t = new Date(`${s}T12:00:00`); if (Number.isNaN(t.getTime()) || isoLocal(t) !== s) return null;
+  // 4.7.57: con hora y zona («…T03:00:00Z», «… 03:00:00+00» de Postgres) cuenta el día local, no el de UTC:
+  // a las 21:00 de Guadalajara ya es mañana en UTC y el camión/arribo salía con un día de más («llega mañana» siendo hoy).
+  const z = x0.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)\s*(Z|[+-]\d{2}(?::?\d{2})?)$/i);
+  if (z) {
+    const off = /^z$/i.test(z[3]) ? 'Z' : z[3].length === 3 ? `${z[3]}:00` : z[3].includes(':') ? z[3] : `${z[3].slice(0, 3)}:${z[3].slice(3)}`;
+    const u = new Date(`${z[1]}T${z[2]}${off}`); if (!Number.isNaN(u.getTime())) return isoLocal(u);
+  }
+  return s;
 }
 // Cartera por cuenta (4.7.52): la vista trae un corte por `cliente`, pero « digitalife » y «digitalife» son dos renglones que
 // se juntan al limpiar la clave; antes ganaba el último que llegaba (podía ser el corte viejo). Ahora gana el de `fecha_corte`

@@ -278,6 +278,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.54) Sucursal virtual (e-commerce, CEDIS, matriz…) por palabra completa: «WEBER PUEBLA» ya cae en Puebla y «General Escobedo» en Monterrey (alias `ESCOBEDO`), antes ambas salían virtuales y sin ciudad.
   - [x] (4.7.55) `plural()` y `porcentaje()` leen texto con comas, espacios o «%» («1,200» → «1,200 pedidos», « 45 % » → «45 %»; antes «0 pedidos» y «—»); en `plural()` un booleano ya no cuenta como 1.
   - [x] (4.7.56) Sin «-0»: `plural()` y `piezasTexto()` redondean -0.4 a «0 días» / «0 pz» (antes «-0 días», «-0 pz»); `listaCorta()` con n = 0 dice «+3» (antes « +3» con espacio al inicio).
+  - [x] (4.7.57) `fechaIso()` con hora y zona («…T03:00:00Z», «… 03:00:00+00» de Postgres) cuenta el día local de Guadalajara, no el de UTC: después de las 18:00 una fecha con hora salía un día adelantada (camión «salió mañana», arribo «llega mañana» siendo hoy). Sin zona se queda el día escrito.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -292,6 +293,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-22 05:37 · v4.7.57 · `fechaIso()` con hora y zona usa el día local (antes, de noche, camiones/arribos salían un día adelantados).
 - 2026-11-22 04:56 · v4.7.55 · `plural()`/`porcentaje()` leen «1,200» y «45 %» en texto; booleanos ya no son «1».
 - 2026-11-22 04:39 · v4.7.54 · Sucursales virtuales por palabra completa («General Escobedo» → Monterrey, «Weber Puebla» → Puebla).
 - 2026-11-22 04:37 · v4.7.53 · Sucursales → ciudad por palabras completas y alias más largo primero (sin León por «Napoleón» ni CDMX por «Estado de México»).
