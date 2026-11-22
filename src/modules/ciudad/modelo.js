@@ -712,14 +712,17 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 // Barra superior tipo recursos (3.90.42): toma la salida de `calcular()` de Inicio (mismos números) y arma los 4 recursos,
 // cada uno con el edificio al que lleva al tocarlo. Lo que no venga se omite. Cobertura sin ritmo (NaN/∞) → sin «d» (3.90.86).
 // POs en tránsito: número (o texto numérico) > 0, redondeado y en singular para 1; «0», NaN o basura → sin texto (antes «0 POs» / «NaN POs»).
-const posTexto = (p) => { const n = Math.round(Number(typeof p === 'string' ? p.trim() : p)); return p != null && p !== '' && typeof p !== 'boolean' && Number.isFinite(n) && n > 0 ? `${n} PO${n === 1 ? '' : 's'}` : null; };
+// 4.7.34: conteos en texto con comas/espacios («1,200») se leen (antes «1,200» → sin POs) y salen con miles es-MX y `plural()`
+// («1,200 POs»; antes «1200 POs»); cobertura «1,200» en texto también (antes sin días). Basura, booleanos, ≤ 0 → nada.
+const leeNum = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : null; };
+const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n) > 0 ? plural(n, 'PO') : null; };
 export function recursosBarra(r) {
   if (!r) return [];
   // 4.7.14: montos en texto con «$», comas o espacios («$5,000») se leen como número (antes 0: cartera «verde» y % de ventas 0).
-  const n = (v) => { const k = typeof v === 'string' ? Number(v.replace(/[\s$,]/g, '')) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) && !(typeof v === 'string' && !v.trim()) ? k : 0; }; const out = [];
+  const n = N, out = [];
   // 4.7.25: `pctTexto` con `porcentaje()` («1,250 %»; antes «1250%» pegado) y días de cobertura con miles es-MX («1,200 d»).
   if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, pctTexto: pct == null ? null : porcentaje(pct), tono: pct == null ? null : pct >= 100 ? 'verde' : pct >= 80 ? 'ambar' : 'rojo', ir: { tipo: 'oficina' } }); }
-  if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: r.inv.cobertura != null && r.inv.cobertura !== '' && Number.isFinite(Number(r.inv.cobertura)) ? `${Math.round(Number(r.inv.cobertura)).toLocaleString('es-MX')} d` : null, ir: { tipo: 'cedis' } });
+  if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: leeNum(r.inv.cobertura) == null ? null : `${Math.round(leeNum(r.inv.cobertura)).toLocaleString('es-MX')} d`, ir: { tipo: 'cedis' } });
   if (r.cartera) out.push({ clave: 'cartera', icono: '🏦', etiqueta: 'Cartera vencida', valor: n(r.cartera.vencido), tono: n(r.cartera.vencido) > 0 ? 'rojo' : 'verde', ir: { tipo: 'banco' } });
   if (r.enCamino) out.push({ clave: 'embarques', icono: '🚢', etiqueta: 'En tránsito', valor: n(r.enCamino.valor), extra: posTexto(r.enCamino.pos), ir: { tipo: 'puerto' } });
   return out;

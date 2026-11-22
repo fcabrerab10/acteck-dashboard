@@ -1381,3 +1381,12 @@ test('demanda3Meses / piezasMes: piezas en texto (JSON o arreglo Postgres) se le
   assert.deepEqual(piezasMes('{"x":1}'), []);
   assert.deepEqual(piezasMes(' { 1 , 2 } '), ['1', '2']);
 });
+
+test('Pulido 4.7.34: barra de recursos lee conteos en texto con comas y usa miles es-MX', () => {
+  const extra = (pos) => recursosBarra({ enCamino: { valor: 1, pos } })[0].extra;
+  assert.equal(extra(1200), '1,200 POs', 'miles es-MX'); assert.equal(extra('1,200'), '1,200 POs', 'texto con coma'); assert.equal(extra(' 1 '), '1 PO');
+  for (const p of [0.4, '-3', false, [2], {}]) assert.equal(extra(p), null, `pos ${String(p)}`);
+  const cob = (c) => recursosBarra({ inv: { valor: 1, cobertura: c } })[0].extra;
+  assert.equal(cob('1,200'), '1,200 d', 'cobertura en texto'); assert.equal(cob(' 45 '), '45 d'); assert.equal(cob(true), null, 'booleano no es día');
+  assert.equal(recursosBarra({ cartera: { vencido: '$5,000' } })[0].valor, 5000, 'montos siguen con numero()');
+});

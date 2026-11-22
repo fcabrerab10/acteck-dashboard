@@ -255,6 +255,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.31) Bitácora en vivo con `unirTexto()`: factura/envío sin cliente o folio, contenedor sin id, pago sin cliente/concepto, sincronización sin estado y reunión sin título ya no dicen «null» («Factura · $1 K», «Salió un envío a pcel · DHL», «Llegó un contenedor al CEDIS», «Fue una reunión»).
   - [x] (4.7.32) `diaLocal()` pura y probada: «hoy» es el día local de Guadalajara. Antes `datos.js` y `construirModelo()` usaban `toISOString()` (UTC) y de 18:00 a 23:59 la Ciudad pedía la agenda, reuniones y viajes de MAÑANA (sala de juntas, misiones y presencia equivocadas) y el banco/bitácora contaban «hoy» un día adelantado; las reuniones se filtran con el rango [inicio, fin) del día local.
   - [x] (4.7.33) `piezasMes()` pura y probada: `demanda3Meses()` (días de inventario de los racks del CEDIS) lee `piezas` en texto JSON «[10,20]» o arreglo Postgres «{10,NULL,20}» (antes indexaba caracteres: «[10,20,30]» sumaba dígitos sueltos); null, objeto o basura → sin demanda y una pieza negativa ya no resta.
+  - [x] (4.7.34) Barra de recursos: POs en tránsito y cobertura de inventario en texto con comas («1,200») ya se leen (antes sin POs / sin días) y salen con miles es-MX y `plural()` («1,200 POs»; antes «1200 POs»); booleanos ya no son «1 d». Montos con `numero()`.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -270,6 +271,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-21 22:56 · v4.7.34 · Barra de recursos: POs y cobertura en texto con comas se leen; «1,200 POs» con miles es-MX; +1 prueba. (El pendiente de permisos de Etapa 8 sigue esperando a Fernando.)
 - 2026-11-21 22:36 · v4.7.33 · `piezasMes()`: la demanda de 3 meses (días de inventario por marca) lee piezas en texto JSON/Postgres; basura y negativas no suman.
 - 2026-11-21 22:17 · v4.7.32 · `diaLocal()`: agenda, reuniones, viajes y «hoy» del modelo en día local (antes UTC: después de las 18:00 era mañana); +1 prueba.
 - 2026-11-21 15:56 · v4.7.31 · Bitácora en vivo sin «null» con `unirTexto()` (cliente, folio, contenedor, concepto, estado, título vacíos); +1 prueba.
