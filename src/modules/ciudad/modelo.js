@@ -425,7 +425,7 @@ export function pensamientos(m, max = 5) {
     for (const t of d.tiendas || []) {
       if (!t || t.reparto) continue; // «Clientes en …» (3.90.56) no es una tienda que piense
       const act = numero(t.importe), prev = numero(t.previo), cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cu = q.get(t.cuenta);
-      const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: `${t.nombreCuenta || t.cuenta} · ${t.sucursal}` };
+      const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: nombreTienda(t) };
       let p = null;
       if (venc.has(t.cuenta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
       else if (prev > 0 && act <= 0) p = { tono: 'rojo', peso: 1, texto: 'Este mes no he vendido nada' };
@@ -684,6 +684,12 @@ export function nombrePersona(p) {
   const e = unirTexto(p?.email).split('@')[0].trim();
   return e || 'Persona';
 }
+// Nombre de la tienda (4.7.39): «Pcel · Centro»; sin nombre de cuenta usa la clave, sin sucursal sólo la cuenta,
+// sin nada «Tienda». Es también la llave con que la tarjeta encuentra la tienda tocada (antes «Pcel · null» y la
+// tarjeta salía vacía porque el edificio se titulaba «Pcel»).
+export function nombreTienda(t) {
+  return unirTexto(unirTexto(t?.nombreCuenta) || t?.cuenta, t?.sucursal) || 'Tienda';
+}
 // A dónde va el vendedor (4.7.37): «va a Cliente (Guadalajara)»; sin cliente «va a Guadalajara»; sin nada, vacío.
 export function vaA(parada) {
   const cl = unirTexto(parada?.cliente), ci = parada?.ciudad ? nombreCiudad(parada.ciudad) : '';
@@ -890,7 +896,7 @@ export function tarjetaDe(tag, modelo) {
     }
   } else if (tag.tipo === 'tienda') {
     const d = sn(m.distritos).find((x) => x.ciudad === tag.ciudad);
-    const s = sn(d?.tiendas).find((x) => x.cuenta === tag.cuenta && `${x.nombreCuenta} · ${x.sucursal}` === tag.titulo);
+    const s = sn(d?.tiendas).find((x) => x.cuenta === tag.cuenta && nombreTienda(x) === tag.titulo);
     if (s) {
       t.numeros = [['Este mes', pesos(s.importe)], ['Mes anterior', pesos(s.previo)]];
       if (numero(s.vendedores) > 0) t.numeros.push(['Vendedores', num(s.vendedores)]);
@@ -1192,7 +1198,7 @@ export function construirModelo(d, hoy = new Date()) {
     const activa = s.actual > 0 || (hoy.getDate() <= 10 && s.previo > 0);
     const t = { cuenta: s.cuenta, nombreCuenta, sucursal: s.sucursal, importe: s.actual, previo: s.previo, vendio: activa, vendioMes: s.actual > 0, virtual: !!c?.virtual, vendedores: s.vendedores };
     cuentasConSucursal.add(s.cuenta);
-    if (c?.virtual) { virtuales.push(t); tienda(sede, { ...t, sucursal: `${s.sucursal} (en línea)` }); continue; }
+    if (c?.virtual) { virtuales.push(t); tienda(sede, { ...t, sucursal: unirTexto(s.sucursal) ? `${unirTexto(s.sucursal)} (en línea)` : 'En línea' }); continue; }
     tienda(c?.ciudad || sede, t);
   }
   // cuentas sin sucursal: una tienda en su sede

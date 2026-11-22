@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, pesosCorto, porcentaje, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, numero, unirTexto, piezasTexto } from '../modelo.js';
+import { COLOR_CUENTA, pesosCorto, porcentaje, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, nombreTienda, numero, unirTexto, piezasTexto } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -379,7 +379,7 @@ export function distritos(ctx, cedisPos) {
     distritoPos.set(d.ciudad, { x: base.x, z: base.z, ancho, largo }); // con medidas: la Vista Ciudad las encuadra
     const g = new THREE.Group(); g.position.set(base.x, 0, base.z);
     const piso = box(1, .3, 1, P.banqueta); piso.scale.set(ancho, 1, largo); piso.position.y = .15; g.add(piso); // caja unitaria escalada: todos los pisos van en un InstancedMesh
-    piso.userData.tag = { tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length.toLocaleString('es-MX')} de ${plural(d.tiendas.length, 'tienda')} vendieron este mes · ${plural(d.cuentas.length, 'cliente')}${d.vendedores.length ? ` · ${plural(d.vendedores.length, 'vendedor', 'vendedores')}` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: `${t.nombreCuenta} · ${t.sucursal}`, vendio: t.vendio, importe: t.importe })) } }; instanciar(ctx, piso); // tocable por su tag en userData.tags (3.90.18)
+    piso.userData.tag = { tipo: 'ciudad', titulo: nombreCiudad(d.ciudad), sub: `${d.tiendas.filter((t) => t.vendio).length.toLocaleString('es-MX')} de ${plural(d.tiendas.length, 'tienda')} vendieron este mes · ${plural(d.cuentas.length, 'cliente')}${d.vendedores.length ? ` · ${plural(d.vendedores.length, 'vendedor', 'vendedores')}` : ''}`, ciudad: d.ciudad, pagina: 'sellOut', distrito: { ciudad: d.ciudad, tiendas: d.tiendas.map((t) => ({ nombre: nombreTienda(t), vendio: t.vendio, importe: t.importe })) } }; instanciar(ctx, piso); // tocable por su tag en userData.tags (3.90.18)
     const calleH = new THREE.Mesh(new THREE.PlaneGeometry(ancho + 2, 1.4), M(P.calle, { roughness: 1 })); calleH.rotation.x = -Math.PI / 2; calleH.position.set(0, .32, largo / 2 + .9); g.add(calleH); calleH.userData.detalle = 'cerca';
     d.tiendas.forEach((t, i) => {
       const c = i % cols, f = Math.floor(i / cols);
@@ -387,7 +387,7 @@ export function distritos(ctx, cedisPos) {
       const col = COLOR_CUENTA[t.cuenta] || ACC.gris;
       const tg = new THREE.Group(); tg.position.set(x, .3, z);
       (ctx.tiendaPos ||= new Map()).set(`${t.cuenta}|${t.sucursal}`, { x: base.x + x, z: base.z + z }); // pensamientos (3.90.52)
-      const tag = { tipo: 'tienda', titulo: unirTexto(t.nombreCuenta || t.cuenta, t.sucursal) || 'Tienda', sub: `${t.vendioMes ? `vendió este mes ${pesosCorto(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior ${pesosCorto(t.previo)}` : ''}${t.vendedores ? ` · ${plural(t.vendedores, 'vendedor', 'vendedores')}` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida ${pesosCorto(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
+      const tag = { tipo: 'tienda', titulo: nombreTienda(t), sub: `${t.vendioMes ? `vendió este mes ${pesosCorto(t.importe)}` : t.vendio ? 'vendió el mes pasado; este mes aún no' : 'sin venta este mes'}${t.previo ? ` · mes anterior ${pesosCorto(t.previo)}` : ''}${t.vendedores ? ` · ${plural(t.vendedores, 'vendedor', 'vendedores')}` : ''}${t.cartera && t.cartera.vencido > 0 ? ` · 🚩 cartera vencida ${pesosCorto(t.cartera.vencido)}` : ''}`, pagina: 'sellOut', cuenta: t.cuenta, sucursal: t.sucursal, ciudad: d.ciudad };
       const cuerpo = new THREE.Mesh(geo(ctx, 'tiendaBisel', () => cajaBiselada(2, 1.9, 2, .12)), M(P.tienda)); cuerpo.castShadow = cuerpo.receiveShadow = true; cuerpo.position.y = .95; tg.add(cuerpo); // kit low-poly (3.90.68): esquinas biseladas
       // ventanas laterales: de noche se prenden (todas si la tienda vendió, una sí y una no si no); de día, vidrio oscuro
       const prendida = (k) => noche && (t.vendio || (i + k) % 2 === 0);
