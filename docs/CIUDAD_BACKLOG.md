@@ -277,6 +277,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.53) `ciudadDeSucursal()` empata palabras completas y el alias/ciudad más largo primero: «NAPOLEON» ya no cae en León ni «MONTE» en Monterrey, «SUC ESTADO DE MEXICO» va a Toluca (antes CDMX) y «Baja California Sur …» a La Paz (antes Tijuana); «GDL1», «MTY-SUR» y palabras cortadas de ≥ 6 letras («AGUASCAL») siguen empatando.
   - [x] (4.7.54) Sucursal virtual (e-commerce, CEDIS, matriz…) por palabra completa: «WEBER PUEBLA» ya cae en Puebla y «General Escobedo» en Monterrey (alias `ESCOBEDO`), antes ambas salían virtuales y sin ciudad.
   - [x] (4.7.55) `plural()` y `porcentaje()` leen texto con comas, espacios o «%» («1,200» → «1,200 pedidos», « 45 % » → «45 %»; antes «0 pedidos» y «—»); en `plural()` un booleano ya no cuenta como 1.
+  - [x] (4.7.56) Sin «-0»: `plural()` y `piezasTexto()` redondean -0.4 a «0 días» / «0 pz» (antes «-0 días», «-0 pz»); `listaCorta()` con n = 0 dice «+3» (antes « +3» con espacio al inicio).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -478,3 +479,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-22 02:16 · v4.7.45 · Clima del panel sin «NaN°» (`temperaturaTexto()`) y tiendas activas por ciudad con miles es-MX.
 - 2026-11-22 02:20 · v4.7.46 · Globo de la persona con `pendientesTexto()` (sin «undefined pendientes») y camión de envío «salió 6 oct».
 - 2026-11-22 03:16 · v4.7.49 · cartera y clientes finales empatan la cuenta aunque traiga espacios.
+- 2026-11-22 05:16 · v4.7.56 · Pulido: `plural()` / `piezasTexto()` sin «-0» y `listaCorta()` con n = 0 sin espacio al inicio.

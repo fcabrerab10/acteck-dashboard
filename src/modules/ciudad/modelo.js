@@ -583,7 +583,8 @@ export function listaCorta(lista, n = 3) {
   n = cuantos(n, 3);
   if (!Array.isArray(lista)) return '';
   const u = [...new Set(lista.map((x) => (x == null ? '' : String(x).trim())).filter(Boolean))];
-  return u.slice(0, n).join(', ') + (u.length > n ? ` +${u.length - n}` : '');
+  // 4.7.56: con n = 0 sale «+3» (antes « +3» con espacio al inicio).
+  return [u.slice(0, n).join(', '), u.length > n ? `+${u.length - n}` : ''].filter(Boolean).join(' ');
 }
 
 // Interior de la oficina (paso 1, 3.90.37): reuniones de hoy (`agenda_reuniones`, sin viajes) en orden, con hora local y si ya
@@ -740,10 +741,10 @@ export function temperaturaTexto(v) {
 }
 // Piezas (4.7.27): enteras con miles es-MX («1,200 pz»; antes «1,200.5 pz» con decimales y texto «$1,200» sí cuenta);
 // ilegible → «0 pz». Globos del contenedor/tarima/tráiler, misión de descarga, bitácora de arribos y globo del puerto.
-export function piezasTexto(v) { return `${Math.round(numero(v)).toLocaleString('es-MX')} pz`; }
+export function piezasTexto(v) { return `${(Math.round(numero(v)) + 0).toLocaleString('es-MX')} pz`; } // 4.7.56: -0.4 → «0 pz» (antes «-0 pz»)
 export function plural(n, uno, varios = `${uno}s`) {
   // 4.7.55: «1,200» / « 3 » en texto se leen (antes «0 pedidos»); booleanos y basura → 0 (antes true = «1 barco»).
-  const k = typeof n === 'string' ? Math.round(Number(n.trim() ? n.replace(/[\s,]/g, '') : NaN)) : typeof n === 'number' ? Math.round(n) : NaN; const v = Number.isFinite(k) ? k : 0;
+  const k = typeof n === 'string' ? Math.round(Number(n.trim() ? n.replace(/[\s,]/g, '') : NaN)) : typeof n === 'number' ? Math.round(n) : NaN; const v = Number.isFinite(k) ? k + 0 : 0; // 4.7.56: + 0 quita el «-0» (-0.4 → «0 días», antes «-0 días»)
   return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;
 }
 // Texto con «$», comas de miles o espacios («$1,200», « 2,500 ») se lee como número; ≥ mil millones sale «1.2 B» como el

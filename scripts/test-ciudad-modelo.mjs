@@ -1585,3 +1585,9 @@ test('(4.7.52) carteraPorCuenta(): con la misma cuenta dos veces gana el corte m
   assert.equal(carteraPorCuenta([{ cliente: 'x', saldo_vencido: 3 }, { cliente: 'x', saldo_vencido: 4 }]).get('x').vencido, 4, 'sin fechas: el último');
   assert.equal(carteraPorCuenta('basura').size, 0); assert.equal(carteraPorCuenta(null).size, 0);
 });
+
+test('4.7.56: plural(), piezasTexto() sin «-0» y listaCorta() con n = 0 sin espacio al inicio', () => {
+  assert.equal(plural(-0.4, 'día'), '0 días'); assert.equal(plural('-0.2', 'día'), '0 días'); assert.equal(plural(-1, 'día'), '-1 día'); assert.equal(plural(-2.6, 'día'), '-3 días');
+  assert.equal(piezasTexto(-0.4), '0 pz'); assert.equal(piezasTexto('-0.3'), '0 pz'); assert.equal(piezasTexto(-5), '-5 pz');
+  assert.equal(listaCorta(['a', 'b', 'c'], 0), '+3'); assert.equal(listaCorta(['a', 'b', 'c'], 2), 'a, b +1'); assert.equal(listaCorta(['a', 'b'], 2), 'a, b'); assert.equal(listaCorta([], 0), '');
+});
