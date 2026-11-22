@@ -790,15 +790,15 @@ export function burbujasAtencion(m, hoy = new Date()) {
   const out = []; const b = m.banco;
   if (b && numero(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
   else if (b && numero(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: plural(b.pagosVencidos, 'pago vencido', 'pagos vencidos') }); // 4.7.9: «1» en texto ya no dice «1 pagos vencidos»
-  const barcos = (m.puerto?.barcos || []).filter(Boolean); // 4.3.3: renglones nulos no truenan
+  const barcos = comoLista(m.puerto?.barcos).filter(Boolean); // 4.3.3: renglones nulos no truenan; 4.7.59: algo que no es lista → sin barcos (antes error)
   const tarde = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias < 0).length;
   const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;
   if (tarde) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'rojo', texto: `${plural(tarde, 'contenedor', 'contenedores')} con ETA vencida` });
   else if (pronto) out.push({ lugar: 'puerto', icono: '🚢', nivel: 'ambar', texto: `${pronto === 1 ? '1 contenedor llega' : `${plural(pronto, 'contenedor', 'contenedores')} llegan`} en ≤ 3 días` });
   const oc = Math.round(numero(m.ocDetenidas)); // 4.7.19: «1,200» en texto cuenta; alerta `oc_detenida` (pedidos de cliente detenidos) → CEDIS
-  if (oc) out.push({ lugar: 'cedis', icono: '📦', nivel: 'rojo', texto: plural(oc, 'pedido de cliente detenido', 'pedidos de cliente detenidos') /* 4.7.10: oc decimal/texto con plural() */ });
+  if (oc > 0) out.push({ lugar: 'cedis', /* 4.7.59: negativo ya no da «-3 pedidos …» en rojo */ icono: '📦', nivel: 'rojo', texto: plural(oc, 'pedido de cliente detenido', 'pedidos de cliente detenidos') /* 4.7.10: oc decimal/texto con plural() */ });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
-  const prox = (m.oficina?.agenda || []).find((r) => r && r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
+  const prox = comoLista(m.oficina?.agenda).find((r) => r && r.estado === 'próxima' && r.ini - ahora <= 15 && r.ini - ahora >= 0);
   if (prox) out.push({ lugar: 'oficina', icono: '📅', nivel: 'ambar', texto: `${unirTexto(prox.titulo) || 'Reunión'} ${enMinutos(prox.ini - ahora)}` });
   return out.map((x) => ({ ...x, tag: { tipo: x.lugar } })).sort((a, c) => (a.nivel === 'rojo' ? 0 : 1) - (c.nivel === 'rojo' ? 0 : 1));
 }

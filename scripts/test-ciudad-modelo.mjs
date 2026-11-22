@@ -468,6 +468,10 @@ test('burbuja del CEDIS por pedidos de cliente detenidos', () => {
   assert.equal(burbujasAtencion({ ocDetenidas: '1' }, h)[0].texto, '1 pedido de cliente detenido');
   assert.equal(burbujasAtencion({ ocDetenidas: 1.4 }, h)[0].texto, '1 pedido de cliente detenido');
   assert.equal(burbujasAtencion({ ocDetenidas: 1200 }, h)[0].texto, '1,200 pedidos de cliente detenidos');
+  // 4.7.59: negativo no da burbuja; barcos/agenda que no son lista no truenan
+  assert.deepEqual(burbujasAtencion({ ocDetenidas: -3 }, h), []);
+  assert.deepEqual(burbujasAtencion({ ocDetenidas: '-1,200' }, h), []);
+  assert.deepEqual(burbujasAtencion({ puerto: { barcos: 'x' }, oficina: { agenda: { a: 1 } } }, h), []);
   assert.equal(burbujasAtencion({ puerto: { barcos: [{ llegaEnDias: 1 }, { llegaEnDias: 2 }] } }, h)[0].texto, '2 contenedores llegan en ≤ 3 días');
   assert.equal(burbujasAtencion({ puerto: { barcos: [{ llegaEnDias: -1 }, { llegaEnDias: -3 }] } }, h)[0].texto, '2 contenedores con ETA vencida');
   assert.equal(construirModelo({ ...d, alertasOc: [{ tipo: 'oc_detenida' }, { tipo: 'oc_detenida' }] }, hoy).ocDetenidas, 2);
