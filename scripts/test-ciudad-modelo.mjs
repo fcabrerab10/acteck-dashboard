@@ -1608,3 +1608,21 @@ test('fechaIso con hora y zona cuenta el día local (4.7.57)', () => {
   assert.equal(fechaIso('2026-11-23 basura'), '2026-11-23', 'cola ilegible: se queda la fecha');
   assert.equal(fechaIso('2026-02-30T03:00:00Z'), null, 'día imposible sigue siendo null');
 });
+
+test('4.7.61 · bitácora: renglones sin folio/id no se pierden ni dicen «null»', () => {
+  const h = new Date(2026, 10, 22, 12, 0);
+  const m = { hoyIso: '2026-11-22', camiones: [
+    { folio: null, fecha: '2026-11-20', monto: 1000 }, { folio: '', fecha: '2026-11-21', monto: 2000 },
+    { folio: 'F1', fecha: '2026-11-21', monto: 3000 }, { folio: ' F1 ', fecha: '2026-11-21', monto: 3000 },
+    { envio: true, folio: null, fecha: '2026-11-20' }, { envio: true, folio: undefined, fecha: '2026-11-21' },
+  ], puerto: { tarimas: [{ id: null, arribo: '2026-11-21', piezas: 10 }], barcos: [{ id: null, arribo: '2026-11-20', piezas: 5 }] } };
+  const b = bitacoraEventos(m, h, 50);
+  assert.equal(b.filter((x) => x.icono === '🧾').length, 3, 'dos facturas sin folio + F1 una vez');
+  assert.equal(b.filter((x) => x.icono === '🚚').length, 2, 'dos envíos sin folio');
+  assert.equal(b.filter((x) => x.icono === '📦').length, 2, 'dos arribos sin id');
+  assert.equal(new Set(b.map((x) => x.id)).size, b.length, 'ids únicos');
+  assert.ok(!JSON.stringify(b).includes('null"'), 'sin «null» en textos/ids');
+  assert.equal(b.find((x) => x.icono === '📦').tarjeta.titulo, 'Contenedor');
+  const c = bitacoraEventos({ ...m, puerto: { barcos: [{ id: ' C9 ', arribo: '2026-11-20' }] } }, h, 50).find((x) => x.icono === '📦');
+  assert.equal(c.tarjeta.titulo, 'Contenedor C9'); assert.equal(c.id, 'arribo-C9');
+});

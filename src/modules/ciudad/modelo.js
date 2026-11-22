@@ -453,15 +453,20 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   const diasAtras = (f) => dias(f, hoyIso);
   const cuando = (f) => haceDias(diasAtras(f)) || 'hoy';
   const out = [];
+  // 4.7.61: sin folio/id, cada renglón lleva su propio id (antes dos facturas, envíos o contenedores sin folio daban el mismo
+  // «factura-null» y el filtro de repetidos dejaba sólo uno en la bitácora); con folio, el mismo folio sigue saliendo una vez.
+  let sinId = 0;
+  const idDe = (pre, v, f) => { const k = unirTexto(v); return k ? `${pre}-${k}` : `${pre}-sin-id-${f}-${sinId++}`; };
   for (const c of m.camiones || []) {
     const f = fechaIso(c?.fecha); if (!f || f > hoyIso) continue;
     out.push(c.envio
-      ? { id: `envio-${c.folio}`, icono: '🚚', texto: unirTexto(`Salió ${unirTexto(c.folio) || 'un envío'}${unirTexto(c.cliente) ? ` a ${unirTexto(c.cliente)}` : ''}`, c.paqueteria), clave: `${f} 00:01`, cuando: cuando(f), ir: { tipo: 'ciudad', ciudad: c.ciudad } }
-      : { id: `factura-${c.folio}`, icono: '🧾', texto: unirTexto(unirTexto(c.folio) ? `Factura ${unirTexto(c.folio)}` : 'Factura', c.cliente, pesos(c.monto)), clave: `${f} 00:01`, cuando: cuando(f), grande: numero(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
+      ? { id: idDe('envio', c.folio, f), icono: '🚚', texto: unirTexto(`Salió ${unirTexto(c.folio) || 'un envío'}${unirTexto(c.cliente) ? ` a ${unirTexto(c.cliente)}` : ''}`, c.paqueteria), clave: `${f} 00:01`, cuando: cuando(f), ir: { tipo: 'ciudad', ciudad: c.ciudad } }
+      : { id: idDe('factura', c.folio, f), icono: '🧾', texto: unirTexto(unirTexto(c.folio) ? `Factura ${unirTexto(c.folio)}` : 'Factura', c.cliente, pesos(c.monto)), clave: `${f} 00:01`, cuando: cuando(f), grande: numero(c.monto) >= 500000, ir: { tipo: 'ciudad', ciudad: c.ciudad } });
   }
   for (const b of [...(m.puerto?.tarimas || []), ...(m.puerto?.barcos || [])]) {
     const f = fechaIso(b?.arribo); if (!f || f > hoyIso) continue;
-    out.push({ id: `arribo-${b.id}`, icono: '📦', texto: unirTexto(`Llegó ${unirTexto(b.id) || 'un contenedor'} al CEDIS`, piezasTexto(b.piezas)), clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: `Contenedor ${b.id}` } });
+    const bid = unirTexto(b.id);
+    out.push({ id: idDe('arribo', b.id, f), icono: '📦', texto: unirTexto(`Llegó ${bid || 'un contenedor'} al CEDIS`, piezasTexto(b.piezas)), clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: bid ? `Contenedor ${bid}` : 'Contenedor' } });
   }
   // 4.7.31: textos con `unirTexto()`: cliente, folio, contenedor, concepto, estado o título vacíos/nulos ya no dicen «null».
   // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.

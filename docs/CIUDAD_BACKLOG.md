@@ -282,6 +282,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.58) Barra de recursos: la cobertura de inventario -0.4 dice «0 d» (antes «-0 d») y una cobertura negativa (inventario negativo) ya no sale como días («-5 d»): sin texto.
   - [x] (4.7.59) `burbujasAtencion()`: pedidos detenidos negativos ya no dan la burbuja roja «-3 pedidos de cliente detenidos» y barcos/agenda que no son lista no lanzan error.
   - [x] (4.7.60) `rebote()` con t NaN (un `dt` inválido) termina (`fin: true`): antes el rebote al tocar quedaba activo para siempre y nunca restauraba la escala.
+  - [x] (4.7.61) Bitácora: facturas, envíos y contenedores sin folio/id llevan cada uno su id (antes todos «factura-null» / «arribo-null» y el filtro de repetidos dejaba sólo uno); el contenedor sin id ya no abre la tarjeta «Contenedor null» y un folio con espacios cuenta igual que sin ellos.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -488,3 +489,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-22 02:20 · v4.7.46 · Globo de la persona con `pendientesTexto()` (sin «undefined pendientes») y camión de envío «salió 6 oct».
 - 2026-11-22 03:16 · v4.7.49 · cartera y clientes finales empatan la cuenta aunque traiga espacios.
 - 2026-11-22 05:16 · v4.7.56 · Pulido: `plural()` / `piezasTexto()` sin «-0» y `listaCorta()` con n = 0 sin espacio al inicio.
+- 2026-11-22 15:37 · v4.7.61 · Bitácora sin eventos perdidos por folio/id vacío ni «Contenedor null».
