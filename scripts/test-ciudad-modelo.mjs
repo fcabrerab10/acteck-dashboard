@@ -1501,3 +1501,12 @@ test('Vendedores del ERP: se juntan por nombre normalizado (4.7.44)', () => {
   assert.equal(v.total, 150); assert.equal(v.totalMes, 150); assert.equal(v.clientes, 1); assert.equal(v.nombre, 'Juan Perez');
   const t = tarjetaDe({ tipo: 'vendedorErp', titulo: v.nombre }, m); assert.ok(t.numeros.length > 0);
 });
+
+test('Sucursales: se juntan por cuenta y nombre normalizado (4.7.47)', () => {
+  const hoy = new Date(2026, 9, 20, 12);
+  const fila = (cuenta, sucursal, importe) => ({ cuenta, anio: 2026, mes: 10, sucursal, importe, vendedores: 2 });
+  const m = construirModelo({ sucursales: [fila('ct', 'HERMOSILLO', 100), fila(' ct ', ' hermosillo ', 50), fila('ct', 'Hermosillo  ', 25)] }, hoy);
+  const her = m.distritos.find((x) => x.ciudad === 'HERMOSILLO'); assert.ok(her, 'Hermosillo existe');
+  const ts = her.tiendas.filter((t) => t.cuenta === 'ct');
+  assert.equal(ts.length, 1); assert.equal(ts[0].importe, 175); assert.equal(ts[0].sucursal, 'HERMOSILLO');
+});

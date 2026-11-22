@@ -1205,8 +1205,10 @@ export function construirModelo(d, hoy = new Date()) {
   const porCiudad = new Map();
   const tienda = (ciudad, t) => { if (!porCiudad.has(ciudad)) porCiudad.set(ciudad, { ciudad, pos: posDe(CIUDADES[ciudad]), estado: CIUDADES[ciudad].estado, tiendas: [], vendedores: [] }); porCiudad.get(ciudad).tiendas.push(t); };
   const sucAgr = new Map(); // cuenta|sucursal → { actual, previo, estado }
+  // 4.7.47: la sucursal se junta por cuenta sin espacios y `norm()` del nombre (« hermosillo » = «HERMOSILLO»; antes salían dos tiendas encimadas con la venta partida).
   for (const r of d.sucursales || []) {
-    const k = `${r.cuenta}|${r.sucursal}`; const o = sucAgr.get(k) || { cuenta: r.cuenta, sucursal: r.sucursal, actual: 0, previo: 0, estado: r.estado || null, vendedores: 0 };
+    const cu = typeof r.cuenta === 'string' ? r.cuenta.trim() : r.cuenta; const su = typeof r.sucursal === 'string' ? r.sucursal.trim().replace(/\s+/g, ' ') : r.sucursal;
+    const k = `${cu}|${norm(su).replace(/\s+/g, ' ')}`; const o = sucAgr.get(k) || { cuenta: cu, sucursal: su, actual: 0, previo: 0, estado: r.estado || null, vendedores: 0 };
     if (N(r.anio) === anio && N(r.mes) === mes) o.actual += N(r.importe);
     if (N(r.anio) === anioPrev && N(r.mes) === mesPrev) o.previo += N(r.importe);
     o.vendedores = Math.max(o.vendedores, N(r.vendedores));
