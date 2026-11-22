@@ -1482,3 +1482,12 @@ test('Tarjeta del camión: «Salió» con fecha corta (4.7.43)', () => {
   assert.match(a, /^6 oct · ayer$/); assert.ok(!a.includes('2026'));
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F2' }, m).numeros.find((x) => x[0] === 'Salió')[1], '—');
 });
+
+test('Vendedores del ERP: se juntan por nombre normalizado (4.7.44)', () => {
+  const hoy = new Date(2026, 9, 7, 12);
+  const fila = (vendedor, fact) => ({ anio: 2026, mes: 10, vendedor, cliente_key: '1', cliente_nombre: 'Cliente', fact_neta: fact });
+  const m = construirModelo({ vendedoresErp: [fila('JUAN PEREZ', 100), fila(' Juan  Perez ', 50), fila('   ', 999), fila(null, 999)] }, hoy);
+  assert.equal(m.vendedoresRuta.length, 1); const v = m.vendedoresRuta[0];
+  assert.equal(v.total, 150); assert.equal(v.totalMes, 150); assert.equal(v.clientes, 1); assert.equal(v.nombre, 'Juan Perez');
+  const t = tarjetaDe({ tipo: 'vendedorErp', titulo: v.nombre }, m); assert.ok(t.numeros.length > 0);
+});

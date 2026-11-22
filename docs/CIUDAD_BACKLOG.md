@@ -265,6 +265,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.41) Tarjeta del camión: el destino usa `nombreCiudad()` («San Luis Potosí», «León», CDMX; antes «San Luis Potosi», «Leon») y cliente/paquetería vacíos o «null» dicen «—»; el estatus del contenedor con espacios o «null» ya no sale como renglón vacío.
   - [x] (4.7.42) `fechaCorta()` pura y probada: las tarjetas del contenedor en el mar dicen «ETA puerto 23 nov» / «Llega a CEDIS 25 nov» (antes «2026-11-23» crudo, y una fecha ilegible salía tal cual); proveedor vacío o con espacios dice «—».
   - [x] (4.7.43) Tarjeta del camión: «Salió» con `fechaCorta()` («6 oct · ayer», «30 sep · hace 7 d»; antes «2026-10-06» crudo); fecha ilegible sigue en «—».
+  - [x] (4.7.44) Vendedores del ERP se juntan por nombre normalizado (« JUAN  PEREZ » = «Juan Perez»): antes el mismo vendedor con espacios o mayúsculas distintas salía como dos coches con la misma tarjeta y sus ventas partidas; sin nombre se salta.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -454,3 +455,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-10-05 15:20 · v3.76.8 · `escena.js` partido en `escena/` (camara, luz-clima, terreno, edificios, gente, vehiculos, etiquetas, interaccion) con un `ctx` compartido; `escena.js` sólo orquesta. Sin cambios visibles (harness día/noche sin errores). `preparar-harness.mjs` copia también `escena/`.
 - 2026-10-05 15:40 · v3.76.9 · Dibujar sólo cuando hace falta: pausa total con la pestaña oculta (`visibilitychange`), modo calma a ~10 fps tras 15 s sin gestos y con la cámara quieta, cualquier gesto vuelve a 60 (medido en harness con reloj simulado: 60 → 10 → 60 fps). `devicePixelRatio` ya estaba topado en 2.
 - 2026-11-21 03:36 · v4.7.19 · Burbujas del banco/CEDIS y bitácora («grande») leen montos en texto con `numero()`.
+- 2026-11-22 01:55 · v4.7.44 · Vendedores del ERP juntados por nombre normalizado (sin coches duplicados ni ventas partidas).

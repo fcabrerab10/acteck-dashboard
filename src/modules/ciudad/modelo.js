@@ -1275,8 +1275,9 @@ export function construirModelo(d, hoy = new Date()) {
   }
 
   // ── Vendedores del ERP (equipo comercial): de la oficina a sus clientes ──
+  // 4.7.44: el vendedor se junta por `norm()` (« JUAN  PEREZ » = «Juan Perez», espacios dobles incluidos; antes salían dos coches con la misma tarjeta) y sin nombre se salta.
   const ve = new Map();
-  for (const r of d.vendedoresErp || []) { if (N(r.anio) !== anio) continue; const o = ve.get(r.vendedor) || { nombre: r.vendedor, clientes: new Map(), total: 0, totalMes: 0 }; o.total += N(r.fact_neta); if (N(r.mes) === mes) o.totalMes += N(r.fact_neta); const c = o.clientes.get(r.cliente_key) || { cliente_key: r.cliente_key, nombre: r.cliente_nombre, fact: 0 }; c.fact += N(r.fact_neta); o.clientes.set(r.cliente_key, c); ve.set(r.vendedor, o); }
+  for (const r of d.vendedoresErp || []) { if (N(r.anio) !== anio) continue; const kv = norm(r.vendedor).replace(/\s+/g, ' '); if (!kv) continue; const o = ve.get(kv) || { nombre: unirTexto(r.vendedor), clientes: new Map(), total: 0, totalMes: 0 }; ve.set(kv, o); o.total += N(r.fact_neta); if (N(r.mes) === mes) o.totalMes += N(r.fact_neta); const c = o.clientes.get(r.cliente_key) || { cliente_key: r.cliente_key, nombre: r.cliente_nombre, fact: 0 }; c.fact += N(r.fact_neta); o.clientes.set(r.cliente_key, c); }
   const porErp = new Map([...cuentas.values()].filter((c) => c.erp_cliente).map((c) => [String(c.erp_cliente), c]));
   const vendedoresRuta = [...ve.values()].filter((v) => v.nombre && v.total > 0).sort((a, b) => b.total - a.total).slice(0, 10).map((v, i) => {
     const top = [...v.clientes.values()].sort((a, b) => b.fact - a.fact).slice(0, 3);
