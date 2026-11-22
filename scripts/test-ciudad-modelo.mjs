@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal, piezasMes } from '../src/modules/ciudad/modelo.js';
+import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1464,4 +1464,14 @@ test('tarjeta del camión: destino con acentos y sin «null» (4.7.41)', () => {
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'E1' }, { ...m, camiones: [{ ...m.camiones[0], ciudad: '' }] }).numeros[3][1], '—');
   const b = tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: '  ' } }, m); assert.equal(b.numeros.length, 3);
   assert.deepEqual(tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: ' EN TRANSITO ' } }, m).numeros[3], ['Estatus', 'EN TRANSITO']);
+});
+
+test('fechaCorta() y tarjetas del contenedor con fecha corta (4.7.42)', () => {
+  const nov = fechaCorta('2026-11-23'); assert.match(nov, /^23 nov/); assert.ok(!nov.endsWith('.'));
+  assert.equal(fechaCorta(' 2026-11-23 '), nov); assert.equal(fechaCorta(new Date(2026, 10, 23, 9)), nov);
+  for (const x of [null, '', 'pendiente', '2026-99-99', 5, {}]) assert.equal(fechaCorta(x), '');
+  const b = tarjetaDe({ tipo: 'barco', barco: { piezas: 1, eta: '2026-11-23', arribo: 'pendiente' } }, {});
+  assert.deepEqual(b.numeros.slice(1, 3), [['ETA puerto', nov], ['Llega a CEDIS', '—']]);
+  const m = { puerto: { barcos: [{ id: 'C1', supplier: '  ', eta: '2026-11-23', llegaEnDias: 1, piezas: 1 }], tarimas: [] } };
+  const c = tarjetaDe({ tipo: 'barco', id: 'C1' }, m); assert.equal(c.numeros[0][1], '—'); assert.match(c.numeros[1][1], /^23 nov · /);
 });

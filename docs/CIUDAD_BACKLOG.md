@@ -263,6 +263,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.39) `nombreTienda()` pura y probada: la tienda sin sucursal o sin nombre de cuenta ya no dice «Pcel · null» en pensamientos, buscador y lista del distrito, la tienda en línea sin sucursal dice «En línea» (antes «null (en línea)»), y la tarjeta encuentra la tienda tocada con la misma llave que su edificio (antes salía vacía). Harness sin errores.
   - [x] (4.7.40) `leyendaCuentas()` pura y probada: la leyenda de colores de cuentas sale una vez por cuenta (antes se repetía si el nombre venía con espacios distintos y chocaba la clave de React), un nombre con «|» ya no se parte y una cuenta nula ya no dice «null». Sin prueba visual: el harness no dibuja `Ciudad.jsx`.
   - [x] (4.7.41) Tarjeta del camión: el destino usa `nombreCiudad()` («San Luis Potosí», «León», CDMX; antes «San Luis Potosi», «Leon») y cliente/paquetería vacíos o «null» dicen «—»; el estatus del contenedor con espacios o «null» ya no sale como renglón vacío.
+  - [x] (4.7.42) `fechaCorta()` pura y probada: las tarjetas del contenedor en el mar dicen «ETA puerto 23 nov» / «Llega a CEDIS 25 nov» (antes «2026-11-23» crudo, y una fecha ilegible salía tal cual); proveedor vacío o con espacios dice «—».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -278,6 +279,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 01:18 · v4.7.42 · `fechaCorta()`: ETA y llegada a CEDIS del contenedor en «23 nov» (antes ISO crudo); proveedor vacío «—»; +1 prueba.
 - 2026-11-22 01:16 · v4.7.41 · Tarjeta del camión: destino con acentos (`nombreCiudad()`), cliente/paquetería sin «null»; estatus del contenedor limpio; +1 prueba.
 - 2026-11-22 00:56 · v4.7.40 · Leyenda de cuentas sin repetidos, sin «null» ni nombres partidos con `leyendaCuentas()`; +1 prueba.
 - 2026-11-22 00:37 · v4.7.39 · Tiendas sin sucursal/nombre de cuenta ya no dicen «null» y su tarjeta vuelve a mostrar números; +1 prueba.

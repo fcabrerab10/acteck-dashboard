@@ -667,6 +667,10 @@ export function enMinutos(min) {
 }
 /** Une partes de un texto con « · » saltando las vacías (null, undefined, '', espacios, NaN, false, 'null'/'undefined'):
  *  el globo del contenedor/camión ya no dice «null · 1,200 pz» ni «salió undefined» (4.7.21). */
+// Fecha corta es-MX (4.7.42): «23 nov» para tarjetas; ilegible (null, «pendiente», '2026-99-99') → '' (nunca «Invalid Date»).
+export function fechaCorta(x) {
+  const f = fechaIso(x); return f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).replace(/\.$/, '') : '';
+}
 export function unirTexto(...partes) {
   return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))
     .filter((x) => x && x !== 'null' && x !== 'undefined' && x !== 'NaN').join(' · ');
@@ -879,9 +883,9 @@ export function tarjetaDe(tag, modelo) {
     // Contenedor en el mar (interior del puerto, 3.90.34): proveedor, ETA, piezas y POs (`v_embarques_contenedor`). ETA vencida sin arribo = rojo.
     const b = [...sn(m.puerto.barcos), ...sn(m.puerto.tarimas)].find((x) => x.id === tag.id);
     if (b) {
-      const f = fechaIso(b.arribo) || fechaIso(b.eta); const fc = f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : 's/f'; // 4.3.30: sin «Invalid Date»
+      const fc = fechaCorta(b.arribo) || fechaCorta(b.eta) || 's/f'; // 4.3.30: sin «Invalid Date»
       const cuando = b.llegaEnDias == null ? 'sin ETA' : `${fc} · ${llegaBarco(b.llegaEnDias).replace(/^llega /, '')}`; // 4.7.6: «mañana» (antes «en 1 d»)
-      t.numeros = [['Proveedor', b.supplier || '—'], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', listaCorta(b.listaPos) || (b.pos ? num(b.pos) : '—')]];
+      t.numeros = [['Proveedor', unirTexto(b.supplier) || '—' /* 4.7.42: « » ya no sale vacío */], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', listaCorta(b.listaPos) || (b.pos ? num(b.pos) : '—')]];
       t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';
     }
   } else if (tag.tipo === 'puerto' && m.puerto) {
@@ -937,7 +941,7 @@ export function tarjetaDe(tag, modelo) {
     const v = sn(m.vendedoresRuta).find((x) => x.nombre === tag.titulo);
     if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', sn(v.destinos).map((x) => unirTexto(x.cliente)).filter(Boolean).slice(0, 3).join(' → ') || '—']]; t.estado = numero(v.totalMes) > 0 ? 'verde' : 'ambar'; }
   } else if (tag.tipo === 'barco' && tag.barco) {
-    const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', b.eta || '—'], ['Llega a CEDIS', b.arribo || '—']];
+    const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', fechaCorta(b.eta) || '—'], ['Llega a CEDIS', fechaCorta(b.arribo) || '—']] /* 4.7.42: «23 nov» (antes «2026-11-23» crudo) */;
     const est = unirTexto(b.estatus); if (est) t.numeros.push(['Estatus', est]); // 4.7.41: « » / «null» ya no salen
     t.estado = b.llegaEnDias == null ? 'ambar' : 'verde';
   }
