@@ -767,6 +767,7 @@ test('rebote al tocar', () => {
   assert.ok(Math.min(...ys) < .93 && Math.max(...ys) > 1.03); // aplasta y estira
   for (let k = 1; k < 50; k++) { const r = rebote(k / 100); assert.ok(Math.abs((r.y - 1) + 2 * (r.xz - 1)) < 1e-9); } // lo que baja en y se ensancha
   assert.equal(rebote(NaN).y, 1);
+  assert.equal(rebote(NaN).fin, true); assert.equal(rebote(-.1).fin, false); assert.equal(rebote(Infinity).fin, true); // 4.7.60
 });
 
 test('saltito de saludo', () => {

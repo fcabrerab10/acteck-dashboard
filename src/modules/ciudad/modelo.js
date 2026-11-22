@@ -1112,7 +1112,8 @@ export function camionesTemporada(m, hoy = new Date()) {
 // Rebote al tocar (3.90.73, Etapa 7): escala (y, xz) a los `t` segundos; aplasta, estira y se asienta en `dur`. `fin` = ya terminó.
 export function rebote(t, dur = .5) {
   if (!(dur > 0) || !Number.isFinite(dur)) dur = .5;
-  if (!(t >= 0) || t >= dur) return { y: 1, xz: 1, fin: t >= dur };
+  // 4.7.60: t NaN (un dt inválido) termina el rebote; antes fin quedaba false para siempre y el rebote nunca se soltaba.
+  if (!(t >= 0) || t >= dur) return { y: 1, xz: 1, fin: !(t < dur) };
   const p = t / dur; const y = 1 - .16 * Math.sin(p * Math.PI * 3) * (1 - p);
   return { y, xz: 1 - (y - 1) * .5, fin: false };
 }
