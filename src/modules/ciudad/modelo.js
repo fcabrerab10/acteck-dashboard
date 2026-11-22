@@ -993,10 +993,17 @@ export function ciudadDeSucursal(nombre) {
   if (VIRTUAL.test(s)) return { ciudad: null, virtual: true };
   if (ALIAS[s]) return { ciudad: ALIAS[s], virtual: false };
   if (CIUDADES[s]) return { ciudad: s, virtual: false };
-  for (const [k, v] of Object.entries(ALIAS)) if (s.includes(k)) return { ciudad: v, virtual: false };
-  for (const k of Object.keys(CIUDADES)) if (s.includes(k) || (s.length >= 4 && k.length > 5 && k.includes(s))) return { ciudad: k, virtual: false };
+  // 4.7.53: palabras completas (antes «NAPOLEON» → León y «MONTE» → Monterrey) y el alias/ciudad más largo primero (antes
+  // «SUC ESTADO DE MEXICO» → CDMX por «MEXICO» y «BAJA CALIFORNIA SUR …» → Tijuana). Números y signos separan («GDL1», «MTY-SUR»).
+  const t = ` ${s.replace(/[^A-Z]+/g, ' ').trim()} `, w = t.trim();
+  for (const [k, v] of ALIAS_LARGOS) if (t.includes(` ${k} `)) return { ciudad: v, virtual: false };
+  for (const k of CIUDADES_LARGAS) if (t.includes(` ${k} `)) return { ciudad: k, virtual: false };
+  // nombre parcial: palabra completa de la ciudad («CIUDAD» → la primera) o una palabra cortada de ≥ 6 letras («AGUASCAL»)
+  if (w.length >= 4) for (const k of Object.keys(CIUDADES)) if (k.length > 5 && (` ${k} `.includes(` ${w} `) || (w.length >= 6 && !w.includes(' ') && k.split(' ').some((p) => p.startsWith(w))))) return { ciudad: k, virtual: false };
   return { ciudad: null, virtual: false };
 }
+const ALIAS_LARGOS = Object.entries(ALIAS).sort((a, b) => b[0].length - a[0].length);
+const CIUDADES_LARGAS = Object.keys(CIUDADES).sort((a, b) => b.length - a.length);
 
 // Fecha 'AAAA-MM-DD' de un valor de la base (texto ISO, con hora o no, o Date) si es una fecha real; si no (null, «pendiente»,
 // '2026-13-40', Date inválido) → null. Así una fecha mala cuenta como «sin fecha» y no da NaN en el puerto ni en los camiones.

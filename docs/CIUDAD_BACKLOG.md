@@ -274,6 +274,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.50) Cuentas sin sucursal con la cuenta limpia: una cuenta « pcel » en la lista de cuentas ya empata sus ventas mensuales (antes la Matriz salía apagada con venta 0) y su nombre; una cuenta con espacios que ya tiene sucursales ya no saca una Matriz doble; la cuenta vacía se salta.
   - [x] (4.7.51) Clave ERP limpia (« 01234 » = «01234») en camiones de facturas y de envíos y en los destinos de los vendedores: antes una clave con espacios mandaba el camión a CDMX con la clave cruda como cliente y el vendedor sin destino; la cuenta sale con la clave limpia del mapa (sede correcta aunque `cuenta` traiga espacios).
   - [x] (4.7.52) `carteraPorCuenta()` pura y probada: si la cartera trae la misma cuenta dos veces (« digitalife » y «digitalife», cortes distintos) gana el `fecha_corte` más reciente (antes el último renglón que llegara, podía ser el corte viejo: vencido y DSO equivocados en la tienda, el banco y los KPIs); fecha ilegible pierde contra legible.
+  - [x] (4.7.53) `ciudadDeSucursal()` empata palabras completas y el alias/ciudad más largo primero: «NAPOLEON» ya no cae en León ni «MONTE» en Monterrey, «SUC ESTADO DE MEXICO» va a Toluca (antes CDMX) y «Baja California Sur …» a La Paz (antes Tijuana); «GDL1», «MTY-SUR» y palabras cortadas de ≥ 6 letras («AGUASCAL») siguen empatando.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -288,6 +289,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-22 04:37 · v4.7.53 · Sucursales → ciudad por palabras completas y alias más largo primero (sin León por «Napoleón» ni CDMX por «Estado de México»).
 - 2026-11-22 04:16 · v4.7.52 · Cartera: con la misma cuenta dos veces gana el corte más reciente (`carteraPorCuenta()`).
 
 - 2026-11-22 03:56 · v4.7.51 · Camiones y destinos de vendedores empatan la clave ERP sin espacios (sede y nombre correctos); +1 prueba.

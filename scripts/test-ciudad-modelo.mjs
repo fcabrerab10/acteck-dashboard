@@ -36,6 +36,18 @@ test('sucursales → ciudad', () => {
   assert.equal(ciudadDeSucursal('XALAPA').ciudad, 'XALAPA');
   for (const x of ['A', 'LA', 'MEX']) assert.equal(ciudadDeSucursal(x).ciudad, null, `«${x}» es muy corto para adivinar la ciudad`);
   assert.equal(ciudadDeSucursal('JUAREZ').ciudad, 'CIUDAD JUAREZ', 'un nombre parcial largo sí empata');
+  // 4.7.53: palabras completas y el alias más largo gana
+  for (const x of ['NAPOLEON', 'MONTE', 'PANTEON', 'COLIMAN']) assert.equal(ciudadDeSucursal(x).ciudad, null, `«${x}» no es una ciudad`);
+  assert.equal(ciudadDeSucursal('SUC ESTADO DE MEXICO').ciudad, 'TOLUCA');
+  assert.equal(ciudadDeSucursal('Baja California Sur Los Cabos').ciudad, 'LA PAZ');
+  assert.equal(ciudadDeSucursal('Galerías León').ciudad, 'LEON');
+  assert.equal(ciudadDeSucursal('GDL1').ciudad, 'GUADALAJARA');
+  assert.equal(ciudadDeSucursal('MTY-SUR').ciudad, 'MONTERREY');
+  assert.equal(ciudadDeSucursal('CD. JUAREZ').ciudad, 'CIUDAD JUAREZ');
+  assert.equal(ciudadDeSucursal('Torreón Centro').ciudad, 'TORREON');
+  assert.equal(ciudadDeSucursal('AGUASCAL').ciudad, 'AGUASCALIENTES', 'palabra cortada de ≥ 6 letras');
+  assert.equal(ciudadDeSucursal('Plaza La Paz').ciudad, 'LA PAZ');
+  assert.equal(ciudadDeSucursal('San Nicolás de los Garza').ciudad, 'MONTERREY');
   const g = posDe(CIUDADES.GUADALAJARA); assert.equal(Math.abs(g.x), 0); assert.equal(Math.abs(g.z), 0);
   assert.ok(posDe(CIUDADES.HERMOSILLO).z < 0 && posDe(CIUDADES.HERMOSILLO).x < 0, 'Hermosillo al noroeste');
 });
