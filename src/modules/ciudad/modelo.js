@@ -728,6 +728,10 @@ export function haceDias(v) {
 export function dsoTexto(v) {
   const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
 }
+// Temperatura (4.7.45): «24°» redondeada (0 y bajo cero valen: «-3°»); sin dato o ilegible → '' (antes «NaN° en Guadalajara»).
+export function temperaturaTexto(v) {
+  const k = leeNum(v); if (k == null) return ''; const r = Math.round(k); return `${r === 0 ? 0 : r}°`;
+}
 // Piezas (4.7.27): enteras con miles es-MX («1,200 pz»; antes «1,200.5 pz» con decimales y texto «$1,200» sí cuenta);
 // ilegible → «0 pz». Globos del contenedor/tarima/tráiler, misión de descarga, bitácora de arribos y globo del puerto.
 export function piezasTexto(v) { return `${Math.round(numero(v)).toLocaleString('es-MX')} pz`; }

@@ -266,6 +266,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.42) `fechaCorta()` pura y probada: las tarjetas del contenedor en el mar dicen «ETA puerto 23 nov» / «Llega a CEDIS 25 nov» (antes «2026-11-23» crudo, y una fecha ilegible salía tal cual); proveedor vacío o con espacios dice «—».
   - [x] (4.7.43) Tarjeta del camión: «Salió» con `fechaCorta()` («6 oct · ayer», «30 sep · hace 7 d»; antes «2026-10-06» crudo); fecha ilegible sigue en «—».
   - [x] (4.7.44) Vendedores del ERP se juntan por nombre normalizado (« JUAN  PEREZ » = «Juan Perez»): antes el mismo vendedor con espacios o mayúsculas distintas salía como dos coches con la misma tarjeta y sus ventas partidas; sin nombre se salta.
+  - [x] (4.7.45) `temperaturaTexto()` pura y probada: el clima del panel dice «24° en Guadalajara» (0 y bajo cero valen) y sin temperatura sólo «Guadalajara» (antes «NaN° en Guadalajara»); las tiendas activas por ciudad del panel salen con miles es-MX («1,200 de 3,400 tiendas»). Sin prueba visual: el harness no dibuja `Ciudad.jsx`.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -456,3 +457,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-10-05 15:40 · v3.76.9 · Dibujar sólo cuando hace falta: pausa total con la pestaña oculta (`visibilitychange`), modo calma a ~10 fps tras 15 s sin gestos y con la cámara quieta, cualquier gesto vuelve a 60 (medido en harness con reloj simulado: 60 → 10 → 60 fps). `devicePixelRatio` ya estaba topado en 2.
 - 2026-11-21 03:36 · v4.7.19 · Burbujas del banco/CEDIS y bitácora («grande») leen montos en texto con `numero()`.
 - 2026-11-22 01:55 · v4.7.44 · Vendedores del ERP juntados por nombre normalizado (sin coches duplicados ni ventas partidas).
+- 2026-11-22 02:16 · v4.7.45 · Clima del panel sin «NaN°» (`temperaturaTexto()`) y tiendas activas por ciudad con miles es-MX.

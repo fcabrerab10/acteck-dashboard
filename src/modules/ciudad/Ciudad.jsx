@@ -12,7 +12,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
 import { crearAmbiente } from './sonido';
-import { COLOR_CUENTA, nombreTienda, leyendaCuentas, piezasTexto, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto } from './modelo';
+import { COLOR_CUENTA, nombreTienda, leyendaCuentas, piezasTexto, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto, temperaturaTexto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -161,7 +161,7 @@ export default function Ciudad({ onNavegar }) {
           <Building2 size={16} style={{ color: theme.accent }} />
           <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, letterSpacing: '-0.02em' }}>acteck<span style={{ color: theme.accent }}>.</span> Ciudad</span>
           <Pill size="xs" tone="gray">etapa 1</Pill>
-          {clima && <span style={{ fontSize: 12, color: theme.textMuted }}>{clima.lluvia ? '🌧' : clima.nubes > .6 ? '☁️' : clima.nubes > .25 ? '⛅' : clima.esDia ? '☀️' : '🌙'} {Math.round(clima.temp)}° en Guadalajara</span>}
+          {clima && <span style={{ fontSize: 12, color: theme.textMuted }}>{clima.lluvia ? '🌧' : clima.nubes > .6 ? '☁️' : clima.nubes > .25 ? '⛅' : clima.esDia ? '☀️' : '🌙'} {temperaturaTexto(clima.temp) ? `${temperaturaTexto(clima.temp)} en ` : ''}Guadalajara</span>}
         </div>
         <div style={{ ...card, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
           <Search size={14} style={{ color: theme.textMuted }} />
@@ -222,7 +222,7 @@ export default function Ciudad({ onNavegar }) {
         {modelo.oficina.personas.filter((p) => p.actividad).map((p) => <div key={p.id}>👤 <b>{p.nombre.split(' ')[0]}</b>: {p.actividad}</div>)}
         {modelo.puerto.barcos.slice(0, 3).map((b) => <div key={b.id}>🚢 <b>{b.id}</b> {llegaBarco(b.llegaEnDias)}</div>)}
         {modelo.kpis.cartera.filter((c) => c.vencido > 0).map((c) => <div key={c.cuenta}>🚩 <b>{capital(c.cuenta)}</b>: cartera vencida {pesosCorto(c.vencido)}{dsoTexto(c.dso) ? ` · ${dsoTexto(c.dso)}` : ''}</div>)}
-        {modelo.distritos.slice(0, 3).map((d) => <div key={d.ciudad}>🏬 {nombreCiudad(d.ciudad)}: {d.tiendas.filter((t) => t.vendio).length} de {plural(d.tiendas.length, 'tienda')} activas</div>)}
+        {modelo.distritos.slice(0, 3).map((d) => <div key={d.ciudad}>🏬 {nombreCiudad(d.ciudad)}: {miles(d.tiendas.filter((t) => t.vendio).length)} de {plural(d.tiendas.length, 'tienda')} activas</div>)}
         {!modelo.camiones.length && !modelo.puerto.barcos.length && <div style={{ color: theme.textMuted }}>Sin movimiento registrado hoy.</div>}
       </div>
       {/* Minimapa + KPIs (columna abajo a la izquierda para que no se encimen) */}
