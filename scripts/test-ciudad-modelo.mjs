@@ -1211,6 +1211,7 @@ test('plural(): singular con 1, plural con 0/varios y n ilegible; la cadena dice
   assert.equal(plural(1, 'barco'), '1 barco'); assert.equal(plural(0, 'barco'), '0 barcos'); assert.equal(plural(2, 'día'), '2 días');
   assert.equal(plural(1.2, 'día'), '1 día'); assert.equal(plural('abc', 'tienda'), '0 tiendas'); assert.equal(plural(-1, 'pago'), '-1 pago');
   assert.equal(plural(1, 'cliente'), '1 cliente'); assert.equal(plural(1, 'cajón', 'cajones'), '1 cajón'); assert.equal(plural(12, 'cajón', 'cajones'), '12 cajones'); assert.equal(plural(1, 'vendedor', 'vendedores'), '1 vendedor');
+  assert.equal(plural('1,200', 'pedido'), '1,200 pedidos'); assert.equal(plural(' 1 ', 'barco'), '1 barco'); assert.equal(plural(true, 'barco'), '0 barcos'); assert.equal(plural('  ', 'día'), '0 días'); assert.equal(plural(Infinity, 'día'), '0 días'); assert.equal(plural(null, 'PO'), '0 POs');
   assert.equal(plural(1500, 'pieza'), '1,500 piezas'); assert.equal(plural(3, 'mes', 'meses'), '3 meses');
   const r = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [{ etaPuerto: '2026-10-20', piezas: 10 }] }, cedis: { dias: 1 }, camiones: [], distritos: [{ tiendas: [{ vendio: true }, { vendio: false }] }] });
   const vol = (k) => r.tramos.find((x) => x.clave === k);
@@ -1349,6 +1350,7 @@ test('porcentaje(): miles es-MX, signo opcional y «—» con lo ilegible; capa 
   assert.equal(porcentaje(-0.4), '0 %'); assert.equal(porcentaje(-25), '-25 %'); assert.equal(porcentaje('80'), '80 %');
   assert.equal(porcentaje(30, { signo: true }), '+30 %'); assert.equal(porcentaje(0, { signo: true }), '0 %'); assert.equal(porcentaje(-5, { signo: true }), '-5 %');
   for (const x of [null, undefined, '', NaN, 'abc', Infinity, true, {}]) assert.equal(porcentaje(x), '—');
+  assert.equal(porcentaje('1,250'), '1,250 %'); assert.equal(porcentaje(' 45 % '), '45 %'); assert.equal(porcentaje('+30', { signo: true }), '+30 %'); assert.equal(porcentaje('  '), '—');
   const m = { distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a', importe: 2350, previo: 100 }] }] };
   assert.match(capaCiudades(m, 'ventas').porCiudad.get('GDL').texto, /\+2,250 % vs mes anterior$/);
 });

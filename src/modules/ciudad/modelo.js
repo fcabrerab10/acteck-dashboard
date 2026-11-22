@@ -712,8 +712,9 @@ export function vaA(parada) {
 // Porcentaje legible (4.7.24): entero redondeado con miles es-MX («1,250 %»), `signo` antepone «+» a los positivos
 // (sell out vs mes anterior) y lo ilegible (null, NaN, texto basura) dice «—» en vez de «NaN %» o «null %».
 export function porcentaje(v, { signo = false } = {}) {
+  // 4.7.55: texto con comas, espacios o «%» («1,250», « 45 %») se lee (antes «—»).
   if (v == null || v === '' || typeof v === 'boolean') return '—';
-  const k = Math.round(Number(v)); if (!Number.isFinite(k)) return '—';
+  const k = Math.round(Number(typeof v === 'string' ? (v.trim() ? v.replace(/[\s,%]/g, '') : NaN) : v)); if (!Number.isFinite(k)) return '—';
   const z = k === 0 ? 0 : k; return `${signo && z > 0 ? '+' : ''}${z.toLocaleString('es-MX')} %`;
 }
 // DSO de la cartera (4.7.26): días redondeados en singular/plural con miles es-MX («DSO 45 días», «DSO 1 día»);
@@ -741,7 +742,8 @@ export function temperaturaTexto(v) {
 // ilegible → «0 pz». Globos del contenedor/tarima/tráiler, misión de descarga, bitácora de arribos y globo del puerto.
 export function piezasTexto(v) { return `${Math.round(numero(v)).toLocaleString('es-MX')} pz`; }
 export function plural(n, uno, varios = `${uno}s`) {
-  const k = Math.round(Number(n)); const v = Number.isFinite(k) ? k : 0;
+  // 4.7.55: «1,200» / « 3 » en texto se leen (antes «0 pedidos»); booleanos y basura → 0 (antes true = «1 barco»).
+  const k = typeof n === 'string' ? Math.round(Number(n.trim() ? n.replace(/[\s,]/g, '') : NaN)) : typeof n === 'number' ? Math.round(n) : NaN; const v = Number.isFinite(k) ? k : 0;
   return `${v.toLocaleString('es-MX')} ${Math.abs(v) === 1 ? uno : varios}`;
 }
 // Texto con «$», comas de miles o espacios («$1,200», « 2,500 ») se lee como número; ≥ mil millones sale «1.2 B» como el
