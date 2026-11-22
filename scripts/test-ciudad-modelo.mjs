@@ -48,6 +48,10 @@ test('sucursales → ciudad', () => {
   assert.equal(ciudadDeSucursal('AGUASCAL').ciudad, 'AGUASCALIENTES', 'palabra cortada de ≥ 6 letras');
   assert.equal(ciudadDeSucursal('Plaza La Paz').ciudad, 'LA PAZ');
   assert.equal(ciudadDeSucursal('San Nicolás de los Garza').ciudad, 'MONTERREY');
+  // 4.7.54: virtual por palabra completa
+  assert.deepEqual(ciudadDeSucursal('General Escobedo'), { ciudad: 'MONTERREY', virtual: false });
+  assert.deepEqual(ciudadDeSucursal('WEBER PUEBLA'), { ciudad: 'PUEBLA', virtual: false });
+  for (const x of ['SUCURSAL GENERAL', 'E-COMMERCE', 'ECOMMERCE', 'Tienda en línea', 'CEDIS GDL', 'MercadoLibre', 'WEB']) assert.equal(ciudadDeSucursal(x).virtual, true, `«${x}» es virtual`);
   const g = posDe(CIUDADES.GUADALAJARA); assert.equal(Math.abs(g.x), 0); assert.equal(Math.abs(g.z), 0);
   assert.ok(posDe(CIUDADES.HERMOSILLO).z < 0 && posDe(CIUDADES.HERMOSILLO).x < 0, 'Hermosillo al noroeste');
 });
