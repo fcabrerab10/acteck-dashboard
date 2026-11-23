@@ -225,6 +225,9 @@ test('acceso rápido: 5 ciudades con más actividad', () => {
   assert.deepEqual(ciudadesTop(mod).map((c) => c.ciudad), ['LEON', 'CIUDAD DE MEXICO', 'QUERETARO'], 'por actividad, empate por tiendas, sin actividad fuera');
   assert.equal(ciudadesTop(mod)[1].nombre, 'CDMX'); assert.equal(ciudadesTop(mod, 1).length, 1);
   assert.deepEqual(ciudadesTop(null), [], 'datos vacíos no rompen');
+  { const t = ciudadesTop({ distritos: [{ ciudad: 'LEON', tiendas: Array.from({ length: 1200 }, () => ({ vendio: true })) }], camiones: [{ ciudad: 'LEON' }] })[0];
+    assert.equal(t.cifra, '1,201', 'actividad con miles es-MX'); assert.equal(t.titulo, 'Ir a León: 1,200 tiendas activas · 1 camión llegando', 'título con plural y miles');
+    const u = ciudadesTop({ distritos: [{ ciudad: 'LEON', tiendas: [{ vendio: true }] }] })[0]; assert.equal(u.titulo, 'Ir a León: 1 tienda activa', 'singular sin camiones'); }
   assert.deepEqual(ciudadesTop({ distritos: 'x' }), [], 'distritos no-lista no rompen');
   assert.deepEqual(ciudadesTop({ distritos: [{ ciudad: 'LEON', tiendas: {} }], camiones: [{ ciudad: 'LEON' }] }).map((c) => [c.ciudad, c.tiendas, c.actividad]), [['LEON', 0, 1]], 'tiendas no-lista cuentan 0');
   const m = construirModelo(d, hoy); const top = ciudadesTop(m); assert.ok(top.length <= 5 && top.every((c) => m.distritos.some((x) => x.ciudad === c.ciudad)));

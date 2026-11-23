@@ -183,7 +183,7 @@ export default function Ciudad({ onNavegar }) {
       </div>
       {top.length > 0 && (
         <div style={{ position: 'absolute', left: 14, top: 52, zIndex: 3, display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 'calc(50% - 28px)' }}>
-          {top.map((c) => <button key={c.ciudad} type="button" onClick={() => escenaRef.current?.irA({ tipo: 'ciudad', ciudad: c.ciudad })} title={`Ir a ${c.nombre}: ${c.activas} tienda${c.activas === 1 ? '' : 's'} activa${c.activas === 1 ? '' : 's'}${c.llegando ? ` · ${c.llegando} camión${c.llegando === 1 ? '' : 'es'} llegando` : ''}`} style={{ ...card, padding: '4px 9px', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: theme.text }}>{c.nombre} <span style={{ color: theme.textMuted, fontWeight: 500 }}>{c.actividad}</span></button>)}
+          {top.map((c) => <button key={c.ciudad} type="button" onClick={() => escenaRef.current?.irA({ tipo: 'ciudad', ciudad: c.ciudad })} title={c.titulo} style={{ ...card, padding: '4px 9px', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: theme.text }}>{c.nombre} <span style={{ color: theme.textMuted, fontWeight: 500 }}>{c.cifra}</span></button>)}
         </div>
       )}
       <BarraRecursos card={card} theme={theme} irA={(t) => escenaRef.current?.irA(t)} ayuda="Arrastra para moverte · rueda = zoom hacia el cursor · clic derecho = girar · flechas" />

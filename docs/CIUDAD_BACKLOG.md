@@ -288,6 +288,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.64) Camiones de envíos: la salida es la primera fecha legible (un `fecha_envio_erp` ilegible ya no esconde el camión si `fecha_surtida` es buena) y una entrega en blanco (« ») ya no cuenta como entregado.
   - [x] (4.7.65) `camionesTemporada()` salta facturas sin folio legible (null, vacío): antes la clave null hacía que, si una caía en Buen Fin o en la semana del cierre, TODOS los camiones sin folio se pintaran de promoción; el folio numérico 0 sí cuenta.
   - [x] (4.7.66) Reuniones de la oficina: `reunionesDelDia()` junta las repetidas (mismo id, o mismo título y hora) y «Reuniones hoy» y la reunión en curso salen de esa agenda limpia: una reunión con fecha ilegible o repetida ya no suma en la tarjeta sin aparecer en la sala, y la reunión en curso ya no lleva título «null» (dice «Reunión»).
+  - [x] (4.7.67) Acceso rápido de ciudades: el número del botón sale con miles es-MX («León 1,250»; antes «1250») y el título usa `plural()` desde `ciudadesTop()` («Ir a León: 1,200 tiendas activas · 1 camión llegando», «1 tienda activa»; antes «1200 tiendas» y el plural se armaba a mano en `Ciudad.jsx`). Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -303,6 +304,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 23:36 · v4.7.67 · Acceso rápido de ciudades con miles es-MX y título con `plural()` desde `ciudadesTop()`; +1 prueba.
 - 2026-11-22 23:17 · v4.7.66 · Reuniones de la oficina sin repetidas; conteo y reunión en curso desde la agenda limpia.
 - 2026-11-22 22:57 · v4.7.65 · `camionesTemporada()`: factura sin folio ya no pinta de promoción a todos los camiones sin folio; +1 prueba.
 - 2026-11-22 22:35 · v4.7.64 · Camiones de envíos: salida = primera fecha legible (ERP ilegible cae a la surtida) y entrega en blanco no cuenta como entregado.

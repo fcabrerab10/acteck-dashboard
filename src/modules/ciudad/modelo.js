@@ -202,7 +202,10 @@ export function pinCiudad(distrito, camiones = []) {
 export function ciudadesTop(modelo, n = 5) {
   n = Math.max(0, Math.floor(Number(n))); if (!Number.isFinite(n)) n = 5; // n en texto/decimal/basura (antes NaN → lista vacía)
   const ds = comoLista(modelo?.distritos).filter(Boolean); // distritos/tiendas que no son lista: vacío, no error ni NaN en el orden
-  return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); return { ciudad: d.ciudad, nombre: p.nombre, activas: p.activas, llegando: p.llegando, actividad: p.activas + p.llegando, tiendas: comoLista(d.tiendas).length }; })
+  return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); const actividad = p.activas + p.llegando;
+    // 4.7.67: `cifra` y `titulo` con miles es-MX y `plural()` («León 1,250», «1 tienda activa · 1 camión llegando»; antes «1200 tiendas» y plural a mano en Ciudad.jsx).
+    const titulo = `Ir a ${p.nombre}: ${plural(p.activas, 'tienda activa', 'tiendas activas')}${p.llegando ? ` · ${plural(p.llegando, 'camión', 'camiones')} llegando` : ''}`;
+    return { ciudad: d.ciudad, nombre: p.nombre, activas: p.activas, llegando: p.llegando, actividad, cifra: actividad.toLocaleString('es-MX'), titulo, tiendas: comoLista(d.tiendas).length }; })
     .filter((c) => c.nombre && c.actividad > 0).sort((x, y) => y.actividad - x.actividad || y.tiendas - x.tiendas).slice(0, n);
 }
 // Botón único Base/Mapa: estás «en la base» si la cámara está cerca del encuadre de la Vista Base (centro a menos de medio
