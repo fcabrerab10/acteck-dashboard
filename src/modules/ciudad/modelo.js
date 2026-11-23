@@ -1228,8 +1228,16 @@ export function sinNulos(d) {
   return o;
 }
 
+// 4.7.79: listas de datos que construirModelo recorre; si una llega como objeto/texto/número (no lista) se toma vacía
+// (antes `.map`/`.filter`/`for…of` lanzaban error y tumbaban toda la Ciudad). reglasPagos (objeto) y marcasSku (Map) no van aquí.
+export const LISTAS_DATOS = ['cuentas', 'perfiles', 'agendaHoy', 'reunionesHoy', 'viajesHoy', 'inventario', 'inventarioSku', 'demandaSku', 'facturas', 'contenedores', 'sucursales', 'cuentaMes', 'clientesFinales', 'vendedoresMayoristas', 'vendedoresErp', 'cartera', 'pagos', 'forecast', 'avisosForecast', 'alertasOc', 'envios'];
+export function listasDatos(d) {
+  const o = sinNulos(d);
+  for (const k of LISTAS_DATOS) if (o[k] != null && !Array.isArray(o[k])) o[k] = [];
+  return o;
+}
 export function construirModelo(d, hoy = new Date()) {
-  d = sinNulos(d);
+  d = listasDatos(d);
   hoy = fechaHoy(hoy);
   const hoyIso = isoLocal(hoy); // 4.7.32: día local (antes UTC: de 18:00 a 23:59 en Guadalajara «hoy» ya era mañana)
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
