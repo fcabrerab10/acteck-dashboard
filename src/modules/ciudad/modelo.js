@@ -723,8 +723,11 @@ export function enMinutos(min) {
 /** Une partes de un texto con « · » saltando las vacías (null, undefined, '', espacios, NaN, false, 'null'/'undefined'):
  *  el globo del contenedor/camión ya no dice «null · 1,200 pz» ni «salió undefined» (4.7.21). */
 // Fecha corta es-MX (4.7.42): «23 nov» para tarjetas; ilegible (null, «pendiente», '2026-99-99') → '' (nunca «Invalid Date»).
-export function fechaCorta(x) {
-  const f = fechaIso(x); return f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).replace(/\.$/, '') : '';
+// 4.12.3: fuera del año de «hoy» lleva el año («23 nov 2025»; antes una ETA o salida de otro año se confundía con este).
+export function fechaCorta(x, hoy) {
+  const f = fechaIso(x); if (!f) return '';
+  const c = new Date(`${f}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).replace(/\.$/, '');
+  return Number(f.slice(0, 4)) === fechaHoy(hoy).getFullYear() ? c : `${c} ${f.slice(0, 4)}`;
 }
 export function unirTexto(...partes) {
   return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))
@@ -976,7 +979,7 @@ export function tarjetaDe(tag, modelo) {
     // Contenedor en el mar (interior del puerto, 3.90.34): proveedor, ETA, piezas y POs (`v_embarques_contenedor`). ETA vencida sin arribo = rojo.
     const b = [...sn(m.puerto.barcos), ...sn(m.puerto.tarimas)].find((x) => x.id === tag.id);
     if (b) {
-      const fc = fechaCorta(b.arribo) || fechaCorta(b.eta) || 's/f'; // 4.3.30: sin «Invalid Date»
+      const fc = fechaCorta(b.arribo, m.hoyIso) || fechaCorta(b.eta, m.hoyIso) || 's/f'; // 4.3.30: sin «Invalid Date»
       const est = estatusBarco(b.estatus); // 4.7.84: estatus con los nombres del Plan de compras («Por zarpar», «En el mar»)
       const cuando = b.llegaEnDias == null ? (est ? `sin ETA · ${est.toLowerCase()}` : 'sin ETA') : `${fc} · ${llegaBarco(b.llegaEnDias).replace(/^llega /, '')}`; // 4.7.6: «mañana» (antes «en 1 d»)
       if (est && !t.sub.toLowerCase().includes(est.toLowerCase())) t.sub = unirTexto(t.sub, est);
@@ -1026,7 +1029,7 @@ export function tarjetaDe(tag, modelo) {
     if (c) {
       const nd = c.fecha ? dias(c.fecha, m.hoyIso || diaLocal().iso) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
       const fs = fechaIso(c.fecha); // 4.7.23: un Date ya no sale «Wed Oct 07»; ilegible → «—»
-      const salio = fs ? unirTexto([fechaCorta(fs), haceDias(n)]) || fechaCorta(fs) : '—'; // 4.7.43: «6 oct · ayer» (antes «2026-10-06» crudo)
+      const salio = fs ? unirTexto([fechaCorta(fs, m.hoyIso), haceDias(n)]) || fechaCorta(fs, m.hoyIso) : '—'; // 4.7.43: «6 oct · ayer» (antes «2026-10-06» crudo)
       // 4.7.41: destino con `nombreCiudad()` («LEON» → «León», «SAN LUIS POTOSI» → «San Luis Potosí», CDMX; antes «Leon»)
       // y cliente/paquetería con `unirTexto()` (« » o «null» ya no salen como texto: «—»).
       const destino = nombreCiudad(c.ciudad) || '—', txt = (x) => unirTexto(x) || '—';
@@ -1038,7 +1041,7 @@ export function tarjetaDe(tag, modelo) {
     const v = sn(m.vendedoresRuta).find((x) => x.nombre === tag.titulo);
     if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', sn(v.destinos).map((x) => unirTexto(x.cliente)).filter(Boolean).slice(0, 3).join(' → ') || '—']]; t.estado = numero(v.totalMes) > 0 ? 'verde' : 'ambar'; }
   } else if (tag.tipo === 'barco' && tag.barco) {
-    const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', fechaCorta(b.eta) || '—'], ['Llega a CEDIS', fechaCorta(b.arribo) || '—']] /* 4.7.42: «23 nov» (antes «2026-11-23» crudo) */;
+    const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', fechaCorta(b.eta, m.hoyIso) || '—'], ['Llega a CEDIS', fechaCorta(b.arribo, m.hoyIso) || '—']] /* 4.7.42: «23 nov» (antes «2026-11-23» crudo) */;
     const est = estatusBarco(b.estatus); if (est) t.numeros.push(['Estatus', est]); // 4.7.41: « » / «null» ya no salen; 4.7.84: «En el mar» como el Plan de compras
     t.estado = b.llegaEnDias == null ? 'ambar' : 'verde';
   }

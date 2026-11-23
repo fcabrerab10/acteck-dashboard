@@ -1833,3 +1833,14 @@ test('estatusBarco(): nombres cortos del Plan de compras (4.7.84)', () => {
   assert.equal(tarjetaDe({ tipo: 'barco', id: 'C2', sub: 'MSK' }, m).sub, 'MSK · En el mar');
   const t3 = tarjetaDe({ tipo: 'barco', id: 'C3', sub: 'x' }, m); assert.deepEqual(t3.numeros[1], ['ETA puerto', 'sin ETA']); assert.equal(t3.sub, 'x');
 });
+
+test('fechaCorta() lleva el año fuera del año de hoy (4.12.3)', () => {
+  const nov = fechaCorta('2025-11-23', '2026-01-05'); assert.match(nov, /^23 nov 2025$/);
+  assert.equal(fechaCorta('2026-11-23', '2026-01-05'), fechaCorta('2026-11-23', new Date(2026, 0, 5)));
+  assert.ok(!/2026/.test(fechaCorta('2026-11-23', '2026-01-05')));
+  assert.match(fechaCorta('2027-01-02', '2026-12-30'), / 2027$/);
+  assert.equal(fechaCorta('2026-11-23', 'basura'), fechaCorta('2026-11-23')); // hoy ilegible = ahora
+  assert.equal(fechaCorta(null, '2026-01-05'), '');
+  const b = tarjetaDe({ tipo: 'barco', barco: { piezas: 1, eta: '2025-12-30', arribo: '2026-01-04' } }, { hoyIso: '2026-01-02' });
+  assert.match(b.numeros[1][1], /^30 dic 2025$/); assert.ok(!/2026/.test(b.numeros[2][1]));
+});
