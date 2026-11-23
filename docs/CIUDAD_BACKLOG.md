@@ -290,6 +290,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.66) Reuniones de la oficina: `reunionesDelDia()` junta las repetidas (mismo id, o mismo título y hora) y «Reuniones hoy» y la reunión en curso salen de esa agenda limpia: una reunión con fecha ilegible o repetida ya no suma en la tarjeta sin aparecer en la sala, y la reunión en curso ya no lleva título «null» (dice «Reunión»).
   - [x] (4.7.67) Acceso rápido de ciudades: el número del botón sale con miles es-MX («León 1,250»; antes «1250») y el título usa `plural()` desde `ciudadesTop()` («Ir a León: 1,200 tiendas activas · 1 camión llegando», «1 tienda activa»; antes «1200 tiendas» y el plural se armaba a mano en `Ciudad.jsx`). Harness sin errores.
   - [x] (4.7.68) Cadena de suministro: `cadenaSuministro()` acepta barcos, camiones, distritos y tiendas que no son lista (antes lanzaba error), lee la ETA en días en texto (« -5 » cuenta como atrasado) y una ETA vacía o ilegible deja el barco en el mar (antes «» valía 0 y salía en puerto); el tramo de clientes finales dice «120 clientes · $2.5 M» (antes «120 · $2.5 M»).
+  - [x] (4.7.69) `cuotaRitmo()` empata la cuenta aunque traiga espacios o venga como número (« ct », 10 = «10») sin contar doble si llega en dos formas; `celebraciones()` acepta distritos/tiendas que no son lista (antes lanzaba error).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -505,3 +506,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-22 03:16 · v4.7.49 · cartera y clientes finales empatan la cuenta aunque traiga espacios.
 - 2026-11-22 05:16 · v4.7.56 · Pulido: `plural()` / `piezasTexto()` sin «-0» y `listaCorta()` con n = 0 sin espacio al inicio.
 - 2026-11-22 15:37 · v4.7.61 · Bitácora sin eventos perdidos por folio/id vacío ni «Contenedor null».
+- 2026-11-23 00:16 · v4.7.69 · Cuota por ciudad/tienda empata cuentas con espacios o numéricas; celebraciones sin error con listas raras.

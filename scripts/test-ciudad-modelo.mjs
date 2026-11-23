@@ -1679,3 +1679,13 @@ test('cadenaSuministro(): listas que no son lista no truenan, ETA en texto cuent
   assert.match(t('mar').volumen, /^2 barcos/, 'vacía y basura = sin ETA, en el mar');
   assert.match(t('puerto').volumen, /^1 con ETA vencida/); assert.equal(t('puerto').estado, 'rojo');
 });
+
+test('cuotaRitmo() empata cuentas con espacios o numéricas sin contar doble; celebraciones() aguanta listas que no son lista', () => {
+  const m = { hoyIso: '2026-10-15', cuotas: new Map([['10', { venta: 50, cuota: 100 }], ['ct', { venta: 30, cuota: 100 }]]) };
+  assert.equal(cuotaRitmo(m, [10])?.pct, 50, 'cuenta numérica');
+  assert.equal(cuotaRitmo(m, [' ct '])?.pct, 30, 'cuenta con espacios');
+  const r = cuotaRitmo(m, ['10', 10, ' 10 ', 'ct', null, '']); assert.equal(r.n, 2); assert.equal(r.venta, 80); assert.equal(r.cuota, 200);
+  let c; assert.doesNotThrow(() => { c = celebraciones({ distritos: 'x' }); }); assert.deepEqual(c.tiendas, []);
+  assert.doesNotThrow(() => { c = celebraciones({ distritos: [{ ciudad: 'X', tiendas: 5 }, { ciudad: 'Y', tiendas: [{ cuenta: 'a', sucursal: 's', vendioMes: true, importe: 10 }] }] }); });
+  assert.equal(c.tiendas.length, 1); assert.equal(c.tiendas[0].ciudad, 'Y');
+});

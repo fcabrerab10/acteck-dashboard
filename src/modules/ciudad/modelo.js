@@ -500,7 +500,8 @@ export function celebraciones(m, max = 5) {
   const q = m?.cuotas instanceof Map ? [...m.cuotas.values()].filter(Boolean) : [];
   // 4.7.16: montos en texto («$5,000») con `numero()` (antes 0: no celebraba la cuota ni ordenaba tiendas).
   const venta = q.reduce((s, x) => s + numero(x.venta), 0), cuo = q.reduce((s, x) => s + numero(x.cuota), 0);
-  const tiendas = (m?.distritos || []).filter(Boolean).flatMap((d) => (d.tiendas || []).filter((t) => t && !t.reparto && t.vendioMes && !(numero(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: numero(t.importe) })))
+  // 4.7.69: distritos o tiendas que no son lista ya no lanzan error.
+  const tiendas = comoLista(m?.distritos).filter(Boolean).flatMap((d) => comoLista(d.tiendas).filter((t) => t && !t.reparto && t.vendioMes && !(numero(t.previo) > 0)).map((t) => ({ ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, importe: numero(t.importe) })))
     .sort((a, b) => b.importe - a.importe).slice(0, max);
   return { cuota: cuo > 0 && venta >= cuo ? { pct: Math.round(venta / cuo * 100) } : null, tiendas };
 }
@@ -514,7 +515,10 @@ export function cuotaRitmo(m, cuentas = []) {
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   // 4.7.16: cuota y venta en texto con «$», comas o espacios («$1,000») se leen con `numero()` (antes la cuota «$1,000» no contaba).
   const cuotaDe = (c) => { const v = numero(q.get(c)?.cuota); return v > 0 ? v : 0; };
-  const cs = [...new Set(comoLista(cuentas))].filter((c) => cuotaDe(c) > 0); if (!cs.length) return null;
+  // 4.7.69: la cuenta se empata aunque traiga espacios o venga como número (« ct », 10 = «10»; las claves de `cuotasPorCuenta()`
+  // van recortadas) y no se cuenta doble si llega en dos formas.
+  const clave = (c) => (q.has(c) ? c : c == null ? '' : String(c).trim());
+  const cs = [...new Set(comoLista(cuentas).map(clave))].filter((c) => cuotaDe(c) > 0); if (!cs.length) return null;
   const venta = cs.reduce((s, c) => s + numero(q.get(c).venta), 0), cuo = cs.reduce((s, c) => s + cuotaDe(c), 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
   return { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', pct, ritmo: Math.round(ritmo * 100), n: cs.length, venta, cuota: cuo };
 }
