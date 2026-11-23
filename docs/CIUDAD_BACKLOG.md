@@ -302,6 +302,7 @@ Principios que no se rompen en ninguna etapa:
 
   - [x] (4.7.77) `llegaBarco()`, `enMinutos()` y `haceDias()` sólo leen número o texto: una ETA/minutos/antigüedad que llega como lista u objeto ya no sale «llega hoy» / «empieza ya» / «hoy» (`[]` valía 0) y `haceDias(' ')` en blanco ya no dice «hoy».
   - [x] (4.7.78) `hexCss()` sólo acepta enteros 0..0xFFFFFF: un color decimal (255.7, -0.4) ya no se redondea a otro color (#000100 / negro), sale gris como dato roto.
+  - [x] (4.7.80) `bitacoraEventos()` y `ponerPosEnPuerto()` aceptan camiones, barcos, tarimas, pagos y agenda que no son lista (antes un objeto o número lanzaba error y tumbaba la bitácora / las POs del puerto; un texto se partía en letras); encontrado con un barrido de datos basura sobre todo `modelo.js`.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -534,3 +535,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-23 00:16 · v4.7.69 · Cuota por ciudad/tienda empata cuentas con espacios o numéricas; celebraciones sin error con listas raras.
 - 2026-11-23 01:18 · v4.7.72 · Pulido: `numero()` lee «12%» y `porcentaje()` con lista/objeto da «—».
 - 2026-11-23 02:55 · v4.7.77 · `llegaBarco()`/`enMinutos()`/`haceDias()` sólo leen número o texto (lista/objeto/blanco ya no dan «llega hoy», «empieza ya», «hoy»).
+- 2026-11-23 03:57 · v4.7.80 · Bitácora y POs del puerto sin error cuando camiones/barcos/tarimas/pagos/agenda no son lista.

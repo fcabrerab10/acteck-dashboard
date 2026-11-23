@@ -1746,3 +1746,15 @@ test('4.7.77 llegaBarco/enMinutos/haceDias sólo leen número o texto', () => {
   assert.equal(haceDias(' '), ''); assert.equal(haceDias('$5'), 'hace 5 d'); assert.equal(haceDias('1,200'), 'hace 1,200 d'); assert.equal(haceDias(-0.4), 'hoy');
   assert.equal(llegaBarco(' 2 '), 'llega en 2 d'); assert.equal(enMinutos(' 5 '), 'en 5 min');
 });
+
+test('4.7.80 bitacoraEventos/ponerPosEnPuerto aguantan listas que no son lista', () => {
+  for (const x of [{}, 7, true, 'abc']) {
+    assert.deepEqual(bitacoraEventos({ hoyIso: '2026-10-15', camiones: x, puerto: { barcos: x, tarimas: x }, pagosHechos: x, oficina: { agenda: x } }, new Date(2026, 9, 15, 12)), []);
+    const pto = { barcos: x, tarimas: [{ id: 'T1' }] };
+    assert.equal(ponerPosEnPuerto(pto, [{ contenedor: 'T1', po: 'PO-1' }]), pto);
+    assert.deepEqual(pto.tarimas[0].listaPos, ['PO-1'], 'la tarima sí recibe sus POs aunque barcos venga roto');
+  }
+  assert.equal(ponerPosEnPuerto('abc', []), 'abc');
+  const ev = bitacoraEventos({ hoyIso: '2026-10-15', camiones: {}, puerto: { barcos: [{ id: 'C1', arribo: '2026-10-15', piezas: 10 }], tarimas: 5 } }, new Date(2026, 9, 15, 12));
+  assert.equal(ev.length, 1); assert.match(ev[0].texto, /Llegó C1 al CEDIS/);
+});
