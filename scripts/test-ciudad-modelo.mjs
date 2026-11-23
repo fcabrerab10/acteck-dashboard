@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta } from '../src/modules/ciudad/modelo.js';
+import { comoLista, diasCedis, diasTexto, tonoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1782,4 +1782,17 @@ test('resumenTorre(): estatus, cierre, confirmado y piezas raros (4.7.82)', () =
     { estatus: 'cerrada', cerrado_at: '2026-11-01', forecast_propuesta_lineas: [{ confirmado: 1 }] }, 'x', [{ estatus: 'activa' }],
   ], [{ fecha_arribo: '2026-11-24', piezas_a_reservar: -5 }, { fecha_arribo: '2026-11-25', piezas_a_reservar: '3' }, '2026-11-24', [{ fecha_arribo: '2026-11-24' }]], hoyIso);
   assert.deepEqual(r, { abiertas: 1, lineas: 4, confirmadas: 2, compradas: 1, arribos7: 2, piezas7: 3, atrasados: 0 }, '« Borrador » fuera; cierre en blanco = abierta; «false» no confirma; -5 no resta');
+});
+
+test('diasCedis() / diasTexto(): CEDIS sin medida de días como Inventario (4.7.83)', () => {
+  assert.equal(diasCedis(null), null); assert.equal(diasCedis(' '), null); assert.equal(diasCedis('abc'), null); assert.equal(diasCedis({}), null); assert.equal(diasCedis(-3), null); assert.equal(diasCedis(Infinity), null);
+  assert.equal(diasCedis(95.6), 96); assert.equal(diasCedis('1,200'), 1200); assert.equal(diasCedis(0), 0); assert.equal(diasCedis(-0.2), null);
+  assert.equal(diasTexto(null), 'sin medida de días'); assert.equal(diasTexto(1), '1 día'); assert.equal(diasTexto('1,200.4'), '1,200 días');
+  assert.equal(tonoDias(null), null); assert.equal(tonoDias(130), 'rojo'); assert.equal(tonoDias(100), 'ambar'); assert.equal(tonoDias(40), 'verde');
+  const m = construirModelo({ inventario: [{ inv_actual: 1000, inv_actual_piezas: 10, dias_inv: null, skus_con_stock: 2 }] });
+  assert.equal(m.cedis.dias, null, 'dias_inv null ya no es 0');
+  const t = tarjetaDe({ tipo: 'cedis' }, m); assert.deepEqual(t.numeros[1], ['Días de inventario', 'sin medida']); assert.equal(t.estado, null, 'sin medida no sale en verde');
+  const c = cadenaSuministro(m).tramos.find((x) => x.clave === 'cedis'); assert.match(c.volumen, /sin medida de días$/); assert.equal(c.estado, 'gris'); assert.equal(c.motivo, null);
+  const m2 = construirModelo({ inventario: [{ inv_actual: 1000, dias_inv: '130' }] });
+  assert.equal(m2.cedis.dias, 130); assert.equal(tarjetaDe({ tipo: 'cedis' }, m2).estado, 'rojo');
 });

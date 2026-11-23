@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, pesosCorto, porcentaje, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, nombreTienda, numero, unirTexto, piezasTexto, pendientesTexto } from '../modelo.js';
+import { COLOR_CUENTA, pesosCorto, porcentaje, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, nombreTienda, numero, unirTexto, piezasTexto, pendientesTexto, diasTexto } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -251,7 +251,7 @@ export function cedis(ctx) {
   for (let i = 0; i < modelo.cedis.racks; i++) { const col = i % 2 ? 0xC58A3A : 0xD49A4A; for (let k = 0; k < 1 + (i % 3); k++) { const c = box(1.3, 1, 1.3, col); c.position.set(-9 + (i % 5) * 2.2, .75 + k * 1.05, 6.5 + Math.floor(i / 5) * 2); g.add(c); instanciar(ctx, c); } } // racks, claraboyas y portones: InstancedMesh con el tag del CEDIS (3.90.20)
   modelo.puerto.tarimas.slice(0, 6).forEach((tp, i) => { const c = box(1.3, 1, 1.3, 0xA86A2E); c.position.set(6 + (i % 3) * 2, .75, 6 + Math.floor(i / 3) * 2); c.userData.detalle = 'fino'; g.add(c); instanciar(ctx, c, { tipo: 'barco', id: tp.id, titulo: `Contenedor ${tp.id ?? ''}`.trim(), sub: `descargando · ${piezasTexto(tp.piezas)}`, pagina: 'inventarioGlobal' }); }); // tarimas: capa fina (3.90.7); cada una tocable con la tarjeta del contenedor (3.90.36)
   for (const [x, z] of [[-10.5, -6.5], [10.5, -6.5]]) arbol(ctx, g, x, z, 1.2);
-  add(g, { tipo: 'cedis', titulo: 'CEDIS', sub: `${pesosCorto(modelo.cedis.valor)} · ${plural(modelo.cedis.dias, 'día')} · ${plural(modelo.puerto.tarimas.length, 'contenedor', 'contenedores')} descargando`, pagina: 'inventarioGlobal' });
+  add(g, { tipo: 'cedis', titulo: 'CEDIS', sub: `${pesosCorto(modelo.cedis.valor)} · ${diasTexto(modelo.cedis.dias)} · ${plural(modelo.puerto.tarimas.length, 'contenedor', 'contenedores')} descargando`, pagina: 'inventarioGlobal' });
   try { interiorCedis(ctx, g, casco, cedisPos); } catch (e) { console.warn('[ciudad] interior CEDIS', e); } // capa nueva: si falla, el CEDIS sigue cerrado
   // montacargas
   const mc = new THREE.Group(); const cuerpo = box(1.6, 1, 1.1, ACC.naranja); mc.add(cuerpo); const mastil = box(.2, 2.2, .2, 0x444444); mastil.position.set(.9, 1.1, 0); mc.add(mastil); const carga = box(1, .8, 1, 0xC58A3A); carga.position.set(1.4, .6, 0); mc.add(carga);

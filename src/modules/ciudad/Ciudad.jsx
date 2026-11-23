@@ -12,7 +12,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { useCiudadData, useTopSkusTienda } from './datos';
 import Carga from './Carga';
 import { crearAmbiente } from './sonido';
-import { COLOR_CUENTA, nombreTienda, leyendaCuentas, piezasTexto, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto, temperaturaTexto } from './modelo';
+import { COLOR_CUENTA, nombreTienda, diasTexto, leyendaCuentas, piezasTexto, plural, nombreCiudad, hexCss, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, pesosCorto, numero, recursosBarra, misionesDelDia, CAPA_TONOS, bitacoraEventos, cadenaSuministro, construirModelo, datosEnFecha, momentosTiempo, eventosCalendario, RECORRIDO, RECORRIDO_CLAVE, recorridoVisto, llegaBarco, dsoTexto, temperaturaTexto } from './modelo';
 import { useInicioData } from '../general/inicio/useInicioData';
 import { calcular } from '../general/inicio/calc';
 
@@ -259,7 +259,7 @@ export default function Ciudad({ onNavegar }) {
         </svg>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', pointerEvents: 'auto' }}>
-        {[['Tiendas', `${miles(k.tiendasVendieron)} de ${miles(k.tiendas)} vendieron`], ['Ciudades', miles(k.ciudades)], ['Contenedores', `${miles(k.barcos)} navegando`], ['Camiones', `${miles(k.camiones)} en ruta`], ['Clientes finales', `${miles(k.clientesFinales)} · 2 meses`], ['CEDIS', `${pesosCorto(modelo.cedis.valor)} · ${plural(modelo.cedis.dias, 'día')}`], ['Oficina', `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')}`]].map(([l, v]) => (
+        {[['Tiendas', `${miles(k.tiendasVendieron)} de ${miles(k.tiendas)} vendieron`], ['Ciudades', miles(k.ciudades)], ['Contenedores', `${miles(k.barcos)} navegando`], ['Camiones', `${miles(k.camiones)} en ruta`], ['Clientes finales', `${miles(k.clientesFinales)} · 2 meses`], ['CEDIS', `${pesosCorto(modelo.cedis.valor)} · ${diasTexto(modelo.cedis.dias)}`], ['Oficina', `${plural(modelo.oficina.personas.length + modelo.oficina.genericos, 'persona')} · ${plural(modelo.oficina.reuniones, 'reunión', 'reuniones')}`]].map(([l, v]) => (
           <div key={l} style={{ ...card, padding: '8px 12px', minWidth: 110 }}><div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>{l}</div><div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</div></div>
         ))}
       </div>

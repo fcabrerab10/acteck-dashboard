@@ -385,7 +385,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const barcos = comoLista(m.puerto?.barcos).filter(Boolean);
   const mar = barcos.filter((b) => !(eta(b) != null && eta(b) <= 0)), enPuerto = barcos.filter((b) => eta(b) != null && eta(b) <= 0);
   const tarde = enPuerto.filter((b) => eta(b) < -3).length;
-  const c = m.cedis || {}, d = n(c.dias);
+  const c = m.cedis || {}, d = diasCedis(c.dias);
   const cam = comoLista(m.camiones).filter(Boolean);
   const lentos = cam.filter((x) => x.envio && hoyIso && x.fecha && dias(x.fecha, hoyIso) > 5).length;
   const distritos = comoLista(m.distritos).filter(Boolean);
@@ -395,7 +395,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const tramos = [
     { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length.toLocaleString('es-MX')} con ETA vencida · ${plural(comoLista(m.puerto?.tarimas).filter(Boolean).length, 'recién llegado')}`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
-    { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${plural(d, 'día')}`, estado: d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde', motivo: d > 90 ? `${plural(d, 'día')} de inventario` : null },
+    { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${diasTexto(d)}`, estado: tonoDias(d) || 'gris', motivo: d != null && d > 90 ? `${plural(d, 'día')} de inventario` : null },
     { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length.toLocaleString('es-MX')} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
     { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
     { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${plural(cf.n, 'cliente')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
@@ -816,6 +816,11 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 const leeNum = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : null; };
 const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n) > 0 ? plural(n, 'PO') : null; };
 // 4.7.58: cobertura -0.4 ya no dice «-0 d» (redondea a «0 d») y una negativa (inventario negativo) no da días: sin texto.
+// 4.7.83: días de inventario del CEDIS como «Inventario» del dashboard (`dias_inv` null = sin medida: «sin medida de días»).
+// Antes `N(null)` daba 0 y el CEDIS decía «0 días» en verde en el globo, la tarjeta, el panel y la cadena. Ilegible o negativo → null.
+export function diasCedis(v) { const k = leeNum(v); return k == null || k < 0 ? null : Math.round(k) + 0; }
+export function diasTexto(v) { const d = diasCedis(v); return d == null ? 'sin medida de días' : plural(d, 'día'); }
+export function tonoDias(v) { const d = diasCedis(v); return d == null ? null : d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde'; }
 const diasCobertura = (c) => { const k = leeNum(c); return k == null || Math.round(k) < 0 ? null : `${(Math.round(k) + 0).toLocaleString('es-MX')} d`; };
 export function recursosBarra(r) {
   if (!r) return [];
@@ -932,9 +937,9 @@ export function tarjetaDe(tag, modelo) {
     t.numeros = ag.length ? ag.slice(0, 5).map((r) => [`${r.hora}${r.estado === 'en curso' ? ' · ahora' : r.estado === 'hecha' ? ' · ✓' : ''}`, r.titulo]) : [['Reuniones hoy', 'ninguna']];
     t.estado = ag.some((r) => r.estado === 'en curso') ? 'ambar' : 'verde';
   } else if ((tag.tipo === 'cedis' || tag.tipo === 'montacargas') && m.cedis) {
-    const c = m.cedis, d = numero(c.dias);
-    t.numeros = [['Inventario', pesos(c.valor)], ['Días de inventario', num(Math.round(d))], ['Piezas', num(c.piezas)], ['SKUs con stock', num(c.skus)]];
-    t.estado = d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde';
+    const c = m.cedis, d = diasCedis(c.dias);
+    t.numeros = [['Inventario', pesos(c.valor)], ['Días de inventario', d == null ? 'sin medida' : num(d)], ['Piezas', num(c.piezas)], ['SKUs con stock', num(c.skus)]];
+    t.estado = tonoDias(d);
   } else if (tag.tipo === 'rack') {
     const r = sn(m.cedis?.racksMarca).find((x) => x.marca === tag.marca);
     if (r) {
@@ -1282,7 +1287,7 @@ export function construirModelo(d, hoy = new Date()) {
   // ── CEDIS ──
   const inv = (d.inventario || [])[0] || {};
   const hoyLocal = `${anio}-${String(mes).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`; // salidas de HOY en Guadalajara (hoyIso es UTC: de noche ya es mañana)
-  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: N(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null, racksMarca: racksPorMarca(d.inventarioSku, d.marcasSku, 8, d.demandaSku ? demanda3Meses(d.demandaSku, hoy) : null), salidasHoy: comoLista(d.facturas).filter((f) => fechaIso(f?.fecha) === hoyLocal).length }; // (4.7.20) fecha con espacios o Date cuenta
+  const cedis = { valor: N(inv.inv_actual), piezas: N(inv.inv_actual_piezas), dias: diasCedis(inv.dias_inv), skus: N(inv.skus_con_stock), racks: Math.max(3, Math.min(10, Math.round(N(inv.dias_inv) / 18))), actualizado: inv.actualizado || null, racksMarca: racksPorMarca(d.inventarioSku, d.marcasSku, 8, d.demandaSku ? demanda3Meses(d.demandaSku, hoy) : null), salidasHoy: comoLista(d.facturas).filter((f) => fechaIso(f?.fecha) === hoyLocal).length }; // (4.7.20) fecha con espacios o Date cuenta
 
   // ── Puerto: contenedores en camino o llegando ──
   const barcos = []; const tarimas = [];

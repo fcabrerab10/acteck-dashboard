@@ -305,6 +305,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.80) `bitacoraEventos()` y `ponerPosEnPuerto()` aceptan camiones, barcos, tarimas, pagos y agenda que no son lista (antes un objeto o número lanzaba error y tumbaba la bitácora / las POs del puerto; un texto se partía en letras); encontrado con un barrido de datos basura sobre todo `modelo.js`.
   - [x] (4.7.81) Banco cuadra con la cartera de Inicio: `resumenBanco()` da saldo total, % vencido y DSO ponderado por saldo (sólo cuentas con saldo > 0 y DSO, como `dsoPonderado(…, { soloConSaldo: true })`); la tarjeta dice «Cartera vencida $500 · 10 % del saldo» y «Cuentas con vencido 2 · DSO 53 días». `carteraPorCuenta()` deja el DSO vacío/ilegible en null (antes 0 y bajaba el promedio).
   - [x] (4.7.82) `resumenTorre()`: estatus « Borrador » (espacios/mayúsculas) sigue fuera, un `cerrado_at` en blanco ya no cierra la propuesta, `confirmado: 'false'`/`0` ya no cuenta como confirmada, un `comprado_at` en blanco no cuenta como comprada, piezas negativas no restan y renglones que no son objeto se saltan.
+  - [x] (4.7.83) CEDIS sin medida de días como Inventario: `diasCedis()` / `diasTexto()` / `tonoDias()` puras y probadas; `dias_inv` null (sin costo de venta de 3 meses) ya no es «0 días» en verde: globo, tarjeta («sin medida», sin color), panel y cadena («sin medida de días», gris). Harness sin errores.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -320,6 +321,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 04:58 · v4.7.83 · CEDIS con `dias_inv` null dice «sin medida de días» (antes «0 días» en verde) en globo, tarjeta, panel y cadena; +1 prueba.
 - 2026-11-23 03:36 · v4.7.79 · `listasDatos()`: si una lista de datos llega como objeto/texto/número se toma vacía (antes `construirModelo()` lanzaba error y tumbaba la Ciudad).
 - 2026-11-23 03:15 · v4.7.78 · `hexCss()` con decimal → gris (antes color redondeado).
 
