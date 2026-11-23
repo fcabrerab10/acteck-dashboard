@@ -293,6 +293,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.69) `cuotaRitmo()` empata la cuenta aunque traiga espacios o venga como número (« ct », 10 = «10») sin contar doble si llega en dos formas; `celebraciones()` acepta distritos/tiendas que no son lista (antes lanzaba error).
   - [x] (4.7.70) `cintasCadena()` (cintas mar → puerto → CEDIS → ciudades) acepta barcos, tarimas, camiones, distritos y tiendas que no son lista (antes lanzaba error) y empata la ciudad del camión con `norm()` (« monterrey » = «MONTERREY», antes no engrosaba la cinta); camión o distrito sin ciudad no hace cinta («cedis → undefined»).
   - [x] (4.7.71) `pensamientos()` y `misionesDelDia()` aceptan cartera, distritos, tiendas y agenda que no son lista (antes lanzaban error); la cartera vencida empata la cuenta con espacios (« pcel » = «pcel») y la cuota/venta en texto («1,000», «$900») ya cuenta para «Voy arriba de mi cuota».
+  - [x] (4.7.72) `numero()` lee «12%» / « 45 % » (antes 0; igual que `porcentaje()`) y `porcentaje()` con lista u objeto da «—» (antes `[]` salía «0 %»).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -512,3 +513,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-22 05:16 · v4.7.56 · Pulido: `plural()` / `piezasTexto()` sin «-0» y `listaCorta()` con n = 0 sin espacio al inicio.
 - 2026-11-22 15:37 · v4.7.61 · Bitácora sin eventos perdidos por folio/id vacío ni «Contenedor null».
 - 2026-11-23 00:16 · v4.7.69 · Cuota por ciudad/tienda empata cuentas con espacios o numéricas; celebraciones sin error con listas raras.
+- 2026-11-23 01:18 · v4.7.72 · Pulido: `numero()` lee «12%» y `porcentaje()` con lista/objeto da «—».

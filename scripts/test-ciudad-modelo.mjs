@@ -1636,6 +1636,8 @@ test('4.7.61 · bitácora: renglones sin folio/id no se pierden ni dicen «null�
 
 test('4.7.62: porcentaje() con opciones null y plural() sin palabra', () => {
   assert.equal(porcentaje(45, null), '45 %'); assert.equal(porcentaje(45, 'x'), '45 %'); assert.equal(porcentaje(45, { signo: true }), '+45 %'); assert.equal(porcentaje(null, null), '—');
+  assert.equal(porcentaje([]), '—'); assert.equal(porcentaje({}), '—'); assert.equal(porcentaje([5]), '—'); assert.equal(porcentaje('12%'), '12 %'); // 4.7.72
+  assert.equal(numero('12%'), 12); assert.equal(numero(' 45 % '), 45); assert.equal(numero('$1,234.50'), 1234.5); assert.equal(numero('abc%'), 0); // 4.7.72
   assert.equal(plural(3), '3'); assert.equal(plural(1, null), '1'); assert.equal(plural(2, ''), '2'); assert.equal(plural('1,200', 5), '1,200');
   assert.equal(plural(2, 'día', null), '2 días'); assert.equal(plural(1, 'día', null), '1 día'); assert.equal(plural(2, 'mes', 'meses'), '2 meses'); assert.equal(plural(1, 'mes', 'meses'), '1 mes');
 });

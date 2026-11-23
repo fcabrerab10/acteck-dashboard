@@ -9,7 +9,8 @@
 
 // 4.7.15: `numero()` lee montos y conteos en texto con «$», comas o espacios («$5,000», « 1,200 ») como número (antes 0:
 // cartera, inventario, piezas y ventas de esas filas no sumaban); vacío, booleano, objeto, NaN o Infinity → 0.
-export const numero = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };
+// 4.7.72: también «12%» / « 45 % » (como `porcentaje()`; antes 0).
+export const numero = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,%]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };
 const N = numero;
 // (4.3.19) Lo que no es lista (null, texto, número, objeto) → []: una consulta que regresa algo raro no tumba la capa.
 export const comoLista = (x) => (Array.isArray(x) ? x : []);
@@ -737,7 +738,8 @@ export function vaA(parada) {
 export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto → sin signo (antes lanzaba error)
   const signo = !!(op && typeof op === 'object' && op.signo);
   // 4.7.55: texto con comas, espacios o «%» («1,250», « 45 %») se lee (antes «—»).
-  if (v == null || v === '' || typeof v === 'boolean') return '—';
+  // 4.7.72: sólo número o texto; una lista u objeto → «—» (antes `[]` salía «0 %»).
+  if (v == null || v === '' || (typeof v !== 'number' && typeof v !== 'string')) return '—';
   const k = Math.round(Number(typeof v === 'string' ? (v.trim() ? v.replace(/[\s,%]/g, '') : NaN) : v)); if (!Number.isFinite(k)) return '—';
   const z = k === 0 ? 0 : k; return `${signo && z > 0 ? '+' : ''}${z.toLocaleString('es-MX')} %`;
 }
