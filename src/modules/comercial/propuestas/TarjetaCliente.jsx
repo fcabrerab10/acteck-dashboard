@@ -44,12 +44,12 @@ export default function TarjetaCliente({ c, kpi, propuestas, ocupado, onNueva, o
           {ult ? <>Última: <Pill tone={est.tone} size="xs">{est.label}</Pill> {ult.nombre || 'Sin nombre'} · {ult.resumen?.skus || 0} SKUs · {relativo(ult.updatedAt || ult.tstamp)}</> : 'Sin propuestas previas'}
         </div>
       </div>
-      <div style={{ padding: '10px 16px 12px', borderTop: `1px solid ${theme.border}`, display: 'flex', gap: 6 }}>
-        <Boton primario size="md" disabled={ocupado} style={{ flex: 1, justifyContent: 'center' }} onClick={stop(() => onNueva(c.key))}>Nueva propuesta <ArrowRight size={13} /></Boton>
+      <div style={{ padding: '10px 16px 12px', borderTop: `1px solid ${theme.border}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Boton primario size="md" disabled={ocupado} style={{ flex: '1 1 150px', justifyContent: 'center' }} onClick={stop(() => onNueva(c.key))}>Nueva propuesta <ArrowRight size={13} /></Boton>
         {borrador && (
           <Boton size="md" icon={Pencil} disabled={ocupado} title={`Retomar el borrador "${borrador.nombre || 'Sin nombre'}" (${relativo(borrador.updatedAt || borrador.tstamp)})`} onClick={stop(() => onContinuar(borrador))}
-            style={{ maxWidth: '50%' }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Continuar{borrador.nombre ? ` · ${borrador.nombre}` : ''}</span>
+            style={{ flex: '1 1 110px', minWidth: 0, maxWidth: '100%' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>Continuar{borrador.nombre ? ` · ${borrador.nombre}` : ''}</span>
           </Boton>
         )}
       </div>
