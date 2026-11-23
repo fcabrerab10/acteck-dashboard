@@ -1004,7 +1004,8 @@ export function vistaMapa(op) { // op null/no objeto → omisión (antes la dese
 /** Color de cada cuenta (toldo y letrero de sus tiendas, sus vendedores, la leyenda). */
 export const COLOR_CUENTA = { ct: 0x0A84FF, cva: 0xFF9F0A, dicotech: 0x30D158, digitalife: 0xBF5AF2, pcel: 0xFF453A, ingram: 0x5AC8FA, pch: 0xFFD60A, loma: 0x64D2FF, guc: 0xFF6482, kabik: 0xA2845E, dcmayorista: 0x7D8BFF, exel: 0x30B0C7, techsmart: 0xAC8E68, arroba: 0xD4A5FF, ingram_retail: 0x5AC8FA, directo: 0x8E8E93 };
 // Color inválido (undefined, texto, negativo, > 0xFFFFFF) → gris de omisión; antes salía «#000NaN» (CSS inválido).
-export const hexCss = (n) => { const v = typeof n === 'number' || (typeof n === 'string' && n.trim() !== '') ? Math.round(Number(n)) : NaN; return `#${(Number.isFinite(v) && v >= 0 && v <= 0xFFFFFF ? v : 0x8E8E93).toString(16).padStart(6, '0')}`; };
+// Sólo enteros 0..0xFFFFFF: un decimal (255.7, -0.4) es dato roto y va gris, no un color redondeado.
+export const hexCss = (n) => { const v = typeof n === 'number' || (typeof n === 'string' && n.trim() !== '') ? Number(n) : NaN; return `#${(Number.isInteger(v) && v >= 0 && v <= 0xFFFFFF ? v : 0x8E8E93).toString(16).padStart(6, '0')}`; };
 
 /** Sede de cada cuenta de sell out (de dónde es el cliente). Las que reportan estado en el sell out lo usan primero. */
 export const SEDE_POR_CUENTA = {

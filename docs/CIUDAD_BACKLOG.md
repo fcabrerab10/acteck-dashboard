@@ -300,6 +300,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.76) `juntarCapas()` / `capaVisible()` sólo aceptan nombres de capa en texto y sin espacios: un objeto ya no da la capa «[object Object]» y ' mapa ' empata con 'mapa' (antes se repetía y el objeto de la capa mapa se veía de cerca).
 
   - [x] (4.7.77) `llegaBarco()`, `enMinutos()` y `haceDias()` sólo leen número o texto: una ETA/minutos/antigüedad que llega como lista u objeto ya no sale «llega hoy» / «empieza ya» / «hoy» (`[]` valía 0) y `haceDias(' ')` en blanco ya no dice «hoy».
+  - [x] (4.7.78) `hexCss()` sólo acepta enteros 0..0xFFFFFF: un color decimal (255.7, -0.4) ya no se redondea a otro color (#000100 / negro), sale gris como dato roto.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -314,6 +315,8 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+
+- 2026-11-23 03:15 · v4.7.78 · `hexCss()` con decimal → gris (antes color redondeado).
 
 - 2026-11-23 02:36 · v4.7.76 · `juntarCapas()` / `capaVisible()` sin «[object Object]» y con capas sin espacios; +1 prueba.
 

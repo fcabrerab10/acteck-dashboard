@@ -1109,6 +1109,8 @@ test('posDe y hexCss aguantan entradas inválidas (4.3.21)', () => {
   assert.equal(hexCss(0xFF3B30), '#ff3b30'); assert.equal(hexCss(0), '#000000'); assert.equal(hexCss('255'), '#0000ff');
   for (const n of [undefined, null, 'x', '', NaN, -1, 0x1000000, Infinity, {}]) assert.equal(hexCss(n), '#8e8e93', `hexCss(${String(n)}) gris`);
   assert.equal(hexCss(CAPA_TONOS.noExiste), '#8e8e93', 'tono desconocido de la cadena');
+  for (const n of [-0.4, 255.7, ' 12.5 ', 0.5]) assert.equal(hexCss(n), '#8e8e93', `hexCss(${n}) decimal gris (4.7.78)`);
+  assert.equal(hexCss(' 255 '), '#0000ff'); assert.equal(hexCss(-0), '#000000');
 });
 
 test('datosEnFecha y camionesTemporada aguantan listas que no son lista (4.3.22)', () => {
