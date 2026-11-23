@@ -1701,3 +1701,15 @@ test('cintasCadena() aguanta listas que no son lista y empata la ciudad del cami
   c = cintasCadena({ ...base, distritos: [...base.distritos, { ciudad: '', tiendas: [{ vendio: true }] }, { tiendas: [{ vendio: true }] }] });
   assert.ok(c.every((x) => x.a), 'sin cinta hacia una ciudad vacía');
 });
+
+test('4.7.71 pensamientos y misiones con listas raras', () => {
+  for (const x of ['texto', 5, { a: 1 }, null]) {
+    assert.deepEqual(pensamientos({ distritos: x, kpis: { cartera: x } }), []);
+    assert.deepEqual(pensamientos({ distritos: [{ ciudad: 'LEON', tiendas: x }] }), []);
+    assert.ok(Array.isArray(misionesDelDia({ oficina: { agenda: x } })));
+  }
+  const p = pensamientos({ hoyIso: '2026-10-15', kpis: { cartera: [{ cuenta: ' pcel ', vencido: '$5,000' }] }, distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'pcel', sucursal: 'Centro', importe: 10, previo: 10 }] }] });
+  assert.equal(p[0]?.texto, 'Tengo pagos vencidos', 'cuenta con espacios empata la cartera vencida');
+  const q = pensamientos({ hoyIso: '2026-10-15', cuotas: new Map([['ct', { cuota: '1,000', venta: '$900' }]]), distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'ct', importe: 10, previo: 10 }] }] });
+  assert.equal(q[0]?.texto, 'Voy arriba de mi cuota', 'cuota y venta en texto cuentan');
+});

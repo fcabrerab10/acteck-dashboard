@@ -292,6 +292,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.68) Cadena de suministro: `cadenaSuministro()` acepta barcos, camiones, distritos y tiendas que no son lista (antes lanzaba error), lee la ETA en días en texto (« -5 » cuenta como atrasado) y una ETA vacía o ilegible deja el barco en el mar (antes «» valía 0 y salía en puerto); el tramo de clientes finales dice «120 clientes · $2.5 M» (antes «120 · $2.5 M»).
   - [x] (4.7.69) `cuotaRitmo()` empata la cuenta aunque traiga espacios o venga como número (« ct », 10 = «10») sin contar doble si llega en dos formas; `celebraciones()` acepta distritos/tiendas que no son lista (antes lanzaba error).
   - [x] (4.7.70) `cintasCadena()` (cintas mar → puerto → CEDIS → ciudades) acepta barcos, tarimas, camiones, distritos y tiendas que no son lista (antes lanzaba error) y empata la ciudad del camión con `norm()` (« monterrey » = «MONTERREY», antes no engrosaba la cinta); camión o distrito sin ciudad no hace cinta («cedis → undefined»).
+  - [x] (4.7.71) `pensamientos()` y `misionesDelDia()` aceptan cartera, distritos, tiendas y agenda que no son lista (antes lanzaban error); la cartera vencida empata la cuenta con espacios (« pcel » = «pcel») y la cuota/venta en texto («1,000», «$900») ya cuenta para «Voy arriba de mi cuota».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -307,6 +308,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 00:56 · v4.7.71 · `pensamientos()` / `misionesDelDia()` sin errores con listas raras; cartera vencida con cuenta con espacios y cuota en texto; +1 prueba.
 - 2026-11-23 00:37 · v4.7.70 · cintasCadena() sin errores con listas raras y ciudad del camión normalizada.
 
 - 2026-11-22 23:56 · v4.7.68 · `cadenaSuministro()`: listas que no son lista sin error, ETA en texto/vacía bien leída y «N clientes» en el tramo de clientes finales; +1 prueba.

@@ -310,7 +310,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
   const out = [];
   for (const b of burbujasAtencion(m, hoy)) if (b.lugar !== 'oficina') out.push({ id: `alerta-${b.lugar}`, icono: b.icono, nivel: b.nivel, texto: b.texto, ir: b.tag, tarjeta: b.tag, orden: 0 });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
-  for (const r of m.oficina?.agenda || []) {
+  for (const r of comoLista(m.oficina?.agenda)) { // 4.7.71: agenda que no es lista ya no lanza error
     if (!r) continue; const ini = Number.isFinite(r.ini) ? r.ini : null; const hecha = r.estado === 'hecha', falta = ini == null ? NaN : ini - ahora;
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
       texto: `${unirTexto(r.hora, unirTexto(r.titulo) || 'Reunión') /* 4.7.36: título vacío/null ya no dice «null» */}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
@@ -426,22 +426,23 @@ export function pensamientos(m, max = 5) {
   max = cuantos(max, 5);
   if (!m) return [];
   // 4.3.3: salta cartera/distritos/tiendas nulos y un hoyIso inválido usa hoy (antes lanzaba error o ritmo NaN).
-  const venc = new Set((m.kpis?.cartera || []).filter((c) => numero(c?.vencido) > 0).map((c) => c.cuenta));
+  // 4.7.71: cartera/distritos/tiendas que no son lista ya no lanzan error; la cuenta vencida empata con espacios (« pcel » = «pcel»)
+  const venc = new Set(comoLista(m.kpis?.cartera).filter((c) => numero(c?.vencido) > 0).map((c) => unirTexto(c.cuenta)).filter(Boolean));
   const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = fechaHoy(m.hoyIso);
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   const out = [];
-  for (const d of m.distritos || []) {
+  for (const d of comoLista(m.distritos)) {
     if (!d) continue; let mejor = null;
-    for (const t of d.tiendas || []) {
+    for (const t of comoLista(d.tiendas)) {
       if (!t || t.reparto) continue; // «Clientes en …» (3.90.56) no es una tienda que piense
-      const act = numero(t.importe), prev = numero(t.previo), cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cu = q.get(t.cuenta);
+      const act = numero(t.importe), prev = numero(t.previo), cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cta = unirTexto(t.cuenta), cu = q.get(t.cuenta) ?? q.get(cta);
       const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: nombreTienda(t) };
       let p = null;
-      if (venc.has(t.cuenta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
+      if (cta && venc.has(cta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
       else if (prev > 0 && act <= 0) p = { tono: 'rojo', peso: 1, texto: 'Este mes no he vendido nada' };
       else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Vendo ${porcentaje(-cambio)} menos que el mes pasado` };
       else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${porcentaje(cambio)} arriba del mes pasado!` };
-      else if (cu?.cuota > 0 && cu.venta / cu.cuota >= ritmo) p = { tono: 'verde', peso: 4, texto: 'Voy arriba de mi cuota' };
+      else if (numero(cu?.cuota) > 0 && numero(cu.venta) / numero(cu.cuota) >= ritmo) p = { tono: 'verde', peso: 4, texto: 'Voy arriba de mi cuota' };
       if (p && (!mejor || p.peso < mejor.peso)) mejor = { ...quien, ...p };
     }
     if (mejor) out.push(mejor);
