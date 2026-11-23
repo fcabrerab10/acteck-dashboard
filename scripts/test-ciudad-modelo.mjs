@@ -1146,6 +1146,15 @@ test('Pulido: cuota en texto y cuenta con espacios en la capa de cuota', () => {
   const q = cuotasPorCuenta([{ cliente_erp: 10, cuenta_sellout: ' a ', cuota_venta: 100 }, { cliente_erp: 11, cuenta_sellout: 'a', cuota_venta: 50 }, { cliente_erp: 12, cuenta_sellout: '  ', cuota_venta: 9 }], [{ cliente: 10, fact_neta: 30 }, { cliente: 12, fact_neta: 5 }]);
   assert.deepEqual([...q.keys()], ['a'], 'cuenta con espacios = la misma; vacía no cuenta'); assert.deepEqual(q.get('a'), { venta: 30, cuota: 150 });
 });
+test('Pulido: cuota por cuenta como Análisis (4.7.85)', () => {
+  // cliente 11 con cuota 0 (o negativa): su venta ya no infla el % de la cuenta; renglón sin cliente ERP no suma cuota
+  const q = cuotasPorCuenta([{ cliente_erp: 10, cuenta_sellout: 'a', cuota_venta: 100 }, { cliente_erp: 11, cuenta_sellout: 'a', cuota_venta: 0 }, { cliente_erp: 12, cuenta_sellout: 'a', cuota_venta: -5 }, { cliente_erp: null, cuenta_sellout: 'a', cuota_venta: 70 }, { cliente_erp: 20, cuenta_sellout: 'b', cuota_venta: 0 }],
+    [{ cliente: 10, fact_neta: 50 }, { cliente: 11, fact_neta: 900 }, { cliente: 12, fact_neta: 40 }, { cliente: 20, fact_neta: 10 }]);
+  assert.deepEqual(q.get('a'), { venta: 50, cuota: 100 }); assert.deepEqual(q.get('b'), { venta: 0, cuota: 0 });
+  assert.equal(cuotaRitmo({ hoyIso: '2026-11-15', cuotas: q }, ['a', 'b']).pct, 50); assert.equal(cuotaRitmo({ cuotas: q }, ['b']), null);
+  // el mismo cliente en dos renglones: la cuota se suma antes de decidir (-10 + 30 = 20 > 0 → su venta cuenta)
+  assert.deepEqual(cuotasPorCuenta([{ cliente_erp: 1, cuenta_sellout: 'a', cuota_venta: -10 }, { cliente_erp: ' 1 ', cuenta_sellout: 'a', cuota_venta: 30 }], [{ cliente: 1, fact_neta: 5 }]).get('a'), { venta: 5, cuota: 20 });
+});
 test('Pulido: torre de pronóstico con fechas de arribo sucias (4.3.27)', () => {
   const hoyIso = '2026-10-07';
   const r = resumenTorre([{ estatus: 'activa', forecast_propuesta_lineas: { confirmado: true } }, { estatus: 'activa', forecast_propuesta_lineas: 'x' }],

@@ -551,11 +551,18 @@ export function cuotaRitmo(m, cuentas = []) {
 // de `mv_analisis_cliente_mes` del mes (cliente = código ERP, fact_neta), las mismas de Análisis → Map(cuenta → { venta, cuota }).
 // La venta se suma sólo de los clientes ERP con cuota (su cuenta sale de la fila de cuota); el % se saca al agregar, nunca se suma.
 export function cuotasPorCuenta(cuotas = [], ventas = []) {
-  const cuentaDe = new Map(); const out = new Map();
+  // 4.7.85: como Análisis (`mapaCuotas` + `conCuota`): la cuota se junta por cliente ERP (renglón sin cliente no cuenta) y
+  // sólo los clientes con cuota > 0 suman su venta; antes la venta de un cliente con cuota 0 inflaba el % de su cuenta.
+  const porCliente = new Map(); const out = new Map();
   for (const r of comoLista(cuotas)) {
     const cu = String(r?.cuenta_sellout ?? '').trim(); if (!cu) continue; // 4.3.24: « ct » = «ct» (antes otra cuenta o sin color)
-    const k = String(r.cliente_erp ?? '').trim(); if (k) cuentaDe.set(k, cu);
-    const o = out.get(cu) || { venta: 0, cuota: 0 }; o.cuota += numero(r.cuota_venta); out.set(cu, o); // 4.7.16: «$1,000» ya suma
+    const k = String(r.cliente_erp ?? '').trim(); if (!k) continue;
+    const o = porCliente.get(k) || { cuenta: cu, cuota: 0 }; o.cuenta = cu; o.cuota += numero(r.cuota_venta); porCliente.set(k, o); // 4.7.16: «$1,000» ya suma
+  }
+  const cuentaDe = new Map();
+  for (const [k, { cuenta, cuota }] of porCliente) {
+    const o = out.get(cuenta) || { venta: 0, cuota: 0 }; out.set(cuenta, o);
+    if (cuota > 0) { o.cuota += cuota; cuentaDe.set(k, cuenta); }
   }
   for (const v of comoLista(ventas)) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += numero(v.fact_neta); }
   return out;
