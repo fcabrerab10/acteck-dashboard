@@ -721,6 +721,16 @@ export function unirTexto(...partes) {
   return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))
     .filter((x) => x && x !== 'null' && x !== 'undefined' && x !== 'NaN').join(' · ');
 }
+// Estatus del contenedor (4.7.84) con los mismos nombres cortos que el Plan de compras (`ESTATUS_CORTO` de
+// `comercial/forecast/sopCalculo.js`): «TRANSITO MARITIMO» → «En el mar», «PROXIMO A ZARPAR» → «Por zarpar»… Acepta
+// espacios, minúsculas y acentos («Tránsito marítimo»); uno desconocido sale en minúsculas como allá; vacío → ''.
+const ESTATUS_BARCO = { 'TRANSITO MARITIMO': 'en el mar', 'PROXIMO A ZARPAR': 'por zarpar', 'EN PRODUCCION': 'en producción', 'EN ESPERA DE CONSOLIDAR': 'por consolidar', 'EN RESGUARDO': 'en resguardo', 'PENDIENTE MODULAR': 'pendiente', 'EN PUERTO': 'en puerto' };
+export function estatusBarco(x) {
+  const s = unirTexto(x).replace(/\s+/g, ' '); if (!s) return '';
+  const clave = s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const t = ESTATUS_BARCO[clave] || s.toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 // Título del camión (4.7.37): «Factura F1 · promo» / «Envío · F1»; sin folio (null, vacío, «undefined») dice sólo
 // «Factura» / «Envío» en vez de «Factura null». El folio numérico cuenta.
 export function tituloCamion(c, promo) {
@@ -952,7 +962,9 @@ export function tarjetaDe(tag, modelo) {
     const b = [...sn(m.puerto.barcos), ...sn(m.puerto.tarimas)].find((x) => x.id === tag.id);
     if (b) {
       const fc = fechaCorta(b.arribo) || fechaCorta(b.eta) || 's/f'; // 4.3.30: sin «Invalid Date»
-      const cuando = b.llegaEnDias == null ? 'sin ETA' : `${fc} · ${llegaBarco(b.llegaEnDias).replace(/^llega /, '')}`; // 4.7.6: «mañana» (antes «en 1 d»)
+      const est = estatusBarco(b.estatus); // 4.7.84: estatus con los nombres del Plan de compras («Por zarpar», «En el mar»)
+      const cuando = b.llegaEnDias == null ? (est ? `sin ETA · ${est.toLowerCase()}` : 'sin ETA') : `${fc} · ${llegaBarco(b.llegaEnDias).replace(/^llega /, '')}`; // 4.7.6: «mañana» (antes «en 1 d»)
+      if (est && !t.sub.toLowerCase().includes(est.toLowerCase())) t.sub = unirTexto(t.sub, est);
       t.numeros = [['Proveedor', unirTexto(b.supplier) || '—' /* 4.7.42: « » ya no sale vacío */], [b.arribo ? 'Arribo CEDIS' : 'ETA puerto', cuando], ['Piezas', num(b.piezas)], ['POs', listaCorta(b.listaPos) || (b.pos ? num(b.pos) : '—')]];
       t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';
     }
@@ -1012,7 +1024,7 @@ export function tarjetaDe(tag, modelo) {
     if (v) { t.numeros = [['Ventas del mes', pesos(v.totalMes)], ['Ventas del año', pesos(v.total)], ['Clientes', num(v.clientes)], ['Ruta', sn(v.destinos).map((x) => unirTexto(x.cliente)).filter(Boolean).slice(0, 3).join(' → ') || '—']]; t.estado = numero(v.totalMes) > 0 ? 'verde' : 'ambar'; }
   } else if (tag.tipo === 'barco' && tag.barco) {
     const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', fechaCorta(b.eta) || '—'], ['Llega a CEDIS', fechaCorta(b.arribo) || '—']] /* 4.7.42: «23 nov» (antes «2026-11-23» crudo) */;
-    const est = unirTexto(b.estatus); if (est) t.numeros.push(['Estatus', est]); // 4.7.41: « » / «null» ya no salen
+    const est = estatusBarco(b.estatus); if (est) t.numeros.push(['Estatus', est]); // 4.7.41: « » / «null» ya no salen; 4.7.84: «En el mar» como el Plan de compras
     t.estado = b.llegaEnDias == null ? 'ambar' : 'verde';
   }
   t.numeros = t.numeros.slice(0, 4);

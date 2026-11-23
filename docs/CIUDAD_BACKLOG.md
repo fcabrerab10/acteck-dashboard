@@ -306,6 +306,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.81) Banco cuadra con la cartera de Inicio: `resumenBanco()` da saldo total, % vencido y DSO ponderado por saldo (sólo cuentas con saldo > 0 y DSO, como `dsoPonderado(…, { soloConSaldo: true })`); la tarjeta dice «Cartera vencida $500 · 10 % del saldo» y «Cuentas con vencido 2 · DSO 53 días». `carteraPorCuenta()` deja el DSO vacío/ilegible en null (antes 0 y bajaba el promedio).
   - [x] (4.7.82) `resumenTorre()`: estatus « Borrador » (espacios/mayúsculas) sigue fuera, un `cerrado_at` en blanco ya no cierra la propuesta, `confirmado: 'false'`/`0` ya no cuenta como confirmada, un `comprado_at` en blanco no cuenta como comprada, piezas negativas no restan y renglones que no son objeto se saltan.
   - [x] (4.7.83) CEDIS sin medida de días como Inventario: `diasCedis()` / `diasTexto()` / `tonoDias()` puras y probadas; `dias_inv` null (sin costo de venta de 3 meses) ya no es «0 días» en verde: globo, tarjeta («sin medida», sin color), panel y cadena («sin medida de días», gris). Harness sin errores.
+  - [x] (4.7.84) `estatusBarco()` pura y probada: la tarjeta del contenedor dice el estatus con los nombres cortos del Plan de compras (`ESTATUS_CORTO`: «TRANSITO MARITIMO» → «En el mar», «PROXIMO A ZARPAR» → «Por zarpar»; acepta acentos, espacios y minúsculas). Antes la tarjeta del puerto no lo mostraba y la de respaldo salía en mayúsculas crudas; sin ETA dice «sin ETA · por zarpar».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -321,6 +322,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 05:17 · v4.7.84 · Tarjeta del contenedor con estatus «En el mar» / «Por zarpar» como el Plan de compras (`estatusBarco()`; antes no salía o salía crudo); +1 prueba. El pendiente de Etapa 8 (más usuarios) sigue esperando a Fernando.
 - 2026-11-23 04:58 · v4.7.83 · CEDIS con `dias_inv` null dice «sin medida de días» (antes «0 días» en verde) en globo, tarjeta, panel y cadena; +1 prueba.
 - 2026-11-23 03:36 · v4.7.79 · `listasDatos()`: si una lista de datos llega como objeto/texto/número se toma vacía (antes `construirModelo()` lanzaba error y tumbaba la Ciudad).
 - 2026-11-23 03:15 · v4.7.78 · `hexCss()` con decimal → gris (antes color redondeado).

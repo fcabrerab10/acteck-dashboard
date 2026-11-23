@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { comoLista, diasCedis, diasTexto, tonoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta } from '../src/modules/ciudad/modelo.js';
+import { estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -1522,7 +1522,7 @@ test('tarjeta del camión: destino con acentos y sin «null» (4.7.41)', () => {
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros[0][1], 'CT');
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'E1' }, { ...m, camiones: [{ ...m.camiones[0], ciudad: '' }] }).numeros[3][1], '—');
   const b = tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: '  ' } }, m); assert.equal(b.numeros.length, 3);
-  assert.deepEqual(tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: ' EN TRANSITO ' } }, m).numeros[3], ['Estatus', 'EN TRANSITO']);
+  assert.deepEqual(tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: ' EN TRANSITO ' } }, m).numeros[3], ['Estatus', 'En transito']);
 });
 
 test('fechaCorta() y tarjetas del contenedor con fecha corta (4.7.42)', () => {
@@ -1795,4 +1795,17 @@ test('diasCedis() / diasTexto(): CEDIS sin medida de días como Inventario (4.7.
   const c = cadenaSuministro(m).tramos.find((x) => x.clave === 'cedis'); assert.match(c.volumen, /sin medida de días$/); assert.equal(c.estado, 'gris'); assert.equal(c.motivo, null);
   const m2 = construirModelo({ inventario: [{ inv_actual: 1000, dias_inv: '130' }] });
   assert.equal(m2.cedis.dias, 130); assert.equal(tarjetaDe({ tipo: 'cedis' }, m2).estado, 'rojo');
+});
+
+test('estatusBarco(): nombres cortos del Plan de compras (4.7.84)', () => {
+  assert.equal(estatusBarco('TRANSITO MARITIMO'), 'En el mar'); assert.equal(estatusBarco(' Tránsito  marítimo '), 'En el mar');
+  assert.equal(estatusBarco('PROXIMO A ZARPAR'), 'Por zarpar'); assert.equal(estatusBarco('Pendiente modular'), 'Pendiente'); assert.equal(estatusBarco('EN PRODUCCION'), 'En producción');
+  assert.equal(estatusBarco('NAVEGANDO'), 'Navegando', 'desconocido en minúsculas como el dashboard');
+  assert.equal(estatusBarco(null), ''); assert.equal(estatusBarco(' '), ''); assert.equal(estatusBarco({}), ''); assert.equal(estatusBarco('null'), '');
+  assert.deepEqual(tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: 'EN PUERTO' } }, {}).numeros[3], ['Estatus', 'En puerto']);
+  const m = { puerto: { barcos: [{ id: 'C1', supplier: 'S', piezas: 5, estatus: 'PROXIMO A ZARPAR', llegaEnDias: null }, { id: 'C2', supplier: 'S', piezas: 5, estatus: 'TRANSITO MARITIMO', eta: '2026-11-25', llegaEnDias: 2 }, { id: 'C3', llegaEnDias: null }], tarimas: [] } };
+  const t1 = tarjetaDe({ tipo: 'barco', id: 'C1', sub: 'MSK · 5 pz' }, m);
+  assert.deepEqual(t1.numeros[1], ['ETA puerto', 'sin ETA · por zarpar']); assert.equal(t1.sub, 'MSK · 5 pz · Por zarpar');
+  assert.equal(tarjetaDe({ tipo: 'barco', id: 'C2', sub: 'MSK' }, m).sub, 'MSK · En el mar');
+  const t3 = tarjetaDe({ tipo: 'barco', id: 'C3', sub: 'x' }, m); assert.deepEqual(t3.numeros[1], ['ETA puerto', 'sin ETA']); assert.equal(t3.sub, 'x');
 });
