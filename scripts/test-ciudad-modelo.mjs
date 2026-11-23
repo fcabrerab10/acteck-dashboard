@@ -1773,3 +1773,13 @@ test('resumenBanco(): saldo, % vencido y DSO ponderado como la cartera de Inicio
   assert.equal(carteraPorCuenta([{ cliente: 'x', saldo_actual: 5, dso: null }]).get('x').dso, null, 'DSO vacío queda null');
   assert.equal(carteraPorCuenta([{ cliente: 'x', dso: ' ' }]).get('x').dso, null); assert.equal(carteraPorCuenta([{ cliente: 'x', dso: '45' }]).get('x').dso, 45);
 });
+
+test('resumenTorre(): estatus, cierre, confirmado y piezas raros (4.7.82)', () => {
+  const hoyIso = '2026-11-23';
+  const r = resumenTorre([
+    { estatus: ' Borrador ', forecast_propuesta_lineas: [{ confirmado: true }] },
+    { estatus: 'activa', cerrado_at: ' ', forecast_propuesta_lineas: [{ confirmado: 'false', comprado_at: ' ' }, { confirmado: 'true', comprado_at: '2026-11-01' }, { confirmado: 0 }, 'x', [1]] },
+    { estatus: 'cerrada', cerrado_at: '2026-11-01', forecast_propuesta_lineas: [{ confirmado: 1 }] }, 'x', [{ estatus: 'activa' }],
+  ], [{ fecha_arribo: '2026-11-24', piezas_a_reservar: -5 }, { fecha_arribo: '2026-11-25', piezas_a_reservar: '3' }, '2026-11-24', [{ fecha_arribo: '2026-11-24' }]], hoyIso);
+  assert.deepEqual(r, { abiertas: 1, lineas: 4, confirmadas: 2, compradas: 1, arribos7: 2, piezas7: 3, atrasados: 0 }, '« Borrador » fuera; cierre en blanco = abierta; «false» no confirma; -5 no resta');
+});

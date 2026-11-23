@@ -306,11 +306,18 @@ export function resumenTorre(propuestas = [], avisos = [], hoyIso = diaLocal().i
   // Pulido (4.3.27): fechas con `fechaIso()` — « 2026-10-08» (espacios) ya no sale atrasado, una fecha ilegible no cuenta
   // y un Date sí; hoy con espacios/Date se lee; líneas que no son lista (objeto, texto) ya no cuentan como línea.
   hoyIso = fechaIso(hoyIso) ?? fechaIso(fechaHoy(hoyIso)); const t0 = Date.parse(`${hoyIso}T00:00:00Z`);
-  const ps = comoLista(propuestas).filter((p) => p && p.estatus !== 'borrador'); const lineas = ps.flatMap((p) => comoLista(p.forecast_propuesta_lineas)).filter(Boolean);
+  // Pulido (4.7.82): estatus con espacios/mayúsculas (« Borrador ») sigue siendo borrador; un cierre en blanco (« ») o
+  // ilegible no cierra la propuesta; `confirmado` en texto ('false', '0', '') ya no cuenta como confirmada; un
+  // `comprado_at` en blanco ya no cuenta como comprada; piezas negativas no restan; renglones que no son objeto se saltan.
+  const esObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+  const si = (v) => (typeof v === 'string' ? ['true', 't', 'si', 'sí', '1'].includes(v.trim().toLowerCase()) : v === true || v === 1);
+  const hay = (v) => (typeof v === 'string' ? !!v.trim() : v instanceof Date ? Number.isFinite(v.getTime()) : v != null && v !== false);
+  const ps = comoLista(propuestas).filter((p) => esObj(p) && (typeof p.estatus === 'string' ? p.estatus.trim().toLowerCase() : p.estatus) !== 'borrador');
+  const lineas = ps.flatMap((p) => comoLista(p.forecast_propuesta_lineas)).filter(esObj);
   const mas7 = new Date(t0 + 7 * 86400000).toISOString().slice(0, 10);
-  const av = comoLista(avisos).map((a) => [a, fechaIso(a?.fecha_arribo)]).filter(([, f]) => f && f <= mas7);
+  const av = comoLista(avisos).filter(esObj).map((a) => [a, fechaIso(a.fecha_arribo)]).filter(([, f]) => f && f <= mas7);
   const atrasados = av.filter(([, f]) => f < hoyIso);
-  return { abiertas: ps.filter((p) => !p.cerrado_at).length, lineas: lineas.length, confirmadas: lineas.filter((l) => l.confirmado).length, compradas: lineas.filter((l) => l.comprado_at).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, [a]) => s + N(a.piezas_a_reservar), 0), atrasados: atrasados.length };
+  return { abiertas: ps.filter((p) => !hay(p.cerrado_at)).length, lineas: lineas.length, confirmadas: lineas.filter((l) => si(l.confirmado)).length, compradas: lineas.filter((l) => hay(l.comprado_at)).length, arribos7: av.length - atrasados.length, piezas7: av.reduce((s, [a]) => s + Math.max(0, N(a.piezas_a_reservar)), 0), atrasados: atrasados.length };
 }
 
 // «Hoy en Acteck» (etapa 4, 3.90.46): misiones del día para la lista con «Ir». Junta las alertas de las burbujas (banco,
