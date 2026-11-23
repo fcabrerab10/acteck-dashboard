@@ -264,6 +264,10 @@ test('tarjeta del edificio: una plantilla con estado y hasta 4 números', () => 
     distritos: [{ ciudad: 'LEON', cuentas: ['ct'], vendedores: [], tiendas: [{ cuenta: 'ct', nombreCuenta: 'CT', sucursal: 'León', importe: 250000, previo: 1e5, vendio: true, vendioMes: true }, { cuenta: 'ct', nombreCuenta: 'CT', sucursal: 'Centro', importe: 0, previo: 0, vendio: false, cartera: { vencido: 5000 } }] }] };
   const of = tarjetaDe({ tipo: 'oficina', titulo: 'Oficina', pagina: 'agenda' }, mod);
   assert.deepEqual(of.numeros[0], ['Personas', '3']); assert.equal(of.estado, 'verde'); assert.equal(of.pagina, 'agenda');
+  { // 4.12.1: pendientes/hechas/genéricos en texto o negativos no se concatenan ni restan
+    const of2 = tarjetaDe({ tipo: 'oficina' }, { oficina: { personas: [{ pendientes: '2', hechas: '1' }, { pendientes: 3, hechas: -4 }, null], genericos: '3', agenda: [], reuniones: 0 } });
+    const v = Object.fromEntries(of2.numeros); assert.equal(v.Pendientes, '5'); assert.equal(v.Hechas, '1'); assert.equal(v.Personas, '5');
+  }
   const ce = tarjetaDe({ tipo: 'cedis' }, mod); assert.equal(ce.numeros[0][1], '$12.5 M'); assert.equal(ce.estado, 'ambar', '95 días → ámbar');
   assert.equal(tarjetaDe({ tipo: 'puerto' }, mod).estado, 'ambar', 'un barco sin ETA');
   const ci = tarjetaDe({ tipo: 'ciudad', ciudad: 'LEON' }, mod); assert.deepEqual(ci.numeros[0], ['Tiendas activas', '1 de 2']); assert.equal(ci.estado, 'ambar');

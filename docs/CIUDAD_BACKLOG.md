@@ -177,6 +177,7 @@ Principios que no se rompen en ninguna etapa:
 - [ ] Pulido: rendimiento, legibilidad de etiquetas, pruebas nuevas en `scripts/test-ciudad-modelo.mjs`, comparar números de cada tarjeta contra su pestaña del dashboard.
   - [x] (3.90.81) Pruebas de coherencia: proyección (GDL en el origen, rumbos de Monterrey/Mérida/Tijuana), coordenadas del catálogo dentro de México, cada cuenta con color y sede existente, `CIUDAD_POR_ESTADO` válido, `hexCss` y `norm`.
   - [x] (3.90.82) Legibilidad de nombres: `nombreCiudad()` puro y probado (acentos «San Luis Potosí», «Ciudad Juárez», conectores en minúscula «Lagos de Moreno», CDMX) en etiquetas, pines, tarjetas de ciudad/camión/vendedor, buscador y minimapa.
+  - [x] (4.12.1) Tarjeta de la oficina: pendientes/hechas/genéricos en texto o negativos ya no se concatenan ni restan.
   - [x] (3.90.83) Cifras cortas: `cifraCorta()` pura y probada (999 600 ya no sale «1000 K» sino «1.0 M», negativos con signo) en etiquetas, tarjetas y `pesosCorto`; la cartera vencida del panel usa `pesosCorto` (antes «$0.0 M» para montos chicos).
   - [x] (3.90.84) Listas cortas sin vacíos ni repetidos: `listaCorta()` limpia espacios, quita nulos/duplicados y el «+N» cuenta sólo lo que falta (POs del barco en la tarjeta del puerto).
   - [x] (3.90.85) `cuotaRitmo()` aguanta fecha inválida (usa hoy) y venta faltante (0): ya no sale «NaN %» en rojo en la capa/tarjeta de cuota.
@@ -325,6 +326,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 15:16 · v4.12.1 · Pulido: tarjeta de la oficina suma pendientes/hechas/genéricos como número ≥ 0 (antes «2» en texto se concatenaba y los negativos restaban); +1 prueba.
 - 2026-11-23 05:56 · v4.7.86 · Pulido: `nombrePersona()` convierte el correo en nombre legible («Ana Lopez») cuando la persona no trae nombre.
 - 2026-11-23 06:16 · v4.7.87 · Pulido: `pendientesTexto()` ya no muestra conteos negativos («-2 hechas» → «0 hechas»).
 - 2026-11-23 05:37 · v4.7.85 · Cuota por cuenta cuadra con Análisis: venta sólo de clientes ERP con cuota > 0; +1 prueba.

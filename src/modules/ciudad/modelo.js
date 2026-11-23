@@ -950,8 +950,9 @@ export function tarjetaDe(tag, modelo) {
   const t = { titulo: tag.titulo || '', sub: tag.sub || '', estado: null, numeros: [], pagina: tag.pagina || null };
   const m = modelo || {};
   if (tag.tipo === 'oficina' && m.oficina) {
-    const o = m.oficina, pend = sn(o.personas).reduce((s, p) => s + (p.pendientes || 0), 0), hechas = sn(o.personas).reduce((s, p) => s + (p.hechas || 0), 0);
-    t.numeros = [['Personas', num(sn(o.personas).length + (o.genericos || 0))], ['Reuniones hoy', (() => { const p = sn(o.agenda).find((r) => r.estado !== 'hecha'); return p ? `${num(o.reuniones)} · ${p.estado === 'en curso' ? 'en curso' : `próxima ${p.hora}`}` : num(o.reuniones); })()], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
+    // 4.12.1: conteos como número ≥ 0 (antes «2» en texto se concatenaba: «0 2 1» → «21» pendientes; negativos restaban).
+    const c0 = (v) => Math.max(0, numero(v)), o = m.oficina, pend = sn(o.personas).reduce((s, p) => s + c0(p.pendientes), 0), hechas = sn(o.personas).reduce((s, p) => s + c0(p.hechas), 0);
+    t.numeros = [['Personas', num(sn(o.personas).length + c0(o.genericos))], ['Reuniones hoy', (() => { const p = sn(o.agenda).find((r) => r.estado !== 'hecha'); return p ? `${num(o.reuniones)} · ${p.estado === 'en curso' ? 'en curso' : `próxima ${p.hora}`}` : num(o.reuniones); })()], ['Pendientes', num(pend)], ['Hechas', num(hechas)]];
     t.estado = o.reunionEnCurso ? 'ambar' : 'verde';
   } else if (tag.tipo === 'sala' && m.oficina) {
     // Sala de juntas (interior de la oficina, 3.90.38): las reuniones de hoy en orden; en curso = ámbar.
