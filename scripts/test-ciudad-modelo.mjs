@@ -1644,3 +1644,10 @@ test('4.7.63: pin con miles es-MX y acceso rápido sin ciudad en blanco', () => 
   const top = ciudadesTop({ distritos: [{ ciudad: '  ', tiendas: [{ vendio: true }] }, { ciudad: 'LEON', tiendas: [{ vendio: true }] }], camiones: [] });
   assert.deepEqual(top.map((c) => [c.ciudad, c.nombre]), [['LEON', 'León']], 'ciudad en blanco no sale como «🏬 1»');
 });
+
+test('camionesTemporada: factura sin folio no pinta de promoción a los demás camiones sin folio (4.7.65)', () => {
+  const cam = [{ folio: null, fecha: '2026-11-30' }, { folio: '  ', fecha: '2026-11-29' }, { folio: 'F9', fecha: '2026-11-30' }, { folio: 0, fecha: '2026-11-30' }];
+  const t = camionesTemporada({ camiones: cam }, new Date(2026, 10, 28, 12));
+  assert.equal(t.has(null) || t.has('  ') || t.has(undefined), false, 'sin folio no entra');
+  assert.ok(t.has('F9')); assert.ok(t.has(0), 'folio numérico 0 sí cuenta');
+});

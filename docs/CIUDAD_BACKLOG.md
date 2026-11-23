@@ -286,6 +286,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.62) `porcentaje()` con opciones null o que no son objeto ya no lanza error (sin signo) y `plural()` sin palabra (null, vacía, número) dice sólo el número (antes «0 undefineds» / «2 null»); `varios` nulo usa la palabra + «s».
   - [x] (4.7.63) Pin de la ciudad con miles es-MX («León · 🏬 1,200 · 🚚 1,050»; antes «🏬 1200») y `pinCiudad()` regresa `nombre`: el acceso rápido ya no toma el nombre partiendo el texto (una ciudad en blanco salía como «🏬 3») y la ciudad en blanco no entra al top.
   - [x] (4.7.64) Camiones de envíos: la salida es la primera fecha legible (un `fecha_envio_erp` ilegible ya no esconde el camión si `fecha_surtida` es buena) y una entrega en blanco (« ») ya no cuenta como entregado.
+  - [x] (4.7.65) `camionesTemporada()` salta facturas sin folio legible (null, vacío): antes la clave null hacía que, si una caía en Buen Fin o en la semana del cierre, TODOS los camiones sin folio se pintaran de promoción; el folio numérico 0 sí cuenta.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -301,6 +302,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 22:57 · v4.7.65 · `camionesTemporada()`: factura sin folio ya no pinta de promoción a todos los camiones sin folio; +1 prueba.
 - 2026-11-22 22:35 · v4.7.64 · Camiones de envíos: salida = primera fecha legible (ERP ilegible cae a la surtida) y entrega en blanco no cuenta como entregado.
 - 2026-11-22 22:16 · v4.7.63 · pinCiudad()/ciudadesTop(): miles es-MX en el pin y acceso rápido sin ciudad en blanco.
 - 2026-11-22 15:56 · v4.7.62 · `porcentaje()` con opciones null sin error y `plural()` sin palabra sin «undefineds»/«null»; +1 prueba.

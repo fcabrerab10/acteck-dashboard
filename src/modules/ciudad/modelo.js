@@ -1109,7 +1109,8 @@ export function camionesTemporada(m, hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const out = new Map(); const evs = eventosCalendario(hoy).filter((e) => e.desde && (e.id === 'cierre' || e.dias === 0));
   for (const c of comoLista(m?.camiones)) {
-    if (c?.envio) continue; const f = fechaIso(c?.fecha); if (!f) continue;
+    // 4.7.65: sin folio legible se salta (antes la clave null pintaba de promoción a TODOS los camiones sin folio).
+    if (c?.envio || !unirTexto(c?.folio)) continue; const f = fechaIso(c?.fecha); if (!f) continue;
     const e = evs.find((x) => f >= x.desde && f <= x.hasta); if (e) out.set(c.folio, { id: e.id, texto: e.id === 'buenfin' ? 'Buen Fin' : 'Cierre de mes' });
   }
   return out;
