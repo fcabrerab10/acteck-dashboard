@@ -141,7 +141,7 @@ export default function CalculadoraPanel({ catalogo = [], filasPorSku, sensible 
           <Segmented size="sm" value={clienteKey} onChange={cambiarCliente} options={CLIENTES.map((c) => ({ id: c.key, label: c.label }))} />
         </div>
       )}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) minmax(320px, 1.3fr)', gap: 14, fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14, fontFamily: TYPO.fontText }}>
         {/* ── Izquierda: SKU ── */}
         <div style={{ minWidth: 0 }}>
           {!item && (

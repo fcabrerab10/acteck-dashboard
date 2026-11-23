@@ -37,8 +37,8 @@ test('Agenda · sólo se parte con la preferencia, ancho suficiente y en las cua
   for (const modulo of ['reuniones', 'semana', 'bandeja', 'ideas', 'registro', 'equipo', 'hoy', 'dia']) assert.equal(cabeDividida({ dividida: true, ancho: 1400, modulo }), false, modulo);
 });
 
-test('La preferencia «dividida» sigue apagada por defecto salvo en el plegable', () => {
-  for (const [modo, d] of Object.entries(disp.DEFAULTS_DISPOSITIVO)) assert.equal(d.dividida, modo === 'plegable', modo);
+test('La preferencia «dividida» está apagada por defecto en todos los modos (2026-11-23: el Duo abierto = la web tal cual)', () => {
+  for (const [modo, d] of Object.entries(disp.DEFAULTS_DISPOSITIVO)) assert.equal(d.dividida, false, modo);
 });
 
 const U = 'u-f', K = 'u-k';

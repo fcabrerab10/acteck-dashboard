@@ -1,3 +1,4 @@
+import './lib/maqueta'
 import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'

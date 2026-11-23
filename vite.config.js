@@ -16,6 +16,36 @@ try {
   commitHash = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || ''
 }
 
+// Maqueta con datos (sólo `npm run dev`, 2026-11-23): con `?maqueta` el cliente de Supabase apunta a /__sb y este
+// proxy contesta las LECTURAS con la llave de servicio de .env.local. La llave vive sólo en este proceso (nunca llega
+// al navegador ni al build) y el proxy rechaza todo lo que no sea GET/HEAD o el RPC de lectura de Inicio, para que una
+// revisión visual no pueda escribir nada. No existe en producción: `configureServer` sólo corre en el dev server.
+function maquetaDatos() {
+  return {
+    name: 'maqueta-datos',
+    apply: 'serve',
+    configureServer(server) {
+      let env = {};
+      try { for (const l of readFileSync('.env.local', 'utf8').split('\n')) { const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) env[m[1]] = m[2].trim().replace(/^"|"$/g, ''); } } catch { env = {}; }
+      const base = env.VITE_SUPABASE_URL, llave = env.SUPABASE_SERVICE_ROLE_KEY;
+      server.middlewares.use('/__sb', async (req, res) => {
+        const lectura = req.method === 'GET' || req.method === 'HEAD' || (req.method === 'POST' && /^\/rest\/v1\/rpc\/inicio_datos(\?|$)/.test(req.url));
+        if (!base || !llave || !lectura || !req.url.startsWith('/rest/v1/')) { res.statusCode = 403; res.setHeader('content-type', 'application/json'); res.end('{"message":"maqueta: sólo lectura"}'); return; }
+        try {
+          let cuerpo;
+          if (req.method === 'POST') { const partes = []; for await (const c of req) partes.push(c); cuerpo = Buffer.concat(partes); }
+          const h = { apikey: llave, Authorization: `Bearer ${llave}` };
+          for (const k of ['prefer', 'range', 'range-unit', 'accept', 'accept-profile', 'content-type']) if (req.headers[k]) h[k] = req.headers[k];
+          const r = await fetch(base + req.url, { method: req.method, headers: h, body: cuerpo });
+          res.statusCode = r.status;
+          for (const k of ['content-type', 'content-range', 'preference-applied']) { const v = r.headers.get(k); if (v) res.setHeader(k, v); }
+          res.end(req.method === 'HEAD' ? undefined : Buffer.from(await r.arrayBuffer()));
+        } catch (e) { res.statusCode = 502; res.end(JSON.stringify({ message: String(e?.message || e) })); }
+      });
+    },
+  };
+}
+
 export default defineConfig({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version),
@@ -62,6 +92,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    maquetaDatos(),
     react(),
     VitePWA({
       // 'prompt': el SW nuevo queda en waiting y src/main.jsx avisa con un toast

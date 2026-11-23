@@ -109,11 +109,15 @@ export function ultimoDiaConVenta(dias, anio, mes) {
 }
 
 /** Último (anio, mes) con sell out en los datos; null si no hay. */
-export function ultimoMesConVenta(dias) {
+// Nunca devuelve un mes posterior al de hoy: una fuente con la fecha volteada (Loma cargó 18 líneas «10-dic-2026» en
+// octubre) abría la pantalla en diciembre con $22 K.
+export function ultimoMesConVenta(dias, hoy = new Date()) {
   let mejor = null;
+  const tope = idxMes(hoy.getFullYear(), hoy.getMonth() + 1);
   for (const r of dias || []) {
     if (!N(r.importe)) continue;
     const i = idxMes(N(r.anio), N(r.mes));
+    if (i > tope) continue;
     if (mejor == null || i > mejor) mejor = i;
   }
   return mejor == null ? null : deIdx(mejor);

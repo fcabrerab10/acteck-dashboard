@@ -6,7 +6,10 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 // True cuando las variables de entorno están configuradas en Vercel
 export const DB_CONFIGURED = !!(SUPABASE_URL && SUPABASE_ANON_KEY)
 
-export const SB_URL = SUPABASE_URL || 'https://placeholder.supabase.co'
+// Sólo `npm run dev` con `?maqueta`: las lecturas van al proxy local de sólo lectura (vite.config.js#maquetaDatos).
+const MAQUETA = import.meta.env.DEV && typeof window !== 'undefined' && !!window.location && new URLSearchParams(window.location.search || '').has('maqueta')
+
+export const SB_URL = MAQUETA ? `${window.location.origin}/__sb` : (SUPABASE_URL || 'https://placeholder.supabase.co')
 export const SB_ANON = SUPABASE_ANON_KEY || 'placeholder-anon-key'
 
 export const supabase = createClient(SB_URL, SB_ANON)

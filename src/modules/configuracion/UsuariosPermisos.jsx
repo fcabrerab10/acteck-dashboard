@@ -47,7 +47,7 @@ export default function UsuariosPermisos({ usuarios, cargando, actividad, actual
   const sel = usuarios.find((u) => u.id === selId) || null;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 1fr', gap: 10, alignItems: 'start' }}>
+    <div className="rej-angosta" style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 1fr', gap: 10, alignItems: 'start' }}>
       <Panel titulo="Usuarios" meta={cargando ? 'cargando…' : `${lista.length} de ${usuarios.length}`} padding="8px"
         acciones={<AccionesCabecera><Boton primario icon={Plus} onClick={onNuevo}>Nuevo usuario</Boton></AccionesCabecera>}>
         <div style={{ position: 'relative', marginBottom: 6 }}>

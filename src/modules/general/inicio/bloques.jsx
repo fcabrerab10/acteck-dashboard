@@ -327,15 +327,17 @@ export function BarraCuota({ valor, cuota, label = 'cuota', inverso = false, alt
   if (!cuota) return null;
   const p = Math.max(0, (valor / cuota) * 100);
   const color = p >= 100 ? theme.green : p >= 85 ? (inverso ? '#5AC8FA' : theme.accent) : p >= 60 ? theme.orange : theme.red;
-  const muted = inverso ? 'rgba(255,255,255,0.65)' : theme.textMuted;
-  const texto = inverso ? '#FFF' : theme.text;
+  // Dentro del Hero (tarjeta inversa) el texto es claro en temas claros y OSCURO en temas oscuros (el hero es blanco).
+  const heroClaro = theme.mode === 'dark';
+  const muted = inverso ? (heroClaro ? 'rgba(29,29,31,0.66)' : 'rgba(255,255,255,0.65)') : theme.textMuted;
+  const texto = inverso ? (theme.textOnInverse || '#FFF') : theme.text;
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: 11, color: muted, fontVariantNumeric: 'tabular-nums' }}>
         <span><b style={{ color: texto, fontWeight: 600 }}>{$c(valor)}</b> de {$c(cuota)} de {label}</span>
         <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 700, color }}>{Math.round(p)}%</span>
       </div>
-      <div style={{ marginTop: 4, height: alto, borderRadius: 999, background: inverso ? 'rgba(255,255,255,0.14)' : `${theme.text}12`, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ marginTop: 4, height: alto, borderRadius: 999, background: inverso ? (heroClaro ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)') : `${theme.text}12`, overflow: 'hidden', position: 'relative' }}>
         <div style={{ height: '100%', width: `${Math.min(100, p)}%`, background: color, borderRadius: 999, transition: 'width 420ms cubic-bezier(0.32,0.72,0,1), background 220ms' }} />
         {p > 100 && <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 2, background: '#FFF' }} />}
       </div>

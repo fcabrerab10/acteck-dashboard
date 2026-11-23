@@ -20,13 +20,14 @@ export default function Panel({ titulo, meta, acciones, children, plegable = fal
         boxShadow: elevation(theme, elevable && hover ? 'hover' : 'tarjeta'), transition: `box-shadow ${DUR.state}ms ${EASE}`, ...style }}>
       {(titulo || acciones) && (
         <div onClick={plegable ? alternar : undefined}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', cursor: plegable ? 'pointer' : 'default', borderBottom: open && children ? `1px solid ${theme.border}` : 'none' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '10px 12px', cursor: plegable ? 'pointer' : 'default', borderBottom: open && children ? `1px solid ${theme.border}` : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
             {plegable && <ChevronDown size={13} style={{ color: theme.textMuted, transform: open ? 'rotate(0)' : 'rotate(-90deg)', transition: `transform ${DUR.state}ms ${EASE}` }} />}
             <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, whiteSpace: 'nowrap' }}>{titulo}</span>
             {meta && <span style={{ fontSize: 10.5, color: theme.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{meta}</span>}
           </div>
-          {acciones && <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>{acciones}</div>}
+          {/* 2026-11-23: las acciones envuelven y bajan de renglón si no caben (antes se salían de la tarjeta en pantallas angostas). */}
+          {acciones && <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto', minWidth: 0, maxWidth: '100%' }}>{acciones}</div>}
         </div>
       )}
       <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: `grid-template-rows ${DUR.content}ms ${EASE}` }}>

@@ -78,7 +78,7 @@ export default function Inicio({ onNavegar, vistaInicial = 'hoy' }) {
 
   const esMes = modo === 'mes';
   const barra = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingRight: 'var(--hueco-avatar, 0px)', minHeight: 40 }}>
       <span style={{ fontSize: 10.5, color: theme.textMuted }}>{fmtDia.format(hoy).replace(',', '')}{enCurso ? '' : ` · viendo ${esMes ? `${MESES[mesActual - 1]} ${anio}` : anio}`}</span>
       <SelectorPeriodo anio={anio} mes={mes} anioHoy={anioHoy} mesHoy={mesHoy} anios={anios} onChange={(a, m) => { setAnio(a); setMes(m); }} />
     </div>

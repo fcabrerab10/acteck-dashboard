@@ -352,6 +352,21 @@ export default function App() {
         } else setArranque(null);
       }, espera);
     };
+    // Sólo en `npm run dev` (import.meta.env.DEV; el build de producción elimina esta rama): `?maqueta` abre el shell
+    // con un perfil de mentira y SIN sesión, para revisar acomodos y tamaños (iPhone Duo, iPad) sin teclear una
+    // contraseña. No da acceso a ningún dato: sin JWT las políticas de la base devuelven vacío.
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('maqueta')) {
+      const falso = { user_id: 'maqueta', nombre: 'Maqueta', es_super_admin: true, activo: true, tipo: 'interno', permisos: {}, preferencias: {} };
+      // Con el proxy de lectura (vite.config.js#maquetaDatos) se usa el perfil real del super admin para ver datos reales.
+      supabase.from('perfiles').select('*').eq('es_super_admin', true).eq('activo', true).limit(1)
+        .then(({ data }) => data?.[0] || falso, () => falso)
+        .then((p) => {
+          // Las pantallas que preguntan «quién soy» (Agenda) reciben a ese mismo usuario; no hay sesión real.
+          supabase.auth.getUser = async () => ({ data: { user: { id: p.user_id, email: 'maqueta@local' } }, error: null });
+          setAuthUser({ id: p.user_id, email: 'maqueta@local' }); setPerfil(p); listo(true);
+        });
+      return undefined;
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         supabase.from("perfiles").select("*").eq("user_id", session.user.id).single()
@@ -565,7 +580,7 @@ export default function App() {
     </>
   ) : (
           <div className="w-full" style={{
-            padding: mobile ? '12px 16px' : '4px 24px 16px',
+            padding: mobile ? '12px 16px' : (disp.modo === 'plegable' ? '4px 12px 16px' : '4px 24px 16px'),
             maxWidth: mobile ? '100%' : (anchoMax > 0 ? anchoMax : '100%'),
             margin: '0 auto',
           }}>

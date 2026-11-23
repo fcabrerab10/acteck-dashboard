@@ -200,7 +200,9 @@ export function intercambiarSlots(slots, i, j) {
 export const NIVELES_VIDRIO_IDS = ['opaco', 'tintado', 'vidrio'];
 export const DEFAULTS_DISPOSITIVO = {
   telefono:        { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
-  plegable:        { densidad: 'compacta', sidebar: 'iconos',  anchoMax: 0,    paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'auto', dividida: true, inicio: 'tarjetas' },
+  // 2026-11-23 · Fernando: «abierto = la versión web tal cual, horizontal o vertical»: menú lateral, Inicio en página y
+  // sin vista dividida por defecto (siguen disponibles en Preferencias › Apariencia).
+  plegable:        { densidad: 'compacta', sidebar: 'iconos',  anchoMax: 0,    paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
   tabletaCompacta: { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
   tableta:         { densidad: 'comoda',  sidebar: 'iconos',   anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },
   laptop:          { densidad: 'comoda',  sidebar: 'completa', anchoMax: 1600, paneles: PANELES_VACIO, vidrio: 'opaco', menu: 'cuenta', dividida: false, inicio: 'pagina' },

@@ -214,7 +214,7 @@ export default function ProyectosAbasto({ inicial = null }) {
 
       {/* Contenido */}
       {vista === 'tablero' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 340px)', gap: 12, alignItems: 'start' }}>
+        <div className="rej-angosta" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 340px)', gap: 12, alignItems: 'start' }}>
           <Tablero columnas={columnas} puedeEditar={puedeEditar}
             onAbrir={(p) => setHojaProyecto({ proyectoId: p.id })}
             onMoverAMes={moverAMes} onMoverRelativo={moverRelativo}

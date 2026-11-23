@@ -25,10 +25,12 @@ export default function Hero({ eyebrow, titulo, sub, dot = true, stats = [], chi
   return (
     <div style={{
       backgroundColor: bg, backgroundImage: `radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, ${bg} 86%, #8A90A8), ${bg} 62%)`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)', color: text, borderRadius: 18, padding: '14px 18px',
-      display: 'grid', gridTemplateColumns: `minmax(0, 1fr) repeat(${stats.length}, auto)`, gap: 20, alignItems: 'center',
+      // 2026-11-23 (iPhone Duo): flex que envuelve; si las cifras no caben junto al texto bajan a su propio renglón
+      // en vez de aplastar el título a una palabra por línea.
+      display: 'flex', flexWrap: 'wrap', gap: '12px 20px', alignItems: 'center',
       fontFamily: TYPO.fontText, ...style,
     }}>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 'min(100%, 300px)', flex: '1 1 300px' }}>
         <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: muted, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           {dot && <span style={{ width: 7, height: 7, borderRadius: 999, background: theme.red || '#FF3B30', display: 'inline-block' }} />}
           {eyebrow}
@@ -37,7 +39,11 @@ export default function Hero({ eyebrow, titulo, sub, dot = true, stats = [], chi
         {sub && <p style={{ color: muted, fontSize: 11.5, maxWidth: 460, lineHeight: 1.4, margin: 0 }}>{sub}</p>}
         {children}
       </div>
-      {stats.map((s, i) => <HeroStat key={i} {...s} />)}
+      {stats.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 20px', alignItems: 'center', justifyContent: 'flex-end', marginLeft: 'auto', maxWidth: '100%' }}>
+          {stats.map((s, i) => <HeroStat key={i} {...s} />)}
+        </div>
+      )}
     </div>
   );
 }
