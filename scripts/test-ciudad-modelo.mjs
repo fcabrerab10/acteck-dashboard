@@ -1496,7 +1496,11 @@ test('títulos de reunión vacíos o nulos (4.7.36)', () => {
 
 test('nombrePersona(): sin nombre usa el correo y sin nada dice «Persona» (antes null)', () => {
   assert.equal(nombrePersona({ nombre: ' Ana López ' }), 'Ana López');
-  assert.equal(nombrePersona({ nombre: null, email: 'ana.lopez@x.com' }), 'ana.lopez');
+  assert.equal(nombrePersona({ nombre: null, email: 'ana.lopez@x.com' }), 'Ana Lopez');
+  assert.equal(nombrePersona({ nombre: '', email: ' JUAN_perez-ruiz@x.com ' }), 'Juan Perez Ruiz');
+  assert.equal(nombrePersona({ email: 'maría+ventas@x.com' }), 'María Ventas');
+  assert.equal(nombrePersona({ email: '123.@x.com' }), 'Persona');
+  assert.equal(nombrePersona({ email: 'ana2@x.com' }), 'Ana2');
   assert.equal(nombrePersona({ nombre: '  ', email: ' ' }), 'Persona');
   assert.equal(nombrePersona(null), 'Persona');
   const m = construirModelo({ perfiles: [{ user_id: 'u1', activo: true, nombre: null, email: null, puesto: null, rol: ' finanzas ' }] }, new Date(2026, 10, 20, 10));

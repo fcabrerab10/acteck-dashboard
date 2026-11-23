@@ -746,9 +746,12 @@ export function tituloCamion(c, promo) {
 }
 // Nombre de la persona en la oficina (4.7.38): nombre limpio; sin nombre, la parte del correo antes de «@»
 // («ana.lopez»); sin nada, «Persona» (antes `null` en el escritorio, la tarjeta y el globo).
+// 4.7.86: el correo sale como nombre legible («ana.lopez» / «ana_lopez» / «ana-lopez» → «Ana Lopez»; antes «ana.lopez»
+// en el escritorio y el globo); números y separadores solos no cuentan («123», «.» → «Persona»).
 export function nombrePersona(p) {
   const n = unirTexto(p?.nombre); if (n) return n;
-  const e = unirTexto(p?.email).split('@')[0].trim();
+  const e = unirTexto(p?.email).split('@')[0].split(/[._\-+\s]+/).filter((w) => /\p{L}/u.test(w))
+    .map((w) => w.charAt(0).toLocaleUpperCase('es-MX') + w.slice(1).toLocaleLowerCase('es-MX')).join(' ');
   return e || 'Persona';
 }
 // Nombre de la tienda (4.7.39): «Pcel · Centro»; sin nombre de cuenta usa la clave, sin sucursal sólo la cuenta,

@@ -308,6 +308,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.83) CEDIS sin medida de días como Inventario: `diasCedis()` / `diasTexto()` / `tonoDias()` puras y probadas; `dias_inv` null (sin costo de venta de 3 meses) ya no es «0 días» en verde: globo, tarjeta («sin medida», sin color), panel y cadena («sin medida de días», gris). Harness sin errores.
   - [x] (4.7.84) `estatusBarco()` pura y probada: la tarjeta del contenedor dice el estatus con los nombres cortos del Plan de compras (`ESTATUS_CORTO`: «TRANSITO MARITIMO» → «En el mar», «PROXIMO A ZARPAR» → «Por zarpar»; acepta acentos, espacios y minúsculas). Antes la tarjeta del puerto no lo mostraba y la de respaldo salía en mayúsculas crudas; sin ETA dice «sin ETA · por zarpar».
   - [x] (4.7.85) Cuota como Análisis: `cuotasPorCuenta()` junta la cuota por cliente ERP y sólo los clientes con cuota > 0 suman su venta (antes la venta de un cliente con cuota 0 inflaba el % de la cuenta en la capa «Cuota», pensamientos y celebraciones); renglón sin cliente ERP ya no suma cuota.
+  - [x] (4.7.86) `nombrePersona()`: sin nombre, el correo sale legible («ana.lopez» / «juan_perez-ruiz» → «Ana Lopez» / «Juan Perez Ruiz»; antes «ana.lopez» en el escritorio, la tarjeta y el globo); números o separadores solos → «Persona».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -323,6 +324,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 05:56 · v4.7.86 · Pulido: `nombrePersona()` convierte el correo en nombre legible («Ana Lopez») cuando la persona no trae nombre.
 - 2026-11-23 05:37 · v4.7.85 · Cuota por cuenta cuadra con Análisis: venta sólo de clientes ERP con cuota > 0; +1 prueba.
 - 2026-11-23 05:17 · v4.7.84 · Tarjeta del contenedor con estatus «En el mar» / «Por zarpar» como el Plan de compras (`estatusBarco()`; antes no salía o salía crudo); +1 prueba. El pendiente de Etapa 8 (más usuarios) sigue esperando a Fernando.
 - 2026-11-23 04:58 · v4.7.83 · CEDIS con `dias_inv` null dice «sin medida de días» (antes «0 días» en verde) en globo, tarjeta, panel y cadena; +1 prueba.
