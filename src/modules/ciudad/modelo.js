@@ -360,22 +360,25 @@ export function rumboBarcos(barcos = []) {
 export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   if (!m) return { tramos: [], atasco: null };
   const n = numero; const pz = (v) => plural(n(v), 'pz');
-  const barcos = (m.puerto?.barcos || []).filter(Boolean);
-  const mar = barcos.filter((b) => !(b.llegaEnDias != null && b.llegaEnDias <= 0)), enPuerto = barcos.filter((b) => b.llegaEnDias != null && b.llegaEnDias <= 0);
-  const tarde = enPuerto.filter((b) => b.llegaEnDias < -3).length;
+  // ETA en días legible (texto «-2» cuenta; vacía, null o basura = sin ETA, sigue en el mar).
+  const eta = (b) => leeNum(b.llegaEnDias);
+  const barcos = comoLista(m.puerto?.barcos).filter(Boolean);
+  const mar = barcos.filter((b) => !(eta(b) != null && eta(b) <= 0)), enPuerto = barcos.filter((b) => eta(b) != null && eta(b) <= 0);
+  const tarde = enPuerto.filter((b) => eta(b) < -3).length;
   const c = m.cedis || {}, d = n(c.dias);
-  const cam = (m.camiones || []).filter(Boolean);
+  const cam = comoLista(m.camiones).filter(Boolean);
   const lentos = cam.filter((x) => x.envio && hoyIso && x.fecha && dias(x.fecha, hoyIso) > 5).length;
-  const tiendas = (m.distritos || []).filter(Boolean).flatMap((x) => x.tiendas || []).filter((t) => t && !t.reparto);
+  const distritos = comoLista(m.distritos).filter(Boolean);
+  const tiendas = distritos.flatMap((x) => comoLista(x.tiendas)).filter((t) => t && !t.reparto);
   const activas = tiendas.filter((t) => t.vendio).length, ratio = tiendas.length ? activas / tiendas.length : 1;
-  const cf = (m.distritos || []).reduce((s, x) => ({ n: s.n + n(x?.clientesFinales?.n), imp: s.imp + n(x?.clientesFinales?.importe) }), { n: 0, imp: 0 });
+  const cf = distritos.reduce((s, x) => ({ n: s.n + n(x.clientesFinales?.n), imp: s.imp + n(x?.clientesFinales?.importe) }), { n: 0, imp: 0 });
   const tramos = [
     { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length.toLocaleString('es-MX')} con ETA vencida · ${plural(comoLista(m.puerto?.tarimas).filter(Boolean).length, 'recién llegado')}`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
     { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${plural(d, 'día')}`, estado: d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde', motivo: d > 90 ? `${plural(d, 'día')} de inventario` : null },
     { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length.toLocaleString('es-MX')} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
     { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
-    { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${cf.n.toLocaleString('es-MX')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
+    { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${plural(cf.n, 'cliente')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
   ];
   return { tramos, atasco: tramos.find((t) => t.estado === 'rojo') || tramos.find((t) => t.estado === 'ambar') || null };
 }

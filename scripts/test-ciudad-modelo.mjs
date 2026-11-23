@@ -655,7 +655,7 @@ test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
   const r = cadenaSuministro(m);
   assert.deepEqual(r.tramos.map((t) => [t.clave, t.estado]), [['mar', 'verde'], ['puerto', 'rojo'], ['cedis', 'ambar'], ['camion', 'ambar'], ['tienda', 'ambar'], ['cliente', 'verde']]);
   assert.equal(r.tramos[0].volumen, '2 barcos · 1,500 pzs'); assert.equal(r.tramos[1].motivo, '1 barco con más de 3 días de atraso');
-  assert.equal(r.tramos[4].volumen, '2 de 3 vendieron'); assert.equal(r.tramos[5].volumen, '120 · $2.5 M'); assert.equal(r.atasco.clave, 'puerto');
+  assert.equal(r.tramos[4].volumen, '2 de 3 vendieron'); assert.equal(r.tramos[5].volumen, '120 clientes · $2.5 M'); assert.equal(r.atasco.clave, 'puerto');
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [] }, cedis: { dias: 30 }, camiones: [], distritos: [] });
   assert.deepEqual(v.tramos.map((t) => t.estado), ['gris', 'verde', 'verde', 'gris', 'gris', 'gris']); assert.equal(v.atasco, null);
   assert.deepEqual(cadenaSuministro(null), { tramos: [], atasco: null });
@@ -1669,4 +1669,13 @@ test('reuniones de la oficina: repetidas una vez y conteo = agenda (4.7.66)', ()
   const s = construirModelo({ reunionesHoy: [{ titulo: null, fecha: '2026-10-05T10:45:00' }] }, h);
   assert.equal(s.oficina.reunionEnCurso.titulo, 'Reunión', 'sin título ya no es null');
   assert.equal(construirModelo({ reunionesHoy: [{ titulo: 'X', fecha: 'mal' }] }, h).oficina.reunionEnCurso, null);
+});
+
+test('cadenaSuministro(): listas que no son lista no truenan, ETA en texto cuenta y vacía sigue en el mar, «1 cliente»', () => {
+  let r; assert.doesNotThrow(() => { r = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: 'x' }, cedis: {}, camiones: 5, distritos: [{ tiendas: 'x', clientesFinales: { n: 1, importe: 5000 } }] }); });
+  assert.equal(r.tramos.find((t) => t.clave === 'cliente').volumen, '1 cliente · $5 K');
+  const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [{ llegaEnDias: '' }, { llegaEnDias: ' -5 ' }, { llegaEnDias: 'pendiente' }] }, cedis: {}, camiones: [], distritos: [] });
+  const t = (k) => v.tramos.find((x) => x.clave === k);
+  assert.match(t('mar').volumen, /^2 barcos/, 'vacía y basura = sin ETA, en el mar');
+  assert.match(t('puerto').volumen, /^1 con ETA vencida/); assert.equal(t('puerto').estado, 'rojo');
 });
