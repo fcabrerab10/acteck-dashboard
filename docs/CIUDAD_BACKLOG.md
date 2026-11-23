@@ -287,6 +287,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.63) Pin de la ciudad con miles es-MX («León · 🏬 1,200 · 🚚 1,050»; antes «🏬 1200») y `pinCiudad()` regresa `nombre`: el acceso rápido ya no toma el nombre partiendo el texto (una ciudad en blanco salía como «🏬 3») y la ciudad en blanco no entra al top.
   - [x] (4.7.64) Camiones de envíos: la salida es la primera fecha legible (un `fecha_envio_erp` ilegible ya no esconde el camión si `fecha_surtida` es buena) y una entrega en blanco (« ») ya no cuenta como entregado.
   - [x] (4.7.65) `camionesTemporada()` salta facturas sin folio legible (null, vacío): antes la clave null hacía que, si una caía en Buen Fin o en la semana del cierre, TODOS los camiones sin folio se pintaran de promoción; el folio numérico 0 sí cuenta.
+  - [x] (4.7.66) Reuniones de la oficina: `reunionesDelDia()` junta las repetidas (mismo id, o mismo título y hora) y «Reuniones hoy» y la reunión en curso salen de esa agenda limpia: una reunión con fecha ilegible o repetida ya no suma en la tarjeta sin aparecer en la sala, y la reunión en curso ya no lleva título «null» (dice «Reunión»).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -302,6 +303,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 23:17 · v4.7.66 · Reuniones de la oficina sin repetidas; conteo y reunión en curso desde la agenda limpia.
 - 2026-11-22 22:57 · v4.7.65 · `camionesTemporada()`: factura sin folio ya no pinta de promoción a todos los camiones sin folio; +1 prueba.
 - 2026-11-22 22:35 · v4.7.64 · Camiones de envíos: salida = primera fecha legible (ERP ilegible cae a la surtida) y entrega en blanco no cuenta como entregado.
 - 2026-11-22 22:16 · v4.7.63 · pinCiudad()/ciudadesTop(): miles es-MX en el pin y acceso rápido sin ciudad en blanco.

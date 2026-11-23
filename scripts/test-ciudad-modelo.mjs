@@ -1651,3 +1651,19 @@ test('camionesTemporada: factura sin folio no pinta de promoción a los demás c
   assert.equal(t.has(null) || t.has('  ') || t.has(undefined), false, 'sin folio no entra');
   assert.ok(t.has('F9')); assert.ok(t.has(0), 'folio numérico 0 sí cuenta');
 });
+
+test('reuniones de la oficina: repetidas una vez y conteo = agenda (4.7.66)', () => {
+  const h = new Date('2026-10-05T11:00:00');
+  const reu = [{ id: 7, titulo: 'Junta', fecha: '2026-10-05T10:30:00' }, { id: 7, titulo: 'Junta', fecha: '2026-10-05T10:30:00' },
+    { titulo: ' junta pcel ', fecha: '2026-10-05T16:00:00' }, { titulo: 'Junta Pcel', fecha: '2026-10-05T16:00:00' },
+    { titulo: 'Junta Pcel', fecha: '2026-10-05T17:00:00' }, { titulo: 'Mala', fecha: 'pendiente' }, { titulo: null, fecha: '2026-10-05T10:45:00' }];
+  const ag = reunionesDelDia(reu, h);
+  assert.equal(ag.length, 4, 'id repetido y mismo título+hora salen una vez; otra hora sí cuenta');
+  const m = construirModelo({ reunionesHoy: reu }, h);
+  assert.equal(m.oficina.reuniones, 4, 'la fecha ilegible y las repetidas ya no suman');
+  assert.equal(m.oficina.agenda.length, m.oficina.reuniones);
+  assert.equal(m.oficina.reunionEnCurso.titulo, 'Junta');
+  const s = construirModelo({ reunionesHoy: [{ titulo: null, fecha: '2026-10-05T10:45:00' }] }, h);
+  assert.equal(s.oficina.reunionEnCurso.titulo, 'Reunión', 'sin título ya no es null');
+  assert.equal(construirModelo({ reunionesHoy: [{ titulo: 'X', fecha: 'mal' }] }, h).oficina.reunionEnCurso, null);
+});

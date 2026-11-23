@@ -609,8 +609,10 @@ const duracionMin = (d) => { const n = Number(d); return Number.isFinite(n) && n
 export function reunionesDelDia(reuniones = [], hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
+  const vistas = new Set(); // 4.7.66: la misma reunión dos veces (mismo id, o mismo título y hora) sale una vez
   return comoLista(reuniones).map((r) => {
     const t = instante(r?.fecha); if (!t) return null;
+    const k = r.id != null && String(r.id).trim() ? `id:${String(r.id).trim()}` : `${norm(unirTexto(r.titulo))}|${t.getTime()}`; if (vistas.has(k)) return null; vistas.add(k);
     const ini = t.getHours() * 60 + t.getMinutes(), fin = ini + duracionMin(r.duracion_min);
     return { titulo: unirTexto(r.titulo) || 'Reunión', cliente_key: r.cliente_key || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
   }).filter(Boolean).sort((a, b) => a.ini - b.ini);
@@ -1220,10 +1222,11 @@ export function construirModelo(d, hoy = new Date()) {
       pendientes: abiertas.length, hechas: mios.filter((it) => it.estado === 'hecha').length, actividad: enCurso ? enCurso.titulo : abiertas[0]?.titulo || null, avatar: p.avatar_url || null };
   });
   const reuniones = (d.reunionesHoy || []).filter((r) => r.tipo !== 'viaje');
-  const ahoraMin = hoy.getHours() * 60 + hoy.getMinutes();
-  const reunionEnCurso = reuniones.find((r) => { const t = instante(r?.fecha); if (!t) return false; const ini = t.getHours() * 60 + t.getMinutes(); return ini <= ahoraMin && ahoraMin < ini + duracionMin(r.duracion_min); }) || null; // 4.3.32: fecha nula ya no es 1970 (18:00) ni duración mala la deja «en curso»
+  // 4.7.66: el conteo y la reunión en curso salen de la agenda limpia (antes una reunión con fecha ilegible o repetida sumaba
+  // en «Reuniones hoy» sin aparecer en la sala, y la reunión en curso llevaba el título crudo, «null» incluido).
+  const agenda = reunionesDelDia(reuniones, hoy), reunionEnCurso = agenda.find((r) => r.estado === 'en curso') || null; // 4.3.32: fecha nula no está en curso
   presenciaPersonas(personas, d.reunionesHoy, d.viajesHoy, hoy); // 3.90.40: en reunión / de viaje / disponible (como Gather)
-  const oficina = { personas, genericos: 3, reuniones: reuniones.length, reunionEnCurso: reunionEnCurso ? { titulo: reunionEnCurso.titulo, cliente_key: reunionEnCurso.cliente_key } : null, agenda: reunionesDelDia(reuniones, hoy) };
+  const oficina = { personas, genericos: 3, reuniones: agenda.length, reunionEnCurso: reunionEnCurso ? { titulo: reunionEnCurso.titulo, cliente_key: reunionEnCurso.cliente_key } : null, agenda };
 
   // ── CEDIS ──
   const inv = (d.inventario || [])[0] || {};
