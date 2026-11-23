@@ -25,10 +25,10 @@ import { listaLbl, roadmapTone, fmtInt, fmtPct, fmtMoneyShort, MESES_LARGO } fro
 export default function EstrategiaPrecios({ inicial = null } = {}) {
   const perfil = usePerfil();
   if (!puedeVerPestanaGlobal(perfil, 'estrategia_precios')) return <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />;
-  return <Pantalla sensible={puedeVerSensible(perfil)} />;
+  return <Pantalla sensible={puedeVerSensible(perfil)} inicial={inicial} />;
 }
 
-function Pantalla({ sensible }) {
+function Pantalla({ sensible, inicial = null }) {
   const { theme } = useTheme();
   const perfil = usePerfil();
   const rootRef = useRef(null);

@@ -1,10 +1,10 @@
 {
   "name": "acteck-dashboard",
   "private": true,
-  "version": "4.7.87",
+  "version": "4.8.0",
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/verificar-deploy.mjs && node --test scripts/test-paridad.mjs",
+    "prebuild": "node scripts/verificar-deploy.mjs && node --test scripts/test-paridad.mjs scripts/test-indefinidos.mjs",
     "verificar-deploy": "node scripts/verificar-deploy.mjs",
     "dev": "vite",
     "build": "vite build",

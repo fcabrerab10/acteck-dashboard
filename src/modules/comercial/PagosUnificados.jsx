@@ -19,7 +19,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { DB_CONFIGURED } from '../../lib/supabase';
 import SinAcceso from '../../components/SinAcceso';
 import ExportMenu from '../../components/ExportMenu';
-import { Hero, Panel, Pill, Segmented, TablaCompacta, Boton, Cargando, toast } from '../../components/kit';
+import { Hero, Panel, Pill, Segmented, TablaCompacta, Boton, Cargando, toast, AccionesCabecera } from '../../components/kit';
 import FrescuraPill from '../../components/FrescuraPill';
 
 import M from './pagosv3/motor';
