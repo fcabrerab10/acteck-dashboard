@@ -154,6 +154,9 @@ test('distritos reales encima del campus: capa mapa, sólo de lejos (3.90.12)', 
   assert.equal(capaVisible(cerca, 'mapa'), false, 'de cerca no se ve'); assert.equal(capaVisible(lejos, 'mapa'), true, 'de lejos sí');
   assert.equal(capaVisible(lejos, 'fino+mapa'), true); assert.equal(capaVisible(capasVisibles(70), 'fino+mapa'), false, 'muy lejos lo fino se va');
   assert.equal(capaVisible(cerca, undefined), true, 'sin capa siempre se ve');
+  assert.equal(juntarCapas({}, 'mapa'), 'mapa', 'un objeto no es capa'); assert.equal(juntarCapas(5, true, [], null), undefined);
+  assert.equal(juntarCapas(' mapa ', 'mapa'), 'mapa', 'con espacios no se repite'); assert.equal(juntarCapas(' fino + mapa '), 'fino+mapa');
+  assert.equal(capaVisible(cerca, ' mapa '), false, 'con espacios también se esconde de cerca'); assert.equal(capaVisible(cerca, {}), true, 'objeto = sin capa');
   assert.ok(DETALLE.mapa < DETALLE.gente, 'hay un tramo donde se ven los distritos y todavía la gente');
   const mapa = capasVisibles(DETALLE.pin + 1);
   assert.deepEqual(mapa, { gente: false, fino: false, mapa: true, cerca: false }, 'Vista Mapa: se va la capa cerca');

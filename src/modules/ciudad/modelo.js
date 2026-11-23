@@ -74,8 +74,11 @@ export const CIUDADES = {
 export const DETALLE = { gente: 50, fino: 65, mapa: 45, pin: 90 };
 export const capasVisibles = (zoom) => ({ gente: !(zoom > DETALLE.gente), fino: !(zoom > DETALLE.fino), mapa: !(zoom <= DETALLE.mapa), cerca: !(zoom > DETALLE.pin) });
 // Una pieza puede ir en varias capas ('fino+mapa'): se ve sólo si todas están visibles.
-export const juntarCapas = (...cs) => [...new Set(cs.flatMap((c) => String(c || '').split('+')).filter(Boolean))].sort().join('+') || undefined;
-export const capaVisible = (capas, detalle) => String(detalle || '').split('+').filter(Boolean).every((k) => capas?.[k] !== false);
+// Capas de un objeto ('fino+mapa'): sólo texto, cada nombre sin espacios; objetos, listas, números y booleanos no son capa
+// (antes un objeto daba la capa «[object Object]» y ' mapa ' no empataba con 'mapa': el objeto se veía de cerca).
+const nombresCapa = (c) => (typeof c === 'string' ? c.split('+').map((k) => k.trim()).filter(Boolean) : []);
+export const juntarCapas = (...cs) => [...new Set(cs.flatMap(nombresCapa))].sort().join('+') || undefined;
+export const capaVisible = (capas, detalle) => nombresCapa(detalle).every((k) => capas?.[k] !== false);
 // Árbol chico (escala menor a 1): adorno que va en la capa fina y se oculta de lejos (3.90.7).
 export const esChico = (s) => Number.isFinite(s) && s < 1;
 
