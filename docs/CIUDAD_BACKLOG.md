@@ -296,6 +296,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.72) `numero()` lee «12%» / « 45 % » (antes 0; igual que `porcentaje()`) y `porcentaje()` con lista u objeto da «—» (antes `[]` salía «0 %»).
   - [x] (4.7.73) `norm()` y `listaCorta()` ya no dejan pasar objetos, listas, booleanos ni Infinity: una cuenta/ciudad/nombre que llega como objeto ya no sale «[OBJECT OBJECT]» / «TRUE» (vacío) y la lista de POs del barco ya no dice «[object Object]».
   - [x] (4.7.74) `carteraPorCuenta()` pone la cuenta en minúsculas («PCEL» / « Digitalife » = `pcel` / `digitalife`, como las cuentas de la Ciudad; antes la cartera vencida no encontraba su tienda ni su sede) y salta clientes que no son texto ni número (antes clave «[object Object]» / «true»).
+  - [x] (4.7.75) `claveVista()` limpia el user_id (« u1 » = «u1») y con objeto, lista, booleano, NaN o en blanco usa «anon» (antes la última vista se guardaba en «acteck.ciudad.vista.[object Object]»).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -310,6 +311,8 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+
+- 2026-11-23 02:16 · v4.7.75 · `claveVista()` sin «[object Object]» y con el id sin espacios; +1 prueba.
 
 - 2026-11-23 01:56 · v4.7.74 · `carteraPorCuenta()` empata la cuenta en mayúsculas y salta clientes que no son texto; +1 prueba.
 

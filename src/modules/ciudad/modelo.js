@@ -251,7 +251,9 @@ export function planoMini(distritos = [], op) {
 }
 // Última vista por usuario (localStorage): clave por user_id y lectura tolerante. leerVista(texto) → { cx, cz, zoom } o null si
 // el texto no es JSON, faltan números o el centro cae fuera de México (con un margen); el zoom se acota a [ZOOM_MIN, ZOOM_MAX].
-export const claveVista = (userId) => `acteck.ciudad.vista.${userId || 'anon'}`;
+// 4.7.75: el user_id se limpia (espacios fuera); si llega como objeto, lista, booleano, NaN o en blanco usa «anon» (antes
+// «acteck.ciudad.vista.[object Object]» y « u1 » guardaba otra vista que «u1»).
+export const claveVista = (userId) => { const id = typeof userId === 'string' ? userId.trim() : typeof userId === 'number' && Number.isFinite(userId) ? String(userId) : ''; return `acteck.ciudad.vista.${id || 'anon'}`; };
 export function leerVista(texto) {
   let v; try { v = JSON.parse(texto); } catch { return null; }
   if (!v || !Number.isFinite(v.cx) || !Number.isFinite(v.cz) || !Number.isFinite(v.zoom)) return null;

@@ -253,6 +253,8 @@ test('última vista: lectura tolerante desde localStorage', () => {
   assert.equal(leerVista(JSON.stringify({ cx: g.x, cz: g.z, zoom: 1 })).zoom, ZOOM_MIN);
   for (const t of [null, '', 'no-json', '{}', '{"cx":"a","cz":0,"zoom":10}', JSON.stringify({ cx: 1e6, cz: 0, zoom: 20 }), JSON.stringify({ cx: 0, cz: -1e6, zoom: 20 })]) assert.equal(leerVista(t), null, String(t));
   assert.equal(claveVista('u1'), 'acteck.ciudad.vista.u1'); assert.equal(claveVista(null), 'acteck.ciudad.vista.anon');
+  assert.equal(claveVista(' u1 '), 'acteck.ciudad.vista.u1', 'id con espacios'); assert.equal(claveVista(7), 'acteck.ciudad.vista.7');
+  for (const raro of [{}, [], true, NaN, '  ']) assert.equal(claveVista(raro), 'acteck.ciudad.vista.anon', 'id raro → anon');
 });
 test('tarjeta del edificio: una plantilla con estado y hasta 4 números', () => {
   const mod = { oficina: { personas: [{ pendientes: 3, hechas: 1 }], genericos: 2, reuniones: 1, reunionEnCurso: null }, cedis: { valor: 12.5e6, dias: 95, piezas: 1000, skus: 40 }, puerto: { barcos: [{ piezas: 10, llegaEnDias: 3 }, { piezas: 5, llegaEnDias: null }], tarimas: [], totalPiezas: 15 },
