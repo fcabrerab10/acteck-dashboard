@@ -111,7 +111,7 @@ test('SSR web: Hoy6 · Lo que mandé · Por cliente · Organiza', () => {
   const s3 = h(PorCliente, comW); sano(s3, 'PorCliente'); assert.match(s3, /Digitalife/); assert.match(s3, /acuerdos/); assert.match(s3, /Reunión/);
   const e = c.estadoDelDia({ items: itemsHoy, uid: U, hoy: hoyReal, horas, registros: [], organizadoHoy: false });
   const s4 = h(OrganizaCuerpo, { d, uid: U, propietario: U, hoy: hoyReal, hoyIso: hoyRealIso, horas, estado: e, puedeEditar: true }); sano(s4, 'Organiza');
-  assert.match(s4, /no se cerró|Lo que quedó/); // paso 0 (ayer sin cerrar) o paso 1
+  assert.match(s4, /no se cerró|Tus pendientes/); assert.doesNotMatch(s4, /El negocio propone/); // paso 0 (ayer sin cerrar) o paso 1
 });
 test('SSR celular: HoyM6 · MandeM · PorClienteM', () => {
   const s1 = h(HoyM6, comM); sano(s1, 'HoyM6'); assert.match(s1, /Tu día/); assert.match(s1, /Desliza/); assert.match(s1, /Lo que mandé/);

@@ -19,7 +19,9 @@ export function hoyDe(items, uid, hoy = new Date(), { reuniones = [], google = [
   const deHoy = mios.filter((it) => abierto(it) && !enBandeja(it) && ((it.cuando && it.cuando === hoyIso) || (!it.cuando && it.fecha_limite === hoyIso)));
   const deAyer = mios.filter((it) => abierto(it) && !enBandeja(it) && ((it.cuando && it.cuando < hoyIso) || (!it.cuando && it.fecha_limite && it.fecha_limite < hoyIso)));
   const hechasHoy = mios.filter((it) => (it.estado === 'hecha') && String(it.completado_en || it.updated_at || '').slice(0, 10) === hoyIso);
-  const ordenar = (a, b) => (a.hora || '99') .localeCompare(b.hora || '99') || N(a.orden_dia) - N(b.orden_dia) || String(a.created_at).localeCompare(String(b.created_at));
+  // El orden que la persona acomodó al organizar su día (`orden_dia` 1…n) manda; lo que no tiene orden va al final.
+  const od = (it) => N(it.orden_dia) || 9999;
+  const ordenar = (a, b) => (a.hora || '99') .localeCompare(b.hora || '99') || od(a) - od(b) || String(a.created_at).localeCompare(String(b.created_at));
   deHoy.sort(ordenar);
   const esHoyG = (e) => String(e.inicio || e.start || '').slice(0, 10) === hoyIso;
   const reunionesHoy = reuniones.filter((r) => String(r.fecha || '').slice(0, 10) === hoyIso && r.tipo !== 'viaje');
@@ -98,7 +100,7 @@ export function siguienteDe(h, ahora = new Date(), { hoyIso = h.hoyIso } = {}) {
   const actual = bloques.find((b) => b.ini <= min && min < b.fin) || null;
   const proximo = bloques.find((b) => b.ini > min && b !== actual) || null;
   const peso = (it) => (it.prioridad === 'alta' || it.prioridad === 'p1' ? 0 : it.prioridad === 'baja' ? 2 : 1);
-  const sinHora = h.deHoy.filter((it) => !it.hora).sort((a, b) => peso(a) - peso(b) || N(a.orden_dia) - N(b.orden_dia) || String(a.created_at).localeCompare(String(b.created_at)));
+  const sinHora = h.deHoy.filter((it) => !it.hora).sort((a, b) => (N(a.orden_dia) || 9999) - (N(b.orden_dia) || 9999) || peso(a) - peso(b) || String(a.created_at).localeCompare(String(b.created_at)));
   const conHora = h.deHoy.filter((it) => it.hora).sort((a, b) => String(a.hora).localeCompare(String(b.hora)));
   const vistos = new Set();
   const cola = [...h.deAyer, ...conHora, ...sinHora].filter((it) => { if (vistos.has(it.id)) return false; vistos.add(it.id); return true; });

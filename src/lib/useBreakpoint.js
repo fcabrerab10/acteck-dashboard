@@ -85,7 +85,7 @@ export const UMBRAL_VIEWPORT_WEB = 600;
 
 // Forzar el shell en ESTE dispositivo (localStorage): 'web' · 'celular' · null = automático. Lo cambia el usuario desde
 // el panel del avatar; sirve de red de seguridad para aparatos que reportan medidas raras (plegables nuevos).
-const LS_SHELL = 'acteck_shell_forzado_v1';
+const LS_SHELL = 'acteck_shell_forzado_v2'; // v2 (2026-11-23): se ignoran las pruebas viejas guardadas en cada aparato; todos vuelven a «auto»
 // También por URL: `?shell=web` · `?shell=celular` · `?shell=auto` (se guarda en este aparato y se limpia de la barra).
 (function leerShellDeUrl() {
   try {
