@@ -291,6 +291,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.67) Acceso rápido de ciudades: el número del botón sale con miles es-MX («León 1,250»; antes «1250») y el título usa `plural()` desde `ciudadesTop()` («Ir a León: 1,200 tiendas activas · 1 camión llegando», «1 tienda activa»; antes «1200 tiendas» y el plural se armaba a mano en `Ciudad.jsx`). Harness sin errores.
   - [x] (4.7.68) Cadena de suministro: `cadenaSuministro()` acepta barcos, camiones, distritos y tiendas que no son lista (antes lanzaba error), lee la ETA en días en texto (« -5 » cuenta como atrasado) y una ETA vacía o ilegible deja el barco en el mar (antes «» valía 0 y salía en puerto); el tramo de clientes finales dice «120 clientes · $2.5 M» (antes «120 · $2.5 M»).
   - [x] (4.7.69) `cuotaRitmo()` empata la cuenta aunque traiga espacios o venga como número (« ct », 10 = «10») sin contar doble si llega en dos formas; `celebraciones()` acepta distritos/tiendas que no son lista (antes lanzaba error).
+  - [x] (4.7.70) `cintasCadena()` (cintas mar → puerto → CEDIS → ciudades) acepta barcos, tarimas, camiones, distritos y tiendas que no son lista (antes lanzaba error) y empata la ciudad del camión con `norm()` (« monterrey » = «MONTERREY», antes no engrosaba la cinta); camión o distrito sin ciudad no hace cinta («cedis → undefined»).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -305,6 +306,8 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+
+- 2026-11-23 00:37 · v4.7.70 · cintasCadena() sin errores con listas raras y ciudad del camión normalizada.
 
 - 2026-11-22 23:56 · v4.7.68 · `cadenaSuministro()`: listas que no son lista sin error, ETA en texto/vacía bien leída y «N clientes» en el tramo de clientes finales; +1 prueba.
 - 2026-11-22 23:36 · v4.7.67 · Acceso rápido de ciudades con miles es-MX y título con `plural()` desde `ciudadesTop()`; +1 prueba.

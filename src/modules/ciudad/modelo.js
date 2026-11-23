@@ -389,10 +389,12 @@ export function cintasCadena(m, max = 8) {
   const cad = cadenaSuministro(m); if (!cad.tramos.length) return [];
   const est = Object.fromEntries(cad.tramos.map((t) => [t.clave, t.estado]));
   const peso = (v, tope) => (tope > 0 ? 1 + Math.round(3 * Math.min(1, v / tope)) : 1);
-  const barcos = (m.puerto?.barcos || []).filter(Boolean).length;
-  const out = [{ de: 'mar', a: 'puerto', tono: est.puerto === 'rojo' ? 'rojo' : est.mar, peso: peso(barcos, 8) }, { de: 'puerto', a: 'cedis', tono: est.puerto, peso: peso(barcos + (m.puerto?.tarimas || []).length, 8) }];
-  const cam = new Map(); for (const c of (m.camiones || []).filter(Boolean)) { const o = cam.get(c.ciudad) || { n: 0, lento: false }; o.n += 1; if (c.envio && m.hoyIso && c.fecha && dias(c.fecha, m.hoyIso) > 5) o.lento = true; cam.set(c.ciudad, o); }
-  const ciudades = (m.distritos || []).filter(Boolean).map((d) => { const ts = (d.tiendas || []).filter((t) => t && !t.reparto); const r = ts.length ? ts.filter((t) => t.vendio).length / ts.length : 1; const c = cam.get(d.ciudad) || { n: 0, lento: false };
+  // 4.7.70: barcos, tarimas, camiones, distritos y tiendas que no son lista ya no lanzan error; el camión empata su ciudad con
+  // norm() (« leon » = «LEON», como el pin) y un camión o distrito sin ciudad no hace cinta (antes «cedis → undefined»).
+  const barcos = comoLista(m.puerto?.barcos).filter(Boolean).length;
+  const out = [{ de: 'mar', a: 'puerto', tono: est.puerto === 'rojo' ? 'rojo' : est.mar, peso: peso(barcos, 8) }, { de: 'puerto', a: 'cedis', tono: est.puerto, peso: peso(barcos + comoLista(m.puerto?.tarimas).filter(Boolean).length, 8) }];
+  const cam = new Map(); for (const c of comoLista(m.camiones)) { const k = norm(c?.ciudad); if (!k) continue; const o = cam.get(k) || { n: 0, lento: false }; o.n += 1; if (c.envio && m.hoyIso && c.fecha && dias(c.fecha, m.hoyIso) > 5) o.lento = true; cam.set(k, o); }
+  const ciudades = comoLista(m.distritos).filter((d) => d && norm(d.ciudad)).map((d) => { const ts = comoLista(d.tiendas).filter((t) => t && !t.reparto); const r = ts.length ? ts.filter((t) => t.vendio).length / ts.length : 1; const c = cam.get(norm(d.ciudad)) || { n: 0, lento: false };
     return { ciudad: d.ciudad, n: c.n, tiendas: ts.length, tono: ts.length && r < 0.4 ? 'rojo' : c.lento || (ts.length && r < 0.7) ? 'ambar' : c.n || ts.length ? 'verde' : 'gris' }; })
     .filter((x) => x.n || x.tiendas).sort((a, b) => b.n - a.n || b.tiendas - a.tiendas).slice(0, max);
   const tope = Math.max(1, ...ciudades.map((x) => x.n));

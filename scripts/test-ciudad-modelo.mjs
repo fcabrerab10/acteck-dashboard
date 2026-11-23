@@ -1689,3 +1689,15 @@ test('cuotaRitmo() empata cuentas con espacios o numéricas sin contar doble; ce
   assert.doesNotThrow(() => { c = celebraciones({ distritos: [{ ciudad: 'X', tiendas: 5 }, { ciudad: 'Y', tiendas: [{ cuenta: 'a', sucursal: 's', vendioMes: true, importe: 10 }] }] }); });
   assert.equal(c.tiendas.length, 1); assert.equal(c.tiendas[0].ciudad, 'Y');
 });
+
+test('cintasCadena() aguanta listas que no son lista y empata la ciudad del camión con norm()', () => {
+  const base = { hoyIso: '2026-10-08', cedis: { dias: 30 }, distritos: [{ ciudad: 'MONTERREY', tiendas: [{ vendio: true }] }] };
+  let c; assert.doesNotThrow(() => { c = cintasCadena({ ...base, camiones: 'x', puerto: { barcos: 5, tarimas: 'x' } }); });
+  assert.ok(c.every((x) => Number.isFinite(x.peso)));
+  assert.doesNotThrow(() => cintasCadena({ ...base, distritos: 'x', camiones: [null] }));
+  assert.doesNotThrow(() => cintasCadena({ ...base, distritos: [null, { ciudad: 'PUEBLA', tiendas: 7 }] }));
+  c = cintasCadena({ ...base, camiones: [{ ciudad: ' monterrey ' }, { ciudad: 'Monterrey' }, { ciudad: null }, { ciudad: '' }] });
+  const mty = c.find((x) => x.a === 'MONTERREY'); assert.equal(mty.peso, 4, 'los dos camiones de Monterrey cuentan');
+  c = cintasCadena({ ...base, distritos: [...base.distritos, { ciudad: '', tiendas: [{ vendio: true }] }, { tiendas: [{ vendio: true }] }] });
+  assert.ok(c.every((x) => x.a), 'sin cinta hacia una ciudad vacía');
+});
