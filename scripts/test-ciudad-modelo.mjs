@@ -1402,6 +1402,7 @@ test('dsoTexto(): días redondeados en singular/plural y nada con 0 o ilegible',
 test('pendientesTexto(): singular/plural con miles es-MX; nulo o ilegible cuenta 0', () => {
   assert.equal(pendientesTexto(1, 1), '1 pendiente hoy · 1 hecha'); assert.equal(pendientesTexto(3, 0), '3 pendientes hoy · 0 hechas');
   assert.equal(pendientesTexto('1,200', 2), '1,200 pendientes hoy · 2 hechas');
+  assert.equal(pendientesTexto(-3, -2), '0 pendientes hoy · 0 hechas'); assert.equal(pendientesTexto(Infinity, '-1'), '0 pendientes hoy · 0 hechas');
   assert.equal(pendientesTexto(undefined, null), '0 pendientes hoy · 0 hechas'); assert.equal(pendientesTexto('abc', NaN), '0 pendientes hoy · 0 hechas');
 });
 test('temperaturaTexto(): grados redondeados, 0 y negativos valen; sin dato → vacío', () => {

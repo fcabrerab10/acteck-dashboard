@@ -799,8 +799,10 @@ export function dsoTexto(v) {
 }
 // Pendientes de la persona (4.7.46): «1 pendiente hoy · 1,200 hechas» con `plural()`; nulo/ilegible cuenta 0
 // (antes «undefined pendientes hoy · NaN hechas» y sin miles es-MX). Globo de la persona en la oficina y de viaje.
+// 4.7.87: un conteo negativo cuenta 0 (antes «-2 hechas»); son tareas, no pueden ser menos de cero.
 export function pendientesTexto(pendientes, hechas) {
-  return `${plural(numero(pendientes), 'pendiente')} hoy · ${plural(numero(hechas), 'hecha')}`;
+  const c = (v) => Math.max(0, numero(v));
+  return `${plural(c(pendientes), 'pendiente')} hoy · ${plural(c(hechas), 'hecha')}`;
 }
 // Temperatura (4.7.45): «24°» redondeada (0 y bajo cero valen: «-3°»); sin dato o ilegible → '' (antes «NaN° en Guadalajara»).
 export function temperaturaTexto(v) {
