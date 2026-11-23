@@ -135,22 +135,30 @@ export function filaDePropuesta(p) {
 }
 
 /** Inserta las propuestas que aún no existen (idempotente por clave_calculo). */
-export async function aplicarPagosCalculados({ propuestas, sbGetAll, sbPost, dryRun = false }) {
+export async function aplicarPagosCalculados({ propuestas, sbGetAll, sbPost, sbPatch = null, dryRun = false }) {
   const aplicables = propuestas.filter((p) => p.aplica && p.monto > 0);
   if (aplicables.length === 0) return { creados: 0, existentes: 0, filas: [] };
   const claves = aplicables.map((p) => p.clave);
-  const yaHay = await sbGetAll(`pagos?select=id,clave_calculo&clave_calculo=in.(${claves.map((c) => `"${c}"`).join(',')})`);
+  const yaHay = await sbGetAll(`pagos?select=id,clave_calculo,estado,monto&clave_calculo=in.(${claves.map((c) => `"${c}"`).join(',')})`);
   const set = new Set(yaHay.map((r) => r.clave_calculo));
   const nuevos = aplicables.filter((p) => !set.has(p.clave)).map(filaDePropuesta);
   if (nuevos.length && !dryRun) await sbPost('pagos', nuevos);
-  return { creados: nuevos.length, existentes: aplicables.length - nuevos.length, filas: nuevos };
+  // 2026-11-23: un pago creado antes del cierre con la misma clave (p. ej. un rebate trimestral generado desde el panel
+  // con el trimestre en curso) se quedaba con el monto de ese día. Al cierre se actualiza SÓLO si sigue en «calculado»
+  // (nadie lo ha solicitado, autorizado ni pagado) y el monto cambió.
+  const porClave = new Map(aplicables.map((p) => [p.clave, p]));
+  const cambiar = yaHay.filter((r) => r.estado === 'calculado' && porClave.has(r.clave_calculo) && Math.abs((Number(r.monto) || 0) - porClave.get(r.clave_calculo).monto) > 0.5);
+  if (cambiar.length && sbPatch && !dryRun) {
+    for (const r of cambiar) { const p = porClave.get(r.clave_calculo); await sbPatch('pagos', r.id, { monto: p.monto, detalle: p.detalle || {}, notas: `Recalculado al cierre (antes ${Math.round(Number(r.monto) || 0)})` }); }
+  }
+  return { creados: nuevos.length, existentes: aplicables.length - nuevos.length, actualizados: sbPatch ? cambiar.length : 0, filas: nuevos };
 }
 
 /** Lo que llama el cron el día 2: calcula el mes cerrado y crea los pagos faltantes. */
-export async function taskPagosCalcular({ sbGetAll, sbPost, hoy = hoyCDMX(), anio, mes, dryRun = false } = {}) {
+export async function taskPagosCalcular({ sbGetAll, sbPost, sbPatch = null, hoy = hoyCDMX(), anio, mes, dryRun = false } = {}) {
   const per = anio && mes ? { anio, mes } : periodoACalcular(hoy);
   const r = await calcularPagosDelPeriodo({ anio: per.anio, mes: per.mes, sbGetAll });
-  const aplicado = await aplicarPagosCalculados({ propuestas: r.propuestas, sbGetAll, sbPost, dryRun });
+  const aplicado = await aplicarPagosCalculados({ propuestas: r.propuestas, sbGetAll, sbPost, sbPatch, dryRun });
   return {
     ok: true,
     periodo: `${per.anio}-${pad(per.mes)}`,

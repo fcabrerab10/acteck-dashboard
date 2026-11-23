@@ -772,8 +772,14 @@ async function reglaRebatePorGenerar(hoy) {
   ]);
   const registrados = new Set();
   for (const p of pagos) {
-    const m = String(p.concepto || '').match(/^Rebate\s+(\d{1,2})\s+\S+\s+(\d{4})/i);
-    if (m) registrados.add(`${m[2]}-${String(Number(m[1])).padStart(2, '0')}`);
+    const c = String(p.concepto || '');
+    const m = c.match(/^Rebate\s+(\d{1,2})\s+\S+\s+(\d{4})/i);
+    if (m) { registrados.add(`${m[2]}-${String(Number(m[1])).padStart(2, '0')}`); continue; }
+    // Formato que escribe el motor de Pagos desde 3.27 («Rebate Noviembre 2026 · Dicotech»): sin él, el aviso seguía
+    // saliendo aunque el rebate ya estuviera generado (2026-11-23).
+    const n = c.match(/^Rebate\s+([A-Za-zÁÉÍÓÚáéíóúñ]+)\s+(\d{4})/);
+    const idx = n ? MESES_LARGO.findIndex((x) => x.toLowerCase() === n[1].toLowerCase()) : -1;
+    if (idx >= 0) registrados.add(`${n[2]}-${String(idx + 1).padStart(2, '0')}`);
   }
   const sellIn = new Map(fact.map((r) => [`${r.anio}-${String(r.mes).padStart(2, '0')}`, Number(r.monto) || 0]));
   const out = [];
@@ -1697,7 +1703,15 @@ async function taskPagosCalcular({ dryRun = esDryRun() } = {}) {
     });
     if (!r.ok) throw new Error(`${tabla} → HTTP ${r.status} ${(await r.text()).slice(0, 300)}`);
   };
-  return _taskPagosCalcular({ sbGetAll, sbPost, hoy: hoyCDMX(), dryRun });
+  const sbPatch = async (tabla, id, cambios) => {
+    const r = await fetch(`${SB_URL}/rest/v1/${tabla}?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(cambios),
+    });
+    if (!r.ok) throw new Error(`${tabla} PATCH → HTTP ${r.status} ${(await r.text()).slice(0, 300)}`);
+  };
+  return _taskPagosCalcular({ sbGetAll, sbPost, sbPatch, hoy: hoyCDMX(), dryRun });
 }
 
 
