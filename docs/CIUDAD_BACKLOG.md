@@ -294,6 +294,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.70) `cintasCadena()` (cintas mar → puerto → CEDIS → ciudades) acepta barcos, tarimas, camiones, distritos y tiendas que no son lista (antes lanzaba error) y empata la ciudad del camión con `norm()` (« monterrey » = «MONTERREY», antes no engrosaba la cinta); camión o distrito sin ciudad no hace cinta («cedis → undefined»).
   - [x] (4.7.71) `pensamientos()` y `misionesDelDia()` aceptan cartera, distritos, tiendas y agenda que no son lista (antes lanzaban error); la cartera vencida empata la cuenta con espacios (« pcel » = «pcel») y la cuota/venta en texto («1,000», «$900») ya cuenta para «Voy arriba de mi cuota».
   - [x] (4.7.72) `numero()` lee «12%» / « 45 % » (antes 0; igual que `porcentaje()`) y `porcentaje()` con lista u objeto da «—» (antes `[]` salía «0 %»).
+  - [x] (4.7.73) `norm()` y `listaCorta()` ya no dejan pasar objetos, listas, booleanos ni Infinity: una cuenta/ciudad/nombre que llega como objeto ya no sale «[OBJECT OBJECT]» / «TRUE» (vacío) y la lista de POs del barco ya no dice «[object Object]».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -308,6 +309,8 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+
+- 2026-11-23 01:36 · v4.7.73 · `norm()` / `listaCorta()` sin «[object Object]» ni «TRUE» con datos que no son texto (pruebas nuevas).
 
 - 2026-11-23 00:56 · v4.7.71 · `pensamientos()` / `misionesDelDia()` sin errores con listas raras; cartera vencida con cuenta con espacios y cuota en texto; +1 prueba.
 - 2026-11-23 00:37 · v4.7.70 · cintasCadena() sin errores con listas raras y ciudad del camión normalizada.

@@ -1089,6 +1089,10 @@ test('cuántos mostrar con max/n inválido no vacía las listas (4.3.20)', () =>
   }
   assert.ok(misionesDelDia(m, hoy).length > 0, 'el fixture sí tiene misiones');
   assert.equal(listaCorta(['a', 'b', 'c', 'd'], 'x'), 'a, b, c +1'); assert.equal(listaCorta(['a', 'b', 'c'], '2'), 'a, b +1'); assert.equal(listaCorta(['a', 'b'], NaN), 'a, b');
+  // 4.7.73: objetos, listas, booleanos y números no finitos no se cuelan como «[object Object]» / «TRUE»
+  assert.equal(listaCorta([{}, 'PO-1', true, NaN, ['x'], 7]), 'PO-1, 7'); assert.equal(listaCorta([{ po: 'PO-1' }]), '');
+  assert.equal(norm({}), ''); assert.equal(norm(['leon']), ''); assert.equal(norm(true), ''); assert.equal(norm(Infinity), ''); assert.equal(norm(' león '), 'LEON'); assert.equal(norm(10), '10');
+  assert.equal(nombreCiudad({}), ''); assert.equal(nombreCiudad(['LEON']), ''); assert.equal(pinCiudad({ ciudad: {} }).nombre, '');
   assert.equal(misionesDelDia(m, hoy, '1').length, Math.min(1, misionesDelDia(m, hoy).length));
 });
 

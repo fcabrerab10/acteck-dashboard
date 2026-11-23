@@ -17,7 +17,8 @@ export const comoLista = (x) => (Array.isArray(x) ? x : []);
 // (4.3.20) Cuántos mostrar: número o texto ≥ 0 → entero (3.7 → 3); NaN, negativo, null o basura → la omisión. Antes un
 // `max`/`n` inválido llegaba a `slice(0, NaN)` y la lista salía vacía (misiones, pensamientos, bitácora, cintas, racks…).
 export const cuantos = (x, omision) => { const n = x == null || x === '' ? NaN : Number(x); return Number.isFinite(n) && n >= 0 ? Math.floor(n) : omision; };
-export const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+// 4.7.73: un objeto, lista, booleano o Infinity ya no sale «[OBJECT OBJECT]» / «TRUE» / «INFINITY» (cuenta, ciudad, nombre): vacío.
+export const norm = (s) => String(s && (typeof s === 'string' || (typeof s === 'number' && Number.isFinite(s))) ? s : '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
 /** Ciudades (lat, lon) · la escena usa x = (lon − lonGDL)·ESC, z = −(lat − latGDL)·ESC. */
 export const CIUDADES = {
@@ -603,7 +604,7 @@ export function ponerPosEnPuerto(puerto, filas = []) {
 export function listaCorta(lista, n = 3) {
   n = cuantos(n, 3);
   if (!Array.isArray(lista)) return '';
-  const u = [...new Set(lista.map((x) => (x == null ? '' : String(x).trim())).filter(Boolean))];
+  const u = [...new Set(lista.map((x) => (typeof x === 'string' || (typeof x === 'number' && Number.isFinite(x)) ? String(x).trim() : '')) /* 4.7.73: objetos, booleanos y NaN fuera (antes «[object Object]») */.filter(Boolean))];
   // 4.7.56: con n = 0 sale «+3» (antes « +3» con espacio al inicio).
   return [u.slice(0, n).join(', '), u.length > n ? `+${u.length - n}` : ''].filter(Boolean).join(' ');
 }
