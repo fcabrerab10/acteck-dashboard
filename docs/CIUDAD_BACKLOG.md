@@ -311,6 +311,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.85) Cuota como Análisis: `cuotasPorCuenta()` junta la cuota por cliente ERP y sólo los clientes con cuota > 0 suman su venta (antes la venta de un cliente con cuota 0 inflaba el % de la cuenta en la capa «Cuota», pensamientos y celebraciones); renglón sin cliente ERP ya no suma cuota.
   - [x] (4.7.86) `nombrePersona()`: sin nombre, el correo sale legible («ana.lopez» / «juan_perez-ruiz» → «Ana Lopez» / «Juan Perez Ruiz»; antes «ana.lopez» en el escritorio, la tarjeta y el globo); números o separadores solos → «Persona».
   - [x] (4.7.87) `pendientesTexto()`: un conteo negativo o infinito cuenta 0 (antes «-2 hechas» en el globo de la persona).
+  - [x] (4.12.2) `nombreCiudad()`: «CDMX», «Cd. de México», «D.F.» salen «CDMX» (antes «Cdmx» / «Cd de México») y un texto sin letras («123», «-», un número) ya no es ciudad (antes «va a 5» en el vendedor y pines con «-»).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -326,6 +327,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 15:37 · v4.12.2 · Pulido: `nombreCiudad()` escribe CDMX en todas sus formas y descarta ciudades sin letras; +1 prueba.
 - 2026-11-23 15:16 · v4.12.1 · Pulido: tarjeta de la oficina suma pendientes/hechas/genéricos como número ≥ 0 (antes «2» en texto se concatenaba y los negativos restaban); +1 prueba.
 - 2026-11-23 05:56 · v4.7.86 · Pulido: `nombrePersona()` convierte el correo en nombre legible («Ana Lopez») cuando la persona no trae nombre.
 - 2026-11-23 06:16 · v4.7.87 · Pulido: `pendientesTexto()` ya no muestra conteos negativos («-2 hechas» → «0 hechas»).

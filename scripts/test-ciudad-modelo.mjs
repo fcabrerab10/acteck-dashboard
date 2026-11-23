@@ -847,6 +847,12 @@ test('pulido: proyección y catálogos coherentes', () => {
   assert.equal(RECORRIDO_CLAVE, 'acteck-ciudad-recorrido');
 });
 
+test('nombreCiudad: CDMX en sus formas y sin letras no es ciudad (4.12.2)', () => {
+  for (const c of ['CDMX', 'cdmx', ' Cd. de México ', 'CD DE MEXICO', 'D.F.', 'DF']) assert.equal(nombreCiudad(c), 'CDMX', c);
+  for (const c of ['123', '-', 5, ' . ', {}]) assert.equal(nombreCiudad(c), '', String(c));
+  assert.equal(vaA({ cliente: 'Pcel', ciudad: 5 }), 'va a Pcel');
+  assert.equal(nombreCiudad('Cd. Juárez'), 'Cd. Juárez');
+});
 test('nombreCiudad: acentos, conectores y CDMX', () => {
   assert.equal(nombreCiudad('SAN LUIS POTOSI'), 'San Luis Potosí');
   assert.equal(nombreCiudad('CIUDAD DE MEXICO'), 'CDMX'); assert.equal(nombreCiudad('Ciudad de México'), 'CDMX');

@@ -190,7 +190,9 @@ export const EXTREMOS_MEXICO = [[32.53, -117.12], [32.72, -114.72], [31.75, -106
 const ACENTOS = { MERIDA: 'Mérida', JUAREZ: 'Juárez', CULIACAN: 'Culiacán', MAZATLAN: 'Mazatlán', TORREON: 'Torreón', POTOSI: 'Potosí', LEON: 'León', QUERETARO: 'Querétaro', GUTIERREZ: 'Gutiérrez', CANCUN: 'Cancún', MEXICO: 'México', OBREGON: 'Obregón', TEHUACAN: 'Tehuacán', CORDOBA: 'Córdoba', SAHAGUN: 'Sahagún', ATIZAPAN: 'Atizapán', TONALA: 'Tonalá', MINATITLAN: 'Minatitlán', LAZARO: 'Lázaro', CARDENAS: 'Cárdenas' };
 const CONECTORES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'EL']);
 export function nombreCiudad(ciudad) {
-  const k = norm(ciudad); if (!k) return ''; if (k === 'CIUDAD DE MEXICO') return 'CDMX';
+  // 4.12.2: «CDMX» / «Cd. de México» ya no salen «Cdmx» / «Cd de México»; sin letras («123», «-», un número) no es ciudad → ''.
+  const k = norm(ciudad); if (!k || !/\p{L}/u.test(k)) return '';
+  if (/^(CIUDAD|CD\.?) DE MEXICO$|^CDMX$|^D\.?F\.?$/.test(k)) return 'CDMX';
   return k.split(/\s+/).map((w, i) => ACENTOS[w] || (i > 0 && CONECTORES.has(w) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase())).join(' ');
 }
 export function pinCiudad(distrito, camiones = []) {
