@@ -680,7 +680,8 @@ export function topSkus(filas = [], n = 5) {
 // Cuenta regresiva corta (4.7.3): 0 → «empieza ya» (antes «en 0 min»), 1..59 → «en N min», ≥ 60 → «en 1 h 5 min»; ilegible o negativa → ''.
 // 4.7.5: cuándo llega un barco en palabras («llega hoy», «llega mañana», «llega en 3 d», «2 d tarde»); sin ETA o ilegible → 'sin ETA'.
 export function llegaBarco(dias) {
-  if (dias == null || (typeof dias === 'string' && !dias.trim())) return 'sin ETA';
+  // 4.7.77: sólo número o texto; una lista/objeto ya no se lee como 0 («llega hoy» con `[]`).
+  if (dias == null || (typeof dias !== 'number' && typeof dias !== 'string') || (typeof dias === 'string' && !dias.trim())) return 'sin ETA';
   // 4.7.29: «1,200» en texto se lee y los días salen con miles es-MX («llega en 1,200 d», «1,200 d tarde»).
   const k = Math.round(Number(typeof dias === 'string' ? dias.replace(/[,\s]/g, '') : dias)); if (!Number.isFinite(k) || typeof dias === 'boolean') return 'sin ETA';
   const m = (n) => n.toLocaleString('es-MX');
@@ -689,7 +690,7 @@ export function llegaBarco(dias) {
 }
 
 export function enMinutos(min) {
-  if (min == null || (typeof min === 'string' && !min.trim())) return '';
+  if (min == null || (typeof min !== 'number' && typeof min !== 'string') || (typeof min === 'string' && !min.trim())) return ''; // 4.7.77: `[]` ya no «empieza ya»
   const k = Math.round(Number(typeof min === 'string' ? min.replace(/[,\s]/g, '') : min)); if (!Number.isFinite(k) || k < 0 || typeof min === 'boolean') return '';
   if (k === 0) return 'empieza ya';
   const h = Math.floor(k / 60), r = k % 60;
@@ -754,8 +755,8 @@ export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto
 // Antigüedad en días (4.7.28): «hoy» (0 o futuro), «ayer», «hace 1,200 d» con miles es-MX y redondeada (antes «hace 1200 d»,
 // «hace 2.6 d»); ilegible → ''. Bitácora (camiones/arribos) y tarjeta del camión.
 export function haceDias(v) {
-  if (v == null || v === '' || typeof v === 'boolean') return '';
-  const k = Math.round(numero(v)); if (!Number.isFinite(Number(String(v).replace(/[$,\s]/g, '')))) return '';
+  // 4.7.77: con `leeNum()`: texto en blanco (« ») y listas (`[]`) ya no dicen «hoy».
+  const n = leeNum(v); if (n == null) return ''; const k = Math.round(n);
   return k <= 0 ? 'hoy' : k === 1 ? 'ayer' : `hace ${k.toLocaleString('es-MX')} d`;
 }
 export function dsoTexto(v) {

@@ -299,6 +299,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.75) `claveVista()` limpia el user_id (« u1 » = «u1») y con objeto, lista, booleano, NaN o en blanco usa «anon» (antes la última vista se guardaba en «acteck.ciudad.vista.[object Object]»).
   - [x] (4.7.76) `juntarCapas()` / `capaVisible()` sólo aceptan nombres de capa en texto y sin espacios: un objeto ya no da la capa «[object Object]» y ' mapa ' empata con 'mapa' (antes se repetía y el objeto de la capa mapa se veía de cerca).
 
+  - [x] (4.7.77) `llegaBarco()`, `enMinutos()` y `haceDias()` sólo leen número o texto: una ETA/minutos/antigüedad que llega como lista u objeto ya no sale «llega hoy» / «empieza ya» / «hoy» (`[]` valía 0) y `haceDias(' ')` en blanco ya no dice «hoy».
+
 ## Necesita a Fernando (el agente no lo hace)
 
 - Nombres del personal de almacén/ventas que no está en el dashboard.
@@ -526,3 +528,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-22 15:37 · v4.7.61 · Bitácora sin eventos perdidos por folio/id vacío ni «Contenedor null».
 - 2026-11-23 00:16 · v4.7.69 · Cuota por ciudad/tienda empata cuentas con espacios o numéricas; celebraciones sin error con listas raras.
 - 2026-11-23 01:18 · v4.7.72 · Pulido: `numero()` lee «12%» y `porcentaje()` con lista/objeto da «—».
+- 2026-11-23 02:55 · v4.7.77 · `llegaBarco()`/`enMinutos()`/`haceDias()` sólo leen número o texto (lista/objeto/blanco ya no dan «llega hoy», «empieza ya», «hoy»).

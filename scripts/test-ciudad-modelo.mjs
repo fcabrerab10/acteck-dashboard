@@ -1731,3 +1731,9 @@ test('4.7.71 pensamientos y misiones con listas raras', () => {
   const q = pensamientos({ hoyIso: '2026-10-15', cuotas: new Map([['ct', { cuota: '1,000', venta: '$900' }]]), distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'ct', importe: 10, previo: 10 }] }] });
   assert.equal(q[0]?.texto, 'Voy arriba de mi cuota', 'cuota y venta en texto cuentan');
 });
+
+test('4.7.77 llegaBarco/enMinutos/haceDias sólo leen número o texto', () => {
+  for (const x of [[], [5], {}, () => 1]) { assert.equal(llegaBarco(x), 'sin ETA'); assert.equal(enMinutos(x), ''); assert.equal(haceDias(x), ''); }
+  assert.equal(haceDias(' '), ''); assert.equal(haceDias('$5'), 'hace 5 d'); assert.equal(haceDias('1,200'), 'hace 1,200 d'); assert.equal(haceDias(-0.4), 'hoy');
+  assert.equal(llegaBarco(' 2 '), 'llega en 2 d'); assert.equal(enMinutos(' 5 '), 'en 5 min');
+});
