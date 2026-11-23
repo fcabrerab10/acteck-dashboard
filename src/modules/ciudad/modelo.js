@@ -1329,7 +1329,8 @@ export function construirModelo(d, hoy = new Date()) {
     return { folio: f.folio, cliente: cuenta?.nombre || ck || f.cliente_key, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + Math.max(0, edad) * 0.12) };
   }).sort((a, b) => b.monto - a.monto).slice(0, 14);
   for (const e of d.envios || []) {
-    const salida = e.fecha_envio_erp || e.fecha_surtida; const entrega = e.fecha_entrega_erp || e.fecha_entregada;
+    // 4.7.64: la salida es la primera fecha legible (envío ERP ilegible cae a la surtida) y una entrega en blanco (« ») no cuenta como entregado.
+    const salida = fechaIso(e.fecha_envio_erp) || fechaIso(e.fecha_surtida); const entrega = [e.fecha_entrega_erp, e.fecha_entregada].some((x) => x instanceof Date || (x != null && String(x).trim() !== ''));
     if (!salida || entrega) continue;
     const key = claveErp(e.oc_clientes?.cliente_key) || 'digitalife';
     const edad = dias(salida, hoyIso); if (!Number.isFinite(edad) || edad > 20) continue; // salida ilegible: sin camión (antes progreso NaN)

@@ -995,6 +995,10 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   assert.ok(medio && Number.isFinite(medio.progreso) && medio.llegaEnDias === 0, 'etd malo usa fecha_emision');
   assert.ok(m.puerto.barcos.every((b) => Number.isFinite(b.progreso)), 'progreso siempre número');
   assert.ok(!m.camiones.some((c) => c.folio === 'guía G-MALA'), 'envío con salida ilegible no sale');
+  const m2 = construirModelo({ ...d, envios: [{ fecha_envio_erp: 'pendiente', fecha_surtida: '2026-10-03', fecha_entrega_erp: '  ', guia_rastreo: 'G-SURT', oc_clientes: { cliente_key: 'pcel' } }, { fecha_surtida: '2026-10-03', fecha_entregada: '2026-10-04', guia_rastreo: 'G-ENT', oc_clientes: { cliente_key: 'pcel' } }] }, hoy);
+  const gs = m2.camiones.find((c) => c.folio === 'guía G-SURT');
+  assert.ok(gs && gs.fecha === '2026-10-03' && Number.isFinite(gs.progreso), 'envío ERP ilegible usa la surtida; entrega en blanco no es entregado');
+  assert.ok(!m2.camiones.some((c) => c.folio === 'guía G-ENT'), 'entregado no sale');
   assert.ok(m.camiones.every((c) => Number.isFinite(c.progreso) && c.progreso >= 0), 'progreso de camiones sin NaN ni negativo');
   const t = tarjetaDe({ tipo: 'camion', folio: 'F-1' }, { ...m, camiones: [{ folio: 'F-1', cliente: 'X', fecha: 'mala', monto: 1, piezas: 1 }] });
   assert.ok(t && !JSON.stringify(t.numeros).includes('NaN'), 'tarjeta del camión sin «hace NaN d»');

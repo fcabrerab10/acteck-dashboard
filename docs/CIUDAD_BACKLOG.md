@@ -285,6 +285,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.61) Bitácora: facturas, envíos y contenedores sin folio/id llevan cada uno su id (antes todos «factura-null» / «arribo-null» y el filtro de repetidos dejaba sólo uno); el contenedor sin id ya no abre la tarjeta «Contenedor null» y un folio con espacios cuenta igual que sin ellos.
   - [x] (4.7.62) `porcentaje()` con opciones null o que no son objeto ya no lanza error (sin signo) y `plural()` sin palabra (null, vacía, número) dice sólo el número (antes «0 undefineds» / «2 null»); `varios` nulo usa la palabra + «s».
   - [x] (4.7.63) Pin de la ciudad con miles es-MX («León · 🏬 1,200 · 🚚 1,050»; antes «🏬 1200») y `pinCiudad()` regresa `nombre`: el acceso rápido ya no toma el nombre partiendo el texto (una ciudad en blanco salía como «🏬 3») y la ciudad en blanco no entra al top.
+  - [x] (4.7.64) Camiones de envíos: la salida es la primera fecha legible (un `fecha_envio_erp` ilegible ya no esconde el camión si `fecha_surtida` es buena) y una entrega en blanco (« ») ya no cuenta como entregado.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -300,6 +301,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-22 22:35 · v4.7.64 · Camiones de envíos: salida = primera fecha legible (ERP ilegible cae a la surtida) y entrega en blanco no cuenta como entregado.
 - 2026-11-22 22:16 · v4.7.63 · pinCiudad()/ciudadesTop(): miles es-MX en el pin y acceso rápido sin ciudad en blanco.
 - 2026-11-22 15:56 · v4.7.62 · `porcentaje()` con opciones null sin error y `plural()` sin palabra sin «undefineds»/«null»; +1 prueba.
 - 2026-11-22 15:15 · v4.7.60 · `rebote()`: t NaN termina el rebote al tocar (antes nunca se soltaba); +3 pruebas.
