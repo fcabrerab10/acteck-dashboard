@@ -1632,3 +1632,11 @@ test('4.7.62: porcentaje() con opciones null y plural() sin palabra', () => {
   assert.equal(plural(3), '3'); assert.equal(plural(1, null), '1'); assert.equal(plural(2, ''), '2'); assert.equal(plural('1,200', 5), '1,200');
   assert.equal(plural(2, 'día', null), '2 días'); assert.equal(plural(1, 'día', null), '1 día'); assert.equal(plural(2, 'mes', 'meses'), '2 meses'); assert.equal(plural(1, 'mes', 'meses'), '1 mes');
 });
+
+test('4.7.63: pin con miles es-MX y acceso rápido sin ciudad en blanco', () => {
+  const ts = Array.from({ length: 1200 }, () => ({ vendio: true }));
+  assert.equal(pinCiudad({ ciudad: 'LEON', tiendas: ts }).texto, 'León · 🏬 1,200');
+  assert.equal(pinCiudad({ ciudad: 'LEON', tiendas: [] }).nombre, 'León'); assert.equal(pinCiudad({ ciudad: '  ', tiendas: [] }).nombre, '');
+  const top = ciudadesTop({ distritos: [{ ciudad: '  ', tiendas: [{ vendio: true }] }, { ciudad: 'LEON', tiendas: [{ vendio: true }] }], camiones: [] });
+  assert.deepEqual(top.map((c) => [c.ciudad, c.nombre]), [['LEON', 'León']], 'ciudad en blanco no sale como «🏬 1»');
+});

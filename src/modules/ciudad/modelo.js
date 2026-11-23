@@ -194,14 +194,16 @@ export function pinCiudad(distrito, camiones = []) {
   // no junta camiones (antes un camión sin ciudad contaba en un distrito sin ciudad: undefined === undefined)
   const activas = comoLista(distrito?.tiendas).filter((t) => t?.vendio && !t.virtual).length, k = norm(distrito?.ciudad);
   const llegando = k ? comoLista(camiones).filter((c) => c && norm(c.ciudad) === k).length : 0;
-  return { activas, llegando, texto: [nombre, `🏬 ${activas}`, llegando ? `🚚 ${llegando}` : null].filter(Boolean).join(' · ') };
+  // 4.7.63: conteos con miles es-MX («🏬 1,200», antes «🏬 1200») y `nombre` aparte (ciudad en blanco → '').
+  const mil = (n) => n.toLocaleString('es-MX');
+  return { nombre, activas, llegando, texto: [nombre, `🏬 ${mil(activas)}`, llegando ? `🚚 ${mil(llegando)}` : null].filter(Boolean).join(' · ') };
 }
 // Acceso rápido (minimapa, paso 1): las n ciudades con más actividad = tiendas activas + camiones llegando (empate: más tiendas).
 export function ciudadesTop(modelo, n = 5) {
   n = Math.max(0, Math.floor(Number(n))); if (!Number.isFinite(n)) n = 5; // n en texto/decimal/basura (antes NaN → lista vacía)
   const ds = comoLista(modelo?.distritos).filter(Boolean); // distritos/tiendas que no son lista: vacío, no error ni NaN en el orden
-  return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); return { ciudad: d.ciudad, nombre: p.texto.split(' · ')[0], activas: p.activas, llegando: p.llegando, actividad: p.activas + p.llegando, tiendas: comoLista(d.tiendas).length }; })
-    .filter((c) => c.ciudad && c.actividad > 0).sort((x, y) => y.actividad - x.actividad || y.tiendas - x.tiendas).slice(0, n);
+  return ds.map((d) => { const p = pinCiudad(d, modelo?.camiones); return { ciudad: d.ciudad, nombre: p.nombre, activas: p.activas, llegando: p.llegando, actividad: p.activas + p.llegando, tiendas: comoLista(d.tiendas).length }; })
+    .filter((c) => c.nombre && c.actividad > 0).sort((x, y) => y.actividad - x.actividad || y.tiendas - x.tiendas).slice(0, n);
 }
 // Botón único Base/Mapa: estás «en la base» si la cámara está cerca del encuadre de la Vista Base (centro a menos de medio
 // encuadre y zoom no más de 1.5× el de la base); si no, estás lejos y el botón ofrece volver. Sin datos cuenta como base.
