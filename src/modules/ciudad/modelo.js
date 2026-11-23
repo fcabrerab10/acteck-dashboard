@@ -290,7 +290,13 @@ export function resumenBanco(cartera = [], pagos = [], hoyIso = diaLocal().iso, 
   const limpio = (p) => { const est = typeof p.estado === 'string' ? p.estado.trim().toLowerCase() : p.estado; const fp = fechaIso(p.fecha_programada), fc = fechaIso(p.fecha_compromiso); return { ...p, estado: est, fecha_programada: fp ?? fc, fecha_compromiso: fc }; };
   const abiertos = vence && vencido ? comoLista(pagos).filter((p) => p && typeof p === 'object').map(limpio).filter((p) => p.estado !== 'rechazado') : [];
   const semana = abiertos.filter((p) => seguro(vence, p, 7, hoyIso)), vencidos = abiertos.filter((p) => seguro(vencido, p, hoyIso));
-  return { carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
+  // 4.7.81: saldo total, % vencido y DSO ponderado por saldo (sólo cuentas con saldo > 0 y DSO), igual que la cartera de Inicio
+  // (`dsoPonderado(filas, { soloConSaldo: true })`, `pctDe(vencido, saldo)`), para que el banco cuadre con el dashboard.
+  const filasC = comoLista(cartera).filter((c) => c && typeof c === 'object');
+  const saldo = filasC.reduce((s, c) => s + N(c.saldo), 0), vencTotal = filasC.reduce((s, c) => s + N(c.vencido), 0);
+  let num = 0, den = 0; for (const c of filasC) { if (c.dso == null || !(N(c.saldo) > 0)) continue; const k = leeNum(c.dso); if (k == null) continue; num += k * N(c.saldo); den += N(c.saldo); }
+  const dso = den > 0 ? Math.round(num / den) : null, pctVencido = saldo > 0 ? (vencTotal / saldo) * 100 : null;
+  return { saldo, pctVencido, dso, carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
 }
 
 /** Torre de pronóstico (3.90.29): propuestas de forecast no borrador (`forecast_propuestas` + líneas, como Proyectos y forecast)
@@ -944,7 +950,9 @@ export function tarjetaDe(tag, modelo) {
     t.estado = b.some((x) => x.llegaEnDias == null) ? 'ambar' : 'verde';
   } else if (tag.tipo === 'banco' && m.banco) {
     const b = m.banco;
-    t.numeros = [['Cartera vencida', pesos(b.carteraVencida)], ['Cuentas con vencido', num(b.cuentasVencidas)], ['Pagos 7 días', `${num(b.pagosSemana)} · ${pesos(b.montoSemana)}`], ['Pagos vencidos', `${num(b.pagosVencidos)} · ${pesos(b.montoVencido)}`]];
+    // 4.7.81: como la cartera de Inicio, la vencida dice su % del saldo total y las cuentas el DSO ponderado (la tarjeta es de 4 renglones).
+    const pct = b.pctVencido != null && numero(b.saldo) > 0 ? `${porcentaje(b.pctVencido)} del saldo` : '';
+    t.numeros = [['Cartera vencida', unirTexto(pesos(b.carteraVencida), pct)], ['Cuentas con vencido', unirTexto(num(b.cuentasVencidas), dsoTexto(b.dso))], ['Pagos 7 días', `${num(b.pagosSemana)} · ${pesos(b.montoSemana)}`], ['Pagos vencidos', `${num(b.pagosVencidos)} · ${pesos(b.montoVencido)}`]];
     t.estado = b.pagosVencidos > 0 || b.carteraVencida > 0 ? 'rojo' : b.pagosSemana > 0 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'torre' && m.torre) {
     const r = m.torre;
@@ -1073,7 +1081,8 @@ export function carteraPorCuenta(filas) {
     // 4.7.74: la clave va en minúsculas como las cuentas de la Ciudad («PCEL» = «pcel»; antes no encontraba su tienda ni su sede)
     // y un cliente que no es texto ni número (objeto, lista, booleano) se salta (antes la clave «[object Object]» / «true»).
     const cl = c?.cliente, k = typeof cl === 'string' || (typeof cl === 'number' && Number.isFinite(cl)) ? String(cl).trim().toLowerCase() : ''; if (!k) continue;
-    const v = { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: N(c.dso), corte: c.fecha_corte };
+    // 4.7.81: DSO vacío/ilegible queda null (antes 0 y bajaba el DSO ponderado del banco), como Inicio (`e.dso != null`).
+    const v = { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: leeNum(c.dso), corte: c.fecha_corte };
     const ya = out.get(k), fa = fechaIso(ya?.corte), fb = fechaIso(v.corte);
     if (!ya || (fb && (!fa || fb >= fa)) || (!fa && !fb)) out.set(k, v);
   }

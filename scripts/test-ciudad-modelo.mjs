@@ -279,8 +279,8 @@ test('banco: cartera vencida y pagos de la semana con las reglas de Pagos V3', a
   const pagos = [{ estado: 'autorizado', monto: 100, fecha_programada: '2026-10-09' }, { estado: 'solicitado', monto: 50, fecha_programada: '2026-10-01' }, { estado: 'pagado', monto: 999, fecha_programada: '2026-10-08' }, { estado: 'rechazado', monto: 7, fecha_programada: '2026-10-08' }, { estado: 'calculado', monto: 3, fecha_programada: '2026-11-30' }, { estado: 'calculado', monto: 1 }];
   const b = resumenBanco([{ cuenta: 'ct', vencido: 2e6 }, { cuenta: 'cva', vencido: 0 }], pagos, hoyIso, reglas);
   assert.equal(resumenBanco([], pagos, hoyIso).pagosSemana, 0, 'sin reglas no cuenta pagos');
-  assert.deepEqual(b, { carteraVencida: 2e6, cuentasVencidas: 1, pagosSemana: 1, montoSemana: 100, pagosVencidos: 1, montoVencido: 50 });
-  assert.deepEqual(resumenBanco(null, null, hoyIso), { carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 0, montoVencido: 0 }, 'sin datos no rompe');
+  assert.deepEqual(b, { saldo: 0, pctVencido: null, dso: null, carteraVencida: 2e6, cuentasVencidas: 1, pagosSemana: 1, montoSemana: 100, pagosVencidos: 1, montoVencido: 50 });
+  assert.deepEqual(resumenBanco(null, null, hoyIso), { saldo: 0, pctVencido: null, dso: null, carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 0, montoVencido: 0 }, 'sin datos no rompe');
   assert.equal(tarjetaDe({ tipo: 'banco' }, { banco: b }).estado, 'rojo');
   assert.equal(tarjetaDe({ tipo: 'banco' }, { banco: { ...resumenBanco([], [pagos[0]], hoyIso, reglas) } }).estado, 'ambar');
   const c = campus({ x: 0, z: 0 }); const bk = c.banco; const est = c.estacionamiento;
@@ -1168,7 +1168,7 @@ test('banco (4.3.28): fechas y estados sucios en pagos, hoy inválido y reglas q
   const sinHoy = resumenBanco([], [{ estado: 'autorizado', monto: 1, fecha_programada: '2000-01-01' }], 'nunca', reglas);
   assert.equal(sinHoy.pagosVencidos, 1, 'hoy inválido usa hoy (antes NaN: no contaba)');
   const rotas = { venceEn: () => { throw new Error('x'); }, estaVencido: () => true };
-  assert.deepEqual(resumenBanco([], [{ estado: 'autorizado', monto: 3 }], hoyIso, rotas), { carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 1, montoVencido: 3 }, 'una regla que lanza no tira el banco');
+  assert.deepEqual(resumenBanco([], [{ estado: 'autorizado', monto: 3 }], hoyIso, rotas), { saldo: 0, pctVencido: null, dso: null, carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 1, montoVencido: 3 }, 'una regla que lanza no tira el banco');
   assert.equal(resumenBanco([], pagos, hoyIso, { venceEn: 1, estaVencido: 'x' }).pagosSemana, 0, 'reglas que no son función no cuentan');
 });
 
@@ -1757,4 +1757,19 @@ test('4.7.80 bitacoraEventos/ponerPosEnPuerto aguantan listas que no son lista',
   assert.equal(ponerPosEnPuerto('abc', []), 'abc');
   const ev = bitacoraEventos({ hoyIso: '2026-10-15', camiones: {}, puerto: { barcos: [{ id: 'C1', arribo: '2026-10-15', piezas: 10 }], tarimas: 5 } }, new Date(2026, 9, 15, 12));
   assert.equal(ev.length, 1); assert.match(ev[0].texto, /Llegó C1 al CEDIS/);
+});
+
+test('resumenBanco(): saldo, % vencido y DSO ponderado como la cartera de Inicio (4.7.81)', () => {
+  const b = resumenBanco([{ cuenta: 'a', saldo: 1000, vencido: 200, dso: 30 }, { cuenta: 'b', saldo: 3000, vencido: 0, dso: 60 }, { cuenta: 'c', saldo: 0, vencido: 0, dso: 900 }, { cuenta: 'd', saldo: '$1,000', vencido: '300', dso: null }], [], '2026-11-23');
+  assert.equal(b.saldo, 5000); assert.equal(Math.round(b.pctVencido), 10, '500 de 5000');
+  assert.equal(b.dso, 53, '(30·1000 + 60·3000) / 4000 = 52.5 → 53; sin saldo o sin DSO no cuentan');
+  const vacio = resumenBanco([{ saldo: 0, vencido: 0, dso: 40 }], [], '2026-11-23'); assert.equal(vacio.dso, null); assert.equal(vacio.pctVencido, null);
+  const raro = resumenBanco([{ saldo: 100, dso: 'abc' }, { saldo: 100, dso: {} }, 'x', null], [], '2026-11-23'); assert.equal(raro.dso, null); assert.equal(raro.saldo, 200);
+  const t = tarjetaDe({ tipo: 'banco' }, { banco: b }).numeros;
+  assert.equal(t.length, 4, 'la tarjeta sigue en 4 renglones');
+  assert.deepEqual(t[0], ['Cartera vencida', `${pesosCorto(500)} · 10 % del saldo`]);
+  assert.deepEqual(t[1], ['Cuentas con vencido', '2 · DSO 53 días']);
+  const t0 = tarjetaDe({ tipo: 'banco' }, { banco: vacio }).numeros; assert.deepEqual(t0.slice(0, 2), [['Cartera vencida', pesosCorto(0)], ['Cuentas con vencido', '0']], 'sin saldo ni DSO no se agregan');
+  assert.equal(carteraPorCuenta([{ cliente: 'x', saldo_actual: 5, dso: null }]).get('x').dso, null, 'DSO vacío queda null');
+  assert.equal(carteraPorCuenta([{ cliente: 'x', dso: ' ' }]).get('x').dso, null); assert.equal(carteraPorCuenta([{ cliente: 'x', dso: '45' }]).get('x').dso, 45);
 });
