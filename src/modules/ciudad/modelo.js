@@ -1061,7 +1061,9 @@ export function fechaIso(x) {
 export function carteraPorCuenta(filas) {
   const out = new Map();
   for (const c of comoLista(filas)) {
-    const k = String(c?.cliente ?? '').trim(); if (!k) continue;
+    // 4.7.74: la clave va en minúsculas como las cuentas de la Ciudad («PCEL» = «pcel»; antes no encontraba su tienda ni su sede)
+    // y un cliente que no es texto ni número (objeto, lista, booleano) se salta (antes la clave «[object Object]» / «true»).
+    const cl = c?.cliente, k = typeof cl === 'string' || (typeof cl === 'number' && Number.isFinite(cl)) ? String(cl).trim().toLowerCase() : ''; if (!k) continue;
     const v = { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: N(c.dso), corte: c.fecha_corte };
     const ya = out.get(k), fa = fechaIso(ya?.corte), fb = fechaIso(v.corte);
     if (!ya || (fb && (!fa || fb >= fa)) || (!fa && !fb)) out.set(k, v);

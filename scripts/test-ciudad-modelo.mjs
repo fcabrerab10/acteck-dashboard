@@ -1603,6 +1603,13 @@ test('(4.7.52) carteraPorCuenta(): con la misma cuenta dos veces gana el corte m
   assert.equal(carteraPorCuenta('basura').size, 0); assert.equal(carteraPorCuenta(null).size, 0);
 });
 
+test('4.7.74: carteraPorCuenta() empata la cuenta en mayúsculas y salta clientes que no son texto', () => {
+  const m = carteraPorCuenta([{ cliente: 'PCEL', fecha_corte: '2026-10-01', saldo_vencido: 1 }, { cliente: ' pcel ', fecha_corte: '2026-11-01', saldo_vencido: 2 }, { cliente: { a: 1 }, saldo_vencido: 9 }, { cliente: true, saldo_vencido: 9 }, { cliente: ['x'], saldo_vencido: 9 }, { cliente: 10, saldo_vencido: 3 }]);
+  assert.deepEqual([...m.keys()].sort(), ['10', 'pcel']); assert.equal(m.get('pcel').vencido, 2);
+  const mod = construirModelo({ ...d, cartera: [{ cliente: 'DIGITALIFE', fecha_corte: '2026-10-01', saldo_vencido: 7777, saldo_actual: 9000, dso: 40 }] }, hoy);
+  assert.ok(mod.kpis.cartera.some((c) => c.cuenta === 'digitalife' && c.vencido === 7777));
+});
+
 test('4.7.56: plural(), piezasTexto() sin «-0» y listaCorta() con n = 0 sin espacio al inicio', () => {
   assert.equal(plural(-0.4, 'día'), '0 días'); assert.equal(plural('-0.2', 'día'), '0 días'); assert.equal(plural(-1, 'día'), '-1 día'); assert.equal(plural(-2.6, 'día'), '-3 días');
   assert.equal(piezasTexto(-0.4), '0 pz'); assert.equal(piezasTexto('-0.3'), '0 pz'); assert.equal(piezasTexto(-5), '-5 pz');
