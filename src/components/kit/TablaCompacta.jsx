@@ -63,7 +63,7 @@ export default function TablaCompacta({ columnas, filas, rowKey = (r, i) => r.id
     ro.observe(el);
     return () => ro.disconnect();
   }, [renderExpandido]);
-  const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, backgroundColor: theme.surface, background: `color-mix(in srgb, ${theme.surface} 82%, transparent)`, backdropFilter: 'saturate(160%) blur(12px)', WebkitBackdropFilter: 'saturate(160%) blur(12px)', zIndex: 1, whiteSpace: 'nowrap' };
+  const th = { padding: dense ? '4px 6px' : '6px 8px', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: hair, position: 'sticky', top: grupos ? GRUPO_H : 0, backgroundColor: theme.surface, ...(tactil ? null : { background: `color-mix(in srgb, ${theme.surface} 82%, transparent)`, backdropFilter: 'saturate(160%) blur(12px)', WebkitBackdropFilter: 'saturate(160%) blur(12px)' }), zIndex: 1, whiteSpace: 'nowrap' };
   const td = { padding: tactil ? (dense ? '6px 6px' : '8px 8px') : dense ? '3px 6px' : 'var(--dens-fila-pad, 5px 8px)', borderBottom: '1px solid transparent', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: dense ? 11 : 11.5, color: theme.text, verticalAlign: 'middle' };
   const alignOf = (c) => c.align || 'right';
   const tot = totales === undefined && columnas.some((c) => c.sum)

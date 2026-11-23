@@ -62,7 +62,8 @@ export default function HojaM({ abierto, onClose, titulo, sub, alto = '78vh', ac
   };
 
   if (!montado) return null;
-  const alturaMax = typeof alto === 'number' ? `${alto}px` : alto;
+  // `vh` en Safari es la pantalla SIN sus barras: una hoja de 92vh quedaba con el título fuera de la vista. Se usa dvh.
+  const alturaMax = typeof alto === 'number' ? `${alto}px` : String(alto).replace(/(\d)vh\b/, '$1dvh');
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
       style={{ position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: visible ? 'rgba(0,0,0,0.36)' : 'rgba(0,0,0,0)', transition: `background ${DUR.page}ms ${EASE}` }}>

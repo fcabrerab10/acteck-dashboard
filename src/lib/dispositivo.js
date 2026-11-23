@@ -300,8 +300,12 @@ function recalcular() {
   const m = medir();
   const k = `${m.ancho}x${m.alto}x${m.touch}`;
   if (k === clave) return;
+  const sig = { ...m, modo: modoDe(m), orientacion: orientacionDe(m) };
+  // Con dedo, Safari cambia el alto visible al esconder sus barras o sacar el teclado: si no cambia el ancho, el modo ni la
+  // orientación, no se avisa (antes se volvía a pintar toda la app a media lectura).
+  if (m.touch && instantanea.touch && sig.ancho === instantanea.ancho && sig.modo === instantanea.modo && sig.orientacion === instantanea.orientacion && Math.abs(sig.alto - instantanea.alto) < 200) return;
   clave = k;
-  instantanea = { ...m, modo: modoDe(m), orientacion: orientacionDe(m) };
+  instantanea = sig;
   listenersDisp.forEach((l) => l());
 }
 

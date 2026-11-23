@@ -6,12 +6,12 @@ import { SILUETAS } from './siluetas';
 export default function Skeleton({ w = '100%', h = 12, r = 6, style }) {
   const { theme } = useTheme();
   const dark = theme.mode === 'dark';
-  const a = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', b = dark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.85)';
+  const b = dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.8)';
   return (
-    <>
-      <style>{`@keyframes kitShimmer{to{background-position:-200% 0}}`}</style>
-      <span style={{ display: 'block', width: w, height: h, borderRadius: r, background: `linear-gradient(100deg, ${a} 38%, ${b} 50%, ${a} 62%) ${dark ? '' : 'rgba(0,0,0,0.06)'}`, backgroundSize: '200% 100%', animation: 'kitShimmer 1.5s ease-in-out infinite', ...style }} />
-    </>
+    // 2026-11-23 · el brillo ya no anima `background-position` (se repintaba en el hilo principal y se congelaba cada vez que
+    // llegaban datos: «se traba varias veces»). Ahora es un barrido con `transform` (clase .kit-sk / .kit-silueta de index.css),
+    // que corre en el compositor aunque el navegador esté ocupado.
+    <span className="kit-sk" style={{ display: 'block', width: w, height: h, borderRadius: r, background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.075)', '--sk-brillo': b, ...style }} />
   );
 }
 
@@ -154,7 +154,7 @@ export function SkeletonPantalla({ silueta, pantalla, style }) {
   const { theme } = useTheme();
   const filas = silueta || SILUETAS[pantalla] || SILUETAS.default;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, ...style }}>
+    <div className="kit-silueta" style={{ display: 'flex', flexDirection: 'column', gap: 10, '--sk-brillo': theme.mode === 'dark' ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.55)', ...style }}>
       {filas.map((f, i) => <div key={i} style={f.gap != null ? { marginBottom: f.gap - 10 } : undefined}><Bloque fila={f} theme={theme} idx={i} /></div>)}
     </div>
   );

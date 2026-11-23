@@ -101,7 +101,8 @@ export function PageTransition({ children, keyId }) {
   React.useEffect(() => {
     if (keyId === shown.keyId) { setShown({ keyId, children }); return; }
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) { setShown({ keyId, children }); return; }
+    const dedo = window.matchMedia?.('(pointer: coarse)').matches;
+    if (reduce || dedo) { setShown({ keyId, children }); return; }
     setLeaving(true);
     const t = setTimeout(() => { setShown({ keyId, children }); setLeaving(false); }, 160);
     return () => clearTimeout(t);

@@ -40,7 +40,10 @@ export function OrganizaCuerpo({ d, uid, propietario, hoy, hoyIso, horas, estado
   const { theme } = useTheme();
   const google = useGoogleEstado();
   const [paso, setPaso] = useState(estado.ayerSinCerrar ? 0 : 1);
-  const [nuevo, setNuevo] = useState('');
+  // El texto de «Agregar» se guarda en la sesión: al abrir o cerrar el teléfono el pop-up cambia de hoja a ventana y se vuelve a montar.
+  const LLAVE = `agenda_org_nuevo_${hoyIso}`;
+  const [nuevo, setNuevoCrudo] = useState(() => { try { return sessionStorage.getItem(LLAVE) || ''; } catch { return ''; } });
+  const setNuevo = (v) => { setNuevoCrudo(v); try { if (v) sessionStorage.setItem(LLAVE, v); else sessionStorage.removeItem(LLAVE); } catch { /* sin storage */ } };
   const [ajustes, setAjustes] = useState({}); // por renglón nuevo: { fecha, cal, hora }
   const [ocupado, setOcupado] = useState(false);
   const renglones = useMemo(() => renglonesNuevos(nuevo, d.personas, hoy), [nuevo, d.personas, hoy]);
@@ -79,6 +82,7 @@ export function OrganizaCuerpo({ d, uid, propietario, hoy, hoyIso, horas, estado
         }
       }
       await marcarOrganizado(propietario, hoyIso);
+      setNuevo('');
       toast.ok(`Día organizado${renglones.length ? ` · ${renglones.length} nuevo${renglones.length === 1 ? '' : 's'}` : ''}${enCalendario ? ` · ${enCalendario} en tu calendario` : ''}`);
       onListo?.();
     } catch (e) { toast.error(e.message); } finally { setOcupado(false); }
@@ -91,8 +95,8 @@ export function OrganizaCuerpo({ d, uid, propietario, hoy, hoyIso, horas, estado
   const campoFecha = { border: `1px solid ${theme.border}`, borderRadius: 999, padding: '0 8px', minHeight: alto, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 12, colorScheme: theme.mode === 'dark' ? 'dark' : 'light' };
   const fila = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '7px 10px', borderRadius: 11, border: `1px solid ${theme.border}`, background: theme.surface };
   const titulo = (it) => (
-    <button type="button" onClick={() => onAbrirItem?.(it)} style={{ flex: '1 1 180px', minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: onAbrirItem ? 'pointer' : 'default', color: theme.text, fontFamily: TYPO.fontText }}>
-      <span style={{ display: 'block', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.titulo}</span>
+    <button type="button" onClick={() => onAbrirItem?.(it)} style={{ flex: movil ? '1 1 120px' : '1 1 180px', minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: onAbrirItem ? 'pointer' : 'default', color: theme.text, fontFamily: TYPO.fontText }}>
+      <span style={movil ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 14, lineHeight: 1.25 } : { display: 'block', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.titulo}</span>
       <span style={{ display: 'block', fontSize: 11, color: theme.textMuted }}>{[it.cliente_key && it.cliente_key !== 'interno' ? nombreClienteAgenda(it.cliente_key) : null, it.hora ? String(it.hora).slice(0, 5) : null, it.duracion_min ? `${it.duracion_min} min` : null].filter(Boolean).join(' · ') || ' '}</span>
     </button>
   );
@@ -110,7 +114,10 @@ export function OrganizaCuerpo({ d, uid, propietario, hoy, hoyIso, horas, estado
   );
 
   return (
-    <div style={{ padding: movil ? '0 16px 16px' : 0, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: movil ? '0 16px' : 0, display: 'flex', flexDirection: 'column' }}>
+      {/* Con ancho (teléfono abierto en horizontal, computadora) van dos columnas: lo que ya tienes | lo que agregas. */}
+      <div style={{ display: 'grid', gridTemplateColumns: movil ? 'minmax(0, 1fr)' : 'repeat(auto-fit, minmax(min(100%, 330px), 1fr))', columnGap: 22, alignItems: 'start' }}>
+      <div style={{ minWidth: 0 }}>
       {/* 1 · Lo que traes pendiente de días anteriores: decide cuándo lo trabajas. */}
       <Tit meta={estado.quedo.length ? `${estado.quedo.length} de días anteriores · elige cuándo` : 'nada atrasado'}>Tus pendientes</Tit>
       {estado.quedo.length === 0 && <div style={{ fontSize: 12.5, color: theme.textMuted }}>No traes nada pendiente de días anteriores.</div>}
@@ -145,6 +152,8 @@ export function OrganizaCuerpo({ d, uid, propietario, hoy, hoyIso, horas, estado
         ))}
       </div>
 
+      </div>
+      <div style={{ minWidth: 0 }}>
       {/* 3 · Lo nuevo: un renglón por pendiente; cada uno con su día y, si hace falta, al calendario con hora. */}
       <Tit meta="un renglón por pendiente · elige el día de cada uno">Agregar</Tit>
       <textarea value={nuevo} onChange={(e) => setNuevo(e.target.value)} rows={3} disabled={!puedeEditar}
@@ -169,7 +178,10 @@ export function OrganizaCuerpo({ d, uid, propietario, hoy, hoyIso, horas, estado
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      </div>
+      </div>
+      {/* Pie fijo: «Listo» siempre a la vista, aunque la lista de hoy sea larga. */}
+      <div style={{ position: 'sticky', bottom: -16, zIndex: 2, display: 'flex', gap: 8, marginTop: 14, padding: '10px 0 14px', alignItems: 'center', flexWrap: 'wrap', background: theme.mode === 'dark' ? 'rgb(34,34,37)' : theme.bg, borderTop: `1px solid ${theme.border}` }}>
         <button type="button" disabled={ocupado || !puedeEditar} onClick={listo} style={{ ...btn(true), flex: movil ? 1 : 'none' }}>Listo, a trabajar{renglones.length ? ` (${renglones.length} nuevo${renglones.length === 1 ? '' : 's'})` : ''}</button>
         {!movil && <span style={{ fontSize: 11.5, color: theme.textMuted }}>Lo que no muevas sigue en Pendientes.</span>}
       </div>
@@ -182,7 +194,7 @@ export default function OrganizaDia({ abierto, onClose, d, uid, propietario, hoy
   const { theme } = useTheme();
   if (!abierto || !estado) return null;
   return (
-    <Modal abierto={abierto} onClose={onClose} theme={theme} ancho={600} zIndex={95}
+    <Modal abierto={abierto} onClose={onClose} theme={theme} ancho={900} zIndex={95}
       titulo={`${nombre ? `${nombre}, o` : 'O'}rganiza tu día`} sub={fechaLarga(hoy).replace(/^./, (c) => c.toUpperCase())}>
       <OrganizaCuerpo d={d} uid={uid} propietario={propietario} hoy={hoy} hoyIso={hoyIso} horas={horas} estado={estado} puedeEditar={puedeEditar} onListo={onClose} onAbrirItem={onAbrirItem} />
     </Modal>

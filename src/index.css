@@ -236,3 +236,25 @@ html[data-modo="plegable"] .rej-hoy > :nth-child(3), html[data-modo="tabletaComp
   /* Repartos con una columna de ancho fijo (lista + detalle, tablero + panel): se apilan. */
   html[data-modo="plegable"] .rej-angosta, html[data-modo="tabletaCompacta"] .rej-angosta { grid-template-columns: minmax(0, 1fr) !important; }
 }
+
+/* Siluetas de carga (2026-11-23): brillo por barrido con transform (corre en el compositor; no se congela mientras llegan
+   los datos). Una silueta completa barre UNA vez sobre todo el bloque; un Skeleton suelto barre sobre sí mismo. */
+@keyframes kitBarrido { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.kit-sk { position: relative; overflow: hidden; }
+.kit-sk::after, .kit-silueta::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, var(--sk-brillo, rgba(255,255,255,0.12)) 50%, transparent 70%);
+  transform: translateX(-100%); animation: kitBarrido 1.5s ease-in-out infinite; will-change: transform;
+}
+.kit-silueta { position: relative; overflow: hidden; }
+.kit-silueta .kit-sk::after { content: none; }
+@media (prefers-reduced-motion: reduce) { .kit-sk::after, .kit-silueta::after { animation: none; content: none; } }
+
+/* Con dedo (iPhone Duo abierto, iPad): el contenido entra de una vez, sin escalonado ni esperas. La silueta se cambia por
+   el contenido con un fundido corto; antes cada bloque volvía a entrar desde transparente con hasta 1 s de espera. */
+@keyframes entraRapido { from { opacity: 0.35; } to { opacity: 1; } }
+html[data-modo="plegable"] [data-stagger] > *, html[data-modo="tabletaCompacta"] [data-stagger] > *, html[data-modo="tableta"] [data-stagger] > *,
+html[data-modo="plegable"][data-entrada] [data-stagger] > *, html[data-modo="tabletaCompacta"][data-entrada] [data-stagger] > *, html[data-modo="tableta"][data-entrada] [data-stagger] > *,
+html[data-modo="plegable"][data-entrada] [data-stagger] > [data-entrada-kpis] > *, html[data-modo="tabletaCompacta"][data-entrada] [data-stagger] > [data-entrada-kpis] > *, html[data-modo="tableta"][data-entrada] [data-stagger] > [data-entrada-kpis] > * {
+  animation: entraRapido 180ms ease-out both !important; animation-delay: 0ms !important;
+}

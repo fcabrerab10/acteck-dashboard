@@ -28,7 +28,9 @@ export default function OrganizaGlobal({ movil = false }) {
   const estado = useMemo(() => (puede && uid && d.items ? estadoDelDia({ items: d.items, uid, hoy: new Date(), horas, registros: d.registros || [], organizadoHoy: org, reuniones: d.reuniones || [], google: d.google || [] }) : null), [puede, uid, d.items, d.registros, d.reuniones, d.google, horas, org]);
   // Si ya se organizó desde otro dispositivo (registro con organizado_at), no molestar aquí.
   useEffect(() => { if (estado?.regHoy?.organizado_at && uid && !org) { recordarOrganizado(uid, hoyIso); setOrg(true); } }, [estado, uid, org, hoyIso]);
-  const abierto = !!estado && estado.fase === 'organizar' && !org && !cerrado && !d.cargando;
+  // Sólo desarrollo: `?organiza` abre el pop-up a cualquier hora para revisar su forma.
+  const forzar = import.meta.env.DEV && typeof window !== 'undefined' && /[?&]organiza\b/.test(window.location?.search || '');
+  const abierto = !!estado && (forzar || (estado.fase === 'organizar' && !org)) && !cerrado && !d.cargando;
   if (!abierto) return null;
   const cerrar = () => { setCerrado(true); try { sessionStorage.setItem(`agenda_org_luego_${hoyIso}`, '1'); } catch { /* sin storage */ } };
   const listo = () => { setOrg(true); setCerrado(true); };
