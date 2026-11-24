@@ -39,7 +39,7 @@ export function useCiudadData(enabled = true) {
         seg(fetchAll('v_sellout_cuenta_mes', 'cuenta,anio,mes,importe', (q) => q.gte('anio', anio - 1)), 'cuenta mes'),
         // Etapa 2: clientes finales (dos meses, por estado), cartera de los propios y envíos en tránsito del Tracking.
         seg(fetchAll('vs_sellout_cliente_final_mes', 'cuenta,anio,mes,estado,importe', (q) => q.gte('anio', anio - (mes === 1 ? 1 : 0)).in('mes', [mes, mesPrev])), 'clientes finales'),
-        seg(fetchAll('v_vision_cartera_consolidada', 'cliente,fecha_corte,saldo_actual,saldo_vencido,dso'), 'cartera'),
+        seg(fetchAll('v_vision_cartera_consolidada', 'cliente,fecha_corte,saldo_actual,saldo_vencido,aging_mas90,dso'), 'cartera'),
         seg(supabase.from('oc_envios').select('fecha_surtida,fecha_entregada,fecha_envio_erp,fecha_entrega_erp,guia_rastreo,paqueteria,oc_clientes(cliente_key,numero_oc)').or(`fecha_surtida.gte.${iso(new Date(hoy.getTime() - 30 * 86400000))},fecha_envio_erp.gte.${iso(new Date(hoy.getTime() - 30 * 86400000))}`).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'envíos'),
         // Etapa 3: banco/tesorería · pagos abiertos de Pagos V3 (sólo lo necesario para «vence en 7 días» y «vencidos»).
         seg(supabase.from('pagos').select('estado,monto,fecha_programada,fecha_compromiso').not('estado', 'in', '(pagado,cancelado,rechazado)').then((r) => { if (r.error) throw r.error; return r.data || []; }), 'pagos'),

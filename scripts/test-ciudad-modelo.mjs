@@ -317,8 +317,8 @@ test('banco: cartera vencida y pagos de la semana con las reglas de Pagos V3', a
   const pagos = [{ estado: 'autorizado', monto: 100, fecha_programada: '2026-10-09' }, { estado: 'solicitado', monto: 50, fecha_programada: '2026-10-01' }, { estado: 'pagado', monto: 999, fecha_programada: '2026-10-08' }, { estado: 'rechazado', monto: 7, fecha_programada: '2026-10-08' }, { estado: 'calculado', monto: 3, fecha_programada: '2026-11-30' }, { estado: 'calculado', monto: 1 }];
   const b = resumenBanco([{ cuenta: 'ct', vencido: 2e6 }, { cuenta: 'cva', vencido: 0 }], pagos, hoyIso, reglas);
   assert.equal(resumenBanco([], pagos, hoyIso).pagosSemana, 0, 'sin reglas no cuenta pagos');
-  assert.deepEqual(b, { saldo: 0, pctVencido: null, dso: null, carteraVencida: 2e6, cuentasVencidas: 1, pagosSemana: 1, montoSemana: 100, pagosVencidos: 1, montoVencido: 50 });
-  assert.deepEqual(resumenBanco(null, null, hoyIso), { saldo: 0, pctVencido: null, dso: null, carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 0, montoVencido: 0 }, 'sin datos no rompe');
+  assert.deepEqual(b, { saldo: 0, pctVencido: null, dso: null, mas90: 0, carteraVencida: 2e6, cuentasVencidas: 1, pagosSemana: 1, montoSemana: 100, pagosVencidos: 1, montoVencido: 50 });
+  assert.deepEqual(resumenBanco(null, null, hoyIso), { saldo: 0, pctVencido: null, dso: null, mas90: 0, carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 0, montoVencido: 0 }, 'sin datos no rompe');
   assert.equal(tarjetaDe({ tipo: 'banco' }, { banco: b }).estado, 'rojo');
   assert.equal(tarjetaDe({ tipo: 'banco' }, { banco: { ...resumenBanco([], [pagos[0]], hoyIso, reglas) } }).estado, 'ambar');
   const c = campus({ x: 0, z: 0 }); const bk = c.banco; const est = c.estacionamiento;
@@ -1241,7 +1241,7 @@ test('banco (4.3.28): fechas y estados sucios en pagos, hoy inválido y reglas q
   const sinHoy = resumenBanco([], [{ estado: 'autorizado', monto: 1, fecha_programada: '2000-01-01' }], 'nunca', reglas);
   assert.equal(sinHoy.pagosVencidos, 1, 'hoy inválido usa hoy (antes NaN: no contaba)');
   const rotas = { venceEn: () => { throw new Error('x'); }, estaVencido: () => true };
-  assert.deepEqual(resumenBanco([], [{ estado: 'autorizado', monto: 3 }], hoyIso, rotas), { saldo: 0, pctVencido: null, dso: null, carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 1, montoVencido: 3 }, 'una regla que lanza no tira el banco');
+  assert.deepEqual(resumenBanco([], [{ estado: 'autorizado', monto: 3 }], hoyIso, rotas), { saldo: 0, pctVencido: null, dso: null, mas90: 0, carteraVencida: 0, cuentasVencidas: 0, pagosSemana: 0, montoSemana: 0, pagosVencidos: 1, montoVencido: 3 }, 'una regla que lanza no tira el banco');
   assert.equal(resumenBanco([], pagos, hoyIso, { venceEn: 1, estaVencido: 'x' }).pagosSemana, 0, 'reglas que no son función no cuentan');
 });
 
@@ -1692,7 +1692,7 @@ test('(4.7.51) clave ERP con espacios: facturas, envíos y destinos de vendedore
 
 test('(4.7.52) carteraPorCuenta(): con la misma cuenta dos veces gana el corte más reciente', () => {
   const m = carteraPorCuenta([{ cliente: 'digitalife', fecha_corte: '2026-11-20', saldo_vencido: '$5,000', saldo_actual: 9000, dso: 40 }, { cliente: ' digitalife ', fecha_corte: '2026-10-01', saldo_vencido: 1, saldo_actual: 1, dso: 1 }, null, { cliente: '  ' }]);
-  assert.equal(m.size, 1); assert.deepEqual(m.get('digitalife'), { vencido: 5000, saldo: 9000, dso: 40, corte: '2026-11-20' });
+  assert.equal(m.size, 1); assert.deepEqual(m.get('digitalife'), { vencido: 5000, saldo: 9000, mas90: 0, dso: 40, corte: '2026-11-20' });
   const n = carteraPorCuenta([{ cliente: 'pcel', fecha_corte: '2026-10-01', saldo_vencido: 1 }, { cliente: 'pcel ', fecha_corte: ' 2026-11-01', saldo_vencido: 2 }]);
   assert.equal(n.get('pcel').vencido, 2, 'el más nuevo llega después');
   assert.equal(carteraPorCuenta([{ cliente: 'x', fecha_corte: '2026-11-01', saldo_vencido: 3 }, { cliente: 'x', fecha_corte: 'pendiente', saldo_vencido: 4 }]).get('x').vencido, 3, 'ilegible pierde');
@@ -2035,4 +2035,17 @@ test('textoSync: estado del puente con las palabras del importador (4.12.26)', (
   const h = new Date('2026-10-07T11:00:00');
   const b = bitacoraEventos({ hoyIso: '2026-10-07', ultimaSync: { status: 'error', created_at: '2026-10-07T10:40:00' } }, h);
   assert.deepEqual(b.map((x) => [x.icono, x.cuando, x.texto]), [['⚠️', '10:40', 'Falló una actualización de datos']]);
+});
+
+test('Banco: cartera a más de 90 días como la frase de cartera de Inicio (4.12.27)', () => {
+  const cp = carteraPorCuenta([{ cliente: 'a', saldo_actual: 1000, saldo_vencido: 400, aging_mas90: '$250' }, { cliente: 'b', saldo_actual: 500, saldo_vencido: 100, aging_mas90: null }]);
+  assert.equal(cp.get('a').mas90, 250); assert.equal(cp.get('b').mas90, 0);
+  const filas = [...cp.entries()].map(([k, c]) => ({ cuenta: k, ...c }));
+  const b = resumenBanco([...filas, { cuenta: 'c', saldo: 100, vencido: 0, mas90: -50 }, null, 'x'], [], '2026-11-24');
+  assert.equal(b.mas90, 250, 'suma +90; negativos, nulos y basura no restan');
+  const t = tarjetaDe({ tipo: 'banco' }, { banco: b }).numeros;
+  assert.equal(t.length, 4);
+  assert.deepEqual(t[0], ['Cartera vencida', `${pesosCorto(500)} · 31 % del saldo · ${pesosCorto(250)} a +90 días`]);
+  const sin = tarjetaDe({ tipo: 'banco' }, { banco: resumenBanco(filas.slice(1), [], '2026-11-24') }).numeros;
+  assert.ok(!sin[0][1].includes('+90'), 'sin +90 no se agrega');
 });

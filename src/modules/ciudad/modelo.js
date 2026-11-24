@@ -313,8 +313,10 @@ export function resumenBanco(cartera = [], pagos = [], hoyIso = diaLocal().iso, 
   const filasC = comoLista(cartera).filter((c) => c && typeof c === 'object');
   const saldo = filasC.reduce((s, c) => s + N(c.saldo), 0), vencTotal = filasC.reduce((s, c) => s + N(c.vencido), 0);
   let num = 0, den = 0; for (const c of filasC) { if (c.dso == null || !(N(c.saldo) > 0)) continue; const k = leeNum(c.dso); if (k == null) continue; num += k * N(c.saldo); den += N(c.saldo); }
+  // 4.12.27: cartera a más de 90 días (`aging_mas90`), como la frase de cartera de Inicio («$X con más de 90 días»).
+  const mas90 = filasC.reduce((s, c) => s + Math.max(0, N(c.mas90)), 0);
   const dso = den > 0 ? Math.round(num / den) : null, pctVencido = saldo > 0 ? (vencTotal / saldo) * 100 : null;
-  return { saldo, pctVencido, dso, carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
+  return { saldo, pctVencido, dso, mas90, carteraVencida: conVencido.reduce((s, c) => s + N(c.vencido), 0), cuentasVencidas: conVencido.length, pagosSemana: semana.length, montoSemana: semana.reduce((s, p) => s + N(p.monto), 0), pagosVencidos: vencidos.length, montoVencido: vencidos.reduce((s, p) => s + N(p.monto), 0) };
 }
 
 /** Torre de pronóstico (3.90.29): propuestas de forecast no borrador (`forecast_propuestas` + líneas, como Proyectos y forecast)
@@ -1080,7 +1082,9 @@ export function tarjetaDe(tag, modelo) {
     const b = m.banco;
     // 4.7.81: como la cartera de Inicio, la vencida dice su % del saldo total y las cuentas el DSO ponderado (la tarjeta es de 4 renglones).
     const pct = b.pctVencido != null && numero(b.saldo) > 0 ? `${porcentaje(b.pctVencido)} del saldo` : '';
-    t.numeros = [['Cartera vencida', unirTexto(pesos(b.carteraVencida), pct)], ['Cuentas con vencido', unirTexto(num(b.cuentasVencidas), dsoTexto(b.dso))], ['Pagos 7 días', `${num(b.pagosSemana)} · ${pesos(b.montoSemana)}`], ['Pagos vencidos', `${num(b.pagosVencidos)} · ${pesos(b.montoVencido)}`]];
+    // 4.12.27: y la parte a más de 90 días, como la frase de cartera de Inicio.
+    const m90 = numero(b.mas90) > 0 ? `${pesosCorto(b.mas90)} a +90 días` : '';
+    t.numeros = [['Cartera vencida', unirTexto(pesos(b.carteraVencida), pct, m90)], ['Cuentas con vencido', unirTexto(num(b.cuentasVencidas), dsoTexto(b.dso))], ['Pagos 7 días', `${num(b.pagosSemana)} · ${pesos(b.montoSemana)}`], ['Pagos vencidos', `${num(b.pagosVencidos)} · ${pesos(b.montoVencido)}`]];
     // 4.12.17: pagos vencidos rojo; la cartera vencida con el semáforo de Inicio (> 15 % del saldo rojo, si no ámbar).
     const tc = tonoCartera(b.carteraVencida, b.pctVencido);
     t.estado = numero(b.pagosVencidos) > 0 || tc === 'rojo' ? 'rojo' : tc === 'ambar' || numero(b.pagosSemana) > 0 ? 'ambar' : 'verde';
@@ -1235,7 +1239,7 @@ export function carteraPorCuenta(filas) {
     // y un cliente que no es texto ni número (objeto, lista, booleano) se salta (antes la clave «[object Object]» / «true»).
     const cl = c?.cliente, k = typeof cl === 'string' || (typeof cl === 'number' && Number.isFinite(cl)) ? String(cl).trim().toLowerCase() : ''; if (!k) continue;
     // 4.7.81: DSO vacío/ilegible queda null (antes 0 y bajaba el DSO ponderado del banco), como Inicio (`e.dso != null`).
-    const v = { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), dso: leeNum(c.dso), corte: c.fecha_corte };
+    const v = { vencido: N(c.saldo_vencido), saldo: N(c.saldo_actual), mas90: N(c.aging_mas90), dso: leeNum(c.dso), corte: c.fecha_corte };
     const ya = out.get(k), fa = fechaIso(ya?.corte), fb = fechaIso(v.corte);
     if (!ya || (fb && (!fa || fb >= fa)) || (!fa && !fb)) out.set(k, v);
   }
