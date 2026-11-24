@@ -80,7 +80,9 @@ const nombresCapa = (c) => (typeof c === 'string' ? c.split('+').map((k) => k.tr
 export const juntarCapas = (...cs) => [...new Set(cs.flatMap(nombresCapa))].sort().join('+') || undefined;
 export const capaVisible = (capas, detalle) => nombresCapa(detalle).every((k) => capas?.[k] !== false);
 // Árbol chico (escala menor a 1): adorno que va en la capa fina y se oculta de lejos (3.90.7).
-export const esChico = (s) => Number.isFinite(s) && s < 1;
+// (4.12.7) Número legible para escala/zoom: número finito o texto numérico (« 0.8 »); null, '', booleanos y basura → NaN.
+const numLegible = (v) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v.trim()) : NaN);
+export const esChico = (s) => { const n = numLegible(s); return Number.isFinite(n) && n < 1; };
 
 // Etiquetas sin encimarse: cajas en pixeles de pantalla { x, y (centro), w, h, prioridad }; se quedan las de mayor prioridad
 // (empate: la primera) y se esconden las que chocan con una ya puesta. Regresa un arreglo de booleanos en el orden recibido.
@@ -104,7 +106,8 @@ export function etiquetasSinEncimar(cajas, margen = 4) {
 export const ELEV_CAM = Math.atan2(240, 300);
 // Límites del zoom (media altura visible). El máximo deja ver México completo aun en pantallas angostas (Vista Mapa, 3.90.x).
 export const ZOOM_MIN = 8, ZOOM_MAX = 180;
-export const zoomEnRango = (z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Number.isFinite(z) ? z : ZOOM_MAX));
+// (4.12.7) Zoom en texto («50») se lee; -Infinity (rueda sin fin hacia adentro) va al mínimo; ilegible sigue al máximo.
+export const zoomEnRango = (z) => { const n = numLegible(z); return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, n === -Infinity ? ZOOM_MIN : Number.isFinite(n) ? n : ZOOM_MAX)); };
 export function encuadre(puntos, op) {
   let { ang = Math.PI / 4, aspecto = 1.6, margen = 1.15, alto = 12, min = 8, max = 120 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
   const ok = (Array.isArray(puntos) ? puntos : []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));

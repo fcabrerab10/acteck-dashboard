@@ -84,7 +84,7 @@ test('nivel de detalle por zoom: lejos sólo volúmenes', () => {
   assert.deepEqual(capasVisibles(70), { gente: false, fino: false, mapa: true, cerca: true }, 'vista inicial (70): sin gente ni ventanas');
   assert.deepEqual(capasVisibles((DETALLE.gente + DETALLE.fino) / 2), { gente: false, fino: true, mapa: true, cerca: true }, 'intermedio: ventanas sí, gente no');
   assert.deepEqual(capasVisibles(DETALLE.gente), { gente: true, fino: true, mapa: true, cerca: true }, 'el umbral cuenta como cerca');
-  assert.equal(esChico(.8), true, 'árbol .8 es chico (capa fina)'); assert.equal(esChico(1), false, 'escala 1 no es chico'); assert.equal(esChico(1.2), false); assert.equal(esChico(undefined), false, 'sin escala no es chico');
+  assert.equal(esChico(.8), true, 'árbol .8 es chico (capa fina)'); assert.equal(esChico(1), false, 'escala 1 no es chico'); assert.equal(esChico(1.2), false); assert.equal(esChico(undefined), false, 'sin escala no es chico'); assert.equal(esChico('0.8'), true, 'escala en texto se lee'); assert.equal(esChico(' 1.5 '), false); for (const v of [null, '', 'abc', false, true, NaN, -Infinity, []]) assert.equal(esChico(v), false, `escala ilegible ${JSON.stringify(v)} no es chico`);
   assert.deepEqual(capasVisibles(NaN), { gente: true, fino: true, mapa: true, cerca: true }, 'zoom inválido no esconde nada');
 });
 
@@ -184,7 +184,7 @@ test('Vista Mapa: México completo cabe en pantalla con cualquier giro y lienzo'
   }
   assert.ok(vistaMapa().zoom > encuadre([{ ...posDe(CIUDADES.GUADALAJARA), r: 9 }]).zoom, 'el mapa se ve más lejos que la base');
   assert.ok(vistaMapa({ aspecto: 1.6 }).zoom < ZOOM_MAX, 'en pantalla normal no topa con el máximo');
-  assert.equal(zoomEnRango(500), ZOOM_MAX); assert.equal(zoomEnRango(2), ZOOM_MIN); assert.equal(zoomEnRango(50), 50); assert.equal(zoomEnRango(NaN), ZOOM_MAX);
+  assert.equal(zoomEnRango(500), ZOOM_MAX); assert.equal(zoomEnRango(2), ZOOM_MIN); assert.equal(zoomEnRango(50), 50); assert.equal(zoomEnRango(NaN), ZOOM_MAX); assert.equal(zoomEnRango('50'), 50, 'zoom en texto se lee'); assert.equal(zoomEnRango(' 500 '), ZOOM_MAX); assert.equal(zoomEnRango(-Infinity), ZOOM_MIN, '-Infinity al mínimo'); assert.equal(zoomEnRango(Infinity), ZOOM_MAX); for (const v of [null, undefined, '', 'abc', true, {}, []]) assert.equal(zoomEnRango(v), ZOOM_MAX, `zoom ilegible ${JSON.stringify(v)} → máximo`);
   assert.ok(vistaMapa({ aspecto: 0 }), 'aspecto inválido no rompe');
 });
 
