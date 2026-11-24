@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, estadoDias, motivoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta, tonoCartera, tonoCarteraCuenta, tonoBanco, tonoCuota, tonoActivas } from '../src/modules/ciudad/modelo.js';
+import { estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, estadoDias, motivoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta, tonoCartera, tonoCarteraCuenta, tonoBanco, tonoCuota, tonoActivas, textoSync } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -621,7 +621,7 @@ test('bitácora: pagos registrados y última sincronización', () => {
     pagosHechos: [{ id: 7, cliente: 'pcel', concepto: 'Rebate', monto: 600000, pagado_at: '2026-10-07T10:15:00' }, { id: 8, cliente: 'x', monto: 10, pagado_at: '2026-10-05T09:00:00' }, { id: 9, monto: 1, pagado_at: 'mal' }],
     ultimaSync: { status: 'ok', created_at: '2026-10-07T10:40:00' } };
   const b = bitacoraEventos(m, h);
-  assert.deepEqual(b.map((x) => [x.cuando, x.texto]), [['10:40', 'Se actualizaron los datos · ok'], ['10:15', 'Pago registrado · pcel · Rebate · $600 K'], ['hoy', 'Factura F1 · Digitalife · $1 K'], ['hace 2 d', 'Pago registrado · x · $10']]);
+  assert.deepEqual(b.map((x) => [x.cuando, x.texto]), [['10:40', 'Se actualizaron los datos'], ['10:15', 'Pago registrado · pcel · Rebate · $600 K'], ['hoy', 'Factura F1 · Digitalife · $1 K'], ['hace 2 d', 'Pago registrado · x · $10']]);
   assert.equal(b[0].ir, null); assert.deepEqual(b[1].ir, { tipo: 'banco' }); assert.equal(b[1].grande, true);
   assert.deepEqual(bitacoraEventos({ hoyIso: '2026-10-07', ultimaSync: { created_at: null } }, h), []);
 });
@@ -2023,4 +2023,16 @@ test('4.12.21 capa de cartera con el semáforo de Inicio (ámbar ≤ 15 % del sa
   assert.equal(c.porCiudad.get('PUE').texto, '1 cuenta con vencido · $5');
   assert.equal(tonoCartera(10, 1), c.porCiudad.get('GDL').tono, 'mismo semáforo que el banco');
   for (const l of c.leyenda) assert.ok(CAPA_TONOS[l.tono] != null);
+});
+
+test('textoSync: estado del puente con las palabras del importador (4.12.26)', () => {
+  assert.deepEqual(textoSync('success'), { icono: '🔄', texto: 'Se actualizaron los datos' });
+  assert.deepEqual(textoSync(' OK '), { icono: '🔄', texto: 'Se actualizaron los datos' });
+  assert.deepEqual(textoSync(null), { icono: '🔄', texto: 'Se actualizaron los datos' });
+  assert.deepEqual(textoSync('warning'), { icono: '🔄', texto: 'Se actualizaron los datos · con avisos' });
+  assert.deepEqual(textoSync('Error'), { icono: '⚠️', texto: 'Falló una actualización de datos' });
+  assert.equal(textoSync('parcial').texto, 'Se actualizaron los datos · parcial');
+  const h = new Date('2026-10-07T11:00:00');
+  const b = bitacoraEventos({ hoyIso: '2026-10-07', ultimaSync: { status: 'error', created_at: '2026-10-07T10:40:00' } }, h);
+  assert.deepEqual(b.map((x) => [x.icono, x.cuando, x.texto]), [['⚠️', '10:40', 'Falló una actualización de datos']]);
 });
