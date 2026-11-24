@@ -313,6 +313,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.87) `pendientesTexto()`: un conteo negativo o infinito cuenta 0 (antes «-2 hechas» en el globo de la persona).
   - [x] (4.12.2) `nombreCiudad()`: «CDMX», «Cd. de México», «D.F.» salen «CDMX» (antes «Cdmx» / «Cd de México») y un texto sin letras («123», «-», un número) ya no es ciudad (antes «va a 5» en el vendedor y pines con «-»).
   - [x] (4.12.3) `fechaCorta()` lleva el año cuando la fecha no es del año de «hoy» («30 dic 2025»; antes una ETA/arribo del contenedor o la salida del camión de otro año se confundía con este); las tarjetas usan el «hoy» del modelo.
+  - [x] (4.12.4) Claves de cuenta y cliente con `unirTexto()` en `construirModelo()`: una cuenta, `cliente_key`, guía u OC que llega como NaN, objeto o lista ya no sale «NaN» / «[object Object]» en tiendas, camiones, clientes finales y bitácora (el camión sin clave queda sin cliente; el envío sin guía ni OC dice «envío OC»). Encontrado con prueba de datos raros sobre el ejemplo del harness.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -328,6 +329,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 22:16 · v4.12.4 · Pulido: claves de cuenta/cliente/guía/OC ilegibles (NaN, objeto, lista) ya no salen «NaN» ni «[object Object]» en tiendas, camiones y bitácora; +1 prueba.
 - 2026-11-23 16:00 · v4.12.3 · Pulido: `fechaCorta()` con año fuera del año en curso en tarjetas del contenedor y del camión; +1 prueba.
 - 2026-11-23 15:37 · v4.12.2 · Pulido: `nombreCiudad()` escribe CDMX en todas sus formas y descarta ciudades sin letras; +1 prueba.
 - 2026-11-23 15:16 · v4.12.1 · Pulido: tarjeta de la oficina suma pendientes/hechas/genéricos como número ≥ 0 (antes «2» en texto se concatenaba y los negativos restaban); +1 prueba.

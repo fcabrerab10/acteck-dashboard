@@ -1844,3 +1844,23 @@ test('fechaCorta() lleva el año fuera del año de hoy (4.12.3)', () => {
   const b = tarjetaDe({ tipo: 'barco', barco: { piezas: 1, eta: '2025-12-30', arribo: '2026-01-04' } }, { hoyIso: '2026-01-02' });
   assert.match(b.numeros[1][1], /^30 dic 2025$/); assert.ok(!/2026/.test(b.numeros[2][1]));
 });
+
+test('4.12.4: claves de cuenta/cliente NaN, objeto o lista no salen «NaN» ni «[object Object]»', () => {
+  const hoy = new Date('2026-11-23T12:00:00');
+  const d = {
+    cuentas: [{ cuenta: NaN, nombre: 'Rota' }, { cuenta: {}, nombre: 'Rota 2' }, { cuenta: ' ct ', nombre: 'CT Internacional', erp_cliente: ' 01234 ' }],
+    facturas: [{ cliente_key: NaN, folio: 'F1', fecha: '2026-11-22', monto: 100 }, { cliente_key: {}, folio: 'F2', fecha: '2026-11-22', monto: 90 }, { cliente_key: '01234', folio: 'F3', fecha: '2026-11-22', monto: 80 }],
+    envios: [{ fecha_envio_erp: '2026-11-22', guia_rastreo: {}, oc_clientes: { cliente_key: [], numero_oc: NaN } }, { fecha_envio_erp: '2026-11-22', guia_rastreo: ' G9 ', oc_clientes: null }],
+    clientesFinales: [{ cuenta: NaN, estado: 'JALISCO', importe: 5 }, { cuenta: ' ct ', estado: 'JALISCO', importe: 5 }],
+  };
+  const m = construirModelo(d, hoy);
+  const s = JSON.stringify({ camiones: m.camiones, distritos: m.distritos });
+  assert.ok(!/NaN|\[object/.test(s), s.slice(0, 300));
+  const cam = Object.fromEntries(m.camiones.map((c) => [c.folio, c]));
+  assert.equal(cam.F1.cliente, null); assert.equal(cam.F2.cliente, null);
+  assert.equal(cam.F3.cliente, 'CT Internacional'); // la clave ERP con espacios sigue empatando
+  assert.ok(cam['envío OC'], 'envío sin guía ni OC legibles dice «envío OC»');
+  assert.equal(cam['guía G9']?.envio, true);
+  const gdl = m.distritos.find((x) => x.ciudad === 'GUADALAJARA');
+  if (gdl?.clientesFinales) assert.deepEqual(gdl.clientesFinales.cuentas, ['ct']);
+});

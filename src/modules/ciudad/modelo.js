@@ -1295,7 +1295,7 @@ export function construirModelo(d, hoy = new Date()) {
   const hoyIso = isoLocal(hoy); // 4.7.32: día local (antes UTC: de 18:00 a 23:59 en Guadalajara «hoy» ya era mañana)
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const mesPrev = mes === 1 ? 12 : mes - 1, anioPrev = mes === 1 ? anio - 1 : anio;
-  const cuentas = new Map((d.cuentas || []).map((c) => [String(c.cuenta ?? '').trim(), c])); // 4.7.50: « pcel » = «pcel»
+  const cuentas = new Map((d.cuentas || []).map((c) => [unirTexto(c.cuenta), c])); // 4.12.4: NaN, objeto o lista no son cuenta (antes «NaN» / «[object Object]») // 4.7.50: « pcel » = «pcel»
 
   // ── Oficina: equipo del dashboard + genéricos ──
   const items = d.agendaHoy || [];
@@ -1366,9 +1366,9 @@ export function construirModelo(d, hoy = new Date()) {
   // cuentas sin sucursal: una tienda en su sede
   // 4.7.50: la cuenta y sus ventas mensuales se empatan sin espacios (« pcel » = «pcel»; antes la Matriz salía apagada con venta 0, o doble si ya tenía sucursales) y la cuenta vacía se salta.
   for (const c0 of d.cuentas || []) {
-    const cc = String(c0.cuenta ?? '').trim(); if (!cc) continue; const c = { ...c0, cuenta: cc };
+    const cc = unirTexto(c0.cuenta); if (!cc) continue; const c = { ...c0, cuenta: cc };
     if (cuentasConSucursal.has(c.cuenta) || !c.tiene_sellout && !c.propio) continue;
-    const m = (d.cuentaMes || []).filter((r) => String(r.cuenta ?? '').trim() === c.cuenta);
+    const m = (d.cuentaMes || []).filter((r) => unirTexto(r.cuenta) === c.cuenta);
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
     tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: String(c.nombre || '').trim() || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
@@ -1395,7 +1395,7 @@ export function construirModelo(d, hoy = new Date()) {
   }
   // Clientes finales por estado → ciudad representativa (casitas junto a la manzana).
   const cfPor = new Map();
-  for (const r of d.clientesFinales || []) { const est = norm(r.estado); if (!est || est === 'SIN ESTADO') continue; const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad) continue; const o = cfPor.get(ciudad) || { n: 0, importe: 0, cuentas: new Set() }; o.n += 1; o.importe += N(r.importe); const cu = String(r.cuenta ?? '').trim(); if (cu) o.cuentas.add(cu); cfPor.set(ciudad, o); }
+  for (const r of d.clientesFinales || []) { const est = norm(r.estado); if (!est || est === 'SIN ESTADO') continue; const ciudad = CIUDAD_POR_ESTADO[est]; if (!ciudad) continue; const o = cfPor.get(ciudad) || { n: 0, importe: 0, cuentas: new Set() }; o.n += 1; o.importe += N(r.importe); const cu = unirTexto(r.cuenta); if (cu) o.cuentas.add(cu); cfPor.set(ciudad, o); }
   for (const [ciudad, o] of cfPor) { if (!porCiudad.has(ciudad)) porCiudad.set(ciudad, { ciudad, pos: posDe(CIUDADES[ciudad]), estado: CIUDADES[ciudad].estado, tiendas: [], vendedores: [] }); porCiudad.get(ciudad).clientesFinales = { n: o.n, importe: o.importe, cuentas: [...o.cuentas] }; }
   const distritos = [...porCiudad.values()].map((dist) => {
     dist.tiendas.sort((a, b) => b.importe - a.importe);
@@ -1409,14 +1409,14 @@ export function construirModelo(d, hoy = new Date()) {
 
   // ── Camiones: facturas recientes del CEDIS a la sede del cliente ──
   // 4.7.51: la clave ERP se limpia (« 1234 » = «1234») en facturas, envíos y destinos de vendedores; la cuenta sale con la clave limpia del mapa.
-  const claveErp = (x) => String(x ?? '').trim();
+  const claveErp = (x) => unirTexto(x); // 4.12.4: NaN, objeto o lista → sin clave (antes cliente «NaN» / «[object Object]» en el camión y la bitácora)
   const cuentaPorErp = new Map([...cuentas.entries()].filter(([k, c]) => k && claveErp(c?.erp_cliente)).map(([k, c]) => [claveErp(c.erp_cliente), k]));
   const camiones = (d.facturas || []).filter((f) => dias(f.fecha, hoyIso) <= 10).map((f) => {
     const ck = claveErp(f.cliente_key), kc = cuentaPorErp.get(ck), cuenta = kc ? cuentas.get(kc) : null;
     const key = kc || ck;
     const ciudad = SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO';
     const edad = dias(f.fecha, hoyIso);
-    return { folio: f.folio, cliente: cuenta?.nombre || ck || f.cliente_key, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + Math.max(0, edad) * 0.12) };
+    return { folio: f.folio, cliente: unirTexto(cuenta?.nombre) || ck || null, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + Math.max(0, edad) * 0.12) };
   }).sort((a, b) => b.monto - a.monto).slice(0, 14);
   for (const e of d.envios || []) {
     // 4.7.64: la salida es la primera fecha legible (envío ERP ilegible cae a la surtida) y una entrega en blanco (« ») no cuenta como entregado.
@@ -1424,7 +1424,7 @@ export function construirModelo(d, hoy = new Date()) {
     if (!salida || entrega) continue;
     const key = claveErp(e.oc_clientes?.cliente_key) || 'digitalife';
     const edad = dias(salida, hoyIso); if (!Number.isFinite(edad) || edad > 20) continue; // salida ilegible: sin camión (antes progreso NaN)
-    camiones.push({ folio: e.guia_rastreo ? `guía ${e.guia_rastreo}` : `envío OC ${e.oc_clientes?.numero_oc || ''}`.trim(), cliente: cuentas.get(key)?.nombre || key, ciudad: SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO', monto: 0, piezas: 0, fecha: salida, progreso: Math.min(0.9, 0.15 + Math.max(0, edad) * 0.15), envio: true, paqueteria: e.paqueteria || null });
+    camiones.push({ folio: unirTexto(e.guia_rastreo) ? `guía ${unirTexto(e.guia_rastreo)}` : unirTexto(e.oc_clientes?.numero_oc) ? `envío OC ${unirTexto(e.oc_clientes.numero_oc)}` : 'envío OC', cliente: unirTexto(cuentas.get(key)?.nombre) || key, ciudad: SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO', monto: 0, piezas: 0, fecha: salida, progreso: Math.min(0.9, 0.15 + Math.max(0, edad) * 0.15), envio: true, paqueteria: e.paqueteria || null });
   }
 
   // ── Vendedores del ERP (equipo comercial): de la oficina a sus clientes ──
