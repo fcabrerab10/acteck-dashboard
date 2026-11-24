@@ -415,7 +415,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length.toLocaleString('es-MX')} con ETA vencida · ${plural(comoLista(m.puerto?.tarimas).filter(Boolean).length, 'recién llegado')}`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
     { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${diasTexto(d)}`, estado: tonoDias(d) || 'gris', motivo: motivoDias(d) },
     { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length.toLocaleString('es-MX')} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
-    { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
+    { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron`, estado: tonoActivas(activas, tiendas.length) || 'gris', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
     { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${plural(cf.n, 'cliente')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
   ];
   return { tramos, atasco: tramos.find((t) => t.estado === 'rojo') || tramos.find((t) => t.estado === 'ambar') || null };
@@ -433,7 +433,7 @@ export function cintasCadena(m, max = 8) {
   const out = [{ de: 'mar', a: 'puerto', tono: est.puerto === 'rojo' ? 'rojo' : est.mar, peso: peso(barcos, 8) }, { de: 'puerto', a: 'cedis', tono: est.puerto, peso: peso(barcos + comoLista(m.puerto?.tarimas).filter(Boolean).length, 8) }];
   const cam = new Map(); for (const c of comoLista(m.camiones)) { const k = norm(c?.ciudad); if (!k) continue; const o = cam.get(k) || { n: 0, lento: false }; o.n += 1; if (c.envio && m.hoyIso && c.fecha && dias(c.fecha, m.hoyIso) > 5) o.lento = true; cam.set(k, o); }
   const ciudades = comoLista(m.distritos).filter((d) => d && norm(d.ciudad)).map((d) => { const ts = comoLista(d.tiendas).filter((t) => t && !t.reparto); const r = ts.length ? ts.filter((t) => t.vendio).length / ts.length : 1; const c = cam.get(norm(d.ciudad)) || { n: 0, lento: false };
-    return { ciudad: d.ciudad, n: c.n, tiendas: ts.length, tono: ts.length && r < 0.4 ? 'rojo' : c.lento || (ts.length && r < 0.7) ? 'ambar' : c.n || ts.length ? 'verde' : 'gris' }; })
+    return { ciudad: d.ciudad, n: c.n, tiendas: ts.length, tono: tonoActivas(r * ts.length, ts.length) === 'rojo' ? 'rojo' : c.lento || tonoActivas(r * ts.length, ts.length) === 'ambar' ? 'ambar' : c.n || ts.length ? 'verde' : 'gris' }; })
     .filter((x) => x.n || x.tiendas).sort((a, b) => b.n - a.n || b.tiendas - a.tiendas).slice(0, max);
   const tope = Math.max(1, ...ciudades.map((x) => x.n));
   for (const x of ciudades) out.push({ de: 'cedis', a: x.ciudad, tono: x.tono, peso: peso(x.n, tope) });
@@ -832,6 +832,15 @@ export function tonoCuota(pct) {
   if (p == null || !Number.isFinite(p)) return null;
   return p >= 100 ? 'verde' : p >= 85 ? null : p >= 60 ? 'ambar' : 'rojo';
 }
+// Semáforo de «tiendas que vendieron este mes» (4.12.19), uno solo para la tira de la cadena, sus cintas por ciudad y la tarjeta
+// de la ciudad: < 40 % rojo, < 70 % ámbar, si no verde. Antes la tarjeta usaba 60 % / 30 %: una ciudad con 50 % de tiendas
+// activas salía verde en la tarjeta y ámbar en la cadena. Sin tiendas (o conteo ilegible) → null.
+export function tonoActivas(activas, total) {
+  const t = leeNum(total), a = leeNum(activas);
+  if (!Number.isFinite(t) || t <= 0 || !Number.isFinite(a)) return null;
+  const r = Math.max(0, a) / t;
+  return r < 0.4 ? 'rojo' : r < 0.7 ? 'ambar' : 'verde';
+}
 export function dsoTexto(v) {
   const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
 }
@@ -1052,7 +1061,7 @@ export function tarjetaDe(tag, modelo) {
       const ts = sn(d.tiendas), act = ts.filter((x) => x.vendio).length, venta = ts.reduce((s, x) => s + numero(x.importe), 0), r = ts.length ? act / ts.length : 0;
       t.numeros = [['Tiendas activas', `${num(act)} de ${num(ts.length)}`], ['Venta del mes', pesos(venta)], ['Clientes', num(sn(d.cuentas).length || new Set(ts.map((x) => x.cuenta)).size)], ['Vendedores', num(sn(d.vendedores).length)]];
       const cq = cuotaRitmo(m, ts.map((x) => x.cuenta)); if (cq) { t.numeros.splice(2, 0, ['Cuota del mes', `${porcentaje(cq.pct)} · ritmo ${porcentaje(cq.ritmo)}`]); t.cuota = cq.tono; } // 3.90.60
-      t.estado = !ts.length ? null : r >= 0.6 ? 'verde' : r >= 0.3 ? 'ambar' : 'rojo';
+      t.estado = tonoActivas(act, ts.length); // 4.12.19: mismo semáforo que la cadena y sus cintas (antes 60 % / 30 %)
     }
   } else if (tag.tipo === 'tienda') {
     const d = sn(m.distritos).find((x) => x.ciudad === tag.ciudad);
