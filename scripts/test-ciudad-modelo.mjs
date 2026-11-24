@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, estadoDias, motivoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta, tonoCartera } from '../src/modules/ciudad/modelo.js';
+import { estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, estadoDias, motivoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta, tonoCartera, tonoCuota } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -468,7 +468,7 @@ test('barra superior de recursos con los números de Inicio', () => {
   const r = { cur: { fact_neta: 8.5e6 }, cuotaPeriodo: 10e6, inv: { valor: 40e6, cobertura: 95 }, cartera: { vencido: 1.2e6 }, enCamino: { valor: 3e6, pos: 7 } };
   const b = recursosBarra(r);
   assert.deepEqual(b.map((x) => [x.clave, x.ir.tipo]), [['ventas', 'oficina'], ['inventario', 'cedis'], ['cartera', 'banco'], ['embarques', 'puerto']]);
-  assert.equal(b[0].pct, 85); assert.equal(b[0].tono, 'ambar'); assert.equal(b[1].extra, '95 d'); assert.equal(b[2].tono, 'rojo'); assert.equal(b[3].extra, '7 POs');
+  assert.equal(b[0].pct, 85); assert.equal(b[0].tono, null); assert.equal(b[1].extra, '95 d'); assert.equal(b[2].tono, 'rojo'); assert.equal(b[3].extra, '7 POs');
   assert.equal(recursosBarra({ cur: { fact_neta: 1 }, cuotaPeriodo: 0 })[0].pct, null, 'sin cuota');
   assert.equal(recursosBarra({ cartera: { vencido: 0 } })[0].tono, 'verde');
   assert.deepEqual(recursosBarra(null), []);
@@ -1956,4 +1956,12 @@ test('4.12.17: cartera vencida con el semáforo de Inicio (rojo > 15 % del saldo
   const t = (b) => tarjetaDe({ tipo: 'banco' }, { banco: { pagosSemana: 0, pagosVencidos: 0, ...b } }).estado;
   assert.equal(t({ carteraVencida: 1e6, saldo: 1e7, pctVencido: 10 }), 'ambar'); assert.equal(t({ carteraVencida: 1e6, saldo: 2e6, pctVencido: 50 }), 'rojo');
   assert.equal(t({ carteraVencida: 0 }), 'verde'); assert.equal(t({ carteraVencida: 1e6, pctVencido: 10, pagosVencidos: 2 }), 'rojo');
+});
+
+test('semáforo de ventas del mes como la barra de cuota de Inicio (4.12.18)', () => {
+  assert.equal(tonoCuota(100), 'verde'); assert.equal(tonoCuota(130), 'verde'); assert.equal(tonoCuota(99), null); assert.equal(tonoCuota(85), null);
+  assert.equal(tonoCuota(84), 'ambar'); assert.equal(tonoCuota(60), 'ambar'); assert.equal(tonoCuota(59), 'rojo'); assert.equal(tonoCuota(0), 'rojo'); assert.equal(tonoCuota('70'), 'ambar');
+  for (const p of [null, undefined, NaN, Infinity, '', 'x', [5], {}]) assert.equal(tonoCuota(p), null, `pct ${String(p)}`);
+  assert.equal(recursosBarra({ cur: { fact_neta: 7e6 }, cuotaPeriodo: 10e6 })[0].tono, 'ambar', '70 % ya no es rojo');
+  assert.equal(recursosBarra({ cur: { fact_neta: 5e6 }, cuotaPeriodo: 10e6 })[0].tono, 'rojo');
 });

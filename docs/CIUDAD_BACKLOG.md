@@ -327,6 +327,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.8) Contenedores con el número limpio (`unirTexto()`): « MSKU1 » = «MSKU1» (empata sus POs y su tarjeta) y un número NaN u objeto ya no sale «Contenedor NaN» / «[object Object]» en el puerto.
   - [x] (4.12.15) Racks del CEDIS con el mismo semáforo que el CEDIS y «Días de Inv» de Inicio (`tonoDias()`: < 30 rojo, > 120 ámbar). Antes seguían con los umbrales viejos (> 120 rojo, > 90 ámbar): un rack con 10 días salía verde y uno con 900 rojo, al revés que el CEDIS. Encontrado al buscar renglones de la escena contra el dashboard.
   - [x] (4.12.17) Cartera vencida con el semáforo de la tarjeta «Cartera» de Inicio: `tonoCartera()` pura y probada (sin vencido verde; vencido > 15 % del saldo rojo, si no ámbar; sin % legible rojo). La usan la barra superior, el globo y la tarjeta del banco; un pago vencido sigue en rojo y gana al globo ámbar. Antes cualquier peso vencido pintaba rojo.
+  - [x] (4.12.18) «Ventas del mes» de la barra superior con el semáforo de la barra de cuota de Inicio: `tonoCuota()` pura y probada (≥ 100 % verde, 85–99 % sin tono → barra en acento como el azul de Inicio, 60–84 % ámbar, < 60 % rojo). Antes 80–99 % ámbar y < 80 % rojo: 70 % salía rojo (Inicio: naranja).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -342,6 +343,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 03:15 · v4.12.18 · Pulido: «Ventas del mes» de la barra superior con el semáforo de cuota de Inicio (≥ 100 verde, 85–99 acento, 60–84 ámbar, < 60 rojo); +1 prueba.
 - 2026-11-24 02:56 · v4.12.17 · Pulido: cartera vencida del banco (barra, globo y tarjeta) con el semáforo de Inicio (rojo > 15 % del saldo, si no ámbar); +1 prueba.
 - 2026-11-24 02:36 · v4.12.16 · Pulido: los días de inventario de la barra superior con el semáforo de Inicio (< 30 rojo, > 120 ámbar); +1 prueba.
 - 2026-11-24 02:17 · v4.12.15 · Pulido: tarjeta del rack del CEDIS con el semáforo de días de Inicio (< 30 rojo, > 120 ámbar), igual que el CEDIS; +1 prueba.

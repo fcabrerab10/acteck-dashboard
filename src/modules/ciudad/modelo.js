@@ -824,6 +824,14 @@ export function tonoCartera(vencido, pctVencido) {
   const p = typeof pctVencido === 'number' || typeof pctVencido === 'string' ? leeNum(pctVencido) : null;
   return p != null && Number.isFinite(p) && p <= 15 ? 'ambar' : 'rojo';
 }
+// Semáforo de «Ventas del mes» como la barra de cuota de Inicio (`toneCuota` / `BarraCuotaM`, 4.12.18): ≥ 100 % verde, 85–99 %
+// sin tono (la barra usa el acento, como el azul de Inicio), 60–84 % ámbar y < 60 % rojo. Antes 80–99 % ámbar y < 80 % rojo:
+// 70 % salía rojo (Inicio: naranja) y 90 % ámbar (Inicio: en camino). Sin % legible → sin tono.
+export function tonoCuota(pct) {
+  const p = typeof pct === 'number' || typeof pct === 'string' ? leeNum(pct) : null;
+  if (p == null || !Number.isFinite(p)) return null;
+  return p >= 100 ? 'verde' : p >= 85 ? null : p >= 60 ? 'ambar' : 'rojo';
+}
 export function dsoTexto(v) {
   const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
 }
@@ -883,7 +891,7 @@ export function recursosBarra(r) {
   // 4.7.14: montos en texto con «$», comas o espacios («$5,000») se leen como número (antes 0: cartera «verde» y % de ventas 0).
   const n = N, out = [];
   // 4.7.25: `pctTexto` con `porcentaje()` («1,250 %»; antes «1250%» pegado) y días de cobertura con miles es-MX («1,200 d»).
-  if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, pctTexto: pct == null ? null : porcentaje(pct), tono: pct == null ? null : pct >= 100 ? 'verde' : pct >= 80 ? 'ambar' : 'rojo', ir: { tipo: 'oficina' } }); }
+  if (r.cur) { const v = n(r.cur.fact_neta), q = n(r.cuotaPeriodo), pct = q > 0 ? Math.round((v / q) * 100) : null; out.push({ clave: 'ventas', icono: '💰', etiqueta: 'Ventas del mes', valor: v, pct, pctTexto: pct == null ? null : porcentaje(pct), tono: tonoCuota(pct), ir: { tipo: 'oficina' } }); }
   // 4.12.16: los días de cobertura llevan el semáforo «Días de Inv» de Inicio (`tonoDias`: < 30 rojo, > 120 ámbar), como el CEDIS;
   // antes salían siempre en gris. Sin medida (null, ilegible, negativo) → sin tono.
   if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: diasCobertura(r.inv.cobertura), tono: diasCobertura(r.inv.cobertura) ? tonoDias(r.inv.cobertura) : null, ir: { tipo: 'cedis' } });
