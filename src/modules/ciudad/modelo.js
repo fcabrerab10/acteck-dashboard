@@ -1337,7 +1337,7 @@ export function construirModelo(d, hoy = new Date()) {
     const enCurso = abiertas.find((it) => it.inicio_real);
     const quien = unirTexto(p.nombre, p.puesto); // 4.7.38: sin «null» en la búsqueda del rol
     return { id: p.user_id, nombre: nombrePersona(p), puesto: unirTexto(p.puesto) || unirTexto(p.rol), rol: /millan|finanz/i.test(quien) ? 'finanzas' : /karolina|comercial/i.test(quien) ? 'comercial' : 'direccion',
-      pendientes: abiertas.length, hechas: mios.filter((it) => it.estado === 'hecha').length, actividad: enCurso ? enCurso.titulo : abiertas[0]?.titulo || null, avatar: p.avatar_url || null };
+      pendientes: abiertas.length, hechas: mios.filter((it) => it.estado === 'hecha').length, actividad: (enCurso ? unirTexto(enCurso.titulo) : unirTexto(abiertas[0]?.titulo)) || null, avatar: p.avatar_url || null };
   });
   const reuniones = (d.reunionesHoy || []).filter((r) => r.tipo !== 'viaje');
   // 4.7.66: el conteo y la reunión en curso salen de la agenda limpia (antes una reunión con fecha ilegible o repetida sumaba
@@ -1387,7 +1387,7 @@ export function construirModelo(d, hoy = new Date()) {
     if (s.actual + s.previo <= 0) continue;
     const c = ciudadDeSucursal(s.sucursal);
     const sede = SEDE_POR_CUENTA[s.cuenta] || 'GUADALAJARA';
-    const nombreCuenta = cuentas.get(s.cuenta)?.nombre || s.cuenta;
+    const nombreCuenta = unirTexto(cuentas.get(s.cuenta)?.nombre) || s.cuenta; // 4.12.11: nombre en objeto ya no sale «[object Object]»
     // Luz encendida = vendió este mes; los primeros 10 días del mes también cuenta el mes anterior (si no, la ciudad amanece apagada el día 1).
     const activa = s.actual > 0 || (hoy.getDate() <= 10 && s.previo > 0);
     const t = { cuenta: s.cuenta, nombreCuenta, sucursal: s.sucursal, importe: s.actual, previo: s.previo, vendio: activa, vendioMes: s.actual > 0, virtual: !!c?.virtual, vendedores: s.vendedores };
@@ -1403,9 +1403,9 @@ export function construirModelo(d, hoy = new Date()) {
     const m = (d.cuentaMes || []).filter((r) => unirTexto(r.cuenta) === c.cuenta);
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
-    tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: String(c.nombre || '').trim() || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
+    tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: unirTexto(c.nombre) || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
     const sede = SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA'; // 3.90.56: y una tienda por estado donde vende a clientes finales
-    for (const r of repartoPorEstado(c.cuenta, d.clientesFinales, { anio, mes, anioPrev, mesPrev, sede })) tienda(r.ciudad, { cuenta: c.cuenta, nombreCuenta: String(c.nombre || '').trim() || c.cuenta, sucursal: `Clientes en ${r.ciudad.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase())}`, importe: r.importe, previo: r.previo, vendio: r.importe > 0 || (hoy.getDate() <= 10 && r.previo > 0), vendioMes: r.importe > 0, virtual: false, reparto: true, vendedores: 0 });
+    for (const r of repartoPorEstado(c.cuenta, d.clientesFinales, { anio, mes, anioPrev, mesPrev, sede })) tienda(r.ciudad, { cuenta: c.cuenta, nombreCuenta: unirTexto(c.nombre) || c.cuenta, sucursal: `Clientes en ${r.ciudad.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase())}`, importe: r.importe, previo: r.previo, vendio: r.importe > 0 || (hoy.getDate() <= 10 && r.previo > 0), vendioMes: r.importe > 0, virtual: false, reparto: true, vendedores: 0 });
   }
   // vendedores de los mayoristas → en la ciudad de su sucursal (o la sede de la cuenta)
   const vm = new Map();
@@ -1415,8 +1415,8 @@ export function construirModelo(d, hoy = new Date()) {
     if (!v.nombre || /^(SIN|N\/?A|-)/i.test(v.nombre)) continue;
     const c = v.sucursal ? ciudadDeSucursal(v.sucursal) : null;
     const ciudad = (c && c.ciudad) || SEDE_POR_CUENTA[v.cuenta] || 'GUADALAJARA';
-    if (!porCiudad.has(ciudad)) tienda(ciudad, { cuenta: v.cuenta, nombreCuenta: cuentas.get(v.cuenta)?.nombre || v.cuenta, sucursal: 'Matriz', importe: 0, previo: 0, vendio: false, virtual: false, vendedores: 0 });
-    porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: cuentas.get(v.cuenta)?.nombre || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
+    if (!porCiudad.has(ciudad)) tienda(ciudad, { cuenta: v.cuenta, nombreCuenta: unirTexto(cuentas.get(v.cuenta)?.nombre) || v.cuenta, sucursal: 'Matriz', importe: 0, previo: 0, vendio: false, virtual: false, vendedores: 0 });
+    porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: unirTexto(cuentas.get(v.cuenta)?.nombre) || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
   }
   // Cartera (propios): saldo vencido → bandera roja en su Matriz / primera tienda de la sede.
   const carteraPor = carteraPorCuenta(d.cartera); // 4.7.49: « digitalife » = «digitalife»; 4.7.52: con dos cortes gana el más reciente

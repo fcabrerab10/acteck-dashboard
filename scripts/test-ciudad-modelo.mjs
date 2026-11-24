@@ -1892,3 +1892,12 @@ test('4.12.8 · contenedor con id sucio: se limpia y la tarjeta lo encuentra (si
   assert.equal(t.numeros.find((n) => n[0] === 'Piezas')?.[1], '10');
   assert.ok(!JSON.stringify(m.puerto).includes('NaN'));
 });
+test('4.12.11: nombre de cuenta y título de pendiente en objeto no llegan como texto raro', () => {
+  const d2 = structuredClone(d); d2.cuentas = d2.cuentas.map((c) => ({ ...c, nombre: {} })); d2.agendaHoy = (d2.agendaHoy || []).map((x) => ({ ...x, titulo: { a: 1 } }));
+  const m = construirModelo(d2, hoy);
+  for (const x of m.distritos) for (const t of x.tiendas) { assert.equal(typeof t.nombreCuenta, 'string'); assert.ok(!t.nombreCuenta.includes('[object'), t.nombreCuenta); }
+  for (const x of m.distritos) for (const v of x.vendedores || []) assert.ok(!String(v.nombreCuenta).includes('[object'));
+  for (const p of m.oficina.personas) assert.ok(p.actividad === null || typeof p.actividad === 'string', 'actividad es texto o null');
+  const d3 = structuredClone(d); d3.cuentas = d3.cuentas.map((c) => ({ ...c, nombre: '  Grupo X  ' }));
+  assert.ok(construirModelo(d3, hoy).distritos.some((x) => x.tiendas.some((t) => t.nombreCuenta === 'Grupo X')), 'nombre limpio sin espacios');
+});
