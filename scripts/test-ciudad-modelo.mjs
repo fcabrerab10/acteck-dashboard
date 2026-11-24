@@ -642,6 +642,14 @@ test('pensamientos de tiendas', () => {
   assert.equal(p[0].nombre, 'MALA · Sur'); assert.equal(p[0].sucursal, 'Sur'); assert.ok(!p.some((x) => 'peso' in x));
   assert.equal(pensamientos(m).length, 5); assert.equal(pensamientos(m, 2).length, 2);
   assert.deepEqual(pensamientos(null), []); assert.deepEqual(pensamientos({}), []);
+  { // 4.12.24: cartera con el semáforo de Inicio — ≤ 15 % del saldo ámbar (tras «no he vendido»), > 15 % o sin saldo rojo
+    const pc = (cartera, t = T('k', 'S', 100, 100)) => pensamientos({ hoyIso: '2026-10-31', kpis: { cartera }, distritos: [{ ciudad: 'X', tiendas: [t] }] })[0];
+    assert.deepEqual([pc([{ cuenta: 'k', vencido: 100, saldo: 1000 }])?.tono, pc([{ cuenta: 'k', vencido: 100, saldo: 1000 }])?.texto], ['ambar', 'Tengo algo de cartera vencida']);
+    assert.equal(pc([{ cuenta: 'k', vencido: 300, saldo: 1000 }]).tono, 'rojo'); assert.equal(pc([{ cuenta: 'k', vencido: 100 }]).tono, 'rojo', 'sin saldo');
+    assert.equal(pc([{ cuenta: ' k ', vencido: 100, saldo: 1000 }, { cuenta: 'k', vencido: 500, saldo: 1000 }]).tono, 'rojo', 'gana el peor');
+    assert.equal(pc([{ cuenta: 'k', vencido: 0, saldo: 1000 }]), undefined, 'al corriente sin pensamiento');
+    assert.equal(pc([{ cuenta: 'k', vencido: 100, saldo: 1000 }], T('k', 'S', 0, 100)).texto, 'Este mes no he vendido nada', 'no vender pesa más que ámbar');
+  }
   assert.ok(Array.isArray(pensamientos(construirModelo(d, hoy))));
 });
 

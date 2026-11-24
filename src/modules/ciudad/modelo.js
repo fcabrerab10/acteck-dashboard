@@ -465,7 +465,13 @@ export function pensamientos(m, max = 5) {
   if (!m) return [];
   // 4.3.3: salta cartera/distritos/tiendas nulos y un hoyIso inválido usa hoy (antes lanzaba error o ritmo NaN).
   // 4.7.71: cartera/distritos/tiendas que no son lista ya no lanzan error; la cuenta vencida empata con espacios (« pcel » = «pcel»)
-  const venc = new Set(comoLista(m.kpis?.cartera).filter((c) => numero(c?.vencido) > 0).map((c) => unirTexto(c.cuenta)).filter(Boolean));
+  // 4.12.24: el tono sale del semáforo de cartera de Inicio (`tonoCartera()`): vencido ≤ 15 % del saldo de la cuenta es ámbar
+  // (va tras «no he vendido nada»); más, o sin saldo legible, rojo. Antes cualquier peso vencido decía rojo, distinto de la tienda.
+  const venc = new Map();
+  for (const c of comoLista(m.kpis?.cartera)) {
+    const cta = unirTexto(c?.cuenta), v = numero(c?.vencido), sal = numero(c?.saldo); if (!cta || !(v > 0)) continue;
+    const tono = tonoCartera(v, sal > 0 ? (v / sal) * 100 : null); if (venc.get(cta) !== 'rojo') venc.set(cta, tono); // con dos renglones gana el peor
+  }
   const q = m.cuotas instanceof Map ? m.cuotas : new Map(); const h = fechaHoy(m.hoyIso);
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   const out = [];
@@ -478,8 +484,9 @@ export function pensamientos(m, max = 5) {
       const act = numero(t.importe), prev = numero(t.previo), esperado = prev * ritmo, cambio = esperado > 0 ? Math.round((act / esperado - 1) * 100) : null, cta = unirTexto(t.cuenta), cu = q.get(t.cuenta) ?? q.get(cta);
       const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: nombreTienda(t) };
       let p = null;
-      if (cta && venc.has(cta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
+      if (cta && venc.get(cta) === 'rojo') p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
       else if (prev > 0 && act <= 0) p = h.getDate() > 10 ? { tono: 'rojo', peso: 1, texto: 'Este mes no he vendido nada' } : null; // como `vendio` de la tienda: los primeros 10 días aún no cuenta
+      else if (cta && venc.get(cta) === 'ambar') p = { tono: 'ambar', peso: 1.5, texto: 'Tengo algo de cartera vencida' };
       else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Voy ${porcentaje(-cambio)} abajo del ritmo del mes pasado` };
       else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${porcentaje(cambio)} arriba del ritmo del mes pasado!` };
       else if (numero(cu?.cuota) > 0 && numero(cu.venta) / numero(cu.cuota) >= ritmo) p = { tono: 'verde', peso: 4, texto: 'Voy arriba de mi cuota' };
