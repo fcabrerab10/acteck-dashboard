@@ -330,6 +330,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.15) Racks del CEDIS con el mismo semáforo que el CEDIS y «Días de Inv» de Inicio (`tonoDias()`: < 30 rojo, > 120 ámbar). Antes seguían con los umbrales viejos (> 120 rojo, > 90 ámbar): un rack con 10 días salía verde y uno con 900 rojo, al revés que el CEDIS. Encontrado al buscar renglones de la escena contra el dashboard.
   - [x] (4.12.17) Cartera vencida con el semáforo de la tarjeta «Cartera» de Inicio: `tonoCartera()` pura y probada (sin vencido verde; vencido > 15 % del saldo rojo, si no ámbar; sin % legible rojo). La usan la barra superior, el globo y la tarjeta del banco; un pago vencido sigue en rojo y gana al globo ámbar. Antes cualquier peso vencido pintaba rojo.
   - [x] (4.12.18) «Ventas del mes» de la barra superior con el semáforo de la barra de cuota de Inicio: `tonoCuota()` pura y probada (≥ 100 % verde, 85–99 % sin tono → barra en acento como el azul de Inicio, 60–84 % ámbar, < 60 % rojo). Antes 80–99 % ámbar y < 80 % rojo: 70 % salía rojo (Inicio: naranja).
+  - [x] (4.12.22) Capa y tarjetas de cuota: `cuotaRitmo()` saca el tono del avance sin redondear (antes 99.6 % del ritmo redondeaba a 100 % y salía verde; 79.6 % salía ámbar en vez de rojo). +1 prueba.
   - [x] (4.12.21) Capa «Cartera» por ciudad con el semáforo de Inicio y del banco (`tonoCartera()`): vencido de sus cuentas ≤ 15 % de su saldo ámbar, más (o sin saldo legible) rojo; el texto dice «N % del saldo» y la leyenda trae los tres tonos. Antes cualquier peso vencido pintaba la ciudad de rojo.
 
 ## Necesita a Fernando (el agente no lo hace)
@@ -346,6 +347,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 04:35 · v4.12.22 · Pulido: el tono de cuota vs ritmo ya no usa el % redondeado (99.6 % ya no sale verde, 79.6 % ya no sale ámbar); +1 prueba.
 - 2026-11-24 04:15 · v4.12.21 · Pulido: capa «Cartera» por ciudad con el semáforo de Inicio (ámbar si el vencido es ≤ 15 % del saldo de sus cuentas, rojo si más) y «N % del saldo» en el texto; +1 prueba.
 - 2026-11-24 03:56 · v4.12.20 · Pulido: tarjeta del puerto con el mismo semáforo que su globo (rojo con ETA vencida) y sin contar atrasados como «llegan en 7 días»; +1 prueba.
 - 2026-11-24 03:36 · v4.12.19 · Pulido: tarjeta de la ciudad con el mismo semáforo de tiendas activas que la cadena (< 40 % rojo, < 70 % ámbar); +1 prueba.

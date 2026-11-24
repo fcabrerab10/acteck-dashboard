@@ -556,6 +556,7 @@ export function cuotaRitmo(m, cuentas = []) {
   // 3.90.85: fecha inválida → hoy y venta faltante → 0 (antes salía «NaN %» y el tono rojo).
   // 4.3.24: cuota en texto se suma como número (antes «1000» se concatenaba y el % salía disparatado); hoyIso con `fechaHoy()`.
   const q = m?.cuotas instanceof Map ? m.cuotas : new Map(); const h = fechaHoy(m?.hoyIso);
+  // 4.12.22: el tono se saca del avance sin redondear (antes 99.6 % del ritmo redondeaba a 100 % y salía verde; 79.6 % salía ámbar).
   const ritmo = h.getDate() / new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   // 4.7.16: cuota y venta en texto con «$», comas o espacios («$1,000») se leen con `numero()` (antes la cuota «$1,000» no contaba).
   const cuotaDe = (c) => { const v = numero(q.get(c)?.cuota); return v > 0 ? v : 0; };
@@ -563,7 +564,7 @@ export function cuotaRitmo(m, cuentas = []) {
   // van recortadas) y no se cuenta doble si llega en dos formas.
   const clave = (c) => (q.has(c) ? c : c == null ? '' : String(c).trim());
   const cs = [...new Set(comoLista(cuentas).map(clave))].filter((c) => cuotaDe(c) > 0); if (!cs.length) return null;
-  const venta = cs.reduce((s, c) => s + numero(q.get(c).venta), 0), cuo = cs.reduce((s, c) => s + cuotaDe(c), 0), pct = Math.round(venta / cuo * 100), r = pct / 100 / ritmo;
+  const venta = cs.reduce((s, c) => s + numero(q.get(c).venta), 0), cuo = cs.reduce((s, c) => s + cuotaDe(c), 0), pct = Math.round(venta / cuo * 100), r = venta / cuo / ritmo;
   return { tono: r >= 1 ? 'verde' : r >= 0.8 ? 'ambar' : 'rojo', pct, ritmo: Math.round(ritmo * 100), n: cs.length, venta, cuota: cuo };
 }
 
