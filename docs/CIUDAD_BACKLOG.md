@@ -338,6 +338,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.22) Capa y tarjetas de cuota: `cuotaRitmo()` saca el tono del avance sin redondear (antes 99.6 % del ritmo redondeaba a 100 % y salía verde; 79.6 % salía ámbar en vez de rojo). +1 prueba.
   - [x] (4.12.21) Capa «Cartera» por ciudad con el semáforo de Inicio y del banco (`tonoCartera()`): vencido de sus cuentas ≤ 15 % de su saldo ámbar, más (o sin saldo legible) rojo; el texto dice «N % del saldo» y la leyenda trae los tres tonos. Antes cualquier peso vencido pintaba la ciudad de rojo.
   - [x] (4.12.28) Calendario: la última semana de diciembre dice «Cierre de año en N días» / «Mañana cierra el año» / «Hoy cierra el año» (antes «Cierre de mes») y los camiones de esa semana salen como «Cierre de año». +1 prueba.
+  - [x] (4.12.29) `claveSku()` pura y probada: un SKU/artículo que llega como objeto, lista, booleano o NaN se salta en el top de la tienda, los racks del CEDIS y la demanda de 3 meses (antes `String()` lo volvía «[OBJECT OBJECT]» / «TRUE» y juntaba esos renglones en un SKU falso); el SKU numérico sí cuenta.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -353,6 +354,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 15:16 · v4.12.29 · `claveSku()`: SKUs que llegan como objeto/lista/booleano/NaN ya no salen «[OBJECT OBJECT]» en top de tienda, racks del CEDIS y demanda de 3 meses; +1 prueba.
 - 2026-11-24 04:56 · v4.12.23 · Pulido: tarjeta de la tienda con el semáforo de cartera de Inicio (ámbar si el vencido es ≤ 15 % del saldo) y el % del saldo en el renglón; +1 prueba.
 - 2026-11-24 04:35 · v4.12.22 · Pulido: el tono de cuota vs ritmo ya no usa el % redondeado (99.6 % ya no sale verde, 79.6 % ya no sale ámbar); +1 prueba.
 - 2026-11-24 04:15 · v4.12.21 · Pulido: capa «Cartera» por ciudad con el semáforo de Inicio (ámbar si el vencido es ≤ 15 % del saldo de sus cuentas, rojo si más) y «N % del saldo» en el texto; +1 prueba.

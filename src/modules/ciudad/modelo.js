@@ -725,10 +725,16 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
 
 // Tienda visitable (3.90.41): filas `{ sku, importe, cantidad }` de sell out de una sucursal → top N SKUs por importe
 // (SKU en mayúsculas, sumado). Mismo cálculo que Análisis en el celular (useSkusDimension).
+// Clave de SKU (4.12.29): texto limpio en mayúsculas («ac-1 » = «AC-1») o número entero/decimal finito; un SKU que llega como
+// objeto, lista, booleano, NaN o en blanco → '' (se salta). Antes `String()` lo volvía «[OBJECT OBJECT]» / «TRUE» / «NAN» en el
+// top de la tienda, los racks del CEDIS y la demanda de 3 meses (y todos esos renglones se juntaban en un solo SKU falso).
+export function claveSku(v) {
+  return typeof v === 'string' ? v.trim().toUpperCase() : typeof v === 'number' && Number.isFinite(v) ? String(v) : '';
+}
 export function topSkus(filas = [], n = 5) {
   const m = new Map();
   n = Number.isFinite(Number(n)) && Number(n) >= 0 ? Math.floor(Number(n)) : 5;
-  for (const r of Array.isArray(filas) ? filas : []) { const k = String(r?.sku ?? '').trim().toUpperCase(); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += numero(r.importe); o.cantidad += numero(r.cantidad); m.set(k, o); }
+  for (const r of Array.isArray(filas) ? filas : []) { const k = claveSku(r?.sku); if (!k) continue; const o = m.get(k) || { sku: k, importe: 0, cantidad: 0 }; o.importe += numero(r.importe); o.cantidad += numero(r.cantidad); m.set(k, o); }
   return [...m.values()].filter((o) => o.importe > 0 || o.cantidad > 0).sort((a, b) => b.importe - a.importe || b.cantidad - a.cantidad).slice(0, n);
 }
 // Cifra corta (3.90.83): 999 600 ya no sale «1000 K» sino «1.0 M», 999.6 → «1 K», negativos con signo y basura → 0.
@@ -976,7 +982,7 @@ export function racksPorMarca(filas = [], marcas = null, n = 8, demanda = null) 
   const marcaDe = (raw, k) => norm(get(raw) ?? get(String(raw).trim()) ?? get(k)) || 'SIN MARCA';
   const por = new Map();
   for (const r of comoLista(filas)) {
-    const k = String(r?.articulo ?? '').trim().toUpperCase();
+    const k = claveSku(r?.articulo);
     if (!k || !(N(r.inventario) > 0)) continue;
     const m = marcaDe(r.articulo, k); const g = por.get(m) || { marca: m, valor: 0, piezas: 0, skus: new Set() };
     g.valor += N(r.costoinventario); g.piezas += N(r.inventario); g.skus.add(k); por.set(m, g);
@@ -1008,7 +1014,7 @@ export function demanda3Meses(rows = [], hoy = new Date()) {
   const cerrados = [1, 2, 3].map((i) => { const f = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1); return { anio: f.getFullYear(), mes: f.getMonth() + 1 }; });
   const m = new Map();
   for (const r of comoLista(rows)) {
-    const sku = String(r?.sku || '').trim().toUpperCase(); if (!sku) continue;
+    const sku = claveSku(r?.sku); if (!sku) continue;
     // Pulido (4.7.33): `piezas` que no es lista se lee con `piezasMes()` (texto JSON «[10,20]» o «{10,20}» de Postgres; antes se
     // indexaban sus caracteres y «[10,20,30]» sumaba dígitos sueltos); null, objeto o basura → sin demanda. Piezas negativas no restan.
     const pz = piezasMes(r.piezas); let s2 = 0; for (const c of cerrados) if (N(r.anio) === c.anio) s2 += Math.max(0, N(pz[c.mes - 1]));
