@@ -254,6 +254,12 @@ test('minimapa: plano chico con contorno, ciudades y marcador de la cámara', ()
   const mk = p.marco({ cx: g.x, cz: g.z, zoom: 1 }); assert.ok(Math.abs(mk.u - gdl.u) < .2 && mk.r === 3, 'marcador mínimo 3 px');
   assert.ok(p.marco({ cx: 9e9, cz: 0, zoom: 9e9 }).u <= 150 && p.marco({ cx: 0, cz: 0, zoom: 9e9 }).r <= 48, 'marcador acotado');
   assert.equal(p.marco(null), null); assert.deepEqual(planoMini(null).puntos, [], 'datos vacíos no rompen');
+  { // 4.12.9: aEscena acotada a las puntas de México y null con toque ilegible
+    const pts = EXTREMOS_MEXICO.map(posDe), xs = pts.map((q) => q.x), zs = pts.map((q) => q.z);
+    for (const [u, v] of [[0, 0], [150, 96], [-50, 500], [75, 0]]) { const e2 = p.aEscena(u, v); assert.ok(e2.x >= Math.min(...xs) - 1e-9 && e2.x <= Math.max(...xs) + 1e-9 && e2.z >= Math.min(...zs) - 1e-9 && e2.z <= Math.max(...zs) + 1e-9, `aEscena(${u},${v}) dentro de México`); }
+    assert.equal(p.aEscena(NaN, 5), null); assert.equal(p.aEscena(5, 'x'), null); assert.equal(p.aEscena(), null);
+    const e3 = p.aEscena(String(gdl.u), String(gdl.v)); assert.ok(Math.hypot(e3.x - g.x, e3.z - g.z) < 1, 'u/v en texto se leen');
+  }
 });
 test('última vista: lectura tolerante desde localStorage', () => {
   const g = posDe(CIUDADES.GUADALAJARA);

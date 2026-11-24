@@ -249,7 +249,9 @@ export function planoMini(distritos = [], op) {
   const s = Math.min((ancho - 2 * margen) / (x1 - x0), (alto - 2 * margen) / (z1 - z0));
   const ox = (ancho - (x1 - x0) * s) / 2, oz = (alto - (z1 - z0) * s) / 2;
   const aSvg = (x, z) => ({ u: ox + (x - x0) * s, v: oz + (z - z0) * s });
-  const aEscena = (u, v) => ({ x: x0 + (u - ox) / s, z: z0 + (v - oz) / s });
+  // 4.12.9: el toque en el borde del plano (fuera del contorno) ya no lleva la cámara al mar: se acota a las puntas de México;
+  // u/v ilegibles (NaN, texto basura) → null (el minimapa no mueve la cámara) en vez de { x: NaN, z: NaN }.
+  const aEscena = (u, v) => { u = numO(u, NaN); v = numO(v, NaN); if (!Number.isFinite(u) || !Number.isFinite(v)) return null; return { x: Math.max(x0, Math.min(x1, x0 + (u - ox) / s)), z: Math.max(z0, Math.min(z1, z0 + (v - oz) / s)) }; };
   const r1 = (n) => Math.round(n * 10) / 10;
   const contorno = pts.map((p) => { const q = aSvg(p.x, p.z); return `${r1(q.u)},${r1(q.v)}`; }).join(' ');
   const puntos = (Array.isArray(distritos) ? distritos : []).filter((d) => d?.ciudad && Number.isFinite(d?.pos?.x) && Number.isFinite(d?.pos?.z)).map((d) => { const q = aSvg(d.pos.x, d.pos.z); return { ciudad: d.ciudad, u: r1(q.u), v: r1(q.v) }; });
