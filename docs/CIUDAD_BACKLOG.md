@@ -201,6 +201,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.10) Catálogo con las ciudades que faltaban (Playa del Carmen, Chetumal, Los Cabos, Nuevo Laredo, Matamoros, Monclova, Cd. Obregón, Cd. del Carmen) y sus alias (Cabo San Lucas, San José del Cabo, Cd. Obregón, Nvo. Laredo); «Álvaro Obregón» va a CDMX. Van al final del catálogo: la ciudad representativa de cada estado no cambia. Resuelve el «pendiente de decidir» de 4.12.5.
   - [x] (4.12.11) Nombre de cuenta (`cuentas.nombre`) y título del pendiente en curso (`agendaHoy.titulo`) pasan por `unirTexto()`: un objeto o lista ya no sale «[object Object]» en tiendas/vendedores ni llega como objeto a la actividad de la oficina (podía tumbar la tarjeta). Prueba nueva.
   - [x] (4.12.13) Días de inventario del CEDIS con el semáforo de Inicio (`estadoCobertura` + `PERFILES.direccion` de `src/lib/cobertura.js`): < 30 días rojo «Sólo N días», > 120 ámbar «(alto)», lo demás verde. Antes 10 días salían en verde (Inicio: rojo «Bajo») y 100 en ámbar (Inicio: sano). `estadoDias()` / `motivoDias()` puras y probadas; globo, tarjeta y cadena.
+  - [x] (4.12.14) Pensamientos de las tiendas contra el ritmo del mes pasado (previo × día/días del mes): antes el mes a medias se comparaba contra el mes pasado completo y a principio de mes casi todas decían «Vendo 90 % menos» y el día 1 todas «no he vendido nada» (ahora sólo desde el día 11, como `vendio`). Texto «Voy N % abajo/arriba del ritmo del mes pasado». Ojo: la capa «Ventas» sigue comparando mes a medias contra mes completo (como dice su título); si Fernando quiere, se puede pasar a ritmo.
   - [x] (4.12.12) Tarjeta del camión con fecha futura (factura/envío fechado adelante): el renglón dice «Sale · 26 nov · mañana» / «· en 3 d» (antes «Salió · 26 nov · hoy»). Prueba nueva.
   - [x] (4.12.9) Minimapa: `planoMini().aEscena()` acota el toque a las puntas de México (el borde del plano ya no lleva la cámara al mar) y con u/v ilegibles regresa null (no mueve la cámara).
   - [x] (4.12.5) `ciudadDeSucursal()` reconoce municipios conurbados y abreviaturas (San Pedro Garza García, Santa Catarina, Tonalá, Tlajomulco, Metepec, Ecatepec, Neza, Cuautitlán, Gómez Palacio, Cholula, QRO, AGS, CHIH, HMO): antes esas tiendas no salían en el mapa. Pendiente de decidir: ciudades que no están en el catálogo (Playa del Carmen, Los Cabos, Nuevo Laredo, Matamoros, Monclova, Chetumal, Cd. Obregón).
@@ -338,6 +339,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 01:56 · v4.12.14 · Pulido: los pensamientos de las tiendas comparan contra el ritmo del mes pasado (ya no «Vendo 90 % menos» a principio de mes); +1 prueba.
 - 2026-11-24 01:37 · v4.12.13 · CEDIS: color de días de inventario igual que «Días de Inv» de Inicio (< 30 rojo, > 120 ámbar).
 - 2026-11-24 01:17 · v4.12.12 · Pulido: tarjeta del camión con fecha futura dice «Sale · mañana / en N d» en vez de «Salió · hoy»; +1 prueba.
 - 2026-11-24 00:36 · v4.12.11 · Pulido: nombre de cuenta o título de pendiente en objeto ya no salen «[object Object]» ni llegan como objeto a la UI; +1 prueba.

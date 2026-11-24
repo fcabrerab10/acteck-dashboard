@@ -459,7 +459,7 @@ export function tramoActual(ciclo, paradas) {
 // reglas del modelo (no por tamaño: se mira la tendencia). Una por ciudad como máximo y `max` en total; primero lo que pide
 // atención (rojo), luego lo bueno. Reglas: cuenta con cartera vencida → «Tengo pagos vencidos»; la tienda vendió el mes
 // anterior y éste no → «Este mes no he vendido nada»; cae > 30 % → «Vendo N % menos que el mes pasado»; sube > 30 % →
-// «¡Voy N % arriba del mes pasado!»; cuenta al ritmo de su cuota (`m.cuotas`) → «Voy arriba de mi cuota».
+// «¡Voy N % arriba del ritmo del mes pasado!»; cuenta al ritmo de su cuota (`m.cuotas`) → «Voy arriba de mi cuota».
 export function pensamientos(m, max = 5) {
   max = cuantos(max, 5);
   if (!m) return [];
@@ -473,13 +473,15 @@ export function pensamientos(m, max = 5) {
     if (!d) continue; let mejor = null;
     for (const t of comoLista(d.tiendas)) {
       if (!t || t.reparto) continue; // «Clientes en …» (3.90.56) no es una tienda que piense
-      const act = numero(t.importe), prev = numero(t.previo), cambio = prev > 0 ? Math.round((act / prev - 1) * 100) : null, cta = unirTexto(t.cuenta), cu = q.get(t.cuenta) ?? q.get(cta);
+      // 4.12.14: el mes en curso va a medias, así que se compara contra el mes pasado al mismo ritmo (previo × día/días del
+      // mes); antes a principio de mes casi todas decían «Vendo 90 % menos» y el día 1 todas «no he vendido nada».
+      const act = numero(t.importe), prev = numero(t.previo), esperado = prev * ritmo, cambio = esperado > 0 ? Math.round((act / esperado - 1) * 100) : null, cta = unirTexto(t.cuenta), cu = q.get(t.cuenta) ?? q.get(cta);
       const quien = { ciudad: d.ciudad, cuenta: t.cuenta, sucursal: t.sucursal, nombre: nombreTienda(t) };
       let p = null;
       if (cta && venc.has(cta)) p = { tono: 'rojo', peso: 0, texto: 'Tengo pagos vencidos' };
-      else if (prev > 0 && act <= 0) p = { tono: 'rojo', peso: 1, texto: 'Este mes no he vendido nada' };
-      else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Vendo ${porcentaje(-cambio)} menos que el mes pasado` };
-      else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${porcentaje(cambio)} arriba del mes pasado!` };
+      else if (prev > 0 && act <= 0) p = h.getDate() > 10 ? { tono: 'rojo', peso: 1, texto: 'Este mes no he vendido nada' } : null; // como `vendio` de la tienda: los primeros 10 días aún no cuenta
+      else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Voy ${porcentaje(-cambio)} abajo del ritmo del mes pasado` };
+      else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${porcentaje(cambio)} arriba del ritmo del mes pasado!` };
       else if (numero(cu?.cuota) > 0 && numero(cu.venta) / numero(cu.cuota) >= ritmo) p = { tono: 'verde', peso: 4, texto: 'Voy arriba de mi cuota' };
       if (p && (!mejor || p.peso < mejor.peso)) mejor = { ...quien, ...p };
     }

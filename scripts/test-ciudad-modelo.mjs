@@ -608,7 +608,7 @@ test('bitácora: pagos registrados y última sincronización', () => {
 
 test('pensamientos de tiendas', () => {
   const T = (cuenta, sucursal, importe, previo) => ({ cuenta, nombreCuenta: cuenta.toUpperCase(), sucursal, importe, previo });
-  const m = { hoyIso: '2026-10-15', kpis: { cartera: [{ cuenta: 'mala', vencido: 10 }] }, cuotas: new Map([['q', { venta: 60, cuota: 100 }]]),
+  const m = { hoyIso: '2026-10-31', kpis: { cartera: [{ cuenta: 'mala', vencido: 10 }] }, cuotas: new Map([['q', { venta: 100, cuota: 100 }]]),
     distritos: [
       { ciudad: 'GDL', tiendas: [T('a', 'Centro', 200, 100), T('mala', 'Sur', 50, 50)] },
       { ciudad: 'MTY', tiendas: [T('b', 'Valle', 0, 80)] },
@@ -618,7 +618,7 @@ test('pensamientos de tiendas', () => {
       { ciudad: 'LEO', tiendas: [T('f', 'Plaza', 150, 100)] },
     ] };
   const p = pensamientos(m, 10);
-  assert.deepEqual(p.map((x) => [x.ciudad, x.tono, x.texto]), [['GDL', 'rojo', 'Tengo pagos vencidos'], ['MTY', 'rojo', 'Este mes no he vendido nada'], ['CDMX', 'ambar', 'Vendo 50 % menos que el mes pasado'], ['LEO', 'verde', '¡Voy 50 % arriba del mes pasado!'], ['PUE', 'verde', 'Voy arriba de mi cuota']]);
+  assert.deepEqual(p.map((x) => [x.ciudad, x.tono, x.texto]), [['GDL', 'rojo', 'Tengo pagos vencidos'], ['MTY', 'rojo', 'Este mes no he vendido nada'], ['CDMX', 'ambar', 'Voy 50 % abajo del ritmo del mes pasado'], ['LEO', 'verde', '¡Voy 50 % arriba del ritmo del mes pasado!'], ['PUE', 'verde', 'Voy arriba de mi cuota']]);
   assert.equal(p[0].nombre, 'MALA · Sur'); assert.equal(p[0].sucursal, 'Sur'); assert.ok(!p.some((x) => 'peso' in x));
   assert.equal(pensamientos(m).length, 5); assert.equal(pensamientos(m, 2).length, 2);
   assert.deepEqual(pensamientos(null), []); assert.deepEqual(pensamientos({}), []);
@@ -1785,7 +1785,7 @@ test('4.7.71 pensamientos y misiones con listas raras', () => {
   }
   const p = pensamientos({ hoyIso: '2026-10-15', kpis: { cartera: [{ cuenta: ' pcel ', vencido: '$5,000' }] }, distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'pcel', sucursal: 'Centro', importe: 10, previo: 10 }] }] });
   assert.equal(p[0]?.texto, 'Tengo pagos vencidos', 'cuenta con espacios empata la cartera vencida');
-  const q = pensamientos({ hoyIso: '2026-10-15', cuotas: new Map([['ct', { cuota: '1,000', venta: '$900' }]]), distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'ct', importe: 10, previo: 10 }] }] });
+  const q = pensamientos({ hoyIso: '2026-10-15', cuotas: new Map([['ct', { cuota: '1,000', venta: '$900' }]]), distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'ct', importe: 10, previo: 21 }] }] });
   assert.equal(q[0]?.texto, 'Voy arriba de mi cuota', 'cuota y venta en texto cuentan');
 });
 
@@ -1912,4 +1912,18 @@ test('4.12.11: nombre de cuenta y título de pendiente en objeto no llegan como 
   for (const p of m.oficina.personas) assert.ok(p.actividad === null || typeof p.actividad === 'string', 'actividad es texto o null');
   const d3 = structuredClone(d); d3.cuentas = d3.cuentas.map((c) => ({ ...c, nombre: '  Grupo X  ' }));
   assert.ok(construirModelo(d3, hoy).distritos.some((x) => x.tiendas.some((t) => t.nombreCuenta === 'Grupo X')), 'nombre limpio sin espacios');
+});
+
+test('4.12.14 pensamientos comparan contra el ritmo del mes pasado', () => {
+  const T = (importe, previo) => ({ distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a', sucursal: 'Centro', importe, previo }] }] });
+  const txt = (hoyIso, i, p) => pensamientos({ ...T(i, p), hoyIso })[0]?.texto ?? null;
+  assert.equal(txt('2026-11-15', 50, 100), null, 'a medio mes 50 de 100 va al ritmo');
+  assert.equal(txt('2026-11-03', 10, 100), null, 'día 3: 10 de 100 va al ritmo (antes «Vendo 90 % menos»)');
+  assert.equal(txt('2026-11-15', 20, 100), 'Voy 60 % abajo del ritmo del mes pasado');
+  assert.equal(txt('2026-11-15', 100, 100), '¡Voy 100 % arriba del ritmo del mes pasado!');
+  assert.equal(txt('2026-11-30', 100, 100), null, 'fin de mes = mes completo');
+  assert.equal(txt('2026-11-01', 0, 100), null, 'día 1 sin venta no es alarma');
+  assert.equal(txt('2026-11-10', 0, 100), null);
+  assert.equal(txt('2026-11-11', 0, 100), 'Este mes no he vendido nada');
+  assert.equal(txt('2026-11-15', 50, 0), null, 'sin mes anterior no compara');
 });
