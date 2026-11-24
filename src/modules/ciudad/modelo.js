@@ -1290,7 +1290,8 @@ export function eventosCalendario(hoy = new Date()) {
   const d0 = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()), y = d0.getFullYear(), mo = d0.getMonth();
   const entre = (a, b) => Math.round((b - a) / 86400000), out = [];
   const ultimo = new Date(y, mo + 1, 0), faltan = entre(d0, ultimo);
-  if (faltan <= 6) out.push({ id: 'cierre', icono: '⏳', dias: faltan, desde: isoLocal(new Date(y, mo, ultimo.getDate() - 6)), hasta: isoLocal(ultimo), nivel: faltan <= 2 ? 'ambar' : null, texto: faltan === 0 ? 'Hoy cierra el mes' : faltan === 1 ? 'Mañana cierra el mes' : `Cierre de mes en ${faltan} días` });
+  const per = mo === 11 ? 'año' : 'mes'; // 4.12.28: la última semana de diciembre es el cierre del año (antes «Cierre de mes»)
+  if (faltan <= 6) out.push({ id: 'cierre', icono: '⏳', dias: faltan, desde: isoLocal(new Date(y, mo, ultimo.getDate() - 6)), hasta: isoLocal(ultimo), nivel: faltan <= 2 ? 'ambar' : null, texto: faltan === 0 ? `Hoy cierra el ${per}` : faltan === 1 ? `Mañana cierra el ${per}` : `Cierre de ${per} en ${faltan} días` });
   const nov1 = new Date(y, 10, 1), lunes3 = new Date(y, 10, 1 + ((8 - nov1.getDay()) % 7) + 14), bfIni = new Date(y, 10, lunes3.getDate() - 3);
   const aBf = entre(d0, bfIni), finBf = entre(d0, lunes3);
   if (aBf <= 14 && finBf >= 0) out.push({ id: 'buenfin', icono: '🏷️', dias: Math.max(0, aBf), desde: isoLocal(bfIni), hasta: isoLocal(lunes3), nivel: aBf <= 0 ? 'ambar' : null, texto: aBf <= 0 ? (finBf === 0 ? 'Buen Fin · hoy es el último día' : `Buen Fin · hasta el lunes ${lunes3.getDate()}`) : aBf === 1 ? `Buen Fin empieza mañana (${bfIni.getDate()}–${lunes3.getDate()} nov)` : `Buen Fin en ${aBf} días (${bfIni.getDate()}–${lunes3.getDate()} nov)` });
@@ -1306,7 +1307,7 @@ export function camionesTemporada(m, hoy = new Date()) {
   for (const c of comoLista(m?.camiones)) {
     // 4.7.65: sin folio legible se salta (antes la clave null pintaba de promoción a TODOS los camiones sin folio).
     if (c?.envio || !unirTexto(c?.folio)) continue; const f = fechaIso(c?.fecha); if (!f) continue;
-    const e = evs.find((x) => f >= x.desde && f <= x.hasta); if (e) out.set(c.folio, { id: e.id, texto: e.id === 'buenfin' ? 'Buen Fin' : 'Cierre de mes' });
+    const e = evs.find((x) => f >= x.desde && f <= x.hasta); if (e) out.set(c.folio, { id: e.id, texto: e.id === 'buenfin' ? 'Buen Fin' : f.slice(5, 7) === '12' ? 'Cierre de año' : 'Cierre de mes' });
   }
   return out;
 }

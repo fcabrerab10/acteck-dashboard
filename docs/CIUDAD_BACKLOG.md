@@ -337,6 +337,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.23) Tarjeta de la tienda con el semáforo de cartera de Inicio (`tonoCartera()`): vencido ≤ 15 % del saldo de su cuenta ámbar, más (o sin saldo legible) rojo; gana el peor de venta y cartera y el renglón dice «$N · N % del saldo». Antes cualquier peso vencido la pintaba de rojo, distinto del banco y de la capa «Cartera». +1 prueba.
   - [x] (4.12.22) Capa y tarjetas de cuota: `cuotaRitmo()` saca el tono del avance sin redondear (antes 99.6 % del ritmo redondeaba a 100 % y salía verde; 79.6 % salía ámbar en vez de rojo). +1 prueba.
   - [x] (4.12.21) Capa «Cartera» por ciudad con el semáforo de Inicio y del banco (`tonoCartera()`): vencido de sus cuentas ≤ 15 % de su saldo ámbar, más (o sin saldo legible) rojo; el texto dice «N % del saldo» y la leyenda trae los tres tonos. Antes cualquier peso vencido pintaba la ciudad de rojo.
+  - [x] (4.12.28) Calendario: la última semana de diciembre dice «Cierre de año en N días» / «Mañana cierra el año» / «Hoy cierra el año» (antes «Cierre de mes») y los camiones de esa semana salen como «Cierre de año». +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -605,3 +606,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-24 05:20 · v4.12.25 · Banderas de tienda y banco en naranja con cartera ≤ 15 % del saldo (como Inicio); harness vuelve a dibujar (faltaba `lib/cobertura.js`).
 - 2026-11-24 05:23 · v4.12.26 · Bitácora: la última sincronización dice «Se actualizaron los datos» (sin «· success»), «· con avisos» o ⚠️ «Falló una actualización de datos», como el importador; +1 prueba.
 - 2026-11-24 05:57 · v4.12.27 · Banco: la tarjeta muestra la cartera a más de 90 días («$Y a +90 días»), como la frase de cartera de Inicio; +1 prueba.
+- 2026-11-24 06:16 · v4.12.28 · Calendario: la última semana de diciembre dice «Cierre de año» (aviso y camiones de temporada) en vez de «Cierre de mes»; +1 prueba.

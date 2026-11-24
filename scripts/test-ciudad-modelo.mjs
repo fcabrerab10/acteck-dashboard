@@ -799,6 +799,15 @@ test('eventosCalendario: cierre de mes, Buen Fin, regreso a clases y Navidad', (
   assert.deepEqual(ids(new Date(2026, 11, 26)), ['cierre:5']); assert.deepEqual(ids(new Date(2026, 11, 20)), ['navidad:5']);
 });
 
+test('eventosCalendario/camionesTemporada: la última semana de diciembre es «cierre de año»', () => {
+  const ev = (d) => eventosCalendario(d).find((e) => e.id === 'cierre')?.texto;
+  assert.equal(ev(new Date(2026, 11, 31)), 'Hoy cierra el año'); assert.equal(ev(new Date(2026, 11, 30)), 'Mañana cierra el año');
+  assert.equal(ev(new Date(2026, 11, 27)), 'Cierre de año en 4 días'); assert.equal(ev(new Date(2026, 11, 20)), undefined);
+  assert.equal(ev(new Date(2026, 10, 30)), 'Hoy cierra el mes');
+  const cam = [{ folio: 7, fecha: '2026-12-28' }, { folio: 8, fecha: '2026-12-20' }];
+  assert.deepEqual([...camionesTemporada({ camiones: cam }, new Date(2026, 11, 29))].map(([f, e]) => [f, e.texto]), [[7, 'Cierre de año']]);
+});
+
 test('camionesTemporada: facturas de Buen Fin y de la semana del cierre', () => {
   const cam = [{ folio: 1, fecha: '2026-11-13' }, { folio: 2, fecha: '2026-11-10' }, { folio: 3, fecha: '2026-11-14', envio: true }, { folio: 4, fecha: '2026-11-27T10:00' }, { folio: 5 }];
   assert.deepEqual([...camionesTemporada({ camiones: cam }, new Date(2026, 10, 14))].map(([f, e]) => [f, e.id]), [[1, 'buenfin']]);
