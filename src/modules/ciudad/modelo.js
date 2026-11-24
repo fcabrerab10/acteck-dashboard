@@ -1044,11 +1044,14 @@ export function tarjetaDe(tag, modelo) {
     if (c) {
       const nd = c.fecha ? dias(c.fecha, m.hoyIso || diaLocal().iso) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
       const fs = fechaIso(c.fecha); // 4.7.23: un Date ya no sale «Wed Oct 07»; ilegible → «—»
-      const salio = fs ? unirTexto([fechaCorta(fs, m.hoyIso), haceDias(n)]) || fechaCorta(fs, m.hoyIso) : '—'; // 4.7.43: «6 oct · ayer» (antes «2026-10-06» crudo)
+      // 4.12.12: con fecha futura (factura/envío fechado adelante) el renglón dice «Sale · 26 nov · mañana» / «· en 3 d» (antes «Salió · 26 nov · hoy»).
+      const futuro = n != null && n < 0, cuando = futuro ? (n === -1 ? 'mañana' : `en ${(-n).toLocaleString('es-MX')} d`) : haceDias(n);
+      const salio = fs ? unirTexto([fechaCorta(fs, m.hoyIso), cuando]) || fechaCorta(fs, m.hoyIso) : '—'; // 4.7.43: «6 oct · ayer» (antes «2026-10-06» crudo)
+      const rSalio = [futuro ? 'Sale' : 'Salió', salio];
       // 4.7.41: destino con `nombreCiudad()` («LEON» → «León», «SAN LUIS POTOSI» → «San Luis Potosí», CDMX; antes «Leon»)
       // y cliente/paquetería con `unirTexto()` (« » o «null» ya no salen como texto: «—»).
       const destino = nombreCiudad(c.ciudad) || '—', txt = (x) => unirTexto(x) || '—';
-      t.numeros = c.envio ? [['Cliente', txt(c.cliente)], ['Paquetería', txt(c.paqueteria)], ['Salió', salio], ['Destino', destino]] : [['Cliente', txt(c.cliente)], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], ['Salió', salio]];
+      t.numeros = c.envio ? [['Cliente', txt(c.cliente)], ['Paquetería', txt(c.paqueteria)], rSalio, ['Destino', destino]] : [['Cliente', txt(c.cliente)], ['Factura', pesos(c.monto)], ['Piezas', num(c.piezas)], rSalio];
       t.estado = c.envio && n != null && n > 5 ? 'ambar' : 'verde';
     }
   } else if (tag.tipo === 'vendedorErp') {

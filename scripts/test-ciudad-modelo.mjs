@@ -1582,6 +1582,12 @@ test('Tarjeta del camión: «Salió» con fecha corta (4.7.43)', () => {
   const a = tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros.find((x) => x[0] === 'Salió')[1];
   assert.match(a, /^6 oct · ayer$/); assert.ok(!a.includes('2026'));
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F2' }, m).numeros.find((x) => x[0] === 'Salió')[1], '—');
+  { // 4.12.12: fecha futura → «Sale · mañana / en N d» (antes «Salió · hoy»)
+    const mf = { hoyIso: '2026-10-07', camiones: [{ folio: 'F3', fecha: '2026-10-08', cliente: 'A' }, { folio: 'E1', envio: true, fecha: '2026-10-10', cliente: 'B' }, { folio: 'F4', fecha: '2026-10-07', cliente: 'A' }] };
+    const r = (f) => tarjetaDe({ tipo: 'camion', folio: f }, mf).numeros.find((x) => x[0] === 'Sale' || x[0] === 'Salió');
+    assert.deepEqual(r('F3'), ['Sale', '8 oct · mañana']); assert.deepEqual(r('E1'), ['Sale', '10 oct · en 3 d']); assert.deepEqual(r('F4'), ['Salió', '7 oct · hoy']);
+    assert.equal(tarjetaDe({ tipo: 'camion', folio: 'E1' }, mf).estado, 'verde');
+  }
 });
 
 test('Vendedores del ERP: se juntan por nombre normalizado (4.7.44)', () => {
