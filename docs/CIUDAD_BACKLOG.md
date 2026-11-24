@@ -324,6 +324,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.3) `fechaCorta()` lleva el año cuando la fecha no es del año de «hoy» («30 dic 2025»; antes una ETA/arribo del contenedor o la salida del camión de otro año se confundía con este); las tarjetas usan el «hoy» del modelo.
   - [x] (4.12.4) Claves de cuenta y cliente con `unirTexto()` en `construirModelo()`: una cuenta, `cliente_key`, guía u OC que llega como NaN, objeto o lista ya no sale «NaN» / «[object Object]» en tiendas, camiones, clientes finales y bitácora (el camión sin clave queda sin cliente; el envío sin guía ni OC dice «envío OC»). Encontrado con prueba de datos raros sobre el ejemplo del harness.
   - [x] (4.12.8) Contenedores con el número limpio (`unirTexto()`): « MSKU1 » = «MSKU1» (empata sus POs y su tarjeta) y un número NaN u objeto ya no sale «Contenedor NaN» / «[object Object]» en el puerto.
+  - [x] (4.12.15) Racks del CEDIS con el mismo semáforo que el CEDIS y «Días de Inv» de Inicio (`tonoDias()`: < 30 rojo, > 120 ámbar). Antes seguían con los umbrales viejos (> 120 rojo, > 90 ámbar): un rack con 10 días salía verde y uno con 900 rojo, al revés que el CEDIS. Encontrado al buscar renglones de la escena contra el dashboard.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -339,6 +340,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 02:17 · v4.12.15 · Pulido: tarjeta del rack del CEDIS con el semáforo de días de Inicio (< 30 rojo, > 120 ámbar), igual que el CEDIS; +1 prueba.
 - 2026-11-24 01:56 · v4.12.14 · Pulido: los pensamientos de las tiendas comparan contra el ritmo del mes pasado (ya no «Vendo 90 % menos» a principio de mes); +1 prueba.
 - 2026-11-24 01:37 · v4.12.13 · CEDIS: color de días de inventario igual que «Días de Inv» de Inicio (< 30 rojo, > 120 ámbar).
 - 2026-11-24 01:17 · v4.12.12 · Pulido: tarjeta del camión con fecha futura dice «Sale · mañana / en N d» en vez de «Salió · hoy»; +1 prueba.

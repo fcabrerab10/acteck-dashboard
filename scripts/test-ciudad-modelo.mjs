@@ -375,7 +375,11 @@ test('días de inventario por marca y salidas de hoy del CEDIS', () => {
   const r = racksPorMarca(filas, marcas, 8, dem);
   assert.deepEqual(r.map((g) => [g.marca, g.dias]), [['ACTECK', 45], ['BALAM', 900], ['GAME', null]], 'piezas / demanda 3 m × 90; sin demanda → null');
   assert.deepEqual(racksPorMarca(filas, marcas, 1, dem).map((g) => [g.marca, g.dias, g.demanda3]), [['ACTECK', 45, 90], ['OTRAS', 1013, 4]], '«otras» junta la demanda');
-  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'BALAM' }, { cedis: { racksMarca: r } }).estado, 'rojo');
+  // 4.12.15: el rack usa el semáforo del CEDIS / Inicio (< 30 rojo, > 120 ámbar), no los umbrales viejos (> 120 rojo).
+  assert.equal(tarjetaDe({ tipo: 'rack', marca: 'BALAM' }, { cedis: { racksMarca: r } }).estado, 'ambar', '900 días = alto (ámbar), como el CEDIS');
+  const tonoRack = (dias) => tarjetaDe({ tipo: 'rack', marca: 'X' }, { cedis: { racksMarca: [{ marca: 'X', valor: 1, piezas: 1, skus: 1, dias }] } }).estado;
+  assert.deepEqual([10, 29, 30, 100, 120, 121, null].map(tonoRack), ['rojo', 'rojo', 'verde', 'verde', 'verde', 'ambar', null], 'mismo corte que tonoDias()');
+  assert.equal(tonoRack(10), tonoDias(10)); assert.equal(tonoRack(500), tonoDias(500));
   assert.equal(tarjetaDe({ tipo: 'rack', marca: 'ACTECK' }, { cedis: { racksMarca: r } }).estado, 'verde');
   assert.equal(racksPorMarca(filas, marcas)[0].dias, null, 'sin capa de demanda no rompe');
   const m = construirModelo({ ...d, facturas: [{ cliente_key: 'x', folio: 1, fecha: '2026-10-07' }, { cliente_key: 'x', folio: 2, fecha: '2026-10-06' }], inventarioSku: filas, marcasSku: marcas, demandaSku: piv }, h);

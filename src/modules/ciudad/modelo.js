@@ -995,7 +995,9 @@ export function tarjetaDe(tag, modelo) {
     if (r) {
       const tot = sn(m.cedis.racksMarca).reduce((s2, x) => s2 + numero(x.valor), 0);
       t.numeros = [['Inventario', `${pesos(r.valor)} · ${porcentaje(tot > 0 ? numero(r.valor) / tot * 100 : 0)}`], ['Días de inventario', r.dias == null ? 'sin demanda' : num(r.dias)], ['Piezas', num(r.piezas)], [r.marcas ? `SKUs · ${plural(r.marcas, 'marca')}` : 'SKUs con stock', num(r.skus)]];
-      t.estado = r.dias == null ? null : r.dias > 120 ? 'rojo' : r.dias > 90 ? 'ambar' : 'verde'; // mismos umbrales que el CEDIS
+      // 4.12.15: mismo semáforo que el CEDIS y «Días de Inv» de Inicio (`tonoDias()`: < 30 rojo, > 120 ámbar). Antes el rack seguía con
+      // los umbrales viejos (> 120 rojo, > 90 ámbar): 10 días salían en verde y 900 en rojo mientras el CEDIS decía lo contrario.
+      t.estado = tonoDias(r.dias);
     }
   } else if (tag.tipo === 'barco' && m.puerto) {
     // Contenedor en el mar (interior del puerto, 3.90.34): proveedor, ETA, piezas y POs (`v_embarques_contenedor`). ETA vencida sin arribo = rojo.
