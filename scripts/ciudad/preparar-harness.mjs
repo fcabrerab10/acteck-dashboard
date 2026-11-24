@@ -13,6 +13,10 @@ fs.writeFileSync(path.join(out, 'escena.js'), fs.readFileSync(path.join(raiz, 's
 fs.mkdirSync(path.join(out, 'escena'), { recursive: true });
 for (const f of fs.readdirSync(path.join(raiz, 'src/modules/ciudad/escena'))) fs.writeFileSync(path.join(out, 'escena', f), json(fs.readFileSync(path.join(raiz, 'src/modules/ciudad/escena', f), 'utf8')));
 fs.copyFileSync(path.join(raiz, 'src/modules/ciudad/modelo.js'), path.join(out, 'modelo.js'));
+// 4.12.25: modelo.js importa '../../lib/cobertura.js' (desde .ciudad-proto/ el navegador lo pide en /lib/); sin copiarlo el
+// harness quedaba en blanco sin error en consola (sólo un 404).
+fs.mkdirSync(path.join(out, 'lib'), { recursive: true });
+fs.copyFileSync(path.join(raiz, 'src/lib/cobertura.js'), path.join(out, 'lib', 'cobertura.js'));
 fs.copyFileSync(path.join(raiz, 'src/modules/comercial/sellout/mexico-estados.json'), path.join(out, 'mexico-estados.json'));
 fs.copyFileSync(path.join(raiz, 'scripts/ciudad/harness.html'), path.join(out, 'ciudad-dev.html'));
 console.log('harness listo en .ciudad-proto/');

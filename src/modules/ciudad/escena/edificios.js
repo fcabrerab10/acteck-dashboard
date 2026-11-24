@@ -1,7 +1,7 @@
 // Acteck Ciudad · edificios: oficina, CEDIS y puerto de Acteck, y un distrito (manzana con tiendas) por ciudad.
 // Cada función recibe el contexto de la escena (ctx) y regresa la posición que usan cámara y carreteras.
 import * as THREE from 'three';
-import { COLOR_CUENTA, pesosCorto, porcentaje, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, nombreTienda, numero, unirTexto, piezasTexto, pendientesTexto, diasTexto } from '../modelo.js';
+import { tonoCarteraCuenta, tonoBanco, COLOR_CUENTA, pesosCorto, porcentaje, DETALLE, encimaDelCampus, juntarCapas, pinCiudad, acomodoRacks, acomodoEscritorios, burbujasAtencion, pensamientos, cuotaRitmo, CAPA_TONOS, celebraciones, eventosCalendario, ventanasOficina, paseantesDistrito, nombreCiudad, plural, nombreTienda, numero, unirTexto, piezasTexto, pendientesTexto, diasTexto } from '../modelo.js';
 import { ACC } from './luz-clima.js';
 import { arbol, carretera } from './terreno.js';
 import { persona, caminar } from './gente.js';
@@ -206,9 +206,10 @@ export function banco(ctx) {
   for (let i = 0; i < 5; i++) { const c = new THREE.Mesh(G(.45, 3.2, .45), col); c.position.set(-2.8 + i * 1.4, 2.45, 1.75); c.userData.detalle = 'fino'; g.add(c); instanciar(ctx, c); }
   const friso = box(7, .5, 4.9, P.oficinaTecho); friso.position.set(0, 4.3, .2); g.add(friso);
   const remate = box(4.6, .55, 3.4, P.oficinaTecho); remate.position.set(0, 4.82, .2); g.add(remate); // frontón escalonado
-  const alerta = r.pagosVencidos > 0 || r.carteraVencida > 0;
-  const letrero = box(3.4, .7, .25, alerta ? ACC.rojo : ACC.verde, { emissive: alerta ? ACC.rojo : ACC.verde, emissiveIntensity: oscuro ? 1.5 : .3 }); letrero.position.set(0, 3.55, 1.95); g.add(letrero);
-  if (alerta) { const asta = box(.12, 2.4, .12, 0x8E8E93); asta.position.set(2.6, 6.2, -.8); g.add(asta); const bandera = box(1.2, .7, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .2 }); bandera.position.set(3.2, 7, -.8); g.add(bandera); }
+  // 4.12.25: letrero y bandera con el semáforo de la tarjeta (`tonoBanco()`): cartera ≤ 15 % del saldo naranja, no roja.
+  const tonoB = tonoBanco(r), alerta = tonoB !== 'verde', colB = tonoB === 'rojo' ? ACC.rojo : tonoB === 'ambar' ? ACC.naranja : ACC.verde;
+  const letrero = box(3.4, .7, .25, colB, { emissive: colB, emissiveIntensity: oscuro ? 1.5 : .3 }); letrero.position.set(0, 3.55, 1.95); g.add(letrero);
+  if (alerta) { const asta = box(.12, 2.4, .12, 0x8E8E93); asta.position.set(2.6, 6.2, -.8); g.add(asta); const bandera = box(1.2, .7, .06, colB, { emissive: colB, emissiveIntensity: oscuro ? 1.2 : .2 }); bandera.position.set(3.2, 7, -.8); g.add(bandera); }
   for (const [x, z] of [[-4.6, 2.4], [4.6, 2.4]]) arbol(ctx, g, x, z, .9);
   const pesos = (v) => `${pesosCorto(v)}`;
   add(g, { tipo: 'banco', titulo: 'Banco · Tesorería', sub: `cartera vencida ${pesos(r.carteraVencida || 0)} · ${plural(r.pagosSemana, 'pago')} esta semana${numero(r.pagosVencidos) ? ` · ${plural(r.pagosVencidos, 'vencido')}` : ''}`, pagina: 'pagos' });
@@ -404,7 +405,7 @@ export function distritos(ctx, cedisPos) {
       const pretil = box(2.3, .14, .1, P.tiendaTecho); pretil.position.set(0, 2.27, 1.1); pretil.userData.detalle = 'fino'; tg.add(pretil); instanciar(ctx, pretil, tag); // pretil al frente
       for (const pz of [cuerpo, techo, toldo, letrero, vit, puerta]) instanciar(ctx, pz, tag); // un InstancedMesh por pieza+color (3.90.3)
       if (oscuro && t.vendio) { const l = new THREE.PointLight(col, .8, 6); l.position.set(0, 2.2, 1.8); tg.add(l); }
-      if (t.cartera && t.cartera.vencido > 0) { const palo = box(.1, 3.2, .1, 0x6b6e76); palo.position.set(-1.1, 1.6, -1.1); tg.add(palo); const bandera = box(.9, .55, .06, ACC.rojo, { emissive: ACC.rojo, emissiveIntensity: oscuro ? 1.2 : .3 }); bandera.position.set(-.65, 2.9, -1.1); tg.add(bandera); animados.push((tt) => { bandera.rotation.y = Math.sin(tt * 3) * .25; }); }
+      const tc = tonoCarteraCuenta(t.cartera); if (tc !== 'verde') { const colC = tc === 'rojo' ? ACC.rojo : ACC.naranja; const palo = box(.1, 3.2, .1, 0x6b6e76); palo.position.set(-1.1, 1.6, -1.1); tg.add(palo); const bandera = box(.9, .55, .06, colC, { emissive: colC, emissiveIntensity: oscuro ? 1.2 : .3 }); bandera.position.set(-.65, 2.9, -1.1); tg.add(bandera); animados.push((tt) => { bandera.rotation.y = Math.sin(tt * 3) * .25; }); }
       g.add(tg);
       tg.traverse((o) => { if (o.isMesh && !o.userData.tag) { o.userData.tag = tag; interact.push(o); } }); // sólo palo y bandera siguen sueltos
     });

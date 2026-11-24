@@ -836,6 +836,17 @@ export function tonoCartera(vencido, pctVencido) {
   const p = typeof pctVencido === 'number' || typeof pctVencido === 'string' ? leeNum(pctVencido) : null;
   return p != null && Number.isFinite(p) && p <= 15 ? 'ambar' : 'rojo';
 }
+// Tono de la cartera de una cuenta ({ vencido, saldo }) con `tonoCartera()` (4.12.25): el % sale del saldo de esa cuenta.
+// Lo usan las banderas de la tienda y el banco en la escena para que pinten igual que su tarjeta.
+export function tonoCarteraCuenta(c) {
+  const v = numero(c?.vencido), s = numero(c?.saldo);
+  return tonoCartera(v, v > 0 && s > 0 ? (v / s) * 100 : null);
+}
+// Tono del banco (4.12.25): un pago vencido manda rojo; si no, la cartera con el semáforo de Inicio.
+export function tonoBanco(b) {
+  if (!b || typeof b !== 'object') return 'verde';
+  return numero(b.pagosVencidos) > 0 ? 'rojo' : tonoCartera(b.carteraVencida, b.pctVencido);
+}
 // Semáforo de «Ventas del mes» como la barra de cuota de Inicio (`toneCuota` / `BarraCuotaM`, 4.12.18): ≥ 100 % verde, 85–99 %
 // sin tono (la barra usa el acento, como el azul de Inicio), 60–84 % ámbar y < 60 % rojo. Antes 80–99 % ámbar y < 80 % rojo:
 // 70 % salía rojo (Inicio: naranja) y 90 % ámbar (Inicio: en camino). Sin % legible → sin tono.
