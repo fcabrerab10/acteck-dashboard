@@ -64,6 +64,16 @@ export const CIUDADES = {
   TLAXCALA: { lat: 19.31, lon: -98.24, estado: 'TLAXCALA' },
   IRAPUATO: { lat: 20.67, lon: -101.35, estado: 'GUANAJUATO' },
   CELAYA: { lat: 20.52, lon: -100.81, estado: 'GUANAJUATO' },
+  // 4.12.10: ciudades con tiendas que no estaban en el catálogo (antes sus sucursales no salían en el mapa). Van al final para
+  // no cambiar la ciudad representativa de su estado (`CIUDAD_POR_ESTADO` toma la primera).
+  'PLAYA DEL CARMEN': { lat: 20.63, lon: -87.07, estado: 'QUINTANA ROO' },
+  CHETUMAL: { lat: 18.5, lon: -88.3, estado: 'QUINTANA ROO' },
+  'LOS CABOS': { lat: 23.06, lon: -109.7, estado: 'BAJA CALIFORNIA SUR' },
+  'NUEVO LAREDO': { lat: 27.48, lon: -99.52, estado: 'TAMAULIPAS' },
+  MATAMOROS: { lat: 25.87, lon: -97.5, estado: 'TAMAULIPAS' },
+  MONCLOVA: { lat: 26.9, lon: -101.42, estado: 'COAHUILA' },
+  'CIUDAD OBREGON': { lat: 27.49, lon: -109.94, estado: 'SONORA' },
+  'CIUDAD DEL CARMEN': { lat: 18.65, lon: -91.83, estado: 'CAMPECHE' },
 };
 // Nivel de detalle por zoom (escena/detalle.js): con la cámara más lejos que esto (zoom = media altura visible) se ocultan
 // la gente y lo fino (ventanas, letreros, vitrinas, puertas). Lejos sólo quedan volúmenes y etiquetas de ciudad.
@@ -1092,6 +1102,9 @@ const ALIAS = {
   'BOCA DEL RIO': 'VERACRUZ', 'CIUDAD MADERO': 'TAMPICO', 'CD MADERO': 'TAMPICO', ALTAMIRA: 'TAMPICO', 'EL MARQUES': 'QUERETARO',
   'RAMOS ARIZPE': 'SALTILLO', ROSARITO: 'TIJUANA', 'SOLEDAD DE GRACIANO SANCHEZ': 'SAN LUIS POTOSI', 'MINERAL DE LA REFORMA': 'PACHUCA',
   JIUTEPEC: 'CUERNAVACA', 'VILLA DE ALVAREZ': 'COLIMA',
+  // 4.12.10: nombres comunes de las ciudades nuevas del catálogo; «Álvaro Obregón» es alcaldía de CDMX, no Cd. Obregón.
+  'ALVARO OBREGON': 'CIUDAD DE MEXICO', 'CABO SAN LUCAS': 'LOS CABOS', 'SAN JOSE DEL CABO': 'LOS CABOS', 'CD OBREGON': 'CIUDAD OBREGON', 'CD DEL CARMEN': 'CIUDAD DEL CARMEN',
+  'PLAYA DEL CARMEN': 'PLAYA DEL CARMEN', 'NVO LAREDO': 'NUEVO LAREDO',
 };
 /** Ciudad representativa de cada estado (para clientes finales, que vienen por estado). */
 export const CIUDAD_POR_ESTADO = (() => { const m = {}; for (const [k, v] of Object.entries(CIUDADES)) if (!m[v.estado]) m[v.estado] = k; m['ESTADO DE MEXICO'] = 'TOLUCA'; m.GUANAJUATO = 'LEON'; m['BAJA CALIFORNIA'] = 'TIJUANA'; m.COAHUILA = 'SALTILLO'; m.SINALOA = 'CULIACAN'; m.TAMAULIPAS = 'TAMPICO'; m.VERACRUZ = 'VERACRUZ'; return m; })();

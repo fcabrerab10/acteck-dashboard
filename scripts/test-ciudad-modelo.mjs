@@ -51,6 +51,12 @@ test('sucursales → ciudad', () => {
   assert.equal(ciudadDeSucursal('MTY-SUR').ciudad, 'MONTERREY');
   assert.equal(ciudadDeSucursal('CD. JUAREZ').ciudad, 'CIUDAD JUAREZ');
   assert.equal(ciudadDeSucursal('Torreón Centro').ciudad, 'TORREON');
+  // 4.12.10: ciudades nuevas del catálogo, sin cambiar la representativa del estado
+  for (const [n, c] of [['Playa del Carmen', 'PLAYA DEL CARMEN'], ['Plaza Chetumal', 'CHETUMAL'], ['Cabo San Lucas', 'LOS CABOS'], ['San José del Cabo', 'LOS CABOS'], ['Nvo. Laredo', 'NUEVO LAREDO'], ['Matamoros', 'MATAMOROS'], ['Monclova Centro', 'MONCLOVA'], ['Cd. Obregón', 'CIUDAD OBREGON'], ['Cd. del Carmen', 'CIUDAD DEL CARMEN']]) assert.equal(ciudadDeSucursal(n).ciudad, c, n);
+  assert.equal(ciudadDeSucursal('Plaza Álvaro Obregón').ciudad, 'CIUDAD DE MEXICO', 'alcaldía, no Cd. Obregón');
+  assert.equal(ciudadDeSucursal('Cancún').ciudad, 'CANCUN');
+  for (const [e, c] of [['QUINTANA ROO', 'CANCUN'], ['BAJA CALIFORNIA SUR', 'LA PAZ'], ['TAMAULIPAS', 'TAMPICO'], ['COAHUILA', 'SALTILLO'], ['SONORA', 'HERMOSILLO'], ['CAMPECHE', 'CAMPECHE']]) assert.equal(CIUDAD_POR_ESTADO[e], c, e);
+  assert.equal(nombreCiudad('CIUDAD OBREGON'), 'Ciudad Obregón'); assert.equal(nombreCiudad('PLAYA DEL CARMEN'), 'Playa del Carmen');
   assert.equal(ciudadDeSucursal('AGUASCAL').ciudad, 'AGUASCALIENTES', 'palabra cortada de ≥ 6 letras');
   assert.equal(ciudadDeSucursal('Plaza La Paz').ciudad, 'LA PAZ');
   assert.equal(ciudadDeSucursal('San Nicolás de los Garza').ciudad, 'MONTERREY');

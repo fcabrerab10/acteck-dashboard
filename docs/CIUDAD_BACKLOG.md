@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
+  - [x] (4.12.10) Catálogo con las ciudades que faltaban (Playa del Carmen, Chetumal, Los Cabos, Nuevo Laredo, Matamoros, Monclova, Cd. Obregón, Cd. del Carmen) y sus alias (Cabo San Lucas, San José del Cabo, Cd. Obregón, Nvo. Laredo); «Álvaro Obregón» va a CDMX. Van al final del catálogo: la ciudad representativa de cada estado no cambia. Resuelve el «pendiente de decidir» de 4.12.5.
   - [x] (4.12.9) Minimapa: `planoMini().aEscena()` acota el toque a las puntas de México (el borde del plano ya no lleva la cámara al mar) y con u/v ilegibles regresa null (no mueve la cámara).
   - [x] (4.12.5) `ciudadDeSucursal()` reconoce municipios conurbados y abreviaturas (San Pedro Garza García, Santa Catarina, Tonalá, Tlajomulco, Metepec, Ecatepec, Neza, Cuautitlán, Gómez Palacio, Cholula, QRO, AGS, CHIH, HMO): antes esas tiendas no salían en el mapa. Pendiente de decidir: ciudades que no están en el catálogo (Playa del Carmen, Los Cabos, Nuevo Laredo, Matamoros, Monclova, Chetumal, Cd. Obregón).
   - [x] (4.12.7) `zoomEnRango()` y `esChico()` leen el número en texto («50», « 0.8 »); `-Infinity` lleva el zoom al mínimo (antes al máximo) y null, '', booleanos o basura siguen sin romper (zoom al máximo, no es chico). Pruebas nuevas.
@@ -334,6 +335,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 00:16 · v4.12.10 · Pulido: 8 ciudades nuevas en el catálogo (Playa del Carmen, Chetumal, Los Cabos, Nuevo Laredo, Matamoros, Monclova, Cd. Obregón, Cd. del Carmen): sus tiendas ya salen en el mapa; +1 prueba.
 - 2026-11-23 23:55 · v4.12.9 · Pulido: tocar el borde del minimapa ya no manda la cámara fuera de México; toque ilegible no la mueve; +1 prueba.
 - 2026-11-23 23:37 · v4.12.8 · Pulido: id del contenedor limpio con `unirTexto()` (sin «Contenedor NaN», espacios ya no rompen la tarjeta); +1 prueba.
 - 2026-11-23 23:17 · v4.12.7 · Pulido: `zoomEnRango()` / `esChico()` leen número en texto y `-Infinity` lleva el zoom al mínimo; +2 pruebas.
