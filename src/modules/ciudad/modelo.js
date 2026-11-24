@@ -617,12 +617,16 @@ export function capaCiudades(m, capa) {
     return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
   const venc = new Map((m.kpis?.cartera || []).filter((c) => c && numero(c.vencido) > 0).map((c) => [c.cuenta, numero(c.vencido)])); // 4.7.17: «$5,000» ya es vencido
+  const saldos = new Map((m.kpis?.cartera || []).filter((c) => c && numero(c.saldo) > 0).map((c) => [c.cuenta, numero(c.saldo)]));
   for (const d of distritos) {
     const cuentas = [...new Set(d.tiendas.map((t) => t.cuenta))], malas = cuentas.filter((c) => venc.has(c));
     const monto = malas.reduce((s, c) => s + venc.get(c), 0);
-    porCiudad.set(d.ciudad, { tono: malas.length ? 'rojo' : 'verde', valor: monto, texto: malas.length ? `${plural(malas.length, 'cuenta')} con vencido · ${pesos(monto)}` : 'Sin cartera vencida' });
+    // 4.12.21: semáforo de la tarjeta «Cartera» de Inicio (`tonoCartera()`): vencido ≤ 15 % del saldo de sus cuentas ámbar, más (o
+    // sin saldo legible) rojo. Antes cualquier peso vencido pintaba la ciudad de rojo, distinto del banco y de Inicio.
+    const saldo = cuentas.reduce((s, c) => s + (saldos.get(c) || 0), 0), pct = malas.length && saldo > 0 ? (monto / saldo) * 100 : null;
+    porCiudad.set(d.ciudad, { tono: malas.length ? tonoCartera(monto, pct) : 'verde', valor: monto, texto: malas.length ? `${plural(malas.length, 'cuenta')} con vencido · ${pesos(monto)}${pct == null ? '' : ` · ${porcentaje(pct)} del saldo`}` : 'Sin cartera vencida' });
   }
-  return { capa, titulo: 'Cartera vencida de sus cuentas', leyenda: [{ tono: 'verde', texto: 'Al corriente' }, { tono: 'rojo', texto: 'Con vencido' }], porCiudad };
+  return { capa, titulo: 'Cartera vencida de sus cuentas', leyenda: [{ tono: 'verde', texto: 'Al corriente' }, { tono: 'ambar', texto: 'Vencido hasta 15 % del saldo' }, { tono: 'rojo', texto: 'Más de 15 %' }], porCiudad };
 }
 
 /** Racks del CEDIS por marca (etapa 3 · interior del CEDIS): filas de `v_inventario_almacen_medida` con `en_inv_actual = true`

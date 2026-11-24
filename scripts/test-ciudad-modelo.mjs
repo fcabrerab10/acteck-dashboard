@@ -1987,3 +1987,18 @@ test('un solo semáforo de tiendas activas: cadena, cintas y tarjeta de la ciuda
   assert.equal(cad.tramos.find((x) => x.clave === 'tienda').estado, card.estado, 'misma señal en la cadena');
   assert.equal(tarjetaDe({ tipo: 'ciudad', ciudad: 'X' }, { distritos: [{ ciudad: 'X', tiendas: [] }] }).estado, null);
 });
+
+test('4.12.21 capa de cartera con el semáforo de Inicio (ámbar ≤ 15 % del saldo)', () => {
+  const m = { distritos: [
+    { ciudad: 'GDL', tiendas: [{ cuenta: 'a' }, { cuenta: 'b' }] },
+    { ciudad: 'MTY', tiendas: [{ cuenta: 'c' }] },
+    { ciudad: 'PUE', tiendas: [{ cuenta: 'd' }] },
+    { ciudad: 'QRO', tiendas: [{ cuenta: 'e' }] },
+  ], kpis: { cartera: [{ cuenta: 'a', vencido: 10, saldo: 100 }, { cuenta: 'b', vencido: 0, saldo: '$900' }, { cuenta: 'c', vencido: 50, saldo: 100 }, { cuenta: 'd', vencido: 5 }, { cuenta: 'e', vencido: 0, saldo: 100 }] } };
+  const c = capaCiudades(m, 'cartera');
+  assert.deepEqual(['GDL', 'MTY', 'PUE', 'QRO'].map((x) => c.porCiudad.get(x).tono), ['ambar', 'rojo', 'rojo', 'verde']); // GDL 10/1000 = 1 %; PUE sin saldo → rojo
+  assert.equal(c.porCiudad.get('GDL').texto, '1 cuenta con vencido · $10 · 1 % del saldo');
+  assert.equal(c.porCiudad.get('PUE').texto, '1 cuenta con vencido · $5');
+  assert.equal(tonoCartera(10, 1), c.porCiudad.get('GDL').tono, 'mismo semáforo que el banco');
+  for (const l of c.leyenda) assert.ok(CAPA_TONOS[l.tono] != null);
+});
