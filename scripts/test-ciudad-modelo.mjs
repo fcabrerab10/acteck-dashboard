@@ -714,11 +714,15 @@ test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
     distritos: [{ tiendas: [{ vendio: true }, { vendio: false }, { vendio: true, reparto: true }], clientesFinales: { n: 120, importe: 2.5e6 } }, { tiendas: [{ vendio: true }] }] };
   const r = cadenaSuministro(m);
   assert.deepEqual(r.tramos.map((t) => [t.clave, t.estado]), [['mar', 'verde'], ['puerto', 'rojo'], ['cedis', 'verde'], ['camion', 'ambar'], ['tienda', 'ambar'], ['cliente', 'verde']]);
-  assert.equal(r.tramos[0].volumen, '2 barcos · 1,500 pzs'); assert.equal(r.tramos[1].motivo, '1 barco con más de 3 días de atraso');
+  assert.equal(r.tramos[0].volumen, '2 barcos · 1,500 pzs'); assert.equal(r.tramos[1].volumen, '1 con ETA vencida · 1 llega hoy · 1 recién llegado'); assert.equal(r.tramos[1].motivo, '1 barco con más de 3 días de atraso');
   assert.equal(r.tramos[4].volumen, '2 de 3 vendieron'); assert.equal(r.tramos[5].volumen, '120 clientes · $2.5 M'); assert.equal(r.atasco.clave, 'puerto');
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [] }, cedis: { dias: 30 }, camiones: [], distritos: [] });
   assert.deepEqual(v.tramos.map((t) => t.estado), ['gris', 'verde', 'verde', 'gris', 'gris', 'gris']); assert.equal(v.atasco, null);
   assert.deepEqual(cadenaSuministro(null), { tramos: [], atasco: null });
+  // 4.12.31: barcos que llegan hoy (ETA 0) no son «ETA vencida» ni pintan ámbar; uno vencido sí.
+  const hoyB = (b) => cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: b }, cedis: { dias: 30 }, camiones: [], distritos: [] }).tramos[1];
+  assert.deepEqual([hoyB([{ llegaEnDias: 0 }, { llegaEnDias: '0' }]).volumen, hoyB([{ llegaEnDias: 0 }]).estado], ['0 con ETA vencida · 2 llegan hoy · 0 recién llegados', 'verde']);
+  assert.deepEqual([hoyB([{ llegaEnDias: -1 }]).estado, hoyB([{ llegaEnDias: -1 }]).motivo, hoyB([{ llegaEnDias: -4 }]).estado], ['ambar', 'Barcos esperando muelle', 'rojo']);
 });
 
 test('cintas de la cadena: mar, puerto y ciudades con grosor y tono', () => {

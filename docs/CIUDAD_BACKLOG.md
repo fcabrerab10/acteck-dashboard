@@ -340,6 +340,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.28) Calendario: la última semana de diciembre dice «Cierre de año en N días» / «Mañana cierra el año» / «Hoy cierra el año» (antes «Cierre de mes») y los camiones de esa semana salen como «Cierre de año». +1 prueba.
   - [x] (4.12.29) `claveSku()` pura y probada: un SKU/artículo que llega como objeto, lista, booleano o NaN se salta en el top de la tienda, los racks del CEDIS y la demanda de 3 meses (antes `String()` lo volvía «[OBJECT OBJECT]» / «TRUE» y juntaba esos renglones en un SKU falso); el SKU numérico sí cuenta.
   - [x] (4.12.30) `ponerPosEnPuerto()` salta contenedor, PO e id de barco que llegan como objeto, lista, booleano o NaN (antes `String()` ponía «[object Object]» / «NaN» en las POs de la tarjeta del puerto).
+  - [x] (4.12.31) Cadena de suministro: el tramo «Puerto» ya no cuenta como «con ETA vencida» a los barcos que llegan hoy (ETA 0) ni pinta ámbar por ellos; ahora dice «N con ETA vencida · N llega(n) hoy · …», como `llegaBarco()`.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -355,6 +356,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 15:56 · v4.12.31 · Cadena: el tramo «Puerto» separa «con ETA vencida» de «llega(n) hoy» (ETA 0 ya no pinta ámbar); +2 pruebas.
 - 2026-11-24 15:35 · v4.12.30 · POs del puerto sin «[object Object]»/«NaN»: `ponerPosEnPuerto()` limpia contenedor/PO/id con `unirTexto()`; +1 prueba.
 - 2026-11-24 15:16 · v4.12.29 · `claveSku()`: SKUs que llegan como objeto/lista/booleano/NaN ya no salen «[OBJECT OBJECT]» en top de tienda, racks del CEDIS y demanda de 3 meses; +1 prueba.
 - 2026-11-24 04:56 · v4.12.23 · Pulido: tarjeta de la tienda con el semáforo de cartera de Inicio (ámbar si el vencido es ≤ 15 % del saldo) y el % del saldo en el renglón; +1 prueba.
