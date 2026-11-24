@@ -1931,3 +1931,14 @@ test('4.12.14 pensamientos comparan contra el ritmo del mes pasado', () => {
   assert.equal(txt('2026-11-11', 0, 100), 'Este mes no he vendido nada');
   assert.equal(txt('2026-11-15', 50, 0), null, 'sin mes anterior no compara');
 });
+
+test('4.12.16 días de inventario de la barra con el semáforo de Inicio', () => {
+  const t = (cobertura) => recursosBarra({ inv: { valor: 1000, cobertura } })[0].tono;
+  assert.equal(t(10), 'rojo', '< 30 días');
+  assert.equal(t(60), 'verde');
+  assert.equal(t('150'), 'ambar', '> 120 días (texto)');
+  assert.equal(t(null), null, 'sin medida');
+  assert.equal(t(NaN), null);
+  assert.equal(t(-5), null, 'negativo');
+  assert.equal(recursosBarra({ inv: { valor: 1, cobertura: 10 } })[0].extra, '10 d');
+});

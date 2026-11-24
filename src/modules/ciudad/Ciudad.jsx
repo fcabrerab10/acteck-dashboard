@@ -350,7 +350,7 @@ function BarraRecursos({ card, theme, irA, ayuda }) {
         <button key={r.clave} type="button" onClick={() => irA(r.ir)} title={`${r.etiqueta} · ir al edificio`} style={{ ...card, padding: '5px 10px', cursor: 'pointer', textAlign: 'left', color: theme.text, minWidth: 92 }}>
           <div style={{ fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700, whiteSpace: 'nowrap' }}>{r.icono} {r.etiqueta}</div>
           <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: r.clave === 'cartera' && r.tono === 'rojo' ? TONO.rojo : theme.text }}>
-            {pesosCorto(r.valor)}{r.pct != null && <span style={{ fontSize: 11, fontWeight: 600, color: TONO[r.tono] || theme.textMuted }}> · {r.pctTexto}</span>}{r.extra && <span style={{ fontSize: 11, fontWeight: 500, color: theme.textMuted }}> · {r.extra}</span>}
+            {pesosCorto(r.valor)}{r.pct != null && <span style={{ fontSize: 11, fontWeight: 600, color: TONO[r.tono] || theme.textMuted }}> · {r.pctTexto}</span>}{r.extra && <span style={{ fontSize: 11, fontWeight: r.clave === 'inventario' && TONO[r.tono] ? 600 : 500, color: (r.clave === 'inventario' && TONO[r.tono]) || theme.textMuted }}> · {r.extra}</span>}
           </div>
           {r.pct != null && Number.isFinite(r.pct) && <div style={{ height: 3, borderRadius: 2, background: theme.border, marginTop: 3, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: TONO[r.tono] || theme.accent }} /></div>}
         </button>

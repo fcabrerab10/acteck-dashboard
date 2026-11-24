@@ -258,6 +258,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.23) Tarjetas con `numero()`/`fechaIso()`: torre «1 atrasado» con «1» en texto (y estado rojo), tienda con cartera vencida en texto («$5,000») ya sale y en rojo, sin «Vendedores 0»; camión con fecha Date ya no dice «Wed Oct 07» (ilegible → «—»); ruta del vendedor sin destinos nulos; «Tiendas activas» con miles es-MX.
   - [x] (4.7.24) `porcentaje()` pura y probada: capa de ventas («+2,250 % vs mes anterior», antes «2250 %»), cuota del mes en la capa, tarjetas de ciudad/tienda y banderín de la manzana, pensamientos de las tiendas y % del rack usan miles es-MX y signo; ilegible dice «—» en vez de «NaN %». Harness sin errores.
   - [x] (4.7.25) Barra de recursos con `porcentaje()`: «Ventas del mes · 1,250 %» (antes «1250%» pegado; ilegible no pinta barra) y cobertura «1,200 d»; panel de la Ciudad con miles es-MX en tiendas, ciudades, contenedores y camiones («1,200 de 3,400 vendieron»). Harness sin errores.
+  - [x] (4.12.16) Barra de recursos: los días de cobertura de «Inventario» llevan el semáforo «Días de Inv» de Inicio (`tonoDias`: < 30 rojo, > 120 ámbar, lo demás verde), como el CEDIS; antes salían siempre en gris. Sin medida o negativo → sin color. Prueba nueva; harness sin errores (no dibuja `Ciudad.jsx`).
   - [x] (4.7.26) `dsoTexto()` pura y probada: el aviso de cartera vencida del panel dice «DSO 46 días» / «DSO 1 día» (antes «DSO 45.678 d») y sin DSO (0 o ilegible) ya no pone «DSO 0 d». Harness sin errores.
   - [x] (4.7.27) `piezasTexto()` pura y probada: globos del contenedor, tarima, tráiler y puerto, misión de descarga, bitácora de arribos y top SKUs de la tienda dicen piezas enteras con miles es-MX («1,201 pz»; antes «1,200.5 pz», y en la tienda «NaN pz» con cantidad en texto). Harness sin errores.
   - [x] (4.7.28) `haceDias()` pura y probada: bitácora (camiones/arribos) y tarjeta del camión dicen «hace 1,200 d» con miles es-MX y redondeada (antes «hace 1200 d»); ilegible ya no da «hace NaN d».
@@ -340,6 +341,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 02:36 · v4.12.16 · Pulido: los días de inventario de la barra superior con el semáforo de Inicio (< 30 rojo, > 120 ámbar); +1 prueba.
 - 2026-11-24 02:17 · v4.12.15 · Pulido: tarjeta del rack del CEDIS con el semáforo de días de Inicio (< 30 rojo, > 120 ámbar), igual que el CEDIS; +1 prueba.
 - 2026-11-24 01:56 · v4.12.14 · Pulido: los pensamientos de las tiendas comparan contra el ritmo del mes pasado (ya no «Vendo 90 % menos» a principio de mes); +1 prueba.
 - 2026-11-24 01:37 · v4.12.13 · CEDIS: color de días de inventario igual que «Días de Inv» de Inicio (< 30 rojo, > 120 ámbar).
