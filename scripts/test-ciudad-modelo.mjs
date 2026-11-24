@@ -33,6 +33,9 @@ test('sucursales → ciudad', () => {
   assert.equal(ciudadDeSucursal('Facturacion Aeropuerto').ciudad, 'CIUDAD DE MEXICO');
   assert.equal(ciudadDeSucursal('AMAZON').virtual, true);
   assert.equal(ciudadDeSucursal('BAJA CALIFORNIA NORTE').ciudad, 'TIJUANA');
+  // 4.12.5: conurbados y abreviaturas
+  for (const [n, c] of [['San Pedro Garza García', 'MONTERREY'], ['Sta. Catarina', 'MONTERREY'], ['Tonalá', 'GUADALAJARA'], ['Metepec', 'TOLUCA'], ['Ecatepec', 'CIUDAD DE MEXICO'], ['Plaza Cuautitlán Izcalli', 'CIUDAD DE MEXICO'], ['Gómez Palacio', 'TORREON'], ['San Andrés Cholula', 'PUEBLA'], ['QRO', 'QUERETARO'], ['Ags 2', 'AGUASCALIENTES'], ['San Pedro Tlaquepaque', 'GUADALAJARA']]) assert.equal(ciudadDeSucursal(n).ciudad, c, n);
+  assert.equal(ciudadDeSucursal('San Pedro').ciudad, null); // ambiguo: no se adivina
   assert.equal(ciudadDeSucursal('XALAPA').ciudad, 'XALAPA');
   for (const x of ['A', 'LA', 'MEX']) assert.equal(ciudadDeSucursal(x).ciudad, null, `«${x}» es muy corto para adivinar la ciudad`);
   assert.equal(ciudadDeSucursal('JUAREZ').ciudad, 'CIUDAD JUAREZ', 'un nombre parcial largo sí empata');
