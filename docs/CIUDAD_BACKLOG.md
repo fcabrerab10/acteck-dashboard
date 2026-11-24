@@ -317,6 +317,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.2) `nombreCiudad()`: «CDMX», «Cd. de México», «D.F.» salen «CDMX» (antes «Cdmx» / «Cd de México») y un texto sin letras («123», «-», un número) ya no es ciudad (antes «va a 5» en el vendedor y pines con «-»).
   - [x] (4.12.3) `fechaCorta()` lleva el año cuando la fecha no es del año de «hoy» («30 dic 2025»; antes una ETA/arribo del contenedor o la salida del camión de otro año se confundía con este); las tarjetas usan el «hoy» del modelo.
   - [x] (4.12.4) Claves de cuenta y cliente con `unirTexto()` en `construirModelo()`: una cuenta, `cliente_key`, guía u OC que llega como NaN, objeto o lista ya no sale «NaN» / «[object Object]» en tiendas, camiones, clientes finales y bitácora (el camión sin clave queda sin cliente; el envío sin guía ni OC dice «envío OC»). Encontrado con prueba de datos raros sobre el ejemplo del harness.
+  - [x] (4.12.8) Contenedores con el número limpio (`unirTexto()`): « MSKU1 » = «MSKU1» (empata sus POs y su tarjeta) y un número NaN u objeto ya no sale «Contenedor NaN» / «[object Object]» en el puerto.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -332,6 +333,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 23:37 · v4.12.8 · Pulido: id del contenedor limpio con `unirTexto()` (sin «Contenedor NaN», espacios ya no rompen la tarjeta); +1 prueba.
 - 2026-11-23 23:17 · v4.12.7 · Pulido: `zoomEnRango()` / `esChico()` leen número en texto y `-Infinity` lleva el zoom al mínimo; +2 pruebas.
 - 2026-11-23 22:56 · v4.12.6 · Pulido: más municipios conurbados y alcaldías caen en su ciudad (CDMX, Veracruz, Tampico, Querétaro, Saltillo, Tijuana…); +1 prueba.
 - 2026-11-23 22:36 · v4.12.5 · Pulido: sucursales en municipios conurbados y abreviaturas (San Pedro Garza García, Tonalá, Metepec, QRO, AGS…) ya caen en su ciudad; +1 prueba.

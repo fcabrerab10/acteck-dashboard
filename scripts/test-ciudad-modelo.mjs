@@ -1870,3 +1870,13 @@ test('4.12.4: claves de cuenta/cliente NaN, objeto o lista no salen «NaN» ni �
   const gdl = m.distritos.find((x) => x.ciudad === 'GUADALAJARA');
   if (gdl?.clientesFinales) assert.deepEqual(gdl.clientesFinales.cuentas, ['ct']);
 });
+
+test('4.12.8 · contenedor con id sucio: se limpia y la tarjeta lo encuentra (sin «Contenedor NaN»)', () => {
+  const hoy = new Date(2026, 10, 23, 12);
+  const m = construirModelo({ contenedores: [{ contenedor: ' MSKU1 ', eta_puerto: '2026-11-30', piezas: 10 }, { contenedor: NaN, eta_puerto: '2026-12-01' }, { contenedor: { x: 1 }, eta_puerto: '2026-12-02' }, { contenedor: 77, eta_puerto: '2026-12-03' }] }, hoy);
+  const ids = m.puerto.barcos.map((b) => b.id).sort((a, b) => String(a).localeCompare(String(b)));
+  assert.deepEqual(ids, ['77', 'MSKU1', null, null]);
+  const t = tarjetaDe({ tipo: 'barco', id: 'MSKU1', titulo: 'Contenedor MSKU1' }, m);
+  assert.equal(t.numeros.find((n) => n[0] === 'Piezas')?.[1], '10');
+  assert.ok(!JSON.stringify(m.puerto).includes('NaN'));
+});

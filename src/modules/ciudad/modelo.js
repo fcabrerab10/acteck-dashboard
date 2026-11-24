@@ -1347,7 +1347,7 @@ export function construirModelo(d, hoy = new Date()) {
     let p = 0.5;
     if (inicio && fin) { const tot = Math.max(1, dias(inicio, fin)); p = Math.max(0.02, Math.min(0.98, dias(inicio, hoyIso) / tot)); }
     const llegaEnDias = fin ? dias(hoyIso, fin) : null;
-    const reg = { id: c.contenedor, supplier: c.supplier, naviera: c.naviera || '', piezas: N(c.piezas), pos: N(c.pos), fob: N(c.fob_usd), eta: eta, arribo, llegaEnDias, progreso: p, estatus: c.estatus || '' };
+    const reg = { id: unirTexto(c.contenedor) || null /* 4.12.8: « MSKU1 » = «MSKU1»; NaN/objeto ya no da «Contenedor NaN» */, supplier: c.supplier, naviera: c.naviera || '', piezas: N(c.piezas), pos: N(c.pos), fob: N(c.fob_usd), eta: eta, arribo, llegaEnDias, progreso: p, estatus: c.estatus || '' };
     if (arribo && dias(hoyIso, arribo) <= 0) tarimas.push(reg); else barcos.push(reg);
   }
   barcos.sort((a, b) => b.progreso - a.progreso);
