@@ -2068,3 +2068,11 @@ test('claveSku: SKU limpio y sin «[OBJECT OBJECT]» (4.12.29)', () => {
   const r = racksPorMarca([{ articulo: {}, inventario: 5, costoinventario: 100 }, { articulo: ' ab ', inventario: 2, costoinventario: 10 }], { AB: 'acteck' });
   assert.deepEqual(r.map((g) => [g.marca, g.skus, g.valor]), [['ACTECK', 1, 10]]);
 });
+
+test('4.12.30 ponerPosEnPuerto salta contenedor/PO/id que no son texto ni número', () => {
+  const pto = { barcos: [{ id: ' C1 ' }, { id: {} }, { id: NaN }], tarimas: [{ id: 'T1' }] };
+  ponerPosEnPuerto(pto, [{ contenedor: 'C1', po: {} }, { contenedor: 'C1', po: NaN }, { contenedor: 'C1', po: true }, { contenedor: 'C1', po: ['PO-3'] }, { contenedor: 'C1', po: ' PO-1 ' }, { contenedor: {}, po: 'PO-X' }, { contenedor: NaN, po: 'PO-Y' }, { contenedor: 'T1', po: 12 }]);
+  assert.deepEqual(pto.barcos[0].listaPos, ['PO-1']);
+  assert.equal(pto.barcos[1].listaPos, undefined); assert.equal(pto.barcos[2].listaPos, undefined);
+  assert.deepEqual(pto.tarimas[0].listaPos, ['12']);
+});

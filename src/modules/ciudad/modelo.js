@@ -647,15 +647,17 @@ export function capaCiudades(m, capa) {
 // 4.7.80: barcos/tarimas que no son lista se saltan (antes un objeto lanzaba error y un texto se partía en letras); puerto que no es objeto se regresa igual.
 export function ponerPosEnPuerto(puerto, filas = []) {
   if (!puerto || typeof puerto !== 'object') return puerto;
+  // 4.12.30: contenedor/PO/id que llega como objeto, lista, booleano o NaN se salta (antes `String()` daba «[object Object]» / «NaN» en las POs del puerto).
+  const txt = (v) => (Array.isArray(v) ? '' : unirTexto(v));
   const por = new Map();
   for (const f of comoLista(filas)) {
-    const c = String(f?.contenedor || '').trim(), po = String(f?.po ?? '').trim();
+    const c = txt(f?.contenedor), po = txt(f?.po);
     if (!c || !po) continue;
     if (!por.has(c)) por.set(c, new Set());
     por.get(c).add(po);
   }
   for (const b of [...comoLista(puerto.barcos), ...comoLista(puerto.tarimas)]) {
-    if (!b) continue; const s = por.get(String(b.id || '').trim());
+    if (!b) continue; const s = por.get(txt(b.id));
     if (s) b.listaPos = [...s].sort((a, z) => a.localeCompare(z, 'es', { numeric: true }));
   }
   return puerto;
