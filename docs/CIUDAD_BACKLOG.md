@@ -326,6 +326,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.4) Claves de cuenta y cliente con `unirTexto()` en `construirModelo()`: una cuenta, `cliente_key`, guía u OC que llega como NaN, objeto o lista ya no sale «NaN» / «[object Object]» en tiendas, camiones, clientes finales y bitácora (el camión sin clave queda sin cliente; el envío sin guía ni OC dice «envío OC»). Encontrado con prueba de datos raros sobre el ejemplo del harness.
   - [x] (4.12.8) Contenedores con el número limpio (`unirTexto()`): « MSKU1 » = «MSKU1» (empata sus POs y su tarjeta) y un número NaN u objeto ya no sale «Contenedor NaN» / «[object Object]» en el puerto.
   - [x] (4.12.15) Racks del CEDIS con el mismo semáforo que el CEDIS y «Días de Inv» de Inicio (`tonoDias()`: < 30 rojo, > 120 ámbar). Antes seguían con los umbrales viejos (> 120 rojo, > 90 ámbar): un rack con 10 días salía verde y uno con 900 rojo, al revés que el CEDIS. Encontrado al buscar renglones de la escena contra el dashboard.
+  - [x] (4.12.17) Cartera vencida con el semáforo de la tarjeta «Cartera» de Inicio: `tonoCartera()` pura y probada (sin vencido verde; vencido > 15 % del saldo rojo, si no ámbar; sin % legible rojo). La usan la barra superior, el globo y la tarjeta del banco; un pago vencido sigue en rojo y gana al globo ámbar. Antes cualquier peso vencido pintaba rojo.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -341,6 +342,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 02:56 · v4.12.17 · Pulido: cartera vencida del banco (barra, globo y tarjeta) con el semáforo de Inicio (rojo > 15 % del saldo, si no ámbar); +1 prueba.
 - 2026-11-24 02:36 · v4.12.16 · Pulido: los días de inventario de la barra superior con el semáforo de Inicio (< 30 rojo, > 120 ámbar); +1 prueba.
 - 2026-11-24 02:17 · v4.12.15 · Pulido: tarjeta del rack del CEDIS con el semáforo de días de Inicio (< 30 rojo, > 120 ámbar), igual que el CEDIS; +1 prueba.
 - 2026-11-24 01:56 · v4.12.14 · Pulido: los pensamientos de las tiendas comparan contra el ritmo del mes pasado (ya no «Vendo 90 % menos» a principio de mes); +1 prueba.

@@ -817,6 +817,13 @@ export function haceDias(v) {
   const n = leeNum(v); if (n == null) return ''; const k = Math.round(n);
   return k <= 0 ? 'hoy' : k === 1 ? 'ayer' : `hace ${k.toLocaleString('es-MX')} d`;
 }
+// Semáforo de la cartera vencida como la tarjeta «Cartera» de Inicio (4.12.17): sin vencido verde; con vencido rojo si pasa
+// 15 % del saldo y ámbar si no. Sin % legible (saldo 0, ilegible) queda rojo, como antes. Antes cualquier peso vencido era rojo.
+export function tonoCartera(vencido, pctVencido) {
+  if (!(numero(vencido) > 0)) return 'verde';
+  const p = typeof pctVencido === 'number' || typeof pctVencido === 'string' ? leeNum(pctVencido) : null;
+  return p != null && Number.isFinite(p) && p <= 15 ? 'ambar' : 'rojo';
+}
 export function dsoTexto(v) {
   const k = Math.round(numero(v)); return Number.isFinite(k) && k > 0 ? `DSO ${plural(k, 'día', 'días')}` : '';
 }
@@ -880,7 +887,7 @@ export function recursosBarra(r) {
   // 4.12.16: los días de cobertura llevan el semáforo «Días de Inv» de Inicio (`tonoDias`: < 30 rojo, > 120 ámbar), como el CEDIS;
   // antes salían siempre en gris. Sin medida (null, ilegible, negativo) → sin tono.
   if (r.inv) out.push({ clave: 'inventario', icono: '📦', etiqueta: 'Inventario', valor: n(r.inv.valor), extra: diasCobertura(r.inv.cobertura), tono: diasCobertura(r.inv.cobertura) ? tonoDias(r.inv.cobertura) : null, ir: { tipo: 'cedis' } });
-  if (r.cartera) out.push({ clave: 'cartera', icono: '🏦', etiqueta: 'Cartera vencida', valor: n(r.cartera.vencido), tono: n(r.cartera.vencido) > 0 ? 'rojo' : 'verde', ir: { tipo: 'banco' } });
+  if (r.cartera) out.push({ clave: 'cartera', icono: '🏦', etiqueta: 'Cartera vencida', valor: n(r.cartera.vencido), tono: tonoCartera(r.cartera.vencido, r.cartera.pctVencido), ir: { tipo: 'banco' } }); // 4.12.17: semáforo de Inicio
   if (r.enCamino) out.push({ clave: 'embarques', icono: '🚢', etiqueta: 'En tránsito', valor: n(r.enCamino.valor), extra: posTexto(r.enCamino.pos), ir: { tipo: 'puerto' } });
   return out;
 }
@@ -893,8 +900,11 @@ export function burbujasAtencion(m, hoy = new Date()) {
   if (!m) return [];
   const pesos = pesosCorto; // 4.7.8: antes 999 600 salía «$1000 K» y los negativos «$-5000»
   const out = []; const b = m.banco;
-  if (b && numero(b.carteraVencida) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
+  // 4.12.17: la cartera vencida usa el semáforo de Inicio (rojo > 15 % del saldo, si no ámbar); un pago vencido (rojo) gana a la cartera ámbar.
+  const tonoC = b ? tonoCartera(b.carteraVencida, b.pctVencido) : 'verde';
+  if (b && tonoC === 'rojo') out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
   else if (b && numero(b.pagosVencidos) > 0) out.push({ lugar: 'banco', icono: '🏦', nivel: 'rojo', texto: plural(b.pagosVencidos, 'pago vencido', 'pagos vencidos') }); // 4.7.9: «1» en texto ya no dice «1 pagos vencidos»
+  else if (tonoC === 'ambar') out.push({ lugar: 'banco', icono: '🏦', nivel: 'ambar', texto: `Cartera vencida ${pesos(b.carteraVencida)}` });
   const barcos = comoLista(m.puerto?.barcos).filter(Boolean); // 4.3.3: renglones nulos no truenan; 4.7.59: algo que no es lista → sin barcos (antes error)
   const tarde = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias < 0).length;
   const pronto = barcos.filter((x) => !x.arribo && x.llegaEnDias != null && x.llegaEnDias >= 0 && x.llegaEnDias <= 3).length;
@@ -1021,7 +1031,9 @@ export function tarjetaDe(tag, modelo) {
     // 4.7.81: como la cartera de Inicio, la vencida dice su % del saldo total y las cuentas el DSO ponderado (la tarjeta es de 4 renglones).
     const pct = b.pctVencido != null && numero(b.saldo) > 0 ? `${porcentaje(b.pctVencido)} del saldo` : '';
     t.numeros = [['Cartera vencida', unirTexto(pesos(b.carteraVencida), pct)], ['Cuentas con vencido', unirTexto(num(b.cuentasVencidas), dsoTexto(b.dso))], ['Pagos 7 días', `${num(b.pagosSemana)} · ${pesos(b.montoSemana)}`], ['Pagos vencidos', `${num(b.pagosVencidos)} · ${pesos(b.montoVencido)}`]];
-    t.estado = b.pagosVencidos > 0 || b.carteraVencida > 0 ? 'rojo' : b.pagosSemana > 0 ? 'ambar' : 'verde';
+    // 4.12.17: pagos vencidos rojo; la cartera vencida con el semáforo de Inicio (> 15 % del saldo rojo, si no ámbar).
+    const tc = tonoCartera(b.carteraVencida, b.pctVencido);
+    t.estado = numero(b.pagosVencidos) > 0 || tc === 'rojo' ? 'rojo' : tc === 'ambar' || numero(b.pagosSemana) > 0 ? 'ambar' : 'verde';
   } else if (tag.tipo === 'torre' && m.torre) {
     const r = m.torre;
     t.numeros = [['Propuestas abiertas', num(r.abiertas)], ['SKUs confirmados', `${num(r.confirmadas)} de ${num(r.lineas)}`], ['Comprados', num(r.compradas)], ['Arribos 7 días', `${num(r.arribos7)}${numero(r.atrasados) > 0 ? ` · ${plural(numero(r.atrasados), 'atrasado')}` : ''}`]]; // 4.7.23: «1» en texto = singular
