@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta } from '../src/modules/ciudad/modelo.js';
+import { estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, estadoDias, motivoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -286,7 +286,7 @@ test('tarjeta del edificio: una plantilla con estado y hasta 4 números', () => 
     const of2 = tarjetaDe({ tipo: 'oficina' }, { oficina: { personas: [{ pendientes: '2', hechas: '1' }, { pendientes: 3, hechas: -4 }, null], genericos: '3', agenda: [], reuniones: 0 } });
     const v = Object.fromEntries(of2.numeros); assert.equal(v.Pendientes, '5'); assert.equal(v.Hechas, '1'); assert.equal(v.Personas, '5');
   }
-  const ce = tarjetaDe({ tipo: 'cedis' }, mod); assert.equal(ce.numeros[0][1], '$12.5 M'); assert.equal(ce.estado, 'ambar', '95 días → ámbar');
+  const ce = tarjetaDe({ tipo: 'cedis' }, mod); assert.equal(ce.numeros[0][1], '$12.5 M'); assert.equal(ce.estado, 'verde', '95 días → sano como Inicio (4.12.13)');
   assert.equal(tarjetaDe({ tipo: 'puerto' }, mod).estado, 'ambar', 'un barco sin ETA');
   const ci = tarjetaDe({ tipo: 'ciudad', ciudad: 'LEON' }, mod); assert.deepEqual(ci.numeros[0], ['Tiendas activas', '1 de 2']); assert.equal(ci.estado, 'ambar');
   const ti = tarjetaDe({ tipo: 'tienda', ciudad: 'LEON', cuenta: 'ct', titulo: 'CT · Centro' }, mod); assert.equal(ti.estado, 'rojo'); assert.ok(ti.numeros.some(([l]) => l === 'Cartera vencida'));
@@ -680,7 +680,7 @@ test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
     cedis: { piezas: 50000, dias: 95 }, camiones: [{ piezas: 300, fecha: '2026-10-07' }, { envio: true, fecha: '2026-10-01', piezas: 0 }],
     distritos: [{ tiendas: [{ vendio: true }, { vendio: false }, { vendio: true, reparto: true }], clientesFinales: { n: 120, importe: 2.5e6 } }, { tiendas: [{ vendio: true }] }] };
   const r = cadenaSuministro(m);
-  assert.deepEqual(r.tramos.map((t) => [t.clave, t.estado]), [['mar', 'verde'], ['puerto', 'rojo'], ['cedis', 'ambar'], ['camion', 'ambar'], ['tienda', 'ambar'], ['cliente', 'verde']]);
+  assert.deepEqual(r.tramos.map((t) => [t.clave, t.estado]), [['mar', 'verde'], ['puerto', 'rojo'], ['cedis', 'verde'], ['camion', 'ambar'], ['tienda', 'ambar'], ['cliente', 'verde']]);
   assert.equal(r.tramos[0].volumen, '2 barcos · 1,500 pzs'); assert.equal(r.tramos[1].motivo, '1 barco con más de 3 días de atraso');
   assert.equal(r.tramos[4].volumen, '2 de 3 vendieron'); assert.equal(r.tramos[5].volumen, '120 clientes · $2.5 M'); assert.equal(r.atasco.clave, 'puerto');
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [] }, cedis: { dias: 30 }, camiones: [], distritos: [] });
@@ -1353,7 +1353,7 @@ test('4.7.17 capa de ventas/cartera y pensamientos leen montos en texto', () => 
 test('4.7.18 tarjetas, top SKUs y piezas leen montos en texto', () => {
   const m = { cedis: { valor: '$85,000', dias: ' 95 ', piezas: '1,200', skus: '30', racksMarca: [{ marca: 'A', valor: '$750', piezas: '10' }, { marca: 'B', valor: '$250' }] },
     puerto: { barcos: [{ id: 'C1', piezas: '1,200', llegaEnDias: 3 }], tarimas: [] }, distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: 'a', vendio: true, importe: '$1,200' }, { cuenta: 'a', importe: '800' }] }] };
-  const ce = tarjetaDe({ tipo: 'cedis' }, m); assert.deepEqual(ce.numeros[1], ['Días de inventario', '95']); assert.deepEqual(ce.numeros[2], ['Piezas', '1,200']); assert.equal(ce.estado, 'ambar');
+  const ce = tarjetaDe({ tipo: 'cedis' }, m); assert.deepEqual(ce.numeros[1], ['Días de inventario', '95']); assert.deepEqual(ce.numeros[2], ['Piezas', '1,200']); assert.equal(ce.estado, 'verde');
   assert.equal(tarjetaDe({ tipo: 'rack', marca: 'A' }, m).numeros[0][1].endsWith('· 75 %'), true);
   assert.deepEqual(tarjetaDe({ tipo: 'barco', id: 'C1' }, m).numeros[2], ['Piezas', '1,200']);
   assert.equal(tarjetaDe({ tipo: 'ciudad', ciudad: 'GDL' }, m).numeros[1][1], pesosCorto(2000));
@@ -1836,13 +1836,19 @@ test('diasCedis() / diasTexto(): CEDIS sin medida de días como Inventario (4.7.
   assert.equal(diasCedis(null), null); assert.equal(diasCedis(' '), null); assert.equal(diasCedis('abc'), null); assert.equal(diasCedis({}), null); assert.equal(diasCedis(-3), null); assert.equal(diasCedis(Infinity), null);
   assert.equal(diasCedis(95.6), 96); assert.equal(diasCedis('1,200'), 1200); assert.equal(diasCedis(0), 0); assert.equal(diasCedis(-0.2), null);
   assert.equal(diasTexto(null), 'sin medida de días'); assert.equal(diasTexto(1), '1 día'); assert.equal(diasTexto('1,200.4'), '1,200 días');
-  assert.equal(tonoDias(null), null); assert.equal(tonoDias(130), 'rojo'); assert.equal(tonoDias(100), 'ambar'); assert.equal(tonoDias(40), 'verde');
+  assert.equal(tonoDias(null), null); assert.equal(tonoDias(130), 'ambar'); assert.equal(tonoDias(100), 'verde'); assert.equal(tonoDias(40), 'verde');
+  // 4.12.13: mismo semáforo que «Días de Inv» de Inicio (PERFILES.direccion: < 30 rojo, > 120 naranja).
+  assert.equal(tonoDias(10), 'rojo'); assert.equal(tonoDias(0), 'rojo'); assert.equal(tonoDias(29.6), 'verde'); assert.equal(tonoDias(30), 'verde'); assert.equal(tonoDias(120), 'verde'); assert.equal(tonoDias('121'), 'ambar');
+  assert.equal(estadoDias(10), 'critico'); assert.equal(estadoDias(200), 'sobre'); assert.equal(estadoDias(60), 'sano'); assert.equal(estadoDias(null), null);
+  assert.equal(motivoDias(1), 'Sólo 1 día de inventario'); assert.equal(motivoDias(1200), '1,200 días de inventario (alto)'); assert.equal(motivoDias(100), null); assert.equal(motivoDias(null), null);
+  const cad = (dias) => cadenaSuministro(construirModelo({ inventario: [{ inv_actual: 1000, inv_actual_piezas: 10, dias_inv: dias, skus_con_stock: 2 }] })).tramos.find((x) => x.clave === 'cedis');
+  assert.equal(cad(12).estado, 'rojo'); assert.equal(cad(12).motivo, 'Sólo 12 días de inventario'); assert.equal(cad(100).estado, 'verde'); assert.equal(cad(100).motivo, null); assert.equal(cad(150).estado, 'ambar'); assert.equal(cad(null).estado, 'gris');
   const m = construirModelo({ inventario: [{ inv_actual: 1000, inv_actual_piezas: 10, dias_inv: null, skus_con_stock: 2 }] });
   assert.equal(m.cedis.dias, null, 'dias_inv null ya no es 0');
   const t = tarjetaDe({ tipo: 'cedis' }, m); assert.deepEqual(t.numeros[1], ['Días de inventario', 'sin medida']); assert.equal(t.estado, null, 'sin medida no sale en verde');
   const c = cadenaSuministro(m).tramos.find((x) => x.clave === 'cedis'); assert.match(c.volumen, /sin medida de días$/); assert.equal(c.estado, 'gris'); assert.equal(c.motivo, null);
   const m2 = construirModelo({ inventario: [{ inv_actual: 1000, dias_inv: '130' }] });
-  assert.equal(m2.cedis.dias, 130); assert.equal(tarjetaDe({ tipo: 'cedis' }, m2).estado, 'rojo');
+  assert.equal(m2.cedis.dias, 130); assert.equal(tarjetaDe({ tipo: 'cedis' }, m2).estado, 'ambar');
 });
 
 test('estatusBarco(): nombres cortos del Plan de compras (4.7.84)', () => {

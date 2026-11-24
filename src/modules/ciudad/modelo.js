@@ -5,6 +5,7 @@
 // Manzanillo es el puerto por donde llegan los contenedores, y por las carreteras van los camiones (facturas)
 // y los vendedores (equipo comercial del ERP) hacia los clientes que atienden.
 // Regla de Fernando: NADA escala por el tamaño del cliente; lo que se ve es actividad (luces, movimiento).
+import { estadoCobertura, PERFILES } from '../../lib/cobertura.js';
 
 
 // 4.7.15: `numero()` lee montos y conteos en texto con «$», comas o espacios («$5,000», « 1,200 ») como número (antes 0:
@@ -412,7 +413,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const tramos = [
     { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${enPuerto.length.toLocaleString('es-MX')} con ETA vencida · ${plural(comoLista(m.puerto?.tarimas).filter(Boolean).length, 'recién llegado')}`, estado: tarde ? 'rojo' : enPuerto.length ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : enPuerto.length ? 'Barcos esperando muelle' : null },
-    { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${diasTexto(d)}`, estado: tonoDias(d) || 'gris', motivo: d != null && d > 90 ? `${plural(d, 'día')} de inventario` : null },
+    { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${diasTexto(d)}`, estado: tonoDias(d) || 'gris', motivo: motivoDias(d) },
     { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length.toLocaleString('es-MX')} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
     { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron`, estado: !tiendas.length ? 'gris' : ratio < 0.4 ? 'rojo' : ratio < 0.7 ? 'ambar' : 'verde', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
     { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${plural(cf.n, 'cliente')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
@@ -862,7 +863,11 @@ const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n)
 // Antes `N(null)` daba 0 y el CEDIS decía «0 días» en verde en el globo, la tarjeta, el panel y la cadena. Ilegible o negativo → null.
 export function diasCedis(v) { const k = leeNum(v); return k == null || k < 0 ? null : Math.round(k) + 0; }
 export function diasTexto(v) { const d = diasCedis(v); return d == null ? 'sin medida de días' : plural(d, 'día'); }
-export function tonoDias(v) { const d = diasCedis(v); return d == null ? null : d > 120 ? 'rojo' : d > 90 ? 'ambar' : 'verde'; }
+// 4.12.13: el color sigue el semáforo «Días de Inv» de Inicio (`estadoCobertura` con `PERFILES.direccion`: < 30 bajo en rojo,
+// > 120 alto en naranja, lo demás verde). Antes la Ciudad pintaba verde 10 días (Inicio: rojo «Bajo») y ámbar 100 (Inicio: sano).
+export function estadoDias(v) { const d = diasCedis(v); return d == null ? null : estadoCobertura(d, PERFILES.direccion); }
+export function tonoDias(v) { const e = estadoDias(v); return e == null ? null : e === 'critico' ? 'rojo' : e === 'sobre' ? 'ambar' : 'verde'; }
+export function motivoDias(v) { const d = diasCedis(v), e = estadoDias(v); return e === 'critico' ? `Sólo ${plural(d, 'día')} de inventario` : e === 'sobre' ? `${plural(d, 'día')} de inventario (alto)` : null; }
 const diasCobertura = (c) => { const k = leeNum(c); return k == null || Math.round(k) < 0 ? null : `${(Math.round(k) + 0).toLocaleString('es-MX')} d`; };
 export function recursosBarra(r) {
   if (!r) return [];
