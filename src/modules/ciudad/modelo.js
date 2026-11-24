@@ -1075,9 +1075,12 @@ export function tarjetaDe(tag, modelo) {
     if (s) {
       t.numeros = [['Este mes', pesos(s.importe)], ['Mes anterior', pesos(s.previo)]];
       if (numero(s.vendedores) > 0) t.numeros.push(['Vendedores', num(s.vendedores)]);
-      const venc = numero(s.cartera?.vencido); if (venc > 0) t.numeros.push(['Cartera vencida', pesos(venc)]); // 4.7.23: «$5,000» en texto ya cuenta
+      // 4.12.23: con el % del saldo de la cuenta y el semáforo de Inicio (`tonoCartera()`): vencido ≤ 15 % del saldo es ámbar, no rojo.
+      const venc = numero(s.cartera?.vencido), sal = numero(s.cartera?.saldo), pv = venc > 0 && sal > 0 ? (venc / sal) * 100 : null;
+      if (venc > 0) t.numeros.push(['Cartera vencida', pv == null ? pesos(venc) : `${pesos(venc)} · ${porcentaje(pv)} del saldo`]); // 4.7.23: «$5,000» en texto ya cuenta
       const cq = cuotaRitmo(m, [s.cuenta]); if (cq) { t.numeros.splice(2, 0, ['Cuota de la cuenta', `${porcentaje(cq.pct)} · ritmo ${porcentaje(cq.ritmo)}`]); t.cuota = cq.tono; } // 3.90.60
-      t.estado = venc > 0 ? 'rojo' : s.vendioMes ? 'verde' : s.vendio ? 'ambar' : 'rojo';
+      const tv = s.vendioMes ? 'verde' : s.vendio ? 'ambar' : 'rojo', tc = tonoCartera(venc, pv); // gana el peor de venta y cartera
+      t.estado = tv === 'rojo' || tc === 'rojo' ? 'rojo' : tv === 'ambar' || tc === 'ambar' ? 'ambar' : 'verde';
     }
   } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {
     const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];

@@ -301,6 +301,12 @@ test('tarjeta del edificio: una plantilla con estado y hasta 4 números', () => 
   const ci = tarjetaDe({ tipo: 'ciudad', ciudad: 'LEON' }, mod); assert.deepEqual(ci.numeros[0], ['Tiendas activas', '1 de 2']); assert.equal(ci.estado, 'ambar');
   const ti = tarjetaDe({ tipo: 'tienda', ciudad: 'LEON', cuenta: 'ct', titulo: 'CT · Centro' }, mod); assert.equal(ti.estado, 'rojo'); assert.ok(ti.numeros.some(([l]) => l === 'Cartera vencida'));
   assert.equal(tarjetaDe({ tipo: 'tienda', ciudad: 'LEON', cuenta: 'ct', titulo: 'CT · León' }, mod).estado, 'verde');
+  { // 4.12.23: tarjeta de la tienda con el semáforo de cartera de Inicio (≤ 15 % del saldo ámbar) y el % del saldo
+    const tm = (cartera, vendioMes = true) => tarjetaDe({ tipo: 'tienda', ciudad: 'X', cuenta: 'k', titulo: nombreTienda({ cuenta: 'k', sucursal: 'S' }) }, { distritos: [{ ciudad: 'X', tiendas: [{ cuenta: 'k', sucursal: 'S', importe: 10, vendioMes, vendio: true, cartera }] }] });
+    let r = tm({ vencido: 100, saldo: 1000 }); assert.equal(r.estado, 'ambar', '10 % del saldo'); assert.ok(r.numeros.some(([l, v]) => l === 'Cartera vencida' && /10 % del saldo/.test(v)), JSON.stringify(r.numeros));
+    assert.equal(tm({ vencido: 300, saldo: 1000 }).estado, 'rojo', '30 % del saldo'); assert.equal(tm({ vencido: 100 }).estado, 'rojo', 'sin saldo legible');
+    assert.equal(tm({ vencido: 0, saldo: 1000 }).estado, 'verde'); assert.equal(tm({ vencido: 100, saldo: 1000 }, false).estado, 'ambar', 'vendió el mes pasado');
+  }
   const cam = tarjetaDe({ tipo: 'camion', titulo: 'Factura 1', sub: 'x' }, mod); assert.equal(cam.estado, null); assert.deepEqual(cam.numeros, []); assert.equal(cam.sub, 'x');
   assert.equal(tarjetaDe(null, mod), null); assert.ok(tarjetaDe({ tipo: 'cedis' }, null).numeros.length === 0, 'sin modelo no rompe');
   const m = construirModelo(d, hoy); for (const tipo of ['oficina', 'cedis', 'puerto']) assert.ok(tarjetaDe({ tipo }, m).numeros.length <= 4);
