@@ -1040,9 +1040,10 @@ export function tarjetaDe(tag, modelo) {
       t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 ? 'rojo' : 'verde';
     }
   } else if (tag.tipo === 'puerto' && m.puerto) {
-    const p = m.puerto, b = sn(p.barcos), pronto = b.filter((x) => x.llegaEnDias != null && x.llegaEnDias <= 7).length;
-    t.numeros = [['Navegando', num(b.length)], ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num(sn(p.tarimas).length)]];
-    t.estado = b.some((x) => x.llegaEnDias == null) ? 'ambar' : 'verde';
+    const p = m.puerto, b = sn(p.barcos), d = (x) => (Number.isFinite(x.llegaEnDias) ? x.llegaEnDias : null);
+    const pronto = b.filter((x) => d(x) != null && d(x) >= 0 && d(x) <= 7).length, tarde = b.filter((x) => !x.arribo && d(x) != null && d(x) < 0).length; // 4.12.20: los atrasados ya no cuentan como «llegan en 7 días»
+    t.numeros = [['Navegando', num(b.length)], tarde ? ['ETA vencida', num(tarde)] : ['Piezas en el mar', num(p.totalPiezas)], ['Llegan en 7 días', num(pronto)], ['Descargando', num(sn(p.tarimas).length)]];
+    t.estado = tarde ? 'rojo' : b.some((x) => d(x) == null) ? 'ambar' : 'verde'; // 4.12.20: rojo como su globo «con ETA vencida» (antes verde)
   } else if (tag.tipo === 'banco' && m.banco) {
     const b = m.banco;
     // 4.7.81: como la cartera de Inicio, la vencida dice su % del saldo total y las cuentas el DSO ponderado (la tarjeta es de 4 renglones).
@@ -1101,7 +1102,7 @@ export function tarjetaDe(tag, modelo) {
   } else if (tag.tipo === 'barco' && tag.barco) {
     const b = tag.barco; t.numeros = [['Piezas', num(b.piezas)], ['ETA puerto', fechaCorta(b.eta, m.hoyIso) || '—'], ['Llega a CEDIS', fechaCorta(b.arribo, m.hoyIso) || '—']] /* 4.7.42: «23 nov» (antes «2026-11-23» crudo) */;
     const est = estatusBarco(b.estatus); if (est) t.numeros.push(['Estatus', est]); // 4.7.41: « » / «null» ya no salen; 4.7.84: «En el mar» como el Plan de compras
-    t.estado = b.llegaEnDias == null ? 'ambar' : 'verde';
+    t.estado = b.llegaEnDias == null ? 'ambar' : b.llegaEnDias < 0 && !b.arribo ? 'rojo' : 'verde'; // 4.12.20: atrasado en rojo como la tarjeta por id
   }
   t.numeros = t.numeros.slice(0, 4);
   return t;

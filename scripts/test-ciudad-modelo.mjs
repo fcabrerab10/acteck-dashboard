@@ -288,6 +288,16 @@ test('tarjeta del edificio: una plantilla con estado y hasta 4 números', () => 
   }
   const ce = tarjetaDe({ tipo: 'cedis' }, mod); assert.equal(ce.numeros[0][1], '$12.5 M'); assert.equal(ce.estado, 'verde', '95 días → sano como Inicio (4.12.13)');
   assert.equal(tarjetaDe({ tipo: 'puerto' }, mod).estado, 'ambar', 'un barco sin ETA');
+  { // 4.12.20: la tarjeta del puerto coincide con su globo «con ETA vencida»
+    const pu = { puerto: { totalPiezas: 900, tarimas: [], barcos: [{ id: 'T', llegaEnDias: -2 }, { id: 'P', llegaEnDias: 3 }, { id: 'R', llegaEnDias: -1, arribo: '2026-11-20' }, null] } };
+    const tp = tarjetaDe({ tipo: 'puerto' }, pu), vp = Object.fromEntries(tp.numeros);
+    assert.equal(tp.estado, 'rojo'); assert.equal(vp['ETA vencida'], '1'); assert.equal(vp['Llegan en 7 días'], '1', 'el atrasado ya no cuenta como «llega en 7 días»');
+    assert.equal(burbujasAtencion({ puerto: pu.puerto }).find((x) => x.lugar === 'puerto')?.nivel, 'rojo');
+    const ok = tarjetaDe({ tipo: 'puerto' }, { puerto: { totalPiezas: 900, barcos: [{ llegaEnDias: 5 }] } });
+    assert.equal(ok.estado, 'verde'); assert.equal(Object.fromEntries(ok.numeros)['Piezas en el mar'], '900');
+    assert.equal(tarjetaDe({ tipo: 'barco', barco: { llegaEnDias: -3 } }, {}).estado, 'rojo', 'barco atrasado tocado sin id');
+    assert.equal(tarjetaDe({ tipo: 'barco', barco: { llegaEnDias: -3, arribo: '2026-11-20' } }, {}).estado, 'verde');
+  }
   const ci = tarjetaDe({ tipo: 'ciudad', ciudad: 'LEON' }, mod); assert.deepEqual(ci.numeros[0], ['Tiendas activas', '1 de 2']); assert.equal(ci.estado, 'ambar');
   const ti = tarjetaDe({ tipo: 'tienda', ciudad: 'LEON', cuenta: 'ct', titulo: 'CT · Centro' }, mod); assert.equal(ti.estado, 'rojo'); assert.ok(ti.numeros.some(([l]) => l === 'Cartera vencida'));
   assert.equal(tarjetaDe({ tipo: 'tienda', ciudad: 'LEON', cuenta: 'ct', titulo: 'CT · León' }, mod).estado, 'verde');
