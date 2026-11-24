@@ -36,6 +36,9 @@ test('sucursales → ciudad', () => {
   // 4.12.5: conurbados y abreviaturas
   for (const [n, c] of [['San Pedro Garza García', 'MONTERREY'], ['Sta. Catarina', 'MONTERREY'], ['Tonalá', 'GUADALAJARA'], ['Metepec', 'TOLUCA'], ['Ecatepec', 'CIUDAD DE MEXICO'], ['Plaza Cuautitlán Izcalli', 'CIUDAD DE MEXICO'], ['Gómez Palacio', 'TORREON'], ['San Andrés Cholula', 'PUEBLA'], ['QRO', 'QUERETARO'], ['Ags 2', 'AGUASCALIENTES'], ['San Pedro Tlaquepaque', 'GUADALAJARA']]) assert.equal(ciudadDeSucursal(n).ciudad, c, n);
   assert.equal(ciudadDeSucursal('San Pedro').ciudad, null); // ambiguo: no se adivina
+  // 4.12.6: más conurbados; calles homónimas no adivinan
+  for (const [n, c] of [['Coyoacán', 'CIUDAD DE MEXICO'], ['Gustavo A. Madero', 'CIUDAD DE MEXICO'], ['Ixtapaluca', 'CIUDAD DE MEXICO'], ['Plaza Boca del Río', 'VERACRUZ'], ['Cd. Madero', 'TAMPICO'], ['Altamira', 'TAMPICO'], ['El Marqués', 'QUERETARO'], ['Ramos Arizpe', 'SALTILLO'], ['Rosarito', 'TIJUANA'], ['Soledad de Graciano Sánchez', 'SAN LUIS POTOSI'], ['Mineral de la Reforma', 'PACHUCA'], ['Jiutepec', 'CUERNAVACA'], ['Villa de Álvarez', 'COLIMA'], ['Zinacantepec', 'TOLUCA']]) assert.equal(ciudadDeSucursal(n).ciudad, c, n);
+  for (const x of ['Av. Madero', 'Corregidora']) assert.equal(ciudadDeSucursal(x).ciudad, null, `«${x}» no se adivina`);
   assert.equal(ciudadDeSucursal('XALAPA').ciudad, 'XALAPA');
   for (const x of ['A', 'LA', 'MEX']) assert.equal(ciudadDeSucursal(x).ciudad, null, `«${x}» es muy corto para adivinar la ciudad`);
   assert.equal(ciudadDeSucursal('JUAREZ').ciudad, 'CIUDAD JUAREZ', 'un nombre parcial largo sí empata');

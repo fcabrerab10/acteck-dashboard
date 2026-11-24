@@ -199,6 +199,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
   - [x] (4.12.5) `ciudadDeSucursal()` reconoce municipios conurbados y abreviaturas (San Pedro Garza García, Santa Catarina, Tonalá, Tlajomulco, Metepec, Ecatepec, Neza, Cuautitlán, Gómez Palacio, Cholula, QRO, AGS, CHIH, HMO): antes esas tiendas no salían en el mapa. Pendiente de decidir: ciudades que no están en el catálogo (Playa del Carmen, Los Cabos, Nuevo Laredo, Matamoros, Monclova, Chetumal, Cd. Obregón).
+  - [x] (4.12.6) Más conurbados en `ciudadDeSucursal()`: alcaldías de CDMX (Coyoacán, Iztapalapa, Tlalpan, Gustavo A. Madero…), Edomex (Ixtapaluca, Tecámac, Tultitlán…), Boca del Río, Cd. Madero/Altamira, El Marqués, Ramos Arizpe, Rosarito, Soledad de G. S., Mineral de la Reforma, Jiutepec, Villa de Álvarez, Zinacantepec; calles homónimas («Av. Madero», «Corregidora») no adivinan.
   - [x] (4.3.13) `fechaIso()` pura y probada: en el puerto una ETA/arribo/ETD ilegible («pendiente», '2026-99-99') cuenta como sin fecha (antes progreso y «llega en» NaN: barco fuera del mar); envío con salida ilegible ya no sale como camión con progreso NaN; factura/envío con fecha futura ya no da progreso negativo; la tarjeta del camión ya no dice «hace NaN d».
   - [x] (4.7.79) `listasDatos()` pura y probada: `construirModelo()` toma vacía cualquier lista de datos que llegue como objeto, texto o número (cuentas, perfiles, envíos, facturas, sucursales, clientes finales…; antes `.map`/`.filter`/`for…of` lanzaban error); `reglasPagos` (objeto) y `marcasSku` (Map) se respetan.
   - [x] (4.7.7) `cifraCorta()` / `pesosCorto()`: ≥ mil millones sale «1.2 B» como `moneyCompact` del dashboard (antes «1000.0 M») y el texto con «$», comas o espacios («$1,200») se lee como número (antes «0»); booleanos y listas → «0».
@@ -330,6 +331,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-23 22:56 · v4.12.6 · Pulido: más municipios conurbados y alcaldías caen en su ciudad (CDMX, Veracruz, Tampico, Querétaro, Saltillo, Tijuana…); +1 prueba.
 - 2026-11-23 22:36 · v4.12.5 · Pulido: sucursales en municipios conurbados y abreviaturas (San Pedro Garza García, Tonalá, Metepec, QRO, AGS…) ya caen en su ciudad; +1 prueba.
 - 2026-11-23 22:16 · v4.12.4 · Pulido: claves de cuenta/cliente/guía/OC ilegibles (NaN, objeto, lista) ya no salen «NaN» ni «[object Object]» en tiendas, camiones y bitácora; +1 prueba.
 - 2026-11-23 16:00 · v4.12.3 · Pulido: `fechaCorta()` con año fuera del año en curso en tarjetas del contenedor y del camión; +1 prueba.
