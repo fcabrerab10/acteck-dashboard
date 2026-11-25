@@ -367,6 +367,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.52) 2026-11-25 04:36 · Leyenda de cuentas: una sola entrada aunque la cuenta llegue con distintas mayúsculas («PCEL» / «pcel»), como su color, y toma el nombre de cuenta de la tienda que sí lo traiga.
   - [x] (4.12.53) 2026-11-25 04:56 · Negativos contables: `numero()`, `cifraCorta()` / `pesosCorto()` y la barra de recursos leen «(1,500)» / «$(2,000)» como negativos (antes 0: una nota de crédito o ajuste en texto no restaba y salía «$0»); «()» o «(-5)» siguen como basura.
   - [x] (4.12.58) 2026-11-25 15:15 · Pellizco con dedos encimados (< 1 px al empezar o al juntarlos): `gestoDosDedos()` ya no brinca la cámara al zoom mínimo/máximo ni gira a un ángulo al azar; +2 pruebas.
+  - [x] (4.12.59) 2026-11-25 15:35 · Antigüedad legible: `haceDias()` dice «hace N meses» desde 60 días y «hace N año(s)» desde 365 (antes «hace 1,200 d» en la bitácora y la tarjeta del camión); +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -381,6 +382,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-25 15:35 · v4.12.59 · `haceDias()` en meses/años para antigüedades largas.
 - 2026-11-25 05:56 · v4.12.56 · Pulido: pruebas de `claveTexto()` y de los bordes del semáforo de días de inventario (+2 pruebas, 183). Barrido de entradas raras sin hallazgos.
 - 2026-11-25 04:56 · v4.12.53 · Negativos contables «(1,500)» se leen negativos en `numero()`, `cifraCorta()`/`pesosCorto()` y la barra de recursos; +1 prueba.
 - 2026-11-25 04:36 · v4.12.52 · Leyenda de cuentas sin repetidos por mayúsculas y con el nombre de la cuenta; +1 prueba.

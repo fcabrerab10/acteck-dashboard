@@ -1522,7 +1522,7 @@ test('piezasTexto(): piezas enteras con miles es-MX y texto con comas; ilegible 
 });
 test('haceDias(): hoy/ayer/hace N d con miles es-MX y redondeo; ilegible → vacío', () => {
   assert.equal(haceDias(0), 'hoy'); assert.equal(haceDias(-3), 'hoy'); assert.equal(haceDias(1), 'ayer'); assert.equal(haceDias(0.6), 'ayer');
-  assert.equal(haceDias(2.6), 'hace 3 d'); assert.equal(haceDias(1200), 'hace 1,200 d'); assert.equal(haceDias(' 5 '), 'hace 5 d');
+  assert.equal(haceDias(2.6), 'hace 3 d'); assert.equal(haceDias(1200), 'hace 3 años'); assert.equal(haceDias(' 5 '), 'hace 5 d');
   for (const x of [null, undefined, '', NaN, 'abc', Infinity, true, {}]) assert.equal(haceDias(x), '');
 });
 test('cadena con miles es-MX: puerto, camiones y tiendas («1,200 en ruta», «1,200 de 1,500 vendieron»)', () => {
@@ -1879,7 +1879,7 @@ test('4.7.71 pensamientos y misiones con listas raras', () => {
 
 test('4.7.77 llegaBarco/enMinutos/haceDias sólo leen número o texto', () => {
   for (const x of [[], [5], {}, () => 1]) { assert.equal(llegaBarco(x), 'sin ETA'); assert.equal(enMinutos(x), ''); assert.equal(haceDias(x), ''); }
-  assert.equal(haceDias(' '), ''); assert.equal(haceDias('$5'), 'hace 5 d'); assert.equal(haceDias('1,200'), 'hace 1,200 d'); assert.equal(haceDias(-0.4), 'hoy');
+  assert.equal(haceDias(' '), ''); assert.equal(haceDias('$5'), 'hace 5 d'); assert.equal(haceDias('1,200'), 'hace 3 años'); assert.equal(haceDias(-0.4), 'hoy');
   assert.equal(llegaBarco(' 2 '), 'llega en 2 d'); assert.equal(enMinutos(' 5 '), 'en 5 min');
 });
 
@@ -2280,4 +2280,10 @@ test('Días de inventario: bordes del semáforo «Días de Inv» de Inicio (< 30
   caso(' 200 ', 'sobre', 'ambar', '200 días de inventario (alto)'); caso('1,200', 'sobre', 'ambar', '1,200 días de inventario (alto)');
   assert.equal(diasTexto(29.6), '30 días'); assert.equal(diasTexto(1), '1 día');
   for (const x of [-5, null, undefined, '', '  ', NaN, 'abc', true, {}, []]) { caso(x, null, null, null); assert.equal(diasTexto(x), 'sin medida de días', JSON.stringify(x)); }
+});
+
+test('4.12.59 haceDias(): desde 60 d en meses y desde 365 en años', () => {
+  assert.equal(haceDias(59), 'hace 59 d'); assert.equal(haceDias(60), 'hace 2 meses');
+  assert.equal(haceDias(91), 'hace 3 meses'); assert.equal(haceDias(350), 'hace 11 meses'); assert.equal(haceDias(364), 'hace 11 meses');
+  assert.equal(haceDias(365), 'hace 1 año'); assert.equal(haceDias(800), 'hace 2 años'); assert.equal(haceDias(365000), 'hace 1,000 años');
 });

@@ -909,7 +909,11 @@ export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto
 export function haceDias(v) {
   // 4.7.77: con `leeNum()`: texto en blanco (« ») y listas (`[]`) ya no dicen «hoy».
   const n = leeNum(v); if (n == null) return ''; const k = Math.round(n);
-  return k <= 0 ? 'hoy' : k === 1 ? 'ayer' : `hace ${k.toLocaleString('es-MX')} d`;
+  // 4.12.59: desde 60 días en meses y desde 365 en años («hace 3 meses», «hace 1 año»; antes «hace 1,200 d»).
+  if (k <= 0) return 'hoy'; if (k === 1) return 'ayer';
+  if (k < 60) return `hace ${k} d`;
+  if (k < 365) return `hace ${Math.min(11, Math.round(k / 30.4))} meses`;
+  const a = Math.floor(k / 365); return `hace ${a.toLocaleString('es-MX')} año${a === 1 ? '' : 's'}`;
 }
 // Semáforo de la cartera vencida como la tarjeta «Cartera» de Inicio (4.12.17): sin vencido verde; con vencido rojo si pasa
 // 15 % del saldo y ámbar si no. Sin % legible (saldo 0, ilegible) queda rojo, como antes. Antes cualquier peso vencido era rojo.
