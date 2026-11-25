@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
+  - [x] (4.12.55) 2026-11-25 05:35 · Tarjeta de la persona con conteos negativos en 0, como su globo (`pendientesTexto()`): antes «Hechas -2» y el semáforo ámbar/verde se invertía.
   - [x] (4.12.54) 2026-11-25 05:16 · Oficina con tipos y estados tolerantes: `esClase()` pura y probada; agenda «HECHA»/« abierta », reunión «Viaje» y perfil « EXTERNO » se reconocen (antes contaban mal pendientes/hechas, el viaje salía como reunión y la presencia lo ignoraba).
   - [x] (4.12.50) 2026-11-25 03:56 · Tira de la cadena: el Puerto sólo dice lo que hay («1 llega hoy · 2 recién llegados»); antes siempre «0 con ETA vencida» y «0 recién llegados». Vacío: «Sin movimiento».
   - [x] (4.12.49) Cadena de suministro con «pz» como el resto de la Ciudad (antes «1,500 pzs»).

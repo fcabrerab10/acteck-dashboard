@@ -2246,3 +2246,12 @@ test('esClase / oficina: tipo y estado sin importar mayúsculas, acentos ni espa
   assert.deepEqual(o.personas.map((p) => [p.pendientes, p.hechas]), base.personas.map((p) => [p.pendientes, p.hechas]));
   assert.equal(o.reuniones, base.reuniones, 'el viaje en «Viaje» no cuenta como reunión');
 });
+
+test('tarjetaDe: persona con conteos negativos cuenta 0, como su globo (4.12.55)', () => {
+  const t = tarjetaDe({ tipo: 'persona', persona: { nombre: 'A', pendientes: '-3', hechas: -2 } }, {});
+  assert.deepEqual(t.numeros, [['Pendientes hoy', '0'], ['Hechas', '0']]);
+  assert.equal(t.estado, 'verde');
+  const t2 = tarjetaDe({ tipo: 'persona', persona: { nombre: 'A', pendientes: 2, hechas: -5 } }, {});
+  assert.deepEqual(t2.numeros, [['Pendientes hoy', '2'], ['Hechas', '0']]);
+  assert.equal(t2.estado, 'ambar');
+});

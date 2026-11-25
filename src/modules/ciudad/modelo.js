@@ -1191,9 +1191,11 @@ export function tarjetaDe(tag, modelo) {
       t.estado = tv === 'rojo' || tc === 'rojo' ? 'rojo' : tv === 'ambar' || tc === 'ambar' ? 'ambar' : 'verde';
     }
   } else if (tag.tipo === 'persona' && tag.persona && !tag.persona.generico) {
-    const p = tag.persona; t.numeros = [['Pendientes hoy', num(p.pendientes)], ['Hechas', num(p.hechas)]];
+    // 4.12.55: conteos negativos cuentan 0, como su globo (`pendientesTexto()`); antes «Hechas -2» y el semáforo se invertía.
+    const p = tag.persona, pend = Math.max(0, numero(p.pendientes)), hech = Math.max(0, numero(p.hechas));
+    t.numeros = [['Pendientes hoy', num(pend)], ['Hechas', num(hech)]];
     const pr = p.presencia; if (pr) t.numeros.unshift(['Ahora', pr.estado === 'viaje' ? unirTexto('De viaje', pr.titulo) : pr.estado === 'reunion' ? unirTexto('En reunión', pr.titulo) : 'Disponible']);
-    t.estado = p.actividad ? 'verde' : numero(p.pendientes) > numero(p.hechas) ? 'ambar' : 'verde';
+    t.estado = p.actividad ? 'verde' : pend > hech ? 'ambar' : 'verde';
   } else if (tag.tipo === 'camion') {
     // Camión (etapa 5, 3.90.54): factura (cliente, monto, piezas) o envío del Tracking (paquetería), cuándo salió y destino.
     // Envío con más de 5 días en camino = ámbar.
