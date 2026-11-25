@@ -692,9 +692,10 @@ export function reunionesDelDia(reuniones = [], hoy = new Date()) {
   const vistas = new Set(); // 4.7.66: la misma reunión dos veces (mismo id, o mismo título y hora) sale una vez
   return comoLista(reuniones).map((r) => {
     const t = instante(r?.fecha); if (!t) return null;
-    const k = r.id != null && String(r.id).trim() ? `id:${String(r.id).trim()}` : `${norm(unirTexto(r.titulo))}|${t.getTime()}`; if (vistas.has(k)) return null; vistas.add(k);
+    // 4.12.32: id/cliente_key que llegan como objeto, lista, booleano o NaN se ignoran (antes «id:[object Object]» juntaba reuniones distintas en una).
+    const id = unirTexto(r.id), k = id ? `id:${id}` : `${norm(unirTexto(r.titulo))}|${t.getTime()}`; if (vistas.has(k)) return null; vistas.add(k);
     const ini = t.getHours() * 60 + t.getMinutes(), fin = ini + duracionMin(r.duracion_min);
-    return { titulo: unirTexto(r.titulo) || 'Reunión', cliente_key: r.cliente_key || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
+    return { titulo: unirTexto(r.titulo) || 'Reunión', cliente_key: unirTexto(r.cliente_key) || null, hora: `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`, ini, fin, estado: ahora >= fin ? 'hecha' : ahora >= ini ? 'en curso' : 'próxima' };
   }).filter(Boolean).sort((a, b) => a.ini - b.ini);
 }
 

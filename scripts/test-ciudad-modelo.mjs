@@ -2080,3 +2080,10 @@ test('4.12.30 ponerPosEnPuerto salta contenedor/PO/id que no son texto ni númer
   assert.equal(pto.barcos[1].listaPos, undefined); assert.equal(pto.barcos[2].listaPos, undefined);
   assert.deepEqual(pto.tarimas[0].listaPos, ['12']);
 });
+
+test('reunionesDelDia ignora id/cliente_key que no son texto ni número (4.12.32)', () => {
+  const h = new Date('2026-10-05T08:00:00');
+  const ag = reunionesDelDia([{ id: {}, titulo: 'A', fecha: '2026-10-05T09:00:00', cliente_key: {} }, { id: {}, titulo: 'B', fecha: '2026-10-05T10:00:00' }, { id: NaN, titulo: 'C', fecha: '2026-10-05T11:00:00', cliente_key: ' acteck ' }, { id: true, titulo: 'D', fecha: '2026-10-05T12:00:00' }, { id: 7, titulo: 'E', fecha: '2026-10-05T13:00:00' }, { id: ' 7 ', titulo: 'E2', fecha: '2026-10-05T14:00:00' }], h);
+  assert.deepEqual(ag.map((r) => r.titulo), ['A', 'B', 'C', 'D', 'E']);
+  assert.equal(ag[0].cliente_key, null); assert.equal(ag[2].cliente_key, 'acteck');
+});
