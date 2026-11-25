@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
+  - [x] (4.12.47) Bitácora: la última sincronización dice qué fuente fue (`fuenteSync()` pura y probada: `status_key` de `sync_events` con el título de `PUENTE` del importador): «Se actualizaron los datos · Inventario ERP», «Falló una actualización de datos · Precios ERP». Cargas manuales sin nombre (sus títulos se repiten por cliente). Harness sin errores.
   - [x] (4.12.45) `acomodoRacks()` salta marcas que son objeto, lista, booleano o NaN (antes un rack «[object Object]» / «true» en el CEDIS) y deja la marca sin espacios.
   - [x] (4.12.46) `tonoCartera()` / `tonoCuota()` leen el porcentaje en texto con «%» («12 %», «70%»): antes la cartera salía roja en vez de ámbar y la cuota sin tono.
   - [x] (4.12.42) Color de la cuenta con `colorCuenta()` pura y probada: tiendas, sus vendedores y la leyenda encuentran el color aunque la cuenta venga con espacios o en MAYÚSCULAS (« PCEL » → rojo de pcel; antes gris), como `sedeDeCuenta()`. Harness sin errores.
@@ -368,6 +369,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-25 03:18 · v4.12.47 · la bitácora de la Ciudad dice qué fuente se actualizó o falló.
 
 - 2026-11-25 02:56 · v4.12.46 · Semáforos de cartera y cuota leen porcentajes en texto con «%» (antes «12 %» pintaba la cartera roja); +1 prueba.
 - 2026-11-25 02:36 · v4.12.45 · `acomodoRacks()`: racks del CEDIS sin marcas falsas «[object Object]» / «true»; marca limpia; +1 prueba.

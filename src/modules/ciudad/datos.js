@@ -3,7 +3,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { fetchAll, cachedQuery } from '../../lib/queries';
-import { construirModelo, ponerPosEnPuerto, topSkus, cuotasPorCuenta, diaLocal } from './modelo';
+import { construirModelo, ponerPosEnPuerto, topSkus, cuotasPorCuenta, diaLocal, fuenteSync } from './modelo';
+import { PUENTE } from '../settings/importador/config'; // nombres de las fuentes para la bitácora (archivo sin imports)
 import { venceEn, estaVencido } from '../comercial/pagosv3/estados'; // banco: mismas reglas de vencimiento que la bandeja de Pagos
 
 const STALE = 5 * 60 * 1000;
@@ -56,12 +57,12 @@ export function useCiudadData(enabled = true) {
         seg(fetchAll('v_analisis_cliente_mes', 'cliente,fact_neta', (q) => q.eq('anio', anio).eq('mes', mes)), 'venta del mes por cliente'),
         // Bitácora (3.90.51): pagos registrados de los últimos 3 días (Pagos V3) y la última sincronización del puente (como Configuración).
         seg(supabase.from('pagos').select('id,cliente,concepto,monto,pagado_at').eq('estado', 'pagado').gte('pagado_at', iso(new Date(hoy.getTime() - 3 * 86400000))).order('pagado_at', { ascending: false }).limit(20).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'pagos registrados'),
-        seg(supabase.from('sync_events').select('status, created_at').order('created_at', { ascending: false }).limit(1).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'última sincronización'),
+        seg(supabase.from('sync_events').select('status, status_key, created_at').order('created_at', { ascending: false }).limit(1).then((r) => { if (r.error) throw r.error; return r.data || []; }), 'última sincronización'),
       ]);
       const crudos = { perfiles, inventario, contenedores, sucursales, vendedoresMayoristas, vendedoresErp, cuentas, facturas, agendaHoy, reunionesHoy, viajesHoy, alertasOc, cuentaMes, clientesFinales, cartera, envios, pagos, reglasPagos: { venceEn, estaVencido }, forecast, avisosForecast, inventarioSku, demandaSku, marcasSku: new Map(marcasSku.map((r) => [r.sku, r.marca])) };
       const modelo = construirModelo(crudos, hoy);
       modelo.crudos = crudos; // barra de tiempo: la ciudad se rearma con datosEnFecha(crudos, fecha)
-      modelo.pagosHechos = pagosHechos; modelo.ultimaSync = syncUlt[0] || null; // bitácora: si fallan, quedan vacíos
+      modelo.pagosHechos = pagosHechos; modelo.ultimaSync = syncUlt[0] ? { ...syncUlt[0], fuente: fuenteSync(syncUlt[0], PUENTE) } : null; // bitácora: si fallan, quedan vacíos
       try { modelo.cuotas = cuotasPorCuenta(cuotaMes, ventaMes); } catch (e) { console.warn('[ciudad] cuotas', e); } // capa «Cuota»: falla sola
       // Números de PO de los contenedores dibujados (tarjeta del barco). Consulta chica; si falla, la tarjeta muestra sólo el conteo.
       const ids = [...(modelo.puerto?.barcos || []), ...(modelo.puerto?.tarimas || [])].map((b) => b.id).filter(Boolean);

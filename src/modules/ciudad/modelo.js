@@ -540,7 +540,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
     out.push({ id: `pago-${p.id ?? `${p.pagado_at}-${p.cliente}`}`, icono: '💸', texto: unirTexto('Pago registrado', p.cliente, p.concepto, pesos(p.monto)), clave: `${fh.f} ${fh.h}`, cuando: fh.f === hoyIso ? fh.h : cuando(fh.f), grande: numero(p.monto) >= 500000, ir: { tipo: 'banco' }, tarjeta: { tipo: 'banco' } });
   }
   const sy = m.ultimaSync?.created_at ? fechaHora(m.ultimaSync.created_at) : null;
-  if (sy && sy.f <= hoyIso) out.push({ id: 'sync', ...textoSync(m.ultimaSync.status), clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
+  if (sy && sy.f <= hoyIso) out.push({ id: 'sync', ...textoSync(m.ultimaSync.status, m.ultimaSync.fuente), clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
   for (const r of comoLista(m.oficina?.agenda)) if (r && r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${unirTexto(r.titulo) || 'una reunión'}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
   const vistos = new Set();
@@ -790,11 +790,21 @@ export function fechaCorta(x, hoy) {
 // Última sincronización en la bitácora (4.12.26) con las palabras del importador (`frescura.js`): 'success'/'ok' → «Se
 // actualizaron los datos», 'warning' → «… · con avisos», 'error' → ⚠️ «Falló una actualización de datos». Antes salía el
 // estado crudo en inglés («Se actualizaron los datos · success») y un error se anunciaba como actualización.
-export function textoSync(status) {
-  const st = unirTexto(typeof status === 'string' ? status.toLowerCase() : status);
-  if (['error', 'failed', 'fail', 'fallo', 'falló'].includes(st)) return { icono: '⚠️', texto: 'Falló una actualización de datos' };
-  if (st === 'warning') return { icono: '🔄', texto: 'Se actualizaron los datos · con avisos' };
-  return { icono: '🔄', texto: ['', 'success', 'ok', 'exito', 'éxito'].includes(st) ? 'Se actualizaron los datos' : unirTexto('Se actualizaron los datos', st) };
+// 4.12.47: con `fuente` (nombre del importador, `fuenteSync()`) dice cuál: «Se actualizaron los datos · Inventario ERP»,
+// «Falló una actualización de datos · Ventas ERP (facturación)»; sin fuente queda como antes.
+export function textoSync(status, fuente) {
+  const st = unirTexto(typeof status === 'string' ? status.toLowerCase() : status), f = unirTexto(fuente);
+  if (['error', 'failed', 'fail', 'fallo', 'falló'].includes(st)) return { icono: '⚠️', texto: unirTexto('Falló una actualización de datos', f) };
+  if (st === 'warning') return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, 'con avisos') };
+  return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, ['', 'success', 'ok', 'exito', 'éxito'].includes(st) ? '' : st) };
+}
+// Fuente de la última sincronización (4.12.47): el `status_key` de `sync_events` con el título del catálogo del importador
+// (`PUENTE` de `settings/importador/config.js`, que `datos.js` pasa para que este archivo no lo importe): 'erp_inventario' →
+// «Inventario ERP». Acepta espacios/mayúsculas; clave desconocida, vacía o catálogo que no es lista → ''.
+export function fuenteSync(ev, catalogo) {
+  const k = claveTexto(ev?.status_key).toLowerCase(); if (!k) return '';
+  const c = comoLista(catalogo).find((x) => x && typeof x === 'object' && claveTexto(x.key ?? x.statusKey).toLowerCase() === k);
+  return unirTexto(c?.titulo);
 }
 export function unirTexto(...partes) {
   return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))

@@ -1,7 +1,7 @@
 // Acteck Ciudad · modelo puro. node --test scripts/test-ciudad-modelo.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { colorCuenta, sedeDeCuenta, nombreSucursal, estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, estadoDias, motivoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta, tonoCartera, tonoCarteraCuenta, tonoBanco, tonoCuota, tonoActivas, textoSync, claveSku, claveTexto } from '../src/modules/ciudad/modelo.js';
+import { colorCuenta, sedeDeCuenta, nombreSucursal, estatusBarco, comoLista, diasCedis, diasTexto, tonoDias, estadoDias, motivoDias, cuantos, construirModelo, ciudadDeSucursal, CIUDADES, posDe, capasVisibles, DETALLE, esChico, etiquetasSinEncimar, encuadre, campus, encimaDelCampus, juntarCapas, capaVisible, vistaMapa, EXTREMOS_MEXICO, ZOOM_MAX, ZOOM_MIN, zoomEnRango, pinCiudad, enLaBase, vistaCiudad, nivelVista, ciudadesTop, planoMini, leerVista, claveVista, tarjetaDe, resumenBanco, resumenTorre, racksPorMarca, acomodoRacks, demanda3Meses, ponerPosEnPuerto, listaCorta, reunionesDelDia, acomodoEscritorios, presenciaPersonas, topSkus, pesosCorto, recursosBarra, burbujasAtencion, misionesDelDia, capaCiudades, CAPA_TONOS, cuotasPorCuenta, bitacoraEventos, pensamientos, circuitoVendedor, tramoActual, rumboBarcos, repartoPorEstado, CIUDAD_POR_ESTADO, cadenaSuministro, cintasCadena, cuotaRitmo, celebraciones, momentosTiempo, datosEnFecha, eventosCalendario, camionesTemporada, ventanasOficina, formaArbol, rebote, saltito, RECORRIDO, recorridoVisto, capasSonido, gestoDosDedos, paseantesDistrito, nombreCiudad, cifraCorta, norm, PX, K, aPx, PX_ORIGEN, pxAEscena, ORIGEN, COLOR_CUENTA, hexCss, SEDE_POR_CUENTA, RECORRIDO_CLAVE, fechaHoy, sinNulos, listasDatos, LISTAS_DATOS, fechaIso, plural, enMinutos, llegaBarco, numero, unirTexto, tituloCamion, vaA, nombrePersona, nombreTienda, leyendaCuentas, porcentaje, dsoTexto, temperaturaTexto, pendientesTexto, piezasTexto, haceDias, diaLocal, piezasMes, fechaCorta, carteraPorCuenta, tonoCartera, tonoCarteraCuenta, tonoBanco, tonoCuota, tonoActivas, textoSync, fuenteSync, claveSku, claveTexto } from '../src/modules/ciudad/modelo.js';
 
 const hoy = new Date(2026, 9, 5, 11, 0);
 const d = {
@@ -2186,4 +2186,19 @@ test('(4.12.46) tonoCartera y tonoCuota leen el porcentaje en texto con «%»', 
   assert.equal(tonoCartera(100, '12 %'), 'ambar'); assert.equal(tonoCartera(100, '12%'), 'ambar'); assert.equal(tonoCartera(100, '40 %'), 'rojo');
   assert.equal(tonoCartera(100, '%'), 'rojo'); assert.equal(tonoCartera(0, '40 %'), 'verde');
   assert.equal(tonoCuota('70%'), 'ambar'); assert.equal(tonoCuota('120 %'), 'verde'); assert.equal(tonoCuota('90%'), null); assert.equal(tonoCuota('%'), null);
+});
+
+test('(4.12.47) la bitácora dice qué fuente se actualizó', () => {
+  const cat = [{ key: 'erp_inventario', titulo: 'Inventario ERP' }, { key: 'erp_sell_in', titulo: 'Ventas ERP (facturación)' }, null];
+  assert.equal(fuenteSync({ status_key: 'erp_inventario' }, cat), 'Inventario ERP');
+  assert.equal(fuenteSync({ status_key: ' ERP_SELL_IN ' }, cat), 'Ventas ERP (facturación)');
+  assert.equal(fuenteSync({ status_key: 'otra' }, cat), ''); assert.equal(fuenteSync({ status_key: {} }, cat), '');
+  assert.equal(fuenteSync(null, cat), ''); assert.equal(fuenteSync({ status_key: 'erp_inventario' }, 'x'), '');
+  assert.equal(fuenteSync({ status_key: 'roadmap' }, [{ statusKey: 'roadmap', titulo: 'Roadmap' }]), 'Roadmap');
+  assert.deepEqual(textoSync('success', 'Inventario ERP'), { icono: '🔄', texto: 'Se actualizaron los datos · Inventario ERP' });
+  assert.deepEqual(textoSync('warning', 'Inventario ERP'), { icono: '🔄', texto: 'Se actualizaron los datos · Inventario ERP · con avisos' });
+  assert.deepEqual(textoSync('error', ' Precios ERP '), { icono: '⚠️', texto: 'Falló una actualización de datos · Precios ERP' });
+  assert.equal(textoSync('success', {}).texto, 'Se actualizaron los datos');
+  const ev = bitacoraEventos({ ultimaSync: { status: 'error', fuente: 'Precios ERP', created_at: '2026-10-08T10:00:00' } }, new Date('2026-10-08T12:00:00'));
+  assert.ok(comoLista(ev).some((e) => e.id === 'sync' && e.texto === 'Falló una actualización de datos · Precios ERP'));
 });
