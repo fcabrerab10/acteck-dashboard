@@ -286,6 +286,10 @@ test('tarjeta del edificio: una plantilla con estado y hasta 4 números', () => 
     const of2 = tarjetaDe({ tipo: 'oficina' }, { oficina: { personas: [{ pendientes: '2', hechas: '1' }, { pendientes: 3, hechas: -4 }, null], genericos: '3', agenda: [], reuniones: 0 } });
     const v = Object.fromEntries(of2.numeros); assert.equal(v.Pendientes, '5'); assert.equal(v.Hechas, '1'); assert.equal(v.Personas, '5');
   }
+  { // 4.12.48: conteos con decimales o «1,200» en texto salen enteros en la tarjeta
+    const v = Object.fromEntries(tarjetaDe({ tipo: 'oficina' }, { oficina: { personas: [{ pendientes: '2.6', hechas: 1.4 }, { pendientes: '1,200', hechas: -0.4 }], genericos: 0.5, agenda: [], reuniones: '3' } }).numeros);
+    assert.equal(v.Personas, '3'); assert.equal(v.Pendientes, '1,203'); assert.equal(v.Hechas, '1'); assert.equal(v['Reuniones hoy'], '3');
+  }
   const ce = tarjetaDe({ tipo: 'cedis' }, mod); assert.equal(ce.numeros[0][1], '$12.5 M'); assert.equal(ce.estado, 'verde', '95 días → sano como Inicio (4.12.13)');
   assert.equal(tarjetaDe({ tipo: 'puerto' }, mod).estado, 'ambar', 'un barco sin ETA');
   { // 4.12.20: la tarjeta del puerto coincide con su globo «con ETA vencida»

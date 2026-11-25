@@ -1097,7 +1097,8 @@ export function tarjetaDe(tag, modelo) {
   if (!tag) return null;
   // 4.3.9: mismo formato que el resto (999 600 → «$1.0 M», no «$1000 K»; negativos «-$5 K») y listas sin nulos.
   const pesos = pesosCorto, sn = (l) => (Array.isArray(l) ? l : []).filter(Boolean);
-  const num = (v) => numero(v).toLocaleString('es-MX');
+  // 4.12.48: todos los `num()` de las tarjetas son conteos, piezas o días: se redondean (antes «2.5» personas, «1,202.6» pendientes; -0.4 → «0»).
+  const num = (v) => (Math.round(numero(v)) + 0).toLocaleString('es-MX');
   const t = { titulo: tag.titulo || '', sub: tag.sub || '', estado: null, numeros: [], pagina: tag.pagina || null };
   const m = modelo || {};
   if (tag.tipo === 'oficina' && m.oficina) {
