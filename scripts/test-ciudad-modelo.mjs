@@ -572,6 +572,11 @@ test('capas de información por ciudad (ventas y cartera)', () => {
   assert.equal(capaCiudades(m, 'inventario'), null); assert.equal(capaCiudades(null, 'ventas'), null);
   assert.equal(capaCiudades({}, 'ventas').porCiudad.size, 0);
   assert.ok(capaCiudades(construirModelo(d, hoy), 'cartera').porCiudad instanceof Map);
+  // 4.12.39: cuenta con espacios/mayúsculas empata y dos renglones suman; cartera que no es lista no lanza error.
+  const mc = { distritos: [{ ciudad: 'GDL', tiendas: [{ cuenta: ' PCEL ' }] }], kpis: { cartera: [{ cuenta: 'pcel', vencido: 10, saldo: 100 }, { cuenta: 'PCEL', vencido: 5, saldo: 100 }, null] } };
+  const cc = capaCiudades(mc, 'cartera').porCiudad.get('GDL');
+  assert.equal(cc.valor, 15); assert.equal(cc.tono, 'ambar'); assert.equal(cc.texto, '1 cuenta con vencido · $15 · 8 % del saldo');
+  assert.equal(capaCiudades({ distritos: mc.distritos, kpis: { cartera: 'x' } }, 'cartera').porCiudad.get('GDL').tono, 'verde');
 });
 
 test('capa de cuota por ciudad', () => {

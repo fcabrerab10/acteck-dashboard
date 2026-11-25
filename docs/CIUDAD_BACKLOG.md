@@ -348,6 +348,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.33) `nombreSucursal()` pura y probada: la sucursal en MAYÚSCULAS sale legible en `nombreTienda()` (acentos y conectores como `nombreCiudad()`, siglas sin vocal/con número/punto intactas) y el buscador de `Ciudad.jsx` compara con `norm()` (sin acentos).
   - [x] (4.12.37) `claveTexto()` pura y probada: `cuotasPorCuenta()` y `repartoPorEstado()` saltan cuenta y cliente ERP que llegan como objeto, lista, booleano o NaN (antes `String()` creaba cuentas falsas «[object Object]» / «true» en la capa de cuota y el reparto por estado).
   - [x] (4.12.38) `capaCiudades(m, 'ventas')`: tono con el % sin redondear (−0.4 % ámbar, −20.4 % rojo) y sin «-0».
+  - [x] (4.12.39) Capa «Cartera» por ciudad: la cuenta empata sin espacios ni mayúsculas (« PCEL » = «pcel», como `carteraPorCuenta()`), dos renglones de la misma cuenta suman (antes ganaba el último) y cartera que no es lista ya no lanza error. +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -362,6 +363,8 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+
+- 2026-11-25 00:36 · v4.12.39 · Capa «Cartera»: cuenta sin espacios/mayúsculas, renglones repetidos suman, cartera no lista no truena.
 - 2026-11-25 00:15 · v4.12.38 · Pulido: capa «Ventas» por ciudad con el semáforo del % sin redondear (−0.4 % ya no verde, −20.4 % ya no ámbar; sin «-0 %»); +1 prueba.
 - 2026-11-24 23:56 · v4.12.37 · `claveTexto()`: la capa de cuota y el reparto por estado saltan cuentas/clientes que no son texto ni número (sin cuentas falsas «[object Object]»).
 - 2026-11-24 23:36 · v4.12.36 · Cadena: motivo del puerto con el número de barcos esperando muelle («1 barco…»); +1 prueba.

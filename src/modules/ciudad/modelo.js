@@ -628,10 +628,15 @@ export function capaCiudades(m, capa) {
     }
     return { capa, titulo: 'Avance de cuota vs ritmo del mes', leyenda: [{ tono: 'verde', texto: 'Al ritmo' }, { tono: 'ambar', texto: 'Hasta 20 % abajo' }, { tono: 'rojo', texto: 'Más abajo' }, { tono: 'gris', texto: 'Sin cuota' }], porCiudad };
   }
-  const venc = new Map((m.kpis?.cartera || []).filter((c) => c && numero(c.vencido) > 0).map((c) => [c.cuenta, numero(c.vencido)])); // 4.7.17: «$5,000» ya es vencido
-  const saldos = new Map((m.kpis?.cartera || []).filter((c) => c && numero(c.saldo) > 0).map((c) => [c.cuenta, numero(c.saldo)]));
+  // 4.12.39: la cuenta se empata sin espacios ni mayúsculas (« PCEL » = «pcel», como `carteraPorCuenta()` y `pensamientos()`) y dos
+  // renglones de la misma cuenta suman (antes ganaba el último); cartera que no es lista ya no lanza error.
+  const ck = (c) => unirTexto(c).toLowerCase(), venc = new Map(), saldos = new Map();
+  for (const c of comoLista(m.kpis?.cartera)) {
+    const k = c && ck(c.cuenta); if (!k) continue; const v = numero(c.vencido), s = numero(c.saldo); // 4.7.17: «$5,000» ya es vencido
+    if (v > 0) venc.set(k, (venc.get(k) || 0) + v); if (s > 0) saldos.set(k, (saldos.get(k) || 0) + s);
+  }
   for (const d of distritos) {
-    const cuentas = [...new Set(d.tiendas.map((t) => t.cuenta))], malas = cuentas.filter((c) => venc.has(c));
+    const cuentas = [...new Set(d.tiendas.map((t) => ck(t.cuenta)).filter(Boolean))], malas = cuentas.filter((c) => venc.has(c));
     const monto = malas.reduce((s, c) => s + venc.get(c), 0);
     // 4.12.21: semáforo de la tarjeta «Cartera» de Inicio (`tonoCartera()`): vencido ≤ 15 % del saldo de sus cuentas ámbar, más (o
     // sin saldo legible) rojo. Antes cualquier peso vencido pintaba la ciudad de rojo, distinto del banco y de Inicio.
