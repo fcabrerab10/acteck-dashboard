@@ -1033,6 +1033,12 @@ test('construirModelo, etiquetas y ventanas aguantan renglones nulos', () => {
   for (const k of listas) assert.doesNotThrow(() => construirModelo({ [k]: [null, {}] }, new Date('2026-11-18T10:00:00')), k);
   assert.doesNotThrow(() => construirModelo(null));
   assert.deepEqual(sinNulos({ a: [null, 1, undefined, 0], b: 'x', c: null }), { a: [1, 0], b: 'x', c: null });
+  // 4.12.57: entradas raras de sinNulos: no-objeto → {}, sólo quita null/undefined (0, '', false y NaN se quedan),
+  // no toca listas anidadas ni muta el original (los datos crudos siguen para la barra de tiempo).
+  for (const v of [null, undefined, 'x', 5, true]) assert.deepEqual(sinNulos(v), {}, String(v));
+  { const crudo = { a: [null, 0, '', false, NaN, [null]] }, o = sinNulos(crudo);
+    assert.equal(o.a.length, 5); assert.ok(Number.isNaN(o.a[3])); assert.deepEqual(o.a[4], [null]);
+    assert.equal(crudo.a.length, 6); assert.notEqual(o.a, crudo.a); assert.notEqual(o, crudo); }
   // 4.7.79: una lista que llega como objeto/texto/número se toma vacía; reglasPagos (objeto) y marcasSku (Map) se respetan.
   for (const k of LISTAS_DATOS) for (const v of [{}, 'x', 5, { a: 1 }]) assert.doesNotThrow(() => construirModelo({ [k]: v }, new Date('2026-11-18T10:00:00')), `${k}=${JSON.stringify(v)}`);
   for (const k of LISTAS_DATOS) assert.doesNotThrow(() => construirModelo({ [k]: [{}, 'texto', 7] }, new Date('2026-11-18T10:00:00')), `${k} filas raras`);
