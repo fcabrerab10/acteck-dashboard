@@ -2010,6 +2010,8 @@ test('4.12.17: cartera vencida con el semáforo de Inicio (rojo > 15 % del saldo
 });
 
 test('semáforo de ventas del mes como la barra de cuota de Inicio (4.12.18)', () => {
+  { const v = recursosBarra({ cur: { fact_neta: 996 }, cuotaPeriodo: 1000 })[0]; assert.equal(v.pct, 100); assert.equal(v.tono, null, '4.12.35: 99.6 % no es verde'); // 4.12.35
+    assert.equal(recursosBarra({ cur: { fact_neta: 846 }, cuotaPeriodo: 1000 })[0].tono, 'ambar', '84.6 % ámbar'); assert.equal(recursosBarra({ cur: { fact_neta: 1000 }, cuotaPeriodo: 1000 })[0].tono, 'verde'); }
   assert.equal(tonoCuota(100), 'verde'); assert.equal(tonoCuota(130), 'verde'); assert.equal(tonoCuota(99), null); assert.equal(tonoCuota(85), null);
   assert.equal(tonoCuota(84), 'ambar'); assert.equal(tonoCuota(60), 'ambar'); assert.equal(tonoCuota(59), 'rojo'); assert.equal(tonoCuota(0), 'rojo'); assert.equal(tonoCuota('70'), 'ambar');
   for (const p of [null, undefined, NaN, Infinity, '', 'x', [5], {}]) assert.equal(tonoCuota(p), null, `pct ${String(p)}`);
