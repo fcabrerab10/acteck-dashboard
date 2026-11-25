@@ -11,7 +11,13 @@ import { estadoCobertura, PERFILES } from '../../lib/cobertura.js';
 // 4.7.15: `numero()` lee montos y conteos en texto con «$», comas o espacios («$5,000», « 1,200 ») como número (antes 0:
 // cartera, inventario, piezas y ventas de esas filas no sumaban); vacío, booleano, objeto, NaN o Infinity → 0.
 // 4.7.72: también «12%» / « 45 % » (como `porcentaje()`; antes 0).
-export const numero = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,%]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };
+// 4.12.53: negativo contable entre paréntesis («(1,500)», «$(2,000)») se lee negativo (antes 0: una nota de crédito o un
+// ajuste de Sheets no restaba); «()» vacío sigue siendo basura.
+function textoNum(s, quita) {
+  const t = s.trim().replace(/^\$\s*(?=\()/, ''); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
+  if (!c) return NaN; const n = Number(c); return p ? (n < 0 ? NaN : -n) : n;
+}
+export const numero = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,%]/g) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };
 const N = numero;
 // (4.3.19) Lo que no es lista (null, texto, número, objeto) → []: una consulta que regresa algo raro no tumba la capa.
 export const comoLista = (x) => (Array.isArray(x) ? x : []);
@@ -965,7 +971,7 @@ export function plural(n, uno, varios) {
 // Texto con «$», comas de miles o espacios («$1,200», « 2,500 ») se lee como número; ≥ mil millones sale «1.2 B» como el
 // `moneyCompact` del dashboard (antes «1000.0 M»). Booleanos y basura → '0'.
 export function cifraCorta(v) {
-  const n = typeof v === 'string' ? Number(v.replace(/[\s$,]/g, '')) : typeof v === 'number' ? v : NaN; if (!Number.isFinite(n) || (typeof v === 'string' && !v.trim())) return '0';
+  const n = typeof v === 'string' ? textoNum(v, /[\s$,]/g) : typeof v === 'number' ? v : NaN; if (!Number.isFinite(n)) return '0';
   const a = Math.abs(n); const s = n < 0 && Math.round(a) > 0 ? '-' : '';
   if (a >= 999.95e6) return `${s}${(a / 1e9).toFixed(1)} B`;
   if (a >= 999500) return `${s}${(a / 1e6).toFixed(1)} M`;
@@ -979,7 +985,7 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 // POs en tránsito: número (o texto numérico) > 0, redondeado y en singular para 1; «0», NaN o basura → sin texto (antes «0 POs» / «NaN POs»).
 // 4.7.34: conteos en texto con comas/espacios («1,200») se leen (antes «1,200» → sin POs) y salen con miles es-MX y `plural()`
 // («1,200 POs»; antes «1200 POs»); cobertura «1,200» en texto también (antes sin días). Basura, booleanos, ≤ 0 → nada.
-const leeNum = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : null; };
+const leeNum = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,]/g) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : null; };
 // 4.12.46: porcentaje en texto con «%» al final («12 %», «70%») se lee para los semáforos (antes ilegible: cartera roja y cuota sin tono).
 const leePct = (v) => leeNum(typeof v === 'string' ? v.replace(/\s*%\s*$/, '') : v);
 const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n) > 0 ? plural(n, 'PO') : null; };

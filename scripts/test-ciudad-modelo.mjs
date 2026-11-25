@@ -2228,3 +2228,9 @@ test('cadenaSuministro(): el puerto sólo dice lo que hay (sin «0 con ETA venci
   assert.equal(v([{ llegaEnDias: 0 }], [{}, {}]), '1 llega hoy · 2 recién llegados');
   assert.equal(v([], []), 'Sin movimiento');
 });
+
+test('numero / cifraCorta / pesosCorto: negativos contables entre paréntesis (4.12.53)', () => {
+  assert.equal(numero('(1,500)'), -1500); assert.equal(numero(' $(2,000.5) '), -2000.5); assert.equal(numero('( 300 )'), -300);
+  assert.equal(numero('()'), 0); assert.equal(numero('(-5)'), 0); assert.equal(numero('(abc)'), 0); assert.equal(numero('1,200'), 1200);
+  assert.equal(cifraCorta('(15,400)'), '-15 K'); assert.equal(pesosCorto('$(1,250,000)'), '-$1.3 M'); assert.equal(cifraCorta('()'), '0');
+});

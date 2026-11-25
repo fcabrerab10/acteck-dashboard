@@ -361,6 +361,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.41) `sedeDeCuenta()` pura y probada: la sede de cada tienda, Matriz, vendedor, camión y la cartera se buscan con la cuenta sin espacios ni mayúsculas (« PCEL » → Monterrey; antes caía en Guadalajara/CDMX) y la cartera encuentra su tienda aunque la cuenta venga en MAYÚSCULAS. +1 prueba.
 
   - [x] (4.12.52) 2026-11-25 04:36 · Leyenda de cuentas: una sola entrada aunque la cuenta llegue con distintas mayúsculas («PCEL» / «pcel»), como su color, y toma el nombre de cuenta de la tienda que sí lo traiga.
+  - [x] (4.12.53) 2026-11-25 04:56 · Negativos contables: `numero()`, `cifraCorta()` / `pesosCorto()` y la barra de recursos leen «(1,500)» / «$(2,000)» como negativos (antes 0: una nota de crédito o ajuste en texto no restaba y salía «$0»); «()» o «(-5)» siguen como basura.
 ## Necesita a Fernando (el agente no lo hace)
 
 - Nombres del personal de almacén/ventas que no está en el dashboard.
@@ -374,6 +375,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-25 04:56 · v4.12.53 · Negativos contables «(1,500)» se leen negativos en `numero()`, `cifraCorta()`/`pesosCorto()` y la barra de recursos; +1 prueba.
 - 2026-11-25 04:36 · v4.12.52 · Leyenda de cuentas sin repetidos por mayúsculas y con el nombre de la cuenta; +1 prueba.
 - 2026-11-25 03:18 · v4.12.47 · la bitácora de la Ciudad dice qué fuente se actualizó o falló.
 
