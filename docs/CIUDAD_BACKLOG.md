@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
+  - [x] (4.12.36) Cadena: el motivo del puerto cuenta los barcos que esperan muelle («1 barco esperando muelle», «2 barcos…»); antes decía «Barcos esperando muelle» aunque fuera uno.
   - [x] (4.12.35) «Ventas del mes» de la barra superior saca el semáforo del avance sin redondear, como la píldora de cuota de Inicio (99.6 % ya no sale verde; 84.6 % sale ámbar).
   - [x] (4.12.34) `nombrePersona()`: nombres que llegan todo en mayúsculas o todo en minúsculas («ANA LÓPEZ DE LA CRUZ») salen legibles («Ana López de la Cruz») en escritorios, tarjetas y globos; la mezcla se respeta.
   - [x] (4.12.24) Pensamientos de tienda con el semáforo de cartera de Inicio: vencido ≤ 15 % del saldo de la cuenta es ámbar «Tengo algo de cartera vencida» (va tras «no he vendido nada»); más o sin saldo, rojo «Tengo pagos vencidos». Antes cualquier peso vencido era rojo.
@@ -359,6 +360,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-24 23:36 · v4.12.36 · Cadena: motivo del puerto con el número de barcos esperando muelle («1 barco…»); +1 prueba.
 - 2026-11-24 23:16 · v4.12.35 · Pulido: semáforo de «Ventas del mes» con el % sin redondear (igual que Inicio: 99.6 % ya no verde, 84.6 % ámbar); +1 prueba.
 
 - 2026-11-24 22:37 · v4.12.33 · Pulido: nombres de tienda legibles con `nombreSucursal()` («CT Internacional · Hermosillo», «Plaza del Sol»; siglas como GDL/CT se respetan) en tarjeta, globo y pensamientos; el buscador ya no distingue acentos; +1 prueba.

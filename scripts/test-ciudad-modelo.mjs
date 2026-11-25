@@ -722,7 +722,8 @@ test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
   // 4.12.31: barcos que llegan hoy (ETA 0) no son «ETA vencida» ni pintan ámbar; uno vencido sí.
   const hoyB = (b) => cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: b }, cedis: { dias: 30 }, camiones: [], distritos: [] }).tramos[1];
   assert.deepEqual([hoyB([{ llegaEnDias: 0 }, { llegaEnDias: '0' }]).volumen, hoyB([{ llegaEnDias: 0 }]).estado], ['0 con ETA vencida · 2 llegan hoy · 0 recién llegados', 'verde']);
-  assert.deepEqual([hoyB([{ llegaEnDias: -1 }]).estado, hoyB([{ llegaEnDias: -1 }]).motivo, hoyB([{ llegaEnDias: -4 }]).estado], ['ambar', 'Barcos esperando muelle', 'rojo']);
+  assert.deepEqual([hoyB([{ llegaEnDias: -1 }]).estado, hoyB([{ llegaEnDias: -1 }]).motivo, hoyB([{ llegaEnDias: -4 }]).estado], ['ambar', '1 barco esperando muelle', 'rojo']);
+  assert.equal(hoyB([{ llegaEnDias: -1 }, { llegaEnDias: -2 }, { llegaEnDias: 0 }]).motivo, '2 barcos esperando muelle');
 });
 
 test('cintas de la cadena: mar, puerto y ciudades con grosor y tono', () => {
