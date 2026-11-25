@@ -2287,3 +2287,8 @@ test('4.12.59 haceDias(): desde 60 d en meses y desde 365 en años', () => {
   assert.equal(haceDias(91), 'hace 3 meses'); assert.equal(haceDias(350), 'hace 11 meses'); assert.equal(haceDias(364), 'hace 11 meses');
   assert.equal(haceDias(365), 'hace 1 año'); assert.equal(haceDias(800), 'hace 2 años'); assert.equal(haceDias(365000), 'hace 1,000 años');
 });
+
+test('4.12.60 unirTexto(): «NULL», «Null», «nan», «#N/A» del ERP/hojas no salen en el globo', () => {
+  assert.equal(unirTexto('NULL', '820 pz', 'Null', 'nan', 'Infinity', '#N/A', 'None', 'llega hoy'), '820 pz · llega hoy');
+  assert.equal(unirTexto('Nullo', 'NaNa'), 'Nullo · NaNa');
+});

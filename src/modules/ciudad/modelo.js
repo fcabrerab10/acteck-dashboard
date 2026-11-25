@@ -820,7 +820,8 @@ export function fuenteSync(ev, catalogo) {
 }
 export function unirTexto(...partes) {
   return partes.flat().map((x) => (typeof x === 'string' ? x.trim() : typeof x === 'number' && Number.isFinite(x) ? String(x) : ''))
-    .filter((x) => x && x !== 'null' && x !== 'undefined' && x !== 'NaN').join(' · ');
+    // 4.12.60: «NULL» / «Null» / «nan» / «Infinity» (como los exporta el ERP o una hoja) también se saltan, no sólo en minúsculas exactas.
+    .filter((x) => x && !['null', 'undefined', 'nan', 'infinity', '-infinity', 'none', '#n/a'].includes(x.toLowerCase())).join(' · ');
 }
 // Estatus del contenedor (4.7.84) con los mismos nombres cortos que el Plan de compras (`ESTATUS_CORTO` de
 // `comercial/forecast/sopCalculo.js`): «TRANSITO MARITIMO» → «En el mar», «PROXIMO A ZARPAR» → «Por zarpar»… Acepta
