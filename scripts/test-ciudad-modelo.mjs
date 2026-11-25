@@ -2158,3 +2158,12 @@ test('(4.12.42) colorCuenta() sin espacios ni mayúsculas; desconocida o basura 
   assert.equal(colorCuenta(' PCEL '), COLOR_CUENTA.pcel); assert.equal(colorCuenta('Kabik'), COLOR_CUENTA.kabik); assert.equal(colorCuenta('ct'), COLOR_CUENTA.ct);
   assert.equal(colorCuenta(''), 0x8E8E93); assert.equal(colorCuenta({}), 0x8E8E93); assert.equal(colorCuenta(NaN, 1), 1); assert.equal(colorCuenta('toString'), 0x8E8E93); assert.equal(colorCuenta('otra', 7), 7);
 });
+
+test('(4.12.43) nombre de la cuenta y Matriz sin duplicar aunque sell out y catálogo difieran en mayúsculas', () => {
+  const m = construirModelo({ ...d, clientesFinales: [], vendedoresMayoristas: [], cuentas: [{ cuenta: 'pcel', nombre: 'PC Electrónica', tiene_sellout: true }, { cuenta: 'Kabik', nombre: 'Kabik SA', tiene_sellout: true }],
+    sucursales: [{ cuenta: 'PCEL', sucursal: 'MONTERREY CENTRO', anio: 2026, mes: 10, importe: 500 }],
+    cuentaMes: [{ cuenta: 'KABIK', anio: 2026, mes: 10, importe: 300 }] }, hoy);
+  const ts = m.distritos.flatMap((x) => x.tiendas);
+  const pc = ts.filter((x) => x.cuenta.toLowerCase() === 'pcel'); assert.equal(pc.length, 1, 'sin Matriz duplicada'); assert.equal(pc[0].nombreCuenta, 'PC Electrónica');
+  const kb = ts.find((x) => x.cuenta === 'Kabik' && x.sucursal === 'Matriz'); assert.ok(kb); assert.equal(kb.importe, 300, 'cuentaMes en MAYÚSCULAS suma');
+});

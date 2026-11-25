@@ -1461,6 +1461,9 @@ export function construirModelo(d, hoy = new Date()) {
   const anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
   const mesPrev = mes === 1 ? 12 : mes - 1, anioPrev = mes === 1 ? anio - 1 : anio;
   const cuentas = new Map((d.cuentas || []).map((c) => [unirTexto(c.cuenta), c])); // 4.12.4: NaN, objeto o lista no son cuenta (antes «NaN» / «[object Object]») // 4.7.50: « pcel » = «pcel»
+  // 4.12.43: nombre de la cuenta sin espacios ni mayúsculas (sell out «PCEL» con catálogo «pcel» ya no sale con la clave cruda)
+  const cuentasMin = new Map(); for (const [k, c] of cuentas) { const km = k.toLowerCase(); if (km && !cuentasMin.has(km)) cuentasMin.set(km, c); }
+  const cuentaDe = (k) => { const t = unirTexto(k); return cuentas.get(t) || cuentasMin.get(t.toLowerCase()); };
 
   // ── Oficina: equipo del dashboard + genéricos ──
   const items = d.agendaHoy || [];
@@ -1520,11 +1523,11 @@ export function construirModelo(d, hoy = new Date()) {
     if (s.actual + s.previo <= 0) continue;
     const c = ciudadDeSucursal(s.sucursal);
     const sede = sedeDeCuenta(s.cuenta);
-    const nombreCuenta = unirTexto(cuentas.get(s.cuenta)?.nombre) || s.cuenta; // 4.12.11: nombre en objeto ya no sale «[object Object]»
+    const nombreCuenta = unirTexto(cuentaDe(s.cuenta)?.nombre) || s.cuenta; // 4.12.11: nombre en objeto ya no sale «[object Object]»
     // Luz encendida = vendió este mes; los primeros 10 días del mes también cuenta el mes anterior (si no, la ciudad amanece apagada el día 1).
     const activa = s.actual > 0 || (hoy.getDate() <= 10 && s.previo > 0);
     const t = { cuenta: s.cuenta, nombreCuenta, sucursal: s.sucursal, importe: s.actual, previo: s.previo, vendio: activa, vendioMes: s.actual > 0, virtual: !!c?.virtual, vendedores: s.vendedores };
-    cuentasConSucursal.add(s.cuenta);
+    cuentasConSucursal.add(unirTexto(s.cuenta).toLowerCase()); // 4.12.43: «PCEL» con sucursales = «pcel» del catálogo (sin Matriz duplicada)
     if (c?.virtual) { virtuales.push(t); tienda(sede, { ...t, sucursal: unirTexto(s.sucursal) ? `${unirTexto(s.sucursal)} (en línea)` : 'En línea' }); continue; }
     tienda(c?.ciudad || sede, t);
   }
@@ -1532,8 +1535,8 @@ export function construirModelo(d, hoy = new Date()) {
   // 4.7.50: la cuenta y sus ventas mensuales se empatan sin espacios (« pcel » = «pcel»; antes la Matriz salía apagada con venta 0, o doble si ya tenía sucursales) y la cuenta vacía se salta.
   for (const c0 of d.cuentas || []) {
     const cc = unirTexto(c0.cuenta); if (!cc) continue; const c = { ...c0, cuenta: cc };
-    if (cuentasConSucursal.has(c.cuenta) || !c.tiene_sellout && !c.propio) continue;
-    const m = (d.cuentaMes || []).filter((r) => unirTexto(r.cuenta) === c.cuenta);
+    if (cuentasConSucursal.has(c.cuenta.toLowerCase()) || !c.tiene_sellout && !c.propio) continue;
+    const m = (d.cuentaMes || []).filter((r) => unirTexto(r.cuenta).toLowerCase() === c.cuenta.toLowerCase()); // 4.12.43
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
     tienda(sedeDeCuenta(c.cuenta), { cuenta: c.cuenta, nombreCuenta: unirTexto(c.nombre) || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
@@ -1548,8 +1551,8 @@ export function construirModelo(d, hoy = new Date()) {
     if (!v.nombre || /^(SIN|N\/?A|-)/i.test(v.nombre)) continue;
     const c = v.sucursal ? ciudadDeSucursal(v.sucursal) : null;
     const ciudad = (c && c.ciudad) || sedeDeCuenta(v.cuenta);
-    if (!porCiudad.has(ciudad)) tienda(ciudad, { cuenta: v.cuenta, nombreCuenta: unirTexto(cuentas.get(v.cuenta)?.nombre) || v.cuenta, sucursal: 'Matriz', importe: 0, previo: 0, vendio: false, virtual: false, vendedores: 0 });
-    porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: unirTexto(cuentas.get(v.cuenta)?.nombre) || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
+    if (!porCiudad.has(ciudad)) tienda(ciudad, { cuenta: v.cuenta, nombreCuenta: unirTexto(cuentaDe(v.cuenta)?.nombre) || v.cuenta, sucursal: 'Matriz', importe: 0, previo: 0, vendio: false, virtual: false, vendedores: 0 });
+    porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: unirTexto(cuentaDe(v.cuenta)?.nombre) || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
   }
   // Cartera (propios): saldo vencido → bandera roja en su Matriz / primera tienda de la sede.
   const carteraPor = carteraPorCuenta(d.cartera); // 4.7.49: « digitalife » = «digitalife»; 4.7.52: con dos cortes gana el más reciente
