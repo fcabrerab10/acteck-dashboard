@@ -724,7 +724,7 @@ test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
     distritos: [{ tiendas: [{ vendio: true }, { vendio: false }, { vendio: true, reparto: true }], clientesFinales: { n: 120, importe: 2.5e6 } }, { tiendas: [{ vendio: true }] }] };
   const r = cadenaSuministro(m);
   assert.deepEqual(r.tramos.map((t) => [t.clave, t.estado]), [['mar', 'verde'], ['puerto', 'rojo'], ['cedis', 'verde'], ['camion', 'ambar'], ['tienda', 'ambar'], ['cliente', 'verde']]);
-  assert.equal(r.tramos[0].volumen, '2 barcos · 1,500 pzs'); assert.equal(r.tramos[1].volumen, '1 con ETA vencida · 1 llega hoy · 1 recién llegado'); assert.equal(r.tramos[1].motivo, '1 barco con más de 3 días de atraso');
+  assert.equal(r.tramos[0].volumen, '2 barcos · 1,500 pz'); assert.equal(r.tramos[1].volumen, '1 con ETA vencida · 1 llega hoy · 1 recién llegado'); assert.equal(r.tramos[1].motivo, '1 barco con más de 3 días de atraso');
   assert.equal(r.tramos[4].volumen, '2 de 3 vendieron'); assert.equal(r.tramos[5].volumen, '120 clientes · $2.5 M'); assert.equal(r.atasco.clave, 'puerto');
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [] }, cedis: { dias: 30 }, camiones: [], distritos: [] });
   assert.deepEqual(v.tramos.map((t) => t.estado), ['gris', 'verde', 'verde', 'gris', 'gris', 'gris']); assert.equal(v.atasco, null);
@@ -1355,7 +1355,7 @@ test('cadenaSuministro() en singular: «1 pz», «1 recién llegado», «1 barco
   assert.equal(t('puerto').volumen, '1 con ETA vencida · 1 recién llegado'); assert.equal(t('puerto').motivo, '1 barco con más de 3 días de atraso');
   assert.equal(t('cedis').volumen, '1 pz · 10 días'); assert.equal(t('camion').volumen, '1 en ruta · 1 pz');
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [], tarimas: 'x' }, cedis: { piezas: 1500 }, camiones: [], distritos: [] });
-  assert.equal(v.tramos.find((x) => x.clave === 'puerto').volumen, '0 con ETA vencida · 0 recién llegados'); assert.match(v.tramos.find((x) => x.clave === 'cedis').volumen, /^1,500 pzs/);
+  assert.equal(v.tramos.find((x) => x.clave === 'puerto').volumen, '0 con ETA vencida · 0 recién llegados'); assert.match(v.tramos.find((x) => x.clave === 'cedis').volumen, /^1,500 pz ·/);
 });
 
 test('enMinutos(): «empieza ya» en 0, minutos y horas; ilegible o negativa vacía; misión y burbuja de reunión', () => {

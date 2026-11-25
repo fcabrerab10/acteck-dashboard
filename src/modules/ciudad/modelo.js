@@ -399,7 +399,7 @@ export function rumboBarcos(barcos = []) {
 // Sólo usa lo que ya trae el modelo (mismos umbrales que las tarjetas: CEDIS 90/120 días, envío > 5 días en ámbar).
 export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   if (!m) return { tramos: [], atasco: null };
-  const n = numero; const pz = (v) => plural(n(v), 'pz');
+  const n = numero; const pz = piezasTexto; // 4.12.49: «1,500 pz» como globos, bitácora y puerto (antes «pzs»)
   // ETA en días legible (texto «-2» cuenta; vacía, null o basura = sin ETA, sigue en el mar).
   const eta = (b) => leeNum(b.llegaEnDias);
   const barcos = comoLista(m.puerto?.barcos).filter(Boolean);
