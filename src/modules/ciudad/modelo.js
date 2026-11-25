@@ -890,7 +890,7 @@ export function haceDias(v) {
 // 15 % del saldo y ámbar si no. Sin % legible (saldo 0, ilegible) queda rojo, como antes. Antes cualquier peso vencido era rojo.
 export function tonoCartera(vencido, pctVencido) {
   if (!(numero(vencido) > 0)) return 'verde';
-  const p = typeof pctVencido === 'number' || typeof pctVencido === 'string' ? leeNum(pctVencido) : null;
+  const p = typeof pctVencido === 'number' || typeof pctVencido === 'string' ? leePct(pctVencido) : null;
   return p != null && Number.isFinite(p) && p <= 15 ? 'ambar' : 'rojo';
 }
 // Tono de la cartera de una cuenta ({ vencido, saldo }) con `tonoCartera()` (4.12.25): el % sale del saldo de esa cuenta.
@@ -908,7 +908,7 @@ export function tonoBanco(b) {
 // sin tono (la barra usa el acento, como el azul de Inicio), 60–84 % ámbar y < 60 % rojo. Antes 80–99 % ámbar y < 80 % rojo:
 // 70 % salía rojo (Inicio: naranja) y 90 % ámbar (Inicio: en camino). Sin % legible → sin tono.
 export function tonoCuota(pct) {
-  const p = typeof pct === 'number' || typeof pct === 'string' ? leeNum(pct) : null;
+  const p = typeof pct === 'number' || typeof pct === 'string' ? leePct(pct) : null;
   if (p == null || !Number.isFinite(p)) return null;
   return p >= 100 ? 'verde' : p >= 85 ? null : p >= 60 ? 'ambar' : 'rojo';
 }
@@ -963,6 +963,8 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 // 4.7.34: conteos en texto con comas/espacios («1,200») se leen (antes «1,200» → sin POs) y salen con miles es-MX y `plural()`
 // («1,200 POs»; antes «1200 POs»); cobertura «1,200» en texto también (antes sin días). Basura, booleanos, ≤ 0 → nada.
 const leeNum = (v) => { const k = typeof v === 'string' ? (v.trim() ? Number(v.replace(/[\s$,]/g, '')) : NaN) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : null; };
+// 4.12.46: porcentaje en texto con «%» al final («12 %», «70%») se lee para los semáforos (antes ilegible: cartera roja y cuota sin tono).
+const leePct = (v) => leeNum(typeof v === 'string' ? v.replace(/\s*%\s*$/, '') : v);
 const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n) > 0 ? plural(n, 'PO') : null; };
 // 4.7.58: cobertura -0.4 ya no dice «-0 d» (redondea a «0 d») y una negativa (inventario negativo) no da días: sin texto.
 // 4.7.83: días de inventario del CEDIS como «Inventario» del dashboard (`dias_inv` null = sin medida: «sin medida de días»).

@@ -2181,3 +2181,9 @@ test('(4.12.44) reuniones y presencia leen fechas de Postgres con zona corta, es
   assert.equal(ps[0].presencia.estado, 'reunion');
   assert.deepEqual(reunionesDelDia([{ fecha: '2026-11-25 25:99' }, { fecha: '2026-11-25T10:00:00+99' }], h), []);
 });
+
+test('(4.12.46) tonoCartera y tonoCuota leen el porcentaje en texto con «%»', () => {
+  assert.equal(tonoCartera(100, '12 %'), 'ambar'); assert.equal(tonoCartera(100, '12%'), 'ambar'); assert.equal(tonoCartera(100, '40 %'), 'rojo');
+  assert.equal(tonoCartera(100, '%'), 'rojo'); assert.equal(tonoCartera(0, '40 %'), 'verde');
+  assert.equal(tonoCuota('70%'), 'ambar'); assert.equal(tonoCuota('120 %'), 'verde'); assert.equal(tonoCuota('90%'), null); assert.equal(tonoCuota('%'), null);
+});
