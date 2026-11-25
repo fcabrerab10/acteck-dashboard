@@ -1581,6 +1581,12 @@ test('nombrePersona(): sin nombre usa el correo y sin nada dice «Persona» (ant
   assert.equal(nombrePersona({ email: 'ana2@x.com' }), 'Ana2');
   assert.equal(nombrePersona({ nombre: '  ', email: ' ' }), 'Persona');
   assert.equal(nombrePersona(null), 'Persona');
+  // 4.12.34: todo en mayúsculas o minúsculas sale legible; mezcla se respeta.
+  assert.equal(nombrePersona({ nombre: 'ANA LÓPEZ DE LA CRUZ' }), 'Ana López de la Cruz');
+  assert.equal(nombrePersona({ nombre: ' juan   pérez ' }), 'Juan Pérez');
+  assert.equal(nombrePersona({ nombre: 'DE LA ROSA' }), 'De la Rosa');
+  assert.equal(nombrePersona({ nombre: 'Ana McGregor' }), 'Ana McGregor');
+  assert.equal(nombrePersona({ nombre: '123' }), '123');
   const m = construirModelo({ perfiles: [{ user_id: 'u1', activo: true, nombre: null, email: null, puesto: null, rol: ' finanzas ' }] }, new Date(2026, 10, 20, 10));
   const per = m.oficina.personas[0];
   assert.equal(per.nombre, 'Persona');

@@ -805,8 +805,15 @@ export function tituloCamion(c, promo) {
 // («ana.lopez»); sin nada, «Persona» (antes `null` en el escritorio, la tarjeta y el globo).
 // 4.7.86: el correo sale como nombre legible («ana.lopez» / «ana_lopez» / «ana-lopez» → «Ana Lopez»; antes «ana.lopez»
 // en el escritorio y el globo); números y separadores solos no cuentan («123», «.» → «Persona»).
+// 4.12.34: el nombre que llega TODO en mayúsculas o TODO en minúsculas («ANA LÓPEZ DE LA CRUZ», «juan pérez») sale legible
+// («Ana López de la Cruz», «Juan Pérez»); uno ya escrito con mayúsculas y minúsculas («Ana McGregor») se respeta tal cual.
 export function nombrePersona(p) {
-  const n = unirTexto(p?.nombre); if (n) return n;
+  const n = unirTexto(p?.nombre).replace(/\s+/g, ' ');
+  if (n && /\p{L}/u.test(n) && (!/\p{Ll}/u.test(n) || !/\p{Lu}/u.test(n))) {
+    return n.split(' ').map((w, i) => (i > 0 && CONECTORES.has(norm(w)) ? w.toLocaleLowerCase('es-MX')
+      : w.charAt(0).toLocaleUpperCase('es-MX') + w.slice(1).toLocaleLowerCase('es-MX'))).join(' ');
+  }
+  if (n) return n;
   const e = unirTexto(p?.email).split('@')[0].split(/[._\-+\s]+/).filter((w) => /\p{L}/u.test(w))
     .map((w) => w.charAt(0).toLocaleUpperCase('es-MX') + w.slice(1).toLocaleLowerCase('es-MX')).join(' ');
   return e || 'Persona';
