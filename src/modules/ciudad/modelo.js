@@ -407,6 +407,8 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const tarde = enPuerto.filter((b) => eta(b) < -3).length;
   // 4.12.31: el que llega hoy (ETA 0) ya no cuenta «con ETA vencida» ni pinta ámbar (como `llegaBarco()`: «llega hoy»).
   const vencidos = enPuerto.filter((b) => eta(b) < 0).length, hoyPuerto = enPuerto.length - vencidos;
+  // 4.12.50: el puerto ya no dice «0 con ETA vencida» / «0 recién llegados»: sólo lo que hay; vacío, «Sin movimiento».
+  const recien = comoLista(m.puerto?.tarimas).filter(Boolean).length;
   const c = m.cedis || {}, d = diasCedis(c.dias);
   const cam = comoLista(m.camiones).filter(Boolean);
   const lentos = cam.filter((x) => x.envio && hoyIso && x.fecha && dias(x.fecha, hoyIso) > 5).length;
@@ -416,7 +418,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const cf = distritos.reduce((s, x) => ({ n: s.n + n(x.clientesFinales?.n), imp: s.imp + n(x?.clientesFinales?.importe) }), { n: 0, imp: 0 });
   const tramos = [
     { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
-    { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: `${vencidos.toLocaleString('es-MX')} con ETA vencida · ${hoyPuerto ? `${plural(hoyPuerto, 'llega', 'llegan')} hoy · ` : ''}${plural(comoLista(m.puerto?.tarimas).filter(Boolean).length, 'recién llegado')}`, estado: tarde ? 'rojo' : vencidos ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : vencidos ? `${plural(vencidos, 'barco')} esperando muelle` : null }, // 4.12.36: cuenta los barcos (antes «Barcos» con uno solo)
+    { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: [vencidos ? `${vencidos.toLocaleString('es-MX')} con ETA vencida` : '', hoyPuerto ? `${plural(hoyPuerto, 'llega', 'llegan')} hoy` : '', recien ? plural(recien, 'recién llegado') : ''].filter(Boolean).join(' · ') || 'Sin movimiento', estado: tarde ? 'rojo' : vencidos ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : vencidos ? `${plural(vencidos, 'barco')} esperando muelle` : null }, // 4.12.36: cuenta los barcos (antes «Barcos» con uno solo)
     { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${diasTexto(d)}`, estado: tonoDias(d) || 'gris', motivo: motivoDias(d) },
     { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length.toLocaleString('es-MX')} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
     { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron`, estado: tonoActivas(activas, tiendas.length) || 'gris', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },

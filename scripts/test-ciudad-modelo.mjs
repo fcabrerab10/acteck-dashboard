@@ -731,7 +731,7 @@ test('cadena de punta a punta: volumen por tramo y dónde se atora', () => {
   assert.deepEqual(cadenaSuministro(null), { tramos: [], atasco: null });
   // 4.12.31: barcos que llegan hoy (ETA 0) no son «ETA vencida» ni pintan ámbar; uno vencido sí.
   const hoyB = (b) => cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: b }, cedis: { dias: 30 }, camiones: [], distritos: [] }).tramos[1];
-  assert.deepEqual([hoyB([{ llegaEnDias: 0 }, { llegaEnDias: '0' }]).volumen, hoyB([{ llegaEnDias: 0 }]).estado], ['0 con ETA vencida · 2 llegan hoy · 0 recién llegados', 'verde']);
+  assert.deepEqual([hoyB([{ llegaEnDias: 0 }, { llegaEnDias: '0' }]).volumen, hoyB([{ llegaEnDias: 0 }]).estado], ['2 llegan hoy', 'verde']);
   assert.deepEqual([hoyB([{ llegaEnDias: -1 }]).estado, hoyB([{ llegaEnDias: -1 }]).motivo, hoyB([{ llegaEnDias: -4 }]).estado], ['ambar', '1 barco esperando muelle', 'rojo']);
   assert.equal(hoyB([{ llegaEnDias: -1 }, { llegaEnDias: -2 }, { llegaEnDias: 0 }]).motivo, '2 barcos esperando muelle');
 });
@@ -1355,7 +1355,7 @@ test('cadenaSuministro() en singular: «1 pz», «1 recién llegado», «1 barco
   assert.equal(t('puerto').volumen, '1 con ETA vencida · 1 recién llegado'); assert.equal(t('puerto').motivo, '1 barco con más de 3 días de atraso');
   assert.equal(t('cedis').volumen, '1 pz · 10 días'); assert.equal(t('camion').volumen, '1 en ruta · 1 pz');
   const v = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [], tarimas: 'x' }, cedis: { piezas: 1500 }, camiones: [], distritos: [] });
-  assert.equal(v.tramos.find((x) => x.clave === 'puerto').volumen, '0 con ETA vencida · 0 recién llegados'); assert.match(v.tramos.find((x) => x.clave === 'cedis').volumen, /^1,500 pz ·/);
+  assert.equal(v.tramos.find((x) => x.clave === 'puerto').volumen, 'Sin movimiento'); assert.match(v.tramos.find((x) => x.clave === 'cedis').volumen, /^1,500 pz ·/);
 });
 
 test('enMinutos(): «empieza ya» en 0, minutos y horas; ilegible o negativa vacía; misión y burbuja de reunión', () => {
@@ -2205,4 +2205,12 @@ test('(4.12.47) la bitácora dice qué fuente se actualizó', () => {
   assert.equal(textoSync('success', {}).texto, 'Se actualizaron los datos');
   const ev = bitacoraEventos({ ultimaSync: { status: 'error', fuente: 'Precios ERP', created_at: '2026-10-08T10:00:00' } }, new Date('2026-10-08T12:00:00'));
   assert.ok(comoLista(ev).some((e) => e.id === 'sync' && e.texto === 'Falló una actualización de datos · Precios ERP'));
+});
+
+test('cadenaSuministro(): el puerto sólo dice lo que hay (sin «0 con ETA vencida»)', () => {
+  const v = (barcos, tarimas) => cadenaSuministro({ puerto: { barcos, tarimas } }, '2026-11-25').tramos.find((x) => x.clave === 'puerto').volumen;
+  assert.equal(v([], [{}]), '1 recién llegado');
+  assert.equal(v([{ llegaEnDias: -1 }], []), '1 con ETA vencida');
+  assert.equal(v([{ llegaEnDias: 0 }], [{}, {}]), '1 llega hoy · 2 recién llegados');
+  assert.equal(v([], []), 'Sin movimiento');
 });
