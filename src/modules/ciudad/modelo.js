@@ -686,7 +686,12 @@ export function listaCorta(lista, n = 3) {
 function instante(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : x;
   if (typeof x !== 'string' || !x.trim()) return null;
-  const s = x.trim(), t = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`) : new Date(s);
+  const s = x.trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) { const t = new Date(`${s}T00:00:00`); return Number.isNaN(t.getTime()) ? null : t; }
+  // 4.12.44: fecha con hora de Postgres en forma ISO estricta antes de leerla: zona corta «+00»/«+0000» (antes Invalid Date
+  // con «T»: la reunión no salía), espacio en vez de «T» y microsegundos (Safari/iPad no los leía). Sin zona = hora local.
+  const z = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?(\.\d+)?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/i);
+  const iso = !z ? s : `${z[1]}T${z[2]}${z[3] || ':00'}${z[4] ? z[4].slice(0, 4).padEnd(4, '0') : ''}${!z[5] ? '' : /^z$/i.test(z[5]) ? 'Z' : z[5].length === 3 ? `${z[5]}:00` : z[5].includes(':') ? z[5] : `${z[5].slice(0, 3)}:${z[5].slice(3)}`}`;
+  const t = new Date(iso);
   return Number.isNaN(t.getTime()) ? null : t;
 }
 // Duración en minutos (4.3.31): 0, negativa, texto o basura → 60 (antes -30 dejaba la reunión «hecha» antes de empezar).

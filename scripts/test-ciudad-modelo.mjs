@@ -2167,3 +2167,16 @@ test('(4.12.43) nombre de la cuenta y Matriz sin duplicar aunque sell out y cat�
   const pc = ts.filter((x) => x.cuenta.toLowerCase() === 'pcel'); assert.equal(pc.length, 1, 'sin Matriz duplicada'); assert.equal(pc[0].nombreCuenta, 'PC Electrónica');
   const kb = ts.find((x) => x.cuenta === 'Kabik' && x.sucursal === 'Matriz'); assert.ok(kb); assert.equal(kb.importe, 300, 'cuentaMes en MAYÚSCULAS suma');
 });
+
+test('(4.12.44) reuniones y presencia leen fechas de Postgres con zona corta, espacio y microsegundos', () => {
+  const h = new Date('2026-11-25T11:00:00');
+  const u = (s) => { const t = new Date(s); return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`; };
+  const ag = reunionesDelDia([{ id: 1, titulo: 'A', fecha: '2026-11-25T16:00:00+00' }, { id: 2, titulo: 'B', fecha: '2026-11-25 10:30:00' }, { id: 3, titulo: 'C', fecha: '2026-11-25 09:00:00.123456+0000' }, { id: 4, titulo: 'D', fecha: '2026-11-25T08:00Z' }], h);
+  assert.equal(ag.length, 4, 'ninguna se pierde');
+  const por = Object.fromEntries(ag.map((r) => [r.titulo, r.hora]));
+  assert.equal(por.A, u('2026-11-25T16:00:00Z')); assert.equal(por.B, '10:30'); assert.equal(por.C, u('2026-11-25T09:00:00.123Z')); assert.equal(por.D, u('2026-11-25T08:00:00Z'));
+  assert.equal(ag.find((r) => r.titulo === 'B').estado, 'en curso');
+  const ps = presenciaPersonas([{ id: 'u1' }], [{ id: 9, titulo: 'Junta', fecha: '2026-11-25 10:30:00', duracion_min: 60, creado_por: 'u1' }], [], h);
+  assert.equal(ps[0].presencia.estado, 'reunion');
+  assert.deepEqual(reunionesDelDia([{ fecha: '2026-11-25 25:99' }, { fecha: '2026-11-25T10:00:00+99' }], h), []);
+});

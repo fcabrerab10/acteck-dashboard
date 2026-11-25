@@ -637,3 +637,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-24 22:56 · v4.12.34 · Oficina: nombres de persona en MAYÚSCULAS o minúsculas salen legibles («Ana López de la Cruz»); +1 prueba.
 - 2026-11-25 01:37 · v4.12.42 · Color de cada cuenta (tiendas, vendedores, leyenda) con la cuenta sin espacios ni mayúsculas (antes gris); +1 prueba.
 - 2026-11-25 01:56 · v4.12.43 · Tiendas con el nombre de su cuenta y sin «Matriz» duplicada aunque sell out, catálogo y venta mensual traigan la cuenta con distintas mayúsculas; +1 prueba.
+- 2026-11-25 02:16 · v4.12.44 · Reuniones y presencia de la oficina leen fechas de Postgres con zona corta («+00»), espacio en vez de «T» y microsegundos (antes la reunión se perdía; Safari/iPad no las leía); +1 prueba.
