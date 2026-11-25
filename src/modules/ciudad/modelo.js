@@ -365,7 +365,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
 // representativa del estado (`CIUDAD_POR_ESTADO`), sin la `sede` (ahí ya está su Matriz), top `max` por actividad.
 export function repartoPorEstado(cuenta, filas = [], op) {
   let { anio, mes, anioPrev, mesPrev, sede = null, max = 6 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
-  const por = new Map(); const clave = (v) => String(v ?? '').trim(); const cta = clave(cuenta); if (!cta) return [];
+  const por = new Map(); const clave = claveTexto; const cta = clave(cuenta); if (!cta) return [];
   anio = Number(anio); mes = Number(mes); anioPrev = Number(anioPrev); mesPrev = Number(mesPrev); max = cuantos(max, 6);
   for (const r of comoLista(filas)) {
     if (clave(r?.cuenta) !== cta) continue; const est = norm(r.estado);
@@ -587,8 +587,8 @@ export function cuotasPorCuenta(cuotas = [], ventas = []) {
   // sólo los clientes con cuota > 0 suman su venta; antes la venta de un cliente con cuota 0 inflaba el % de su cuenta.
   const porCliente = new Map(); const out = new Map();
   for (const r of comoLista(cuotas)) {
-    const cu = String(r?.cuenta_sellout ?? '').trim(); if (!cu) continue; // 4.3.24: « ct » = «ct» (antes otra cuenta o sin color)
-    const k = String(r.cliente_erp ?? '').trim(); if (!k) continue;
+    const cu = claveTexto(r?.cuenta_sellout); if (!cu) continue; // 4.3.24: « ct » = «ct» (antes otra cuenta o sin color)
+    const k = claveTexto(r.cliente_erp); if (!k) continue;
     const o = porCliente.get(k) || { cuenta: cu, cuota: 0 }; o.cuenta = cu; o.cuota += numero(r.cuota_venta); porCliente.set(k, o); // 4.7.16: «$1,000» ya suma
   }
   const cuentaDe = new Map();
@@ -596,7 +596,7 @@ export function cuotasPorCuenta(cuotas = [], ventas = []) {
     const o = out.get(cuenta) || { venta: 0, cuota: 0 }; out.set(cuenta, o);
     if (cuota > 0) { o.cuota += cuota; cuentaDe.set(k, cuenta); }
   }
-  for (const v of comoLista(ventas)) { const c = cuentaDe.get(String(v?.cliente ?? '').trim()); if (c) out.get(c).venta += numero(v.fact_neta); }
+  for (const v of comoLista(ventas)) { const c = cuentaDe.get(claveTexto(v?.cliente)); if (c) out.get(c).venta += numero(v.fact_neta); }
   return out;
 }
 
@@ -735,6 +735,11 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
 // top de la tienda, los racks del CEDIS y la demanda de 3 meses (y todos esos renglones se juntaban en un solo SKU falso).
 export function claveSku(v) {
   return typeof v === 'string' ? v.trim().toUpperCase() : typeof v === 'number' && Number.isFinite(v) ? String(v) : '';
+}
+// Clave de texto (4.12.37): como `claveSku()` pero sin mayúsculas, para cuentas y clientes ERP; un objeto, lista, booleano o
+// NaN → '' (se salta). Antes `String()` hacía cuentas falsas «[object Object]» / «true» en la capa de cuota y el reparto por estado.
+export function claveTexto(v) {
+  return typeof v === 'string' ? v.trim() : typeof v === 'number' && Number.isFinite(v) ? String(v) : '';
 }
 export function topSkus(filas = [], n = 5) {
   const m = new Map();
