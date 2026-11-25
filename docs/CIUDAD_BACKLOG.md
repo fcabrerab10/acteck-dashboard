@@ -197,6 +197,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.9) `tarjetaDe()` usa `pesosCorto()` (999 600 ya no sale «$1000 K» sino «$1.0 M»; negativos «-$5 K») y salta personas, reuniones, racks, barcos, tarimas, distritos, tiendas, camiones, vendedores y destinos nulos (antes lanzaba error al tocar el edificio).
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
+  - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
   - [x] (4.12.50) 2026-11-25 03:56 · Tira de la cadena: el Puerto sólo dice lo que hay («1 llega hoy · 2 recién llegados»); antes siempre «0 con ETA vencida» y «0 recién llegados». Vacío: «Sin movimiento».
   - [x] (4.12.49) Cadena de suministro con «pz» como el resto de la Ciudad (antes «1,500 pzs»).
   - [x] (4.12.48) Tarjetas con conteos enteros: `num()` de `tarjetaDe()` redondea (oficina ya no dice «2.5» personas ni «1,202.6» pendientes).

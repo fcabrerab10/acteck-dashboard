@@ -925,6 +925,15 @@ test('pulido: proyección y catálogos coherentes', () => {
   assert.equal(RECORRIDO_CLAVE, 'acteck-ciudad-recorrido');
 });
 
+test('nombreCiudad / nombreSucursal: más acentos y eñes (4.12.51)', () => {
+  assert.equal(nombreCiudad('SAN NICOLAS DE LOS GARZA'), 'San Nicolás de los Garza');
+  assert.equal(nombreCiudad('SAN PEDRO GARZA GARCIA'), 'San Pedro Garza García');
+  assert.equal(nombreCiudad('CIUDAD ACUÑA'), 'Ciudad Acuña'); assert.equal(nombreCiudad('CIUDAD ACUNA'), 'Ciudad Acuña');
+  assert.equal(nombreCiudad('SAN JOSE DEL CABO'), 'San José del Cabo'); assert.equal(nombreCiudad('SAN JUAN DEL RIO'), 'San Juan del Río');
+  assert.equal(nombreCiudad('GOMEZ PALACIO'), 'Gómez Palacio'); assert.equal(nombreCiudad('MICHOACAN'), 'Michoacán');
+  assert.equal(nombreCiudad('Tepatitlán'), 'Tepatitlán'); assert.equal(nombreCiudad('LAGOS DE MORENO'), 'Lagos de Moreno');
+  assert.equal(nombreSucursal('PLAZA RIO'), 'Plaza Río'); assert.equal(nombreSucursal('Galerías GDL'), 'Galerías GDL');
+});
 test('nombreCiudad: CDMX en sus formas y sin letras no es ciudad (4.12.2)', () => {
   for (const c of ['CDMX', 'cdmx', ' Cd. de México ', 'CD DE MEXICO', 'D.F.', 'DF']) assert.equal(nombreCiudad(c), 'CDMX', c);
   for (const c of ['123', '-', 5, ' . ', {}]) assert.equal(nombreCiudad(c), '', String(c));
