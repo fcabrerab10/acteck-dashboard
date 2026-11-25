@@ -372,6 +372,7 @@ test('interior del CEDIS: acomodo de racks y tarjeta del rack', () => {
   assert.deepEqual(acomodoRacks(racks, { ancho: 12, largo: 8, cols: 3.9 }).map((r) => [r.x, r.z]), [[-4, -2], [0, -2], [4, -2], [-4, 2]], 'cols decimal → 3');
   assert.ok(acomodoRacks(racks, { maxNiveles: NaN }).every((r) => r.niveles === 1), 'maxNiveles inválido → 1');
   assert.equal(acomodoRacks([{ marca: 'A', valor: 10 }, { marca: 'B', valor: -5 }])[1].niveles, 1, 'valor negativo = 1 nivel');
+  assert.deepEqual(acomodoRacks([{ marca: {}, valor: 5 }, { marca: true }, { marca: NaN }, { marca: [] }, 7, { marca: ' ACTECK ', valor: 2 }]).map((r) => r.marca), ['ACTECK'], 'marca no texto se salta y sale limpia');
   const m = { cedis: { racksMarca: racks } };
   const t = tarjetaDe({ tipo: 'rack', marca: 'ACTECK', titulo: 'ACTECK', pagina: 'inventarioGlobal' }, m);
   assert.deepEqual(t.numeros, [['Inventario', '$1 K · 67 %'], ['Días de inventario', 'sin demanda'], ['Piezas', '10'], ['SKUs con stock', '3']]); assert.equal(t.estado, null);

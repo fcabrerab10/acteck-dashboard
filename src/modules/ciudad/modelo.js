@@ -1071,7 +1071,8 @@ export function demanda3Meses(rows = [], hoy = new Date()) {
 export function acomodoRacks(racks = [], op) {
   const { ancho = 14, largo = 9, cols = 3, maxNiveles = 5 } = op && typeof op === 'object' ? op : {}; // (4.3.19) opciones null → omisión
   // (4.3.11) Acepta algo que no es lista, cols 0/decimal (antes NaN/Infinity en x) y maxNiveles inválido; valor negativo = 1 nivel.
-  const rs = (Array.isArray(racks) ? racks : []).filter((r) => r && String(r.marca ?? '').trim()); if (!rs.length) return [];
+  // 4.12.45: marca que es objeto, lista, booleano o NaN se salta (antes `String()` dibujaba un rack «[object Object]» / «true»); la marca sale limpia.
+  const rs = (Array.isArray(racks) ? racks : []).filter((r) => r && typeof r === 'object' && claveTexto(r.marca)).map((r) => ({ ...r, marca: claveTexto(r.marca) })); if (!rs.length) return [];
   const c = Math.max(1, Math.floor(Number(cols)) || 1), tope = Math.max(1, Math.floor(Number(maxNiveles)) || 1);
   const max = Math.max(...rs.map((r) => N(r.valor))); const filas = Math.ceil(rs.length / c);
   const dx = ancho / c, dz = largo / filas;

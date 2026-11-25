@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
+  - [x] (4.12.45) `acomodoRacks()` salta marcas que son objeto, lista, booleano o NaN (antes un rack «[object Object]» / «true» en el CEDIS) y deja la marca sin espacios.
   - [x] (4.12.42) Color de la cuenta con `colorCuenta()` pura y probada: tiendas, sus vendedores y la leyenda encuentran el color aunque la cuenta venga con espacios o en MAYÚSCULAS (« PCEL » → rojo de pcel; antes gris), como `sedeDeCuenta()`. Harness sin errores.
   - [x] (4.12.40) Coche del vendedor: el destino dice el nombre de la cuenta del dashboard («va a CT Internacional (Hermosillo)», como el camión) en vez del nombre crudo del ERP («CT INTERNACIONAL DEL NOROESTE SA DE CV»); sin cuenta, el del ERP limpio o la clave.
   - [x] (4.12.36) Cadena: el motivo del puerto cuenta los barcos que esperan muelle («1 barco esperando muelle», «2 barcos…»); antes decía «Barcos esperando muelle» aunque fuera uno.
@@ -367,6 +368,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-25 02:36 · v4.12.45 · `acomodoRacks()`: racks del CEDIS sin marcas falsas «[object Object]» / «true»; marca limpia; +1 prueba.
 - 2026-11-25 01:16 · v4.12.41 · `sedeDeCuenta()`: sede y cartera de la tienda con la cuenta sin espacios ni mayúsculas (« PCEL » ya no cae en Guadalajara); +1 prueba.
 - 2026-11-25 00:57 · v4.12.40 · Vendedores: el destino del coche usa el nombre de la cuenta del dashboard (como el camión), no el crudo del ERP; +1 prueba.
 - 2026-11-25 00:36 · v4.12.39 · Capa «Cartera»: cuenta sin espacios/mayúsculas, renglones repetidos suman, cartera no lista no truena.
