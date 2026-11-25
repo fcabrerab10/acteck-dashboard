@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
+  - [x] (4.12.54) 2026-11-25 05:16 · Oficina con tipos y estados tolerantes: `esClase()` pura y probada; agenda «HECHA»/« abierta », reunión «Viaje» y perfil « EXTERNO » se reconocen (antes contaban mal pendientes/hechas, el viaje salía como reunión y la presencia lo ignoraba).
   - [x] (4.12.50) 2026-11-25 03:56 · Tira de la cadena: el Puerto sólo dice lo que hay («1 llega hoy · 2 recién llegados»); antes siempre «0 con ETA vencida» y «0 recién llegados». Vacío: «Sin movimiento».
   - [x] (4.12.49) Cadena de suministro con «pz» como el resto de la Ciudad (antes «1,500 pzs»).
   - [x] (4.12.48) Tarjetas con conteos enteros: `num()` de `tarjetaDe()` redondea (oficina ya no dice «2.5» personas ni «1,202.6» pendientes).
@@ -654,3 +655,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-25 02:16 · v4.12.44 · Reuniones y presencia de la oficina leen fechas de Postgres con zona corta («+00»), espacio en vez de «T» y microsegundos (antes la reunión se perdía; Safari/iPad no las leía); +1 prueba.
 - 2026-11-25 03:35 · v4.12.48 · Tarjetas (oficina, CEDIS, puerto, banco…) muestran conteos, piezas y días enteros aunque lleguen con decimales; +1 prueba.
 - 2026-11-25 03:39 · v4.12.49 · Cadena de suministro dice «1,500 pz» (igual que globos, bitácora y puerto; antes «pzs»).
+- 2026-11-25 05:16 · v4.12.54 · Oficina: tipos y estados de agenda, reuniones y perfiles sin importar mayúsculas, acentos ni espacios (`esClase()`); +1 prueba.

@@ -26,6 +26,8 @@ export const comoLista = (x) => (Array.isArray(x) ? x : []);
 export const cuantos = (x, omision) => { const n = x == null || x === '' ? NaN : Number(x); return Number.isFinite(n) && n >= 0 ? Math.floor(n) : omision; };
 // 4.7.73: un objeto, lista, booleano o Infinity ya no sale «[OBJECT OBJECT]» / «TRUE» / «INFINITY» (cuenta, ciudad, nombre): vacío.
 export const norm = (s) => String(s && (typeof s === 'string' || (typeof s === 'number' && Number.isFinite(s))) ? s : '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+// 4.12.54: tipo/estado de agenda, reuniones y perfiles sin importar mayúsculas, acentos ni espacios («Viaje», « hecha », «EXTERNO»).
+export const esClase = (v, ...clases) => { const k = norm(v); return !!k && clases.some((c) => norm(c) === k); };
 
 /** Ciudades (lat, lon) · la escena usa x = (lon − lonGDL)·ESC, z = −(lat − latGDL)·ESC. */
 export const CIUDADES = {
@@ -738,8 +740,8 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
   const de = (r, id) => r && id && (r.creado_por === id || (Array.isArray(r.asistentes) && r.asistentes.some((a) => a && (a.user_id === id || a === id))));
   const todas = [...comoLista(reuniones), ...comoLista(viajes)].filter(Boolean);
   const vistos = new Set(); const unicas = todas.filter((r) => { const k = r.id || `${r.titulo}|${r.fecha}`; if (vistos.has(k)) return false; vistos.add(k); return true; });
-  const viajeHoy = unicas.filter((r) => r.tipo === 'viaje' && dia(r.fecha) && dia(r.fecha) <= hoyD && (dia(r.fecha_fin || r.fecha) || dia(r.fecha)) >= hoyD);
-  const enCurso = unicas.filter((r) => { if (r.tipo === 'viaje') return false; const t = instante(r.fecha)?.getTime(); return Number.isFinite(t) && t <= ahora && ahora < t + duracionMin(r.duracion_min) * 60000; });
+  const viajeHoy = unicas.filter((r) => esClase(r.tipo, 'viaje') && dia(r.fecha) && dia(r.fecha) <= hoyD && (dia(r.fecha_fin || r.fecha) || dia(r.fecha)) >= hoyD);
+  const enCurso = unicas.filter((r) => { if (esClase(r.tipo, 'viaje')) return false; const t = instante(r.fecha)?.getTime(); return Number.isFinite(t) && t <= ahora && ahora < t + duracionMin(r.duracion_min) * 60000; });
   for (const p of comoLista(personas)) {
     if (!p || typeof p !== 'object') continue;
     const v = viajeHoy.find((r) => de(r, p.id)); const r = !v && enCurso.find((x) => de(x, p.id));
@@ -1499,15 +1501,15 @@ export function construirModelo(d, hoy = new Date()) {
 
   // ── Oficina: equipo del dashboard + genéricos ──
   const items = d.agendaHoy || [];
-  const personas = (d.perfiles || []).filter((p) => p.activo && p.tipo !== 'externo' && !/prueba/i.test(p.nombre || '')).map((p) => {
+  const personas = (d.perfiles || []).filter((p) => p.activo && !esClase(p.tipo, 'externo') && !/prueba/i.test(p.nombre || '')).map((p) => {
     const mios = items.filter((it) => it.propietario === p.user_id || (Array.isArray(it.responsables) && it.responsables.includes(p.user_id)));
-    const abiertas = mios.filter((it) => it.estado === 'abierta' || it.estado === 'arrastrada');
+    const abiertas = mios.filter((it) => esClase(it.estado, 'abierta', 'arrastrada'));
     const enCurso = abiertas.find((it) => it.inicio_real);
     const quien = unirTexto(p.nombre, p.puesto); // 4.7.38: sin «null» en la búsqueda del rol
     return { id: p.user_id, nombre: nombrePersona(p), puesto: unirTexto(p.puesto) || unirTexto(p.rol), rol: /millan|finanz/i.test(quien) ? 'finanzas' : /karolina|comercial/i.test(quien) ? 'comercial' : 'direccion',
-      pendientes: abiertas.length, hechas: mios.filter((it) => it.estado === 'hecha').length, actividad: (enCurso ? unirTexto(enCurso.titulo) : unirTexto(abiertas[0]?.titulo)) || null, avatar: p.avatar_url || null };
+      pendientes: abiertas.length, hechas: mios.filter((it) => esClase(it.estado, 'hecha')).length, actividad: (enCurso ? unirTexto(enCurso.titulo) : unirTexto(abiertas[0]?.titulo)) || null, avatar: p.avatar_url || null };
   });
-  const reuniones = (d.reunionesHoy || []).filter((r) => r.tipo !== 'viaje');
+  const reuniones = (d.reunionesHoy || []).filter((r) => !esClase(r.tipo, 'viaje'));
   // 4.7.66: el conteo y la reunión en curso salen de la agenda limpia (antes una reunión con fecha ilegible o repetida sumaba
   // en «Reuniones hoy» sin aparecer en la sala, y la reunión en curso llevaba el título crudo, «null» incluido).
   const agenda = reunionesDelDia(reuniones, hoy), reunionEnCurso = agenda.find((r) => r.estado === 'en curso') || null; // 4.3.32: fecha nula no está en curso
