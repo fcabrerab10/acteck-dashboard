@@ -1206,6 +1206,9 @@ export const SEDE_POR_CUENTA = {
   ingram: 'CIUDAD DE MEXICO', ingram_retail: 'CIUDAD DE MEXICO', pch: 'CIUDAD DE MEXICO', loma: 'MONTERREY', guc: 'MONTERREY',
   kabik: 'MERIDA', dcmayorista: 'PUEBLA', exel: 'MONTERREY', techsmart: 'GUADALAJARA', arroba: 'GUADALAJARA', directo: 'GUADALAJARA',
 };
+// 4.12.41: la sede se busca con la cuenta sin espacios ni mayúsculas (« PCEL » → Monterrey; antes caía en la de omisión y
+// la cartera de la cuenta no encontraba su tienda). Cuenta vacía, objeto o NaN → la de omisión.
+export function sedeDeCuenta(cuenta, omision = 'GUADALAJARA') { const k = unirTexto(cuenta).toLowerCase(); return (k && Object.hasOwn(SEDE_POR_CUENTA, k) && SEDE_POR_CUENTA[k]) || omision; }
 // Alias de nombres de sucursal → ciudad del catálogo (lo que no cae aquí se busca por coincidencia de palabras).
 const ALIAS = {
   CDMX: 'CIUDAD DE MEXICO', MEXICO: 'CIUDAD DE MEXICO', 'CD DE MEXICO': 'CIUDAD DE MEXICO', AZCAPOTZALCO: 'CIUDAD DE MEXICO', VALLEJO: 'CIUDAD DE MEXICO',
@@ -1513,7 +1516,7 @@ export function construirModelo(d, hoy = new Date()) {
   for (const s of sucAgr.values()) {
     if (s.actual + s.previo <= 0) continue;
     const c = ciudadDeSucursal(s.sucursal);
-    const sede = SEDE_POR_CUENTA[s.cuenta] || 'GUADALAJARA';
+    const sede = sedeDeCuenta(s.cuenta);
     const nombreCuenta = unirTexto(cuentas.get(s.cuenta)?.nombre) || s.cuenta; // 4.12.11: nombre en objeto ya no sale «[object Object]»
     // Luz encendida = vendió este mes; los primeros 10 días del mes también cuenta el mes anterior (si no, la ciudad amanece apagada el día 1).
     const activa = s.actual > 0 || (hoy.getDate() <= 10 && s.previo > 0);
@@ -1530,8 +1533,8 @@ export function construirModelo(d, hoy = new Date()) {
     const m = (d.cuentaMes || []).filter((r) => unirTexto(r.cuenta) === c.cuenta);
     const act = m.filter((r) => N(r.anio) === anio && N(r.mes) === mes).reduce((s, r) => s + N(r.importe), 0);
     const prev = m.filter((r) => N(r.anio) === anioPrev && N(r.mes) === mesPrev).reduce((s, r) => s + N(r.importe), 0);
-    tienda(SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA', { cuenta: c.cuenta, nombreCuenta: unirTexto(c.nombre) || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
-    const sede = SEDE_POR_CUENTA[c.cuenta] || 'GUADALAJARA'; // 3.90.56: y una tienda por estado donde vende a clientes finales
+    tienda(sedeDeCuenta(c.cuenta), { cuenta: c.cuenta, nombreCuenta: unirTexto(c.nombre) || c.cuenta, sucursal: 'Matriz', importe: act, previo: prev, vendio: act > 0 || (hoy.getDate() <= 10 && prev > 0), vendioMes: act > 0, virtual: false, vendedores: 0 });
+    const sede = sedeDeCuenta(c.cuenta); // 3.90.56: y una tienda por estado donde vende a clientes finales
     for (const r of repartoPorEstado(c.cuenta, d.clientesFinales, { anio, mes, anioPrev, mesPrev, sede })) tienda(r.ciudad, { cuenta: c.cuenta, nombreCuenta: unirTexto(c.nombre) || c.cuenta, sucursal: `Clientes en ${r.ciudad.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase())}`, importe: r.importe, previo: r.previo, vendio: r.importe > 0 || (hoy.getDate() <= 10 && r.previo > 0), vendioMes: r.importe > 0, virtual: false, reparto: true, vendedores: 0 });
   }
   // vendedores de los mayoristas → en la ciudad de su sucursal (o la sede de la cuenta)
@@ -1541,16 +1544,16 @@ export function construirModelo(d, hoy = new Date()) {
   for (const v of vm.values()) {
     if (!v.nombre || /^(SIN|N\/?A|-)/i.test(v.nombre)) continue;
     const c = v.sucursal ? ciudadDeSucursal(v.sucursal) : null;
-    const ciudad = (c && c.ciudad) || SEDE_POR_CUENTA[v.cuenta] || 'GUADALAJARA';
+    const ciudad = (c && c.ciudad) || sedeDeCuenta(v.cuenta);
     if (!porCiudad.has(ciudad)) tienda(ciudad, { cuenta: v.cuenta, nombreCuenta: unirTexto(cuentas.get(v.cuenta)?.nombre) || v.cuenta, sucursal: 'Matriz', importe: 0, previo: 0, vendio: false, virtual: false, vendedores: 0 });
     porCiudad.get(ciudad).vendedores.push({ nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, cuenta: v.cuenta, nombreCuenta: unirTexto(cuentas.get(v.cuenta)?.nombre) || v.cuenta, importe: v.importe, activo: v.ultimoMes >= mesPrev });
   }
   // Cartera (propios): saldo vencido → bandera roja en su Matriz / primera tienda de la sede.
   const carteraPor = carteraPorCuenta(d.cartera); // 4.7.49: « digitalife » = «digitalife»; 4.7.52: con dos cortes gana el más reciente
   for (const [cuenta, c] of carteraPor) {
-    const sede = SEDE_POR_CUENTA[cuenta] || 'GUADALAJARA';
+    const sede = sedeDeCuenta(cuenta);
     if (!porCiudad.has(sede)) continue;
-    const t = porCiudad.get(sede).tiendas.find((x) => x.cuenta === cuenta); if (t) t.cartera = c;
+    const t = porCiudad.get(sede).tiendas.find((x) => unirTexto(x.cuenta).toLowerCase() === cuenta); if (t) t.cartera = c;
   }
   // Clientes finales por estado → ciudad representativa (casitas junto a la manzana).
   const cfPor = new Map();
@@ -1573,7 +1576,7 @@ export function construirModelo(d, hoy = new Date()) {
   const camiones = (d.facturas || []).filter((f) => dias(f.fecha, hoyIso) <= 10).map((f) => {
     const ck = claveErp(f.cliente_key), kc = cuentaPorErp.get(ck), cuenta = kc ? cuentas.get(kc) : null;
     const key = kc || ck;
-    const ciudad = SEDE_POR_CUENTA[key] || 'CIUDAD DE MEXICO';
+    const ciudad = sedeDeCuenta(key, 'CIUDAD DE MEXICO');
     const edad = dias(f.fecha, hoyIso);
     return { folio: f.folio, cliente: unirTexto(cuenta?.nombre) || ck || null, ciudad, monto: N(f.monto), piezas: N(f.piezas), fecha: f.fecha, progreso: Math.min(0.95, 0.1 + Math.max(0, edad) * 0.12) };
   }).sort((a, b) => b.monto - a.monto).slice(0, 14);

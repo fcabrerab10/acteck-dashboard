@@ -350,6 +350,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.37) `claveTexto()` pura y probada: `cuotasPorCuenta()` y `repartoPorEstado()` saltan cuenta y cliente ERP que llegan como objeto, lista, booleano o NaN (antes `String()` creaba cuentas falsas «[object Object]» / «true» en la capa de cuota y el reparto por estado).
   - [x] (4.12.38) `capaCiudades(m, 'ventas')`: tono con el % sin redondear (−0.4 % ámbar, −20.4 % rojo) y sin «-0».
   - [x] (4.12.39) Capa «Cartera» por ciudad: la cuenta empata sin espacios ni mayúsculas (« PCEL » = «pcel», como `carteraPorCuenta()`), dos renglones de la misma cuenta suman (antes ganaba el último) y cartera que no es lista ya no lanza error. +1 prueba.
+  - [x] (4.12.41) `sedeDeCuenta()` pura y probada: la sede de cada tienda, Matriz, vendedor, camión y la cartera se buscan con la cuenta sin espacios ni mayúsculas (« PCEL » → Monterrey; antes caía en Guadalajara/CDMX) y la cartera encuentra su tienda aunque la cuenta venga en MAYÚSCULAS. +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -365,6 +366,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-25 01:16 · v4.12.41 · `sedeDeCuenta()`: sede y cartera de la tienda con la cuenta sin espacios ni mayúsculas (« PCEL » ya no cae en Guadalajara); +1 prueba.
 - 2026-11-25 00:57 · v4.12.40 · Vendedores: el destino del coche usa el nombre de la cuenta del dashboard (como el camión), no el crudo del ERP; +1 prueba.
 - 2026-11-25 00:36 · v4.12.39 · Capa «Cartera»: cuenta sin espacios/mayúsculas, renglones repetidos suman, cartera no lista no truena.
 - 2026-11-25 00:15 · v4.12.38 · Pulido: capa «Ventas» por ciudad con el semáforo del % sin redondear (−0.4 % ya no verde, −20.4 % ya no ámbar; sin «-0 %»); +1 prueba.
