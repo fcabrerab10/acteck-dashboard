@@ -614,8 +614,8 @@ export function capaCiudades(m, capa) {
   if (capa === 'ventas') {
     for (const d of distritos) {
       const act = d.tiendas.reduce((s, t) => s + numero(t.importe), 0), prev = d.tiendas.reduce((s, t) => s + numero(t.previo), 0); // 4.7.17: «$5,000» en texto cuenta
-      const pct = prev > 0 ? Math.round((act / prev - 1) * 100) : null;
-      const tono = pct == null ? (act > 0 ? 'verde' : 'gris') : pct >= 0 ? 'verde' : pct >= -20 ? 'ambar' : 'rojo';
+      const crudo = prev > 0 ? (act / prev - 1) * 100 : null, pct = crudo == null ? null : Math.round(crudo) + 0; // 4.12.38: tono con el % sin redondear (−0.4 % ya no verde, −20.4 % ya no ámbar)
+      const tono = crudo == null ? (act > 0 ? 'verde' : 'gris') : crudo >= 0 ? 'verde' : crudo >= -20 ? 'ambar' : 'rojo';
       porCiudad.set(d.ciudad, { tono, valor: pct, texto: `${pesos(act)}${pct == null ? '' : ` · ${porcentaje(pct, { signo: true })} vs mes anterior`}` });
     }
     return { capa, titulo: 'Sell out vs mes anterior', leyenda: [{ tono: 'verde', texto: 'Igual o arriba' }, { tono: 'ambar', texto: 'Hasta −20 %' }, { tono: 'rojo', texto: 'Más de −20 %' }, { tono: 'gris', texto: 'Sin venta' }], porCiudad };

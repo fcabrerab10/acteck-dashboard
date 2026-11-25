@@ -2115,3 +2115,16 @@ test('claveTexto: cuentas y clientes que no son texto ni número se saltan (4.12
   assert.deepEqual(repartoPorEstado(true, [{ cuenta: true, estado: 'NUEVO LEON', anio: 2026, mes: 10, importe: 10 }], opt), []);
   assert.equal(repartoPorEstado(7, [{ cuenta: ' 7 ', estado: 'NUEVO LEON', anio: 2026, mes: 10, importe: 10 }, { cuenta: {}, estado: 'NUEVO LEON', anio: 2026, mes: 10, importe: 99 }], opt)[0]?.importe, 10);
 });
+
+test('capa ventas: semáforo con el % sin redondear (4.12.38)', () => {
+  const m = { distritos: [
+    { ciudad: 'A', tiendas: [{ importe: 996, previo: 1000 }] },
+    { ciudad: 'B', tiendas: [{ importe: 796, previo: 1000 }] },
+    { ciudad: 'C', tiendas: [{ importe: 1000, previo: 1000 }] },
+    { ciudad: 'D', tiendas: [{ importe: 800, previo: 1000 }] },
+  ] };
+  const v = capaCiudades(m, 'ventas').porCiudad;
+  assert.equal(v.get('A').tono, 'ambar'); assert.equal(v.get('A').valor, 0); assert.ok(!Object.is(v.get('A').valor, -0));
+  assert.equal(v.get('B').tono, 'rojo'); assert.equal(v.get('B').valor, -20);
+  assert.equal(v.get('C').tono, 'verde'); assert.equal(v.get('D').tono, 'ambar');
+});

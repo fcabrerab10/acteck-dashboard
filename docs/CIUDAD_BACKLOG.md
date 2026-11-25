@@ -347,6 +347,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.32) `reunionesDelDia()` ignora id y cliente_key que llegan como objeto, lista, booleano o NaN (antes «id:[object Object]» juntaba reuniones distintas en una y la oficina perdía reuniones de la agenda).
   - [x] (4.12.33) `nombreSucursal()` pura y probada: la sucursal en MAYÚSCULAS sale legible en `nombreTienda()` (acentos y conectores como `nombreCiudad()`, siglas sin vocal/con número/punto intactas) y el buscador de `Ciudad.jsx` compara con `norm()` (sin acentos).
   - [x] (4.12.37) `claveTexto()` pura y probada: `cuotasPorCuenta()` y `repartoPorEstado()` saltan cuenta y cliente ERP que llegan como objeto, lista, booleano o NaN (antes `String()` creaba cuentas falsas «[object Object]» / «true» en la capa de cuota y el reparto por estado).
+  - [x] (4.12.38) `capaCiudades(m, 'ventas')`: tono con el % sin redondear (−0.4 % ámbar, −20.4 % rojo) y sin «-0».
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -361,6 +362,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-25 00:15 · v4.12.38 · Pulido: capa «Ventas» por ciudad con el semáforo del % sin redondear (−0.4 % ya no verde, −20.4 % ya no ámbar; sin «-0 %»); +1 prueba.
 - 2026-11-24 23:56 · v4.12.37 · `claveTexto()`: la capa de cuota y el reparto por estado saltan cuentas/clientes que no son texto ni número (sin cuentas falsas «[object Object]»).
 - 2026-11-24 23:36 · v4.12.36 · Cadena: motivo del puerto con el número de barcos esperando muelle («1 barco…»); +1 prueba.
 - 2026-11-24 23:16 · v4.12.35 · Pulido: semáforo de «Ventas del mes» con el % sin redondear (igual que Inicio: 99.6 % ya no verde, 84.6 % ámbar); +1 prueba.
