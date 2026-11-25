@@ -868,11 +868,14 @@ export function nombreSucursal(s) {
 }
 // Leyenda de cuentas (4.7.40): una entrada por cuenta (antes se repetía si el nombre venía con espacios distintos
 // y la clave chocaba en React; un nombre con «|» se partía y una cuenta nula decía «null»). Salta distritos/tiendas nulos.
+// 4.12.52: la misma cuenta con distintas mayúsculas («PCEL» / «Pcel») es una sola entrada, como su color (`colorCuenta()`);
+// si la primera tienda no traía nombre de cuenta, toma el de la siguiente que sí (antes la leyenda decía la clave «PCEL»).
 export function leyendaCuentas(distritos) {
   const out = new Map();
   for (const d of comoLista(distritos)) for (const t of comoLista(d?.tiendas)) {
-    const c = unirTexto(t?.cuenta); if (!c || out.has(c)) continue;
-    out.set(c, { cuenta: c, nombre: unirTexto(t.nombreCuenta) || c });
+    const c = unirTexto(t?.cuenta), k = c.toLowerCase(); if (!c) continue;
+    const n = unirTexto(t.nombreCuenta), ya = out.get(k);
+    if (!ya) out.set(k, { cuenta: c, nombre: n || c }); else if (n && ya.nombre === ya.cuenta) ya.nombre = n;
   }
   return [...out.values()];
 }

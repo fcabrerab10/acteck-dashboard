@@ -1631,6 +1631,11 @@ test('leyendaCuentas(): una entrada por cuenta, sin «null» ni nombres partidos
   assert.deepEqual(leyendaCuentas(ds), [{ cuenta: '10', nombre: 'Pcel' }, { cuenta: '20', nombre: 'A|B' }, { cuenta: '30', nombre: '30' }]);
   assert.deepEqual(leyendaCuentas(null), []);
 });
+test('4.12.52 leyendaCuentas(): una sola entrada aunque la cuenta cambie de mayúsculas y toma el nombre que sí venga', () => {
+  const ds = [{ tiendas: [{ cuenta: 'PCEL', nombreCuenta: null }, { cuenta: ' pcel ', nombreCuenta: 'Pcel' }, { cuenta: 'Pcel', nombreCuenta: 'Otro' }] },
+    { tiendas: [{ cuenta: 'CT', nombreCuenta: 'CT Internacional' }, { cuenta: 'ct', nombreCuenta: null }] }];
+  assert.deepEqual(leyendaCuentas(ds), [{ cuenta: 'PCEL', nombre: 'Pcel' }, { cuenta: 'CT', nombre: 'CT Internacional' }]);
+});
 
 test('tarjeta del camión: destino con acentos y sin «null» (4.7.41)', () => {
   const m = { hoyIso: '2026-10-08', camiones: [{ folio: 'E1', envio: true, cliente: ' null ', paqueteria: '  ', ciudad: 'SAN LUIS POTOSI', fecha: '2026-10-07' }, { folio: 'F1', cliente: ' CT ', monto: 1000, piezas: 3, fecha: '2026-10-07', ciudad: null }] };
