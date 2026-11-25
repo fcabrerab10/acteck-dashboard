@@ -342,6 +342,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.30) `ponerPosEnPuerto()` salta contenedor, PO e id de barco que llegan como objeto, lista, booleano o NaN (antes `String()` ponía «[object Object]» / «NaN» en las POs de la tarjeta del puerto).
   - [x] (4.12.31) Cadena de suministro: el tramo «Puerto» ya no cuenta como «con ETA vencida» a los barcos que llegan hoy (ETA 0) ni pinta ámbar por ellos; ahora dice «N con ETA vencida · N llega(n) hoy · …», como `llegaBarco()`.
   - [x] (4.12.32) `reunionesDelDia()` ignora id y cliente_key que llegan como objeto, lista, booleano o NaN (antes «id:[object Object]» juntaba reuniones distintas en una y la oficina perdía reuniones de la agenda).
+  - [x] (4.12.33) `nombreSucursal()` pura y probada: la sucursal en MAYÚSCULAS sale legible en `nombreTienda()` (acentos y conectores como `nombreCiudad()`, siglas sin vocal/con número/punto intactas) y el buscador de `Ciudad.jsx` compara con `norm()` (sin acentos).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -357,6 +358,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-24 22:37 · v4.12.33 · Pulido: nombres de tienda legibles con `nombreSucursal()` («CT Internacional · Hermosillo», «Plaza del Sol»; siglas como GDL/CT se respetan) en tarjeta, globo y pensamientos; el buscador ya no distingue acentos; +1 prueba.
 - 2026-11-24 22:15 · v4.12.32 · Agenda de la oficina: `reunionesDelDia()` ya no junta reuniones distintas cuyo id llega como objeto/booleano/NaN; +1 prueba.
 - 2026-11-24 15:56 · v4.12.31 · Cadena: el tramo «Puerto» separa «con ETA vencida» de «llega(n) hoy» (ETA 0 ya no pinta ámbar); +2 pruebas.
 - 2026-11-24 15:35 · v4.12.30 · POs del puerto sin «[object Object]»/«NaN»: `ponerPosEnPuerto()` limpia contenedor/PO/id con `unirTexto()`; +1 prueba.

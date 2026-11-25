@@ -814,8 +814,21 @@ export function nombrePersona(p) {
 // Nombre de la tienda (4.7.39): «Pcel · Centro»; sin nombre de cuenta usa la clave, sin sucursal sólo la cuenta,
 // sin nada «Tienda». Es también la llave con que la tarjeta encuentra la tienda tocada (antes «Pcel · null» y la
 // tarjeta salía vacía porque el edificio se titulaba «Pcel»).
+// 4.12.33: la sucursal que llega toda en mayúsculas («CIUDAD JUAREZ», «PLAZA DEL SOL») sale legible con `nombreSucursal()`
+// («Ciudad Juárez», «Plaza del Sol»); antes la tarjeta, el globo y el pensamiento decían «CT Internacional · HERMOSILLO».
 export function nombreTienda(t) {
-  return unirTexto(unirTexto(t?.nombreCuenta) || t?.cuenta, t?.sucursal) || 'Tienda';
+  return unirTexto(unirTexto(t?.nombreCuenta) || t?.cuenta, nombreSucursal(t?.sucursal)) || 'Tienda';
+}
+// Sucursal legible (4.12.33): sólo toca la que viene TODA en mayúsculas (una ya escrita «Galerías GDL» se respeta). Cada palabra
+// como `nombreCiudad()` (acentos conocidos, conectores en minúscula) salvo siglas: palabras cortas sin vocal («CT», «GDL», «MTY»),
+// con número («GDL1») o con punto («S.A.») quedan tal cual. CDMX entera se abrevia. Lo que no es texto/número → ''.
+export function nombreSucursal(s) {
+  const t = unirTexto(s).replace(/\s+/g, ' '); if (!t || !/\p{L}/u.test(t) || /\p{Ll}/u.test(t)) return t;
+  if (/^(CIUDAD|CD\.?) DE MEXICO$|^CDMX$/.test(norm(t))) return 'CDMX';
+  return t.split(/(\s+|-)/).map((w, i) => {
+    if (!/\p{L}/u.test(w) || /[\d.]/.test(w) || (w.length <= 4 && !/[AEIOUÁÉÍÓÚ]/.test(w))) return w;
+    const k = norm(w); return ACENTOS[k] || (i > 0 && CONECTORES.has(k) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase());
+  }).join('');
 }
 // Leyenda de cuentas (4.7.40): una entrada por cuenta (antes se repetía si el nombre venía con espacios distintos
 // y la clave chocaba en React; un nombre con «|» se partía y una cuenta nula decía «null»). Salta distritos/tiendas nulos.
