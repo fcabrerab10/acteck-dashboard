@@ -366,6 +366,8 @@ Principios que no se rompen en ninguna etapa:
 
   - [x] (4.12.52) 2026-11-25 04:36 · Leyenda de cuentas: una sola entrada aunque la cuenta llegue con distintas mayúsculas («PCEL» / «pcel»), como su color, y toma el nombre de cuenta de la tienda que sí lo traiga.
   - [x] (4.12.53) 2026-11-25 04:56 · Negativos contables: `numero()`, `cifraCorta()` / `pesosCorto()` y la barra de recursos leen «(1,500)» / «$(2,000)» como negativos (antes 0: una nota de crédito o ajuste en texto no restaba y salía «$0»); «()» o «(-5)» siguen como basura.
+  - [x] (4.12.58) 2026-11-25 15:15 · Pellizco con dedos encimados (< 1 px al empezar o al juntarlos): `gestoDosDedos()` ya no brinca la cámara al zoom mínimo/máximo ni gira a un ángulo al azar; +2 pruebas.
+
 ## Necesita a Fernando (el agente no lo hace)
 
 - Nombres del personal de almacén/ventas que no está en el dashboard.
@@ -660,3 +662,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-25 03:35 · v4.12.48 · Tarjetas (oficina, CEDIS, puerto, banco…) muestran conteos, piezas y días enteros aunque lleguen con decimales; +1 prueba.
 - 2026-11-25 03:39 · v4.12.49 · Cadena de suministro dice «1,500 pz» (igual que globos, bitácora y puerto; antes «pzs»).
 - 2026-11-25 05:16 · v4.12.54 · Oficina: tipos y estados de agenda, reuniones y perfiles sin importar mayúsculas, acentos ni espacios (`esClase()`); +1 prueba.
+- 2026-11-25 15:15 · v4.12.58 · Pellizco táctil con dedos encimados ya no brinca el zoom de la Ciudad (`gestoDosDedos()`); +2 pruebas.

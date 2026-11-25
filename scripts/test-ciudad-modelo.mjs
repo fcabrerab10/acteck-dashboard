@@ -884,7 +884,9 @@ test('gesto de dos dedos', () => {
   assert.equal(gestoDosDedos(p(0, 0, 100, 0), p(0, 0, 200, 0)).escala, .5); // separar = acercar
   assert.ok(Math.abs(gestoDosDedos(p(0, 0, 100, 0), p(0, 0, 0, 100)).giro - Math.PI / 2) < 1e-9);
   assert.ok(Math.abs(gestoDosDedos(p(0, 0, -100, 1), p(0, 0, -100, -1)).giro) < .1); // cruza ±π sin brincar
-  assert.equal(gestoDosDedos(p(5, 5, 5, 5), p(0, 0, 10, 0)).escala, .1); // dedos encimados: sin dividir entre 0
+  assert.deepEqual(gestoDosDedos(p(5, 5, 5, 5), p(0, 0, 10, 0)), { escala: 1, giro: 0 }); // 4.12.58: empezar encimados no brinca el zoom
+  assert.deepEqual(gestoDosDedos(p(0, 0, 100, 0), p(3, 3, 3.5, 3)), { escala: 1, giro: 0 }); // juntarlos (< 1 px) tampoco
+  assert.equal(gestoDosDedos(p(0, 0, 1, 0), p(0, 0, 2, 0)).escala, .5); // 1 px ya cuenta
 });
 
 test('paseantes por manzana (versión ligera)', () => {

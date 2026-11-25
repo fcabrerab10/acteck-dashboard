@@ -1419,7 +1419,10 @@ export function gestoDosDedos(a, b) {
   // pareja incompleta o con coordenadas que no son número (4.3.14): sin cambio, para que el zoom/giro no quede NaN (pantalla negra)
   const ok = (p) => Array.isArray(p) && p.length >= 2 && [p[0], p[1]].every((q) => q && Number.isFinite(q.x) && Number.isFinite(q.y));
   if (!ok(a) || !ok(b)) return { escala: 1, giro: 0 };
-  const dist = (p) => Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y) || 1;
+  const dist = (p) => Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+  // 4.12.58: dedos encimados (< 1 px, al empezar o al juntarlos) no tienen distancia ni ángulo: sin cambio. Antes el `|| 1`
+  // daba escala 0.1 o 100 y la cámara brincaba al zoom mínimo/máximo, y el giro salía de un ángulo al azar.
+  if (!(dist(a) >= 1) || !(dist(b) >= 1)) return { escala: 1, giro: 0 };
   const ang = (p) => Math.atan2(p[1].y - p[0].y, p[1].x - p[0].x);
   let giro = ang(b) - ang(a); while (giro > Math.PI) giro -= 2 * Math.PI; while (giro < -Math.PI) giro += 2 * Math.PI;
   return { escala: dist(a) / dist(b), giro };
