@@ -2133,3 +2133,13 @@ test('capa ventas: semáforo con el % sin redondear (4.12.38)', () => {
   assert.equal(v.get('B').tono, 'rojo'); assert.equal(v.get('B').valor, -20);
   assert.equal(v.get('C').tono, 'verde'); assert.equal(v.get('D').tono, 'ambar');
 });
+
+test('(4.12.40) destino del vendedor con el nombre de la cuenta del dashboard (como el camión); sin cuenta, el del ERP', () => {
+  const erp = [{ anio: 2026, vendedor: 'ANA', cliente_key: '01234', cliente_nombre: 'CT INTERNACIONAL DEL NOROESTE SA DE CV', fact_neta: 500 },
+    { anio: 2026, vendedor: 'ANA', cliente_key: '777', cliente_nombre: ' DISTRIBUIDORA X ', fact_neta: 300 },
+    { anio: 2026, vendedor: 'ANA', cliente_key: '888', cliente_nombre: null, fact_neta: 100 }];
+  const ds = construirModelo({ ...d, vendedoresErp: erp }, hoy).vendedoresRuta[0].destinos;
+  assert.equal(ds[0].cliente, 'CT Internacional'); assert.equal(vaA(ds[0]), 'va a CT Internacional (Hermosillo)');
+  assert.equal(ds[1].cliente, 'DISTRIBUIDORA X', 'sin cuenta: nombre del ERP sin espacios');
+  assert.equal(ds[2].cliente, '888', 'sin nombre: la clave');
+});

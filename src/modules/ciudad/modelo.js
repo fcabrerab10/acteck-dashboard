@@ -1592,7 +1592,9 @@ export function construirModelo(d, hoy = new Date()) {
   for (const r of d.vendedoresErp || []) { if (N(r.anio) !== anio) continue; const kv = norm(r.vendedor).replace(/\s+/g, ' '); if (!kv) continue; const o = ve.get(kv) || { nombre: unirTexto(r.vendedor), clientes: new Map(), total: 0, totalMes: 0 }; ve.set(kv, o); o.total += N(r.fact_neta); if (N(r.mes) === mes) o.totalMes += N(r.fact_neta); const ck = claveErp(r.cliente_key); const c = o.clientes.get(ck) || { cliente_key: ck, nombre: r.cliente_nombre, fact: 0 }; c.fact += N(r.fact_neta); o.clientes.set(ck, c); }
   const vendedoresRuta = [...ve.values()].filter((v) => v.nombre && v.total > 0).sort((a, b) => b.total - a.total).slice(0, 10).map((v, i) => {
     const top = [...v.clientes.values()].sort((a, b) => b.fact - a.fact).slice(0, 3);
-    const destinos = top.map((c) => { const ke = cuentaPorErp.get(claveErp(c.cliente_key)) || [...cuentas.entries()].find(([, x]) => norm(x?.nombre) === norm(c.nombre))?.[0]; const key = ke || null; return { cliente: c.nombre || c.cliente_key, ciudad: (key && SEDE_POR_CUENTA[key]) || 'CIUDAD DE MEXICO', fact: c.fact }; });
+    // 4.12.40: el destino usa el nombre de la cuenta del dashboard cuando la cuenta se identificó («va a CT Internacional», como el
+    // camión); antes salía el nombre crudo del ERP («va a CT INTERNACIONAL DEL NOROESTE SA DE CV»). Sin cuenta, el del ERP limpio.
+    const destinos = top.map((c) => { const ke = cuentaPorErp.get(claveErp(c.cliente_key)) || [...cuentas.entries()].find(([, x]) => norm(x?.nombre) === norm(c.nombre))?.[0]; const key = ke || null; return { cliente: unirTexto(cuentas.get(key)?.nombre) || unirTexto(c.nombre) || unirTexto(c.cliente_key) || null, ciudad: (key && SEDE_POR_CUENTA[key]) || 'CIUDAD DE MEXICO', fact: c.fact }; });
     return { nombre: nombreCorto(v.nombre), nombreCompleto: v.nombre, total: v.total, totalMes: v.totalMes, clientes: v.clientes.size, destinos, fase: i / 10 };
   });
 

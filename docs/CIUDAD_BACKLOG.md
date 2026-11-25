@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
+  - [x] (4.12.40) Coche del vendedor: el destino dice el nombre de la cuenta del dashboard («va a CT Internacional (Hermosillo)», como el camión) en vez del nombre crudo del ERP («CT INTERNACIONAL DEL NOROESTE SA DE CV»); sin cuenta, el del ERP limpio o la clave.
   - [x] (4.12.36) Cadena: el motivo del puerto cuenta los barcos que esperan muelle («1 barco esperando muelle», «2 barcos…»); antes decía «Barcos esperando muelle» aunque fuera uno.
   - [x] (4.12.35) «Ventas del mes» de la barra superior saca el semáforo del avance sin redondear, como la píldora de cuota de Inicio (99.6 % ya no sale verde; 84.6 % sale ámbar).
   - [x] (4.12.34) `nombrePersona()`: nombres que llegan todo en mayúsculas o todo en minúsculas («ANA LÓPEZ DE LA CRUZ») salen legibles («Ana López de la Cruz») en escritorios, tarjetas y globos; la mezcla se respeta.
@@ -364,6 +365,7 @@ Principios que no se rompen en ninguna etapa:
 
 ## Hecho
 
+- 2026-11-25 00:57 · v4.12.40 · Vendedores: el destino del coche usa el nombre de la cuenta del dashboard (como el camión), no el crudo del ERP; +1 prueba.
 - 2026-11-25 00:36 · v4.12.39 · Capa «Cartera»: cuenta sin espacios/mayúsculas, renglones repetidos suman, cartera no lista no truena.
 - 2026-11-25 00:15 · v4.12.38 · Pulido: capa «Ventas» por ciudad con el semáforo del % sin redondear (−0.4 % ya no verde, −20.4 % ya no ámbar; sin «-0 %»); +1 prueba.
 - 2026-11-24 23:56 · v4.12.37 · `claveTexto()`: la capa de cuota y el reparto por estado saltan cuentas/clientes que no son texto ni número (sin cuentas falsas «[object Object]»).
