@@ -2255,3 +2255,21 @@ test('tarjetaDe: persona con conteos negativos cuenta 0, como su globo (4.12.55)
   assert.deepEqual(t2.numeros, [['Pendientes hoy', '2'], ['Hechas', '0']]);
   assert.equal(t2.estado, 'ambar');
 });
+
+test('claveTexto(): texto sin espacios, números finitos como texto y lo demás vacío (4.12.56)', () => {
+  assert.equal(claveTexto(' ct '), 'ct'); assert.equal(claveTexto('CT'), 'CT', 'no cambia mayúsculas (eso es claveSku)');
+  assert.equal(claveTexto(10), '10'); assert.equal(claveTexto(0), '0'); assert.equal(claveTexto(-0), '0'); assert.equal(claveTexto(1.5), '1.5');
+  for (const x of [null, undefined, '', '   ', NaN, Infinity, -Infinity, true, false, {}, [], ['ct']]) assert.equal(claveTexto(x), '', JSON.stringify(x));
+});
+
+test('Días de inventario: bordes del semáforo «Días de Inv» de Inicio (< 30 rojo, > 120 ámbar) con días redondeados (4.12.56)', () => {
+  const caso = (v, estado, tono, motivo) => { assert.equal(estadoDias(v), estado, `estado ${v}`); assert.equal(tonoDias(v), tono, `tono ${v}`); assert.equal(motivoDias(v), motivo, `motivo ${v}`); };
+  caso(0, 'critico', 'rojo', 'Sólo 0 días de inventario');
+  caso(29, 'critico', 'rojo', 'Sólo 29 días de inventario');
+  caso(29.6, 'sano', 'verde', null); // se redondea a 30 antes del semáforo, igual que el texto «30 días»
+  caso(30, 'sano', 'verde', null); caso(120, 'sano', 'verde', null); caso(120.4, 'sano', 'verde', null);
+  caso(121, 'sobre', 'ambar', '121 días de inventario (alto)');
+  caso(' 200 ', 'sobre', 'ambar', '200 días de inventario (alto)'); caso('1,200', 'sobre', 'ambar', '1,200 días de inventario (alto)');
+  assert.equal(diasTexto(29.6), '30 días'); assert.equal(diasTexto(1), '1 día');
+  for (const x of [-5, null, undefined, '', '  ', NaN, 'abc', true, {}, []]) { caso(x, null, null, null); assert.equal(diasTexto(x), 'sin medida de días', JSON.stringify(x)); }
+});

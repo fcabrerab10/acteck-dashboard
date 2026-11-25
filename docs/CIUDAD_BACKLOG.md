@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
+  - [x] (4.12.56) 2026-11-25 05:56 · Pruebas nuevas: `claveTexto()` (no tenía) y bordes del semáforo de días de inventario (29 rojo, 29.6 → 30 verde, 120.4 verde, 121 ámbar; texto « 200 » / «1,200»; ilegibles sin tono). Barrido de entradas raras a todas las funciones de `modelo.js`, `construirModelo()` y `tarjetaDe()`: sin errores ni NaN.
   - [x] (4.12.55) 2026-11-25 05:35 · Tarjeta de la persona con conteos negativos en 0, como su globo (`pendientesTexto()`): antes «Hechas -2» y el semáforo ámbar/verde se invertía.
   - [x] (4.12.54) 2026-11-25 05:16 · Oficina con tipos y estados tolerantes: `esClase()` pura y probada; agenda «HECHA»/« abierta », reunión «Viaje» y perfil « EXTERNO » se reconocen (antes contaban mal pendientes/hechas, el viaje salía como reunión y la presencia lo ignoraba).
   - [x] (4.12.50) 2026-11-25 03:56 · Tira de la cadena: el Puerto sólo dice lo que hay («1 llega hoy · 2 recién llegados»); antes siempre «0 con ETA vencida» y «0 recién llegados». Vacío: «Sin movimiento».
@@ -377,6 +378,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-25 05:56 · v4.12.56 · Pulido: pruebas de `claveTexto()` y de los bordes del semáforo de días de inventario (+2 pruebas, 183). Barrido de entradas raras sin hallazgos.
 - 2026-11-25 04:56 · v4.12.53 · Negativos contables «(1,500)» se leen negativos en `numero()`, `cifraCorta()`/`pesosCorto()` y la barra de recursos; +1 prueba.
 - 2026-11-25 04:36 · v4.12.52 · Leyenda de cuentas sin repetidos por mayúsculas y con el nombre de la cuenta; +1 prueba.
 - 2026-11-25 03:18 · v4.12.47 · la bitácora de la Ciudad dice qué fuente se actualizó o falló.
