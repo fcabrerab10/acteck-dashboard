@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.3.12) `encuadre()` (y `vistaCiudad()`) usa los valores de omisión con ángulo, margen, alto, min/max inválidos (max < min → min) y algo que no es lista; `planoMini()` aguanta ancho/alto/margen inválidos (contorno y marcador sin NaN en el minimapa); `topSkus()` acepta `n` en texto/decimal/inválido, SKU numérico y algo que no es lista.
+  - [x] (4.12.42) Color de la cuenta con `colorCuenta()` pura y probada: tiendas, sus vendedores y la leyenda encuentran el color aunque la cuenta venga con espacios o en MAYÚSCULAS (« PCEL » → rojo de pcel; antes gris), como `sedeDeCuenta()`. Harness sin errores.
   - [x] (4.12.40) Coche del vendedor: el destino dice el nombre de la cuenta del dashboard («va a CT Internacional (Hermosillo)», como el camión) en vez del nombre crudo del ERP («CT INTERNACIONAL DEL NOROESTE SA DE CV»); sin cuenta, el del ERP limpio o la clave.
   - [x] (4.12.36) Cadena: el motivo del puerto cuenta los barcos que esperan muelle («1 barco esperando muelle», «2 barcos…»); antes decía «Barcos esperando muelle» aunque fuera uno.
   - [x] (4.12.35) «Ventas del mes» de la barra superior saca el semáforo del avance sin redondear, como la píldora de cuota de Inicio (99.6 % ya no sale verde; 84.6 % sale ámbar).
@@ -634,3 +635,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-24 05:57 · v4.12.27 · Banco: la tarjeta muestra la cartera a más de 90 días («$Y a +90 días»), como la frase de cartera de Inicio; +1 prueba.
 - 2026-11-24 06:16 · v4.12.28 · Calendario: la última semana de diciembre dice «Cierre de año» (aviso y camiones de temporada) en vez de «Cierre de mes»; +1 prueba.
 - 2026-11-24 22:56 · v4.12.34 · Oficina: nombres de persona en MAYÚSCULAS o minúsculas salen legibles («Ana López de la Cruz»); +1 prueba.
+- 2026-11-25 01:37 · v4.12.42 · Color de cada cuenta (tiendas, vendedores, leyenda) con la cuenta sin espacios ni mayúsculas (antes gris); +1 prueba.
