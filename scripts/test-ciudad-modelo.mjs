@@ -1006,6 +1006,18 @@ test('presenciaPersonas / reunionesDelDia aguantan persona nula y fecha inválid
   assert.equal(ag.length, 1); assert.equal(ag[0].estado, 'en curso');
 });
 
+test('fechaHoy: fecha imposible cae en ahora y lee los formatos de fechaIso (4.12.86)', () => {
+  const dia = (x) => { const t = fechaHoy(x); return [t.getFullYear(), t.getMonth() + 1, t.getDate(), t.getHours()]; };
+  for (const x of ['26/11/2026', '26 nov 2026', '20261126', ' 2026-11-26 ', '26-Nov-2026']) assert.deepEqual(dia(x), [2026, 11, 26, 12], x);
+  const ahora = new Date();
+  for (const x of ['2026-02-30', '2026-13-01', '2026-00-10', '   ']) {
+    const t = fechaHoy(x);
+    assert.ok(Math.abs(t - ahora) < 5000, `«${x}» → ahora`);
+  }
+  const conHora = fechaHoy('2026-11-26T10:30:00');
+  assert.deepEqual([conHora.getDate(), conHora.getHours(), conHora.getMinutes()], [26, 10, 30], 'con hora se queda la hora');
+  assert.equal(diaLocal('2026-02-30').iso, diaLocal().iso);
+});
 test('fechaHoy: cualquier «hoy» malo cae en ahora y las capas con fecha ya no truenan', () => {
   const d = new Date(2026, 10, 18, 9);
   assert.equal(fechaHoy(d), d, 'Date válido tal cual');

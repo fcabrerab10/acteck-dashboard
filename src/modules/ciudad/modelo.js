@@ -311,10 +311,17 @@ export function leerVista(texto) {
 // fecha mala tumbe el modelo o una capa de la Ciudad.
 export function fechaHoy(h) {
   if (h instanceof Date) return Number.isNaN(h.getTime()) ? new Date() : h;
-  if (typeof h === 'string' || typeof h === 'number') {
-    const t = typeof h === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h.trim()) ? new Date(`${h.trim()}T12:00:00`) : new Date(h);
-    if (!Number.isNaN(t.getTime())) return t;
+  // 4.12.86: 'AAAA-MM-DD' imposible ('2026-02-30', mes 13) cae en ahora (antes se recorría al 2 de marzo) y el texto que
+  // `fechaIso()` entiende sin hora («26/11/2026», «26 nov 2026», «20261126») va a mediodía local de ese día.
+  if (typeof h === 'string') {
+    const s = h.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return fechaIso(s) ? new Date(`${s}T12:00:00`) : new Date();
+    const t = new Date(s), vale = s !== '' && !Number.isNaN(t.getTime());
+    if (vale && /\d:\d\d/.test(s)) return t; // con hora: se respeta
+    const iso = fechaIso(s); // sólo el día: a mediodía, como 'AAAA-MM-DD'
+    return iso ? new Date(`${iso}T12:00:00`) : vale ? t : new Date();
   }
+  if (typeof h === 'number') { const t = new Date(h); if (!Number.isNaN(t.getTime())) return t; }
   return new Date();
 }
 
