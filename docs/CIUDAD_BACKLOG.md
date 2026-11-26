@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
+  - [x] (4.12.63) 2026-11-25 22:56 · Cuenta regresiva de reuniones: `enMinutos()` desde 24 h dice días y desde 60 días meses/años, como `faltanDias()` («en 2 d», «en 3 meses»; antes «en 1,200 h») en la misión y la burbuja de la oficina.
   - [x] (4.12.57) 2026-11-25 06:15 · Pruebas nuevas de `sinNulos()`: entrada que no es objeto da {}, sólo quita null/undefined (0, '', false y NaN se quedan), no toca listas anidadas y no muta los datos crudos (la barra de tiempo los usa antes de limpiar).
   - [x] (4.12.56) 2026-11-25 05:56 · Pruebas nuevas: `claveTexto()` (no tenía) y bordes del semáforo de días de inventario (29 rojo, 29.6 → 30 verde, 120.4 verde, 121 ámbar; texto « 200 » / «1,200»; ilegibles sin tono). Barrido de entradas raras a todas las funciones de `modelo.js`, `construirModelo()` y `tarjetaDe()`: sin errores ni NaN.
   - [x] (4.12.55) 2026-11-25 05:35 · Tarjeta de la persona con conteos negativos en 0, como su globo (`pendientesTexto()`): antes «Hechas -2» y el semáforo ámbar/verde se invertía.
@@ -385,6 +386,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-25 22:56 · v4.12.63 · `enMinutos()`: reuniones lejanas en días/meses/años; +1 prueba (188).
 - 2026-11-25 22:35 · v4.12.62 · `llegaBarco()`: ETAs lejanas o muy tarde en meses/años; +1 prueba (187).
 - 2026-11-25 22:16 · v4.12.61 · `faltanDias()`: fechas futuras en meses/años en la tarjeta del camión; +1 prueba (186).
 - 2026-11-25 15:55 · v4.12.60 · `unirTexto()` salta «NULL»/«#N/A»/«nan» en cualquier mayúscula; +1 prueba (185).

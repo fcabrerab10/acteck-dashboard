@@ -791,6 +791,8 @@ export function enMinutos(min) {
   if (min == null || (typeof min !== 'number' && typeof min !== 'string') || (typeof min === 'string' && !min.trim())) return ''; // 4.7.77: `[]` ya no «empieza ya»
   const k = Math.round(Number(typeof min === 'string' ? min.replace(/[,\s]/g, '') : min)); if (!Number.isFinite(k) || k < 0 || typeof min === 'boolean') return '';
   if (k === 0) return 'empieza ya';
+  // 4.12.63: desde 24 h en días y desde 60 días en meses/años, como `faltanDias()` («en 2 d», «en 3 meses»; antes «en 1,200 h»).
+  if (k >= 1440) { const d = Math.round(k / 1440); return d < 60 ? `en ${d.toLocaleString('es-MX')} d` : faltanDias(d); }
   const h = Math.floor(k / 60), r = k % 60;
   return h ? `en ${h.toLocaleString('es-MX')} h${r ? ` ${r} min` : ''}` : `en ${k} min`;
 }
