@@ -390,6 +390,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.79) 2026-11-26 04:16 · `fechaIso()` toma «UTC» / «GMT» en letra como zona («2026-11-23 03:00:00 UTC», «… GMT-0600», «UTC+00:00», como logs, correos y BigQuery): cuenta el día local (antes se quedaba el día de UTC y de noche el camión/arribo salía con un día de más); +1 prueba.
   - [x] (4.12.80) 2026-11-26 04:36 · `fechaIso()` lee el formato de `date`/asctime con la hora entre el día y el año («Thu Nov 26 04:34:17 CST 2026», «Thu Nov  5 04:34:17 2026», como logs de Unix; antes «sin fecha»); la zona en letra se ignora; «Feb 31» o sin año siguen null; +pruebas.
   - [x] (4.12.82) 2026-11-26 05:16 · `numero()` / `leeNum()` ignoran una unidad al final del número en texto («3 días», «45 d», «1 200 pz», «24 °C», «$5,000 MXN»; antes 0 o vacío en DSO, temperatura, piezas y cifras) y `llegaBarco()` lee «3 días» / «5 d» (antes «sin ETA»); la unidad sola sigue siendo basura; +1 prueba.
+  - [x] (4.12.83) 2026-11-26 05:36 · `nombreCiudad()` completa las abreviaturas del ERP: «CD. JUAREZ» / «Cd.Obregón» → «Ciudad Juárez» / «Ciudad Obregón», «GRAL. ESCOBEDO» → «General Escobedo», «STA./STO.» → «Santa/Santo», «SN PEDRO» → «San Pedro» (antes «Cd. Juárez», «Gral. Escobedo» en etiquetas, pines, tarjetas y minimapa); +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -404,6 +405,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 05:36 · v4.12.83 · `nombreCiudad()` completa abreviaturas del ERP (Cd./Gral./Sta./Sto./Sn → Ciudad/General/Santa/Santo/San); +1 prueba (195).
 - 2026-11-26 05:16 · v4.12.82 · `numero()` / `leeNum()` ignoran una unidad al final del número en texto («3 días», «45 d», «1 200 pz», «24 °C», «$5,000 MXN»; antes 0 o vacío en DSO, temperatura, piezas y cifras) y `llegaBarco()` lee «3 días» / «5 d» (antes «sin ETA»); la unidad sola sigue siendo basura; +1 prueba.
 - 2026-11-26 04:57 · v4.12.81 · `duracionMin()` lee «90 min», «1 h», «1:30»; viaje con fechas al revés cuenta en la presencia; +1 prueba (193).
 - 2026-11-26 04:36 · v4.12.80 · `fechaIso()` lee el formato de `date`/asctime («Thu Nov 26 04:34:17 CST 2026»); +pruebas.

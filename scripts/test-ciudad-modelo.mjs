@@ -935,6 +935,14 @@ test('pulido: proyección y catálogos coherentes', () => {
   assert.equal(RECORRIDO_CLAVE, 'acteck-ciudad-recorrido');
 });
 
+test('nombreCiudad: abreviaturas del ERP completas (4.12.83)', () => {
+  assert.equal(nombreCiudad('CD. JUAREZ'), 'Ciudad Juárez'); assert.equal(nombreCiudad('CD JUAREZ'), 'Ciudad Juárez');
+  assert.equal(nombreCiudad('Cd.Obregón'), 'Ciudad Obregón'); assert.equal(nombreCiudad('GRAL. ESCOBEDO'), 'General Escobedo');
+  assert.equal(nombreCiudad('STA. CATARINA'), 'Santa Catarina'); assert.equal(nombreCiudad('SN PEDRO GARZA GARCIA'), 'San Pedro Garza García');
+  assert.equal(nombreCiudad('CD. DE MEXICO'), 'CDMX'); assert.equal(nombreCiudad('CDMX'), 'CDMX');
+  assert.equal(nombreCiudad('VILLA DE STO. DOMINGO'), 'Villa de Santo Domingo'); assert.equal(nombreCiudad('STAR CITY'), 'Star City');
+});
+
 test('nombreCiudad / nombreSucursal: municipios con acento o eñe (4.12.71)', () => {
   assert.equal(nombreCiudad('TLAJOMULCO DE ZUÑIGA'), 'Tlajomulco de Zúñiga'); assert.equal(nombreCiudad('TLAJOMULCO DE ZUNIGA'), 'Tlajomulco de Zúñiga');
   assert.equal(nombreCiudad('CIUDAD GUZMAN'), 'Ciudad Guzmán'); assert.equal(nombreCiudad('CIUDAD LOPEZ MATEOS'), 'Ciudad López Mateos');
@@ -955,7 +963,7 @@ test('nombreCiudad: CDMX en sus formas y sin letras no es ciudad (4.12.2)', () =
   for (const c of ['CDMX', 'cdmx', ' Cd. de México ', 'CD DE MEXICO', 'D.F.', 'DF']) assert.equal(nombreCiudad(c), 'CDMX', c);
   for (const c of ['123', '-', 5, ' . ', {}]) assert.equal(nombreCiudad(c), '', String(c));
   assert.equal(vaA({ cliente: 'Pcel', ciudad: 5 }), 'va a Pcel');
-  assert.equal(nombreCiudad('Cd. Juárez'), 'Cd. Juárez');
+  assert.equal(nombreCiudad('Cd. Juárez'), 'Ciudad Juárez'); // 4.12.83: no es CDMX y la abreviatura se completa
 });
 test('nombreCiudad: acentos, conectores y CDMX', () => {
   assert.equal(nombreCiudad('SAN LUIS POTOSI'), 'San Luis Potosí');

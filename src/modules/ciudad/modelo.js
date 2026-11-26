@@ -221,11 +221,14 @@ const ACENTOS = { MERIDA: 'Mérida', JUAREZ: 'Juárez', CULIACAN: 'Culiacán', M
   // 4.12.71: más municipios con acento o eñe (antes «Tlajomulco de Zuniga», «Ciudad Guzman», «Ciudad Lopez Mateos», «Chimalhuacan»).
   ZUNIGA: 'Zúñiga', LOPEZ: 'López', GUZMAN: 'Guzmán', CHIMALHUACAN: 'Chimalhuacán', TEZIUTLAN: 'Teziutlán', ZACATLAN: 'Zacatlán', TEOTIHUACAN: 'Teotihuacán', TEPOTZOTLAN: 'Tepotzotlán', ZAPOTLAN: 'Zapotlán', ACATLAN: 'Acatlán', IXTLAN: 'Ixtlán', TIZAPAN: 'Tizapán', MIAHUATLAN: 'Miahuatlán', JALOSTOTITLAN: 'Jalostotitlán', PANUCO: 'Pánuco', GUAMUCHIL: 'Guamúchil', ANAHUAC: 'Anáhuac', VALPARAISO: 'Valparaíso', ALAMOS: 'Álamos', JIMENEZ: 'Jiménez', ZINAPECUARO: 'Zinapécuaro', ENCARNACION: 'Encarnación', CONCEPCION: 'Concepción', ASUNCION: 'Asunción', JESUS: 'Jesús', MARIA: 'María', BAHIA: 'Bahía', CIENEGA: 'Ciénega', ESTACION: 'Estación', PURISIMA: 'Purísima', GONZALEZ: 'González', HERNANDEZ: 'Hernández', PEREZ: 'Pérez', RAMIREZ: 'Ramírez', SANCHEZ: 'Sánchez', DIAZ: 'Díaz', PENON: 'Peñón' };
 const CONECTORES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'EL']);
+const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo', SN: 'San' };
 export function nombreCiudad(ciudad) {
   // 4.12.2: «CDMX» / «Cd. de México» ya no salen «Cdmx» / «Cd de México»; sin letras («123», «-», un número) no es ciudad → ''.
   const k = norm(ciudad); if (!k || !/\p{L}/u.test(k)) return '';
   if (/^(CIUDAD|CD\.?) DE MEXICO$|^CDMX$|^D\.?F\.?$/.test(k)) return 'CDMX';
-  return k.split(/\s+/).map((w, i) => ACENTOS[w] || (i > 0 && CONECTORES.has(w) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase())).join(' ');
+  // 4.12.83: abreviaturas del ERP completas («CD. JUAREZ» → «Ciudad Juárez», «GRAL. ESCOBEDO» → «General Escobedo»,
+  // «STA. CATARINA» → «Santa Catarina», «SN PEDRO» → «San Pedro»; antes «Cd. Juárez» / «Gral. Escobedo»). Sólo para mostrar.
+  return k.replace(/^(CD|GRAL|STA|STO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i) => ABREV_CIUDAD[w.replace(/\.$/, '')] || ACENTOS[w] ||(i > 0 && CONECTORES.has(w) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase())).join(' ');
 }
 export function pinCiudad(distrito, camiones = []) {
   const nombre = nombreCiudad(distrito?.ciudad);
