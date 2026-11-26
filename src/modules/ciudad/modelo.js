@@ -1336,6 +1336,10 @@ const CIUDADES_LARGAS = Object.keys(CIUDADES).sort((a, b) => b.length - a.length
 export function fechaIso(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
   if (typeof x !== 'string') return null;
+  // 4.12.70: «26/11/2026» o «5/1/2026 10:30» (día/mes/año como en México y en Sheets) también se lee (antes null: la fecha
+  // contaba como «sin fecha»); '31/02/2026' o mes 13 siguen siendo null.
+  const dm = x.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[\sT].*)?$/);
+  if (dm) { const s = `${dm[3]}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
   const x0 = x.trim(), s = x0.slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   const t = new Date(`${s}T12:00:00`); if (Number.isNaN(t.getTime()) || isoLocal(t) !== s) return null;
   // 4.7.57: con hora y zona («…T03:00:00Z», «… 03:00:00+00» de Postgres) cuenta el día local, no el de UTC:

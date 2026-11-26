@@ -1108,6 +1108,10 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   assert.equal(fechaIso('2026-10-05'), '2026-10-05'); assert.equal(fechaIso(' 2026-10-05T08:00:00Z'), '2026-10-05', 'con hora y espacios');
   assert.equal(fechaIso(new Date(2026, 1, 3, 9)), '2026-02-03', 'Date');
   for (const x of [null, undefined, '', 'pendiente', '2026-13-40', '2026-02-30', 20261005, new Date('x'), {}]) assert.equal(fechaIso(x), null, String(x));
+  // 4.12.70: día/mes/año como en México y Sheets
+  assert.equal(fechaIso('26/11/2026'), '2026-11-26'); assert.equal(fechaIso(' 5/1/2027 10:30 '), '2027-01-05', 'sin ceros y con hora');
+  for (const x of ['31/02/2026', '12/13/2026', '1/1/26', '26/11/2026x']) assert.equal(fechaIso(x), null, x);
+  assert.equal(fechaCorta('26/11/2026', new Date(2026, 10, 26)), '26 nov', 'tarjetas');
   const m = construirModelo({ ...d,
     contenedores: [...d.contenedores, { contenedor: 'MALO', supplier: 'X', estatus: 'NAVEGANDO', piezas: 5, etd: 'pendiente', eta_puerto: 'sin fecha', arribo_cedis: '2026-99-99' }, { contenedor: 'MEDIO', estatus: 'NAVEGANDO', etd: 'x', fecha_emision: '2026-09-05', eta_puerto: '2026-10-05' }],
     envios: [...d.envios, { fecha_surtida: 'ayer', fecha_entregada: null, guia_rastreo: 'G-MALA', oc_clientes: { cliente_key: 'pcel' } }, { fecha_surtida: '2026-10-08', fecha_entregada: null, guia_rastreo: 'G-FUT', oc_clientes: { cliente_key: 'pcel' } }],
