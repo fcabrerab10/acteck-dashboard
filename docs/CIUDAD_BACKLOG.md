@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.74) 2026-11-26 02:36 · `fechaIso()` lee fechas con el mes en letra (español o inglés, abreviado o completo, con «de»): «26 nov 2026», «26-Nov-2026», «5 de enero de 2027», «3/Ago/2026 10:30» (antes contaban como «sin fecha» en puerto, camiones y tarjetas). Mes desconocido o «31 feb 2026» siguen null.
+  - [x] (4.12.81) 2026-11-26 04:57 · Presencia y agenda: la duración de la reunión en texto con unidad («90 min», «1 h», «1.5 h», «1:30») ya no cae a 60 min, y un viaje con las fechas al revés (fin antes del inicio) cuenta de la menor a la mayor (antes la persona salía «disponible»).
   - [x] (4.12.76) 2026-11-26 03:15 · `fechaIso()` lee fechas compactas AAAAMMDD en texto («20261126», «20261126 10:30», como exportan SAP y otros ERP; antes «sin fecha» en puerto, camiones y tarjetas). Número suelto, '20260230' o mes 13 siguen null; +1 prueba.
   - [x] (4.12.75) 2026-11-26 02:56 · `encimaDelCampus()` y `distritoGDL()` leen ancho/largo con `medidaCaja()`: negativo, Infinity, texto basura, objeto o lista cuentan como 0 (antes un ancho negativo volteaba la caja y el distrito se dibujaba encima de la base; Infinity mandaba el distrito GDL al infinito); medidas en texto («7») se leen.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
@@ -402,6 +403,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 04:57 · v4.12.81 · `duracionMin()` lee «90 min», «1 h», «1:30»; viaje con fechas al revés cuenta en la presencia; +1 prueba (193).
 - 2026-11-26 04:36 · v4.12.80 · `fechaIso()` lee el formato de `date`/asctime («Thu Nov 26 04:34:17 CST 2026»); +pruebas.
 - 2026-11-26 03:56 · v4.12.78 · `fechaIso()` lee fechas con el día de la semana adelante («Thu Nov 26 2026 …», «Thu, 26 Nov 2026 GMT», «jue 26 nov 2026»); «mar 26, 2026» sigue siendo marzo; +1 prueba (193)
 - 2026-11-26 03:36 · v4.12.77 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30»); sin día o fechas imposibles siguen nulas; +1 prueba.

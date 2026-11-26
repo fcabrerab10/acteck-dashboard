@@ -2394,3 +2394,18 @@ test('4.12.67: misión «Descargar» y arribo de la bitácora sin «· 0 pz»; r
     oficina: { agenda: [{ titulo: 'Sin hora', hora: '', ini: null, estado: 'próxima' }, { titulo: 'Junta', hora: '09:00', ini: 540, estado: 'hecha' }] } }, h).map((x) => x.texto);
   assert.deepEqual(b, ['Fue Junta', 'Llegó B1 al CEDIS']);
 });
+
+test('4.12.81 duración de reunión en texto con unidad y viaje con fechas al revés', () => {
+  const fin = (d) => reunionesDelDia([{ titulo: 'J', fecha: '2026-11-26T09:00:00', duracion_min: d }], new Date(2026, 10, 26, 8, 0))[0].fin - 540;
+  assert.equal(fin(45), 45); assert.equal(fin(' 45 '), 45); assert.equal(fin('90 min'), 90); assert.equal(fin('90min'), 90); assert.equal(fin('1 h'), 60);
+  assert.equal(fin('1.5 h'), 90); assert.equal(fin('1,5 horas'), 90); assert.equal(fin('1:30'), 90); assert.equal(fin('2 hrs'), 120);
+  for (const x of [null, '', 'abc', -30, 0, '0 min', '-5', {}, [], NaN]) assert.equal(fin(x), 60);
+  const h = new Date(2026, 10, 26, 10, 0);
+  const est = (v) => presenciaPersonas([{ id: 'a' }], [], [{ tipo: 'viaje', creado_por: 'a', ...v }], h)[0].presencia.estado;
+  assert.equal(est({ fecha: '2026-11-28', fecha_fin: '2026-11-24' }), 'viaje');
+  assert.equal(est({ fecha: '2026-11-24', fecha_fin: '2026-11-28' }), 'viaje');
+  assert.equal(est({ fecha: '2026-11-28', fecha_fin: '2026-11-27' }), 'disponible');
+  assert.equal(est({ fecha: '2026-11-26', fecha_fin: 'basura' }), 'viaje');
+  assert.equal(est({ fecha: null, fecha_fin: '2026-11-26' }), 'disponible');
+  assert.equal(presenciaPersonas([{ id: 'a' }], [{ fecha: '2026-11-26T09:00:00', duracion_min: '90 min', creado_por: 'a' }], [], new Date(2026, 10, 26, 10, 15))[0].presencia.estado, 'reunion');
+});

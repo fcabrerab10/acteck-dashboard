@@ -715,7 +715,16 @@ function instante(x) {
   return Number.isNaN(t.getTime()) ? null : t;
 }
 // Duración en minutos (4.3.31): 0, negativa, texto o basura → 60 (antes -30 dejaba la reunión «hecha» antes de empezar).
-const duracionMin = (d) => { const n = Number(d); return Number.isFinite(n) && n > 0 ? n : 60; };
+// 4.12.81: también texto con unidad («90 min», « 45 », «1 h», «1.5 h», «1:30»); antes «90 min» caía a 60.
+const duracionMin = (d) => {
+  let n = typeof d === 'number' ? d : NaN;
+  if (typeof d === 'string') {
+    const s = d.trim().toLowerCase().replace(',', '.'); const hm = s.match(/^(\d{1,2}):(\d{2})\s*(h|hrs?|horas?)?$/);
+    const u = s.match(/^(\d+(?:\.\d+)?)\s*(m|min|mins|minutos?|h|hr|hrs|horas?)?\.?$/);
+    n = hm ? Number(hm[1]) * 60 + Number(hm[2]) : u ? Number(u[1]) * (u[2] && u[2][0] === 'h' ? 60 : 1) : NaN;
+  }
+  return Number.isFinite(n) && n > 0 ? n : 60;
+};
 export function reunionesDelDia(reuniones = [], hoy = new Date()) {
   hoy = fechaHoy(hoy);
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
@@ -748,7 +757,8 @@ export function presenciaPersonas(personas = [], reuniones = [], viajes = [], ho
   const de = (r, id) => r && id && (r.creado_por === id || (Array.isArray(r.asistentes) && r.asistentes.some((a) => a && (a.user_id === id || a === id))));
   const todas = [...comoLista(reuniones), ...comoLista(viajes)].filter(Boolean);
   const vistos = new Set(); const unicas = todas.filter((r) => { const k = r.id || `${r.titulo}|${r.fecha}`; if (vistos.has(k)) return false; vistos.add(k); return true; });
-  const viajeHoy = unicas.filter((r) => esClase(r.tipo, 'viaje') && dia(r.fecha) && dia(r.fecha) <= hoyD && (dia(r.fecha_fin || r.fecha) || dia(r.fecha)) >= hoyD);
+  // 4.12.81: viaje con las fechas al revés (fin antes del inicio) se toma de la menor a la mayor (antes no contaba).
+  const viajeHoy = unicas.filter((r) => { if (!esClase(r.tipo, 'viaje')) return false; const a = dia(r.fecha); if (!a) return false; const b = dia(r.fecha_fin) || a; return (a < b ? a : b) <= hoyD && (a < b ? b : a) >= hoyD; });
   const enCurso = unicas.filter((r) => { if (esClase(r.tipo, 'viaje')) return false; const t = instante(r.fecha)?.getTime(); return Number.isFinite(t) && t <= ahora && ahora < t + duracionMin(r.duracion_min) * 60000; });
   for (const p of comoLista(personas)) {
     if (!p || typeof p !== 'object') continue;
