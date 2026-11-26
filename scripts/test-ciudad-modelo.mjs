@@ -1137,6 +1137,10 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   assert.equal(fechaIso('2026/11/26'), '2026-11-26'); assert.equal(fechaIso('2026-01-05T08:00:00'), '2026-01-05', 'ISO normal igual');
   for (const x of ['2026/02/30', '2026-13-1', '2026/1-5', '2026/01/05x', '2026-1-5-']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaCorta('2026/11/26', new Date(2026, 10, 26)), '26 nov', 'tarjetas con diagonales');
+  // 4.12.76: compacta AAAAMMDD (SAP y otros ERP), sólo en texto.
+  assert.equal(fechaIso('20261126'), '2026-11-26'); assert.equal(fechaIso(' 20270105 10:30 '), '2027-01-05', 'con hora'); assert.equal(fechaIso('20261126T083000'), '2026-11-26', 'con T');
+  for (const x of ['20260230', '20261326', '2026112', '202611260', '18001126', '20261126x', '20261126 x', 20261126]) assert.equal(fechaIso(x), null, String(x));
+  assert.equal(fechaCorta('20261126', new Date(2026, 10, 26)), '26 nov', 'tarjetas con fecha compacta');
   const m = construirModelo({ ...d,
     contenedores: [...d.contenedores, { contenedor: 'MALO', supplier: 'X', estatus: 'NAVEGANDO', piezas: 5, etd: 'pendiente', eta_puerto: 'sin fecha', arribo_cedis: '2026-99-99' }, { contenedor: 'MEDIO', estatus: 'NAVEGANDO', etd: 'x', fecha_emision: '2026-09-05', eta_puerto: '2026-10-05' }],
     envios: [...d.envios, { fecha_surtida: 'ayer', fecha_entregada: null, guia_rastreo: 'G-MALA', oc_clientes: { cliente_key: 'pcel' } }, { fecha_surtida: '2026-10-08', fecha_entregada: null, guia_rastreo: 'G-FUT', oc_clientes: { cliente_key: 'pcel' } }],
