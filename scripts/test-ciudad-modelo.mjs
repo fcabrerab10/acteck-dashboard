@@ -1357,6 +1357,8 @@ test('plural(): singular con 1, plural con 0/varios y n ilegible; la cadena dice
   assert.equal(plural(1, 'cliente'), '1 cliente'); assert.equal(plural(1, 'cajón', 'cajones'), '1 cajón'); assert.equal(plural(12, 'cajón', 'cajones'), '12 cajones'); assert.equal(plural(1, 'vendedor', 'vendedores'), '1 vendedor');
   assert.equal(plural('1,200', 'pedido'), '1,200 pedidos'); assert.equal(plural(' 1 ', 'barco'), '1 barco'); assert.equal(plural(true, 'barco'), '0 barcos'); assert.equal(plural('  ', 'día'), '0 días'); assert.equal(plural(Infinity, 'día'), '0 días'); assert.equal(plural(null, 'PO'), '0 POs');
   assert.equal(plural(1500, 'pieza'), '1,500 piezas'); assert.equal(plural(3, 'mes', 'meses'), '3 meses');
+  // 4.12.65: panel «En la ciudad»: «1 de 1 tienda activa» (antes «1 tienda activas»).
+  assert.equal(plural(1, 'tienda activa', 'tiendas activas'), '1 tienda activa'); assert.equal(plural(1200, 'tienda activa', 'tiendas activas'), '1,200 tiendas activas');
   const r = cadenaSuministro({ hoyIso: '2026-10-08', puerto: { barcos: [{ etaPuerto: '2026-10-20', piezas: 10 }] }, cedis: { dias: 1 }, camiones: [], distritos: [{ tiendas: [{ vendio: true }, { vendio: false }] }] });
   const vol = (k) => r.tramos.find((x) => x.clave === k);
   assert.match(vol('mar').volumen, /^1 barco ·/); assert.match(vol('cedis').volumen, /· 1 día$/); assert.equal(vol('tienda').motivo, '1 tienda sin venta este mes');
