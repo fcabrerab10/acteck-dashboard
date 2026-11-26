@@ -426,13 +426,14 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   const tiendas = distritos.flatMap((x) => comoLista(x.tiendas)).filter((t) => t && !t.reparto);
   const activas = tiendas.filter((t) => t.vendio).length, ratio = tiendas.length ? activas / tiendas.length : 1;
   const cf = distritos.reduce((s, x) => ({ n: s.n + n(x.clientesFinales?.n), imp: s.imp + n(x?.clientesFinales?.importe) }), { n: 0, imp: 0 });
+  // 4.12.66: mar, camiones, tiendas y clientes vacíos dicen «Sin …» (antes «0 barcos · 0 pz», «0 de 0 vendieron»), como el puerto.
   const tramos = [
-    { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}`, estado: mar.length ? 'verde' : 'gris', motivo: null },
+    { clave: 'mar', titulo: 'En el mar', icono: '🚢', volumen: mar.length ? `${plural(mar.length, 'barco')} · ${pz(mar.reduce((s, b) => s + n(b.piezas), 0))}` : 'Sin barcos en el mar', estado: mar.length ? 'verde' : 'gris', motivo: null },
     { clave: 'puerto', titulo: 'Puerto', icono: '⚓', volumen: [vencidos ? `${vencidos.toLocaleString('es-MX')} con ETA vencida` : '', hoyPuerto ? `${plural(hoyPuerto, 'llega', 'llegan')} hoy` : '', recien ? plural(recien, 'recién llegado') : ''].filter(Boolean).join(' · ') || 'Sin movimiento', estado: tarde ? 'rojo' : vencidos ? 'ambar' : 'verde', motivo: tarde ? `${plural(tarde, 'barco')} con más de 3 días de atraso` : vencidos ? `${plural(vencidos, 'barco')} esperando muelle` : null }, // 4.12.36: cuenta los barcos (antes «Barcos» con uno solo)
     { clave: 'cedis', titulo: 'CEDIS', icono: '🏭', volumen: `${pz(c.piezas)} · ${diasTexto(d)}`, estado: tonoDias(d) || 'gris', motivo: motivoDias(d) },
-    { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: `${cam.length.toLocaleString('es-MX')} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}`, estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
-    { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron`, estado: tonoActivas(activas, tiendas.length) || 'gris', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
-    { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: `${plural(cf.n, 'cliente')} · ${pesosCorto(cf.imp)}`, estado: cf.n ? 'verde' : 'gris', motivo: null },
+    { clave: 'camion', titulo: 'Camiones', icono: '🚚', volumen: cam.length ? `${cam.length.toLocaleString('es-MX')} en ruta · ${pz(cam.reduce((s, x) => s + n(x.piezas), 0))}` : 'Sin camiones en ruta', estado: lentos ? 'ambar' : cam.length ? 'verde' : 'gris', motivo: lentos ? `${plural(lentos, 'envío')} con más de 5 días en camino` : null },
+    { clave: 'tienda', titulo: 'Tiendas', icono: '🏬', volumen: tiendas.length ? `${activas.toLocaleString('es-MX')} de ${tiendas.length.toLocaleString('es-MX')} vendieron` : 'Sin tiendas', estado: tonoActivas(activas, tiendas.length) || 'gris', motivo: tiendas.length && ratio < 0.7 ? `${plural(tiendas.length - activas, 'tienda')} sin venta este mes` : null },
+    { clave: 'cliente', titulo: 'Clientes finales', icono: '🏠', volumen: cf.n ? `${plural(cf.n, 'cliente')} · ${pesosCorto(cf.imp)}` : 'Sin clientes finales', estado: cf.n ? 'verde' : 'gris', motivo: null },
   ];
   return { tramos, atasco: tramos.find((t) => t.estado === 'rojo') || tramos.find((t) => t.estado === 'ambar') || null };
 }

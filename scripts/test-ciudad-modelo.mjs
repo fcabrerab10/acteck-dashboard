@@ -2319,3 +2319,10 @@ test('4.12.63 enMinutos(): desde 24 h en días y desde 60 días en meses/años',
   assert.equal(enMinutos(1439), 'en 23 h 59 min'); assert.equal(enMinutos(1440), 'en 1 d'); assert.equal(enMinutos(60 * 48), 'en 2 d');
   assert.equal(enMinutos(1440 * 59), 'en 59 d'); assert.equal(enMinutos(1440 * 90), 'en 3 meses'); assert.equal(enMinutos(1440 * 400), 'en 1 año');
 });
+
+test('4.12.66 cadenaSuministro(): tramos vacíos dicen «Sin …» en vez de ceros', () => {
+  const t = Object.fromEntries(cadenaSuministro({ puerto: { barcos: [] }, cedis: { dias: 10 }, camiones: [], distritos: [] }, '2026-11-25').tramos.map((x) => [x.clave, x.volumen]));
+  assert.equal(t.mar, 'Sin barcos en el mar'); assert.equal(t.camion, 'Sin camiones en ruta'); assert.equal(t.tienda, 'Sin tiendas'); assert.equal(t.cliente, 'Sin clientes finales');
+  const u = Object.fromEntries(cadenaSuministro({ distritos: [{ tiendas: [{ vendio: false }] }] }, '2026-11-25').tramos.map((x) => [x.clave, x.volumen]));
+  assert.equal(u.tienda, '0 de 1 vendieron');
+});
