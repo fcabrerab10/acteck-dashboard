@@ -1395,7 +1395,7 @@ test('tarjetaDe(barco): ETA en palabras (mañana, hoy, tarde)', () => {
 test('llegaBarco(): hoy, mañana, en N d, tarde y sin ETA', () => {
   assert.equal(llegaBarco(0), 'llega hoy'); assert.equal(llegaBarco(1), 'llega mañana'); assert.equal(llegaBarco(5), 'llega en 5 d'); assert.equal(llegaBarco(' 3 '), 'llega en 3 d');
   assert.equal(llegaBarco(-2), '2 d tarde'); assert.equal(llegaBarco(0.3), 'llega hoy');
-  assert.equal(llegaBarco(1200), 'llega en 1,200 d'); assert.equal(llegaBarco('1,200'), 'llega en 1,200 d'); assert.equal(llegaBarco(-1500), '1,500 d tarde'); assert.equal(llegaBarco(true), 'sin ETA');
+  assert.equal(llegaBarco(1200), 'llega en 3 años'); assert.equal(llegaBarco('1,200'), 'llega en 3 años'); assert.equal(llegaBarco(-1500), '4 años tarde'); assert.equal(llegaBarco(true), 'sin ETA');
   assert.equal(enMinutos(60 * 1200), 'en 1,200 h'); assert.equal(enMinutos('1,500'), 'en 25 h'); assert.equal(enMinutos(true), '');
   assert.equal(llegaBarco(null), 'sin ETA'); assert.equal(llegaBarco(''), 'sin ETA'); assert.equal(llegaBarco('x'), 'sin ETA'); assert.equal(llegaBarco(Infinity), 'sin ETA');
 });
@@ -2298,4 +2298,10 @@ test('4.12.61 faltanDias(): mañana / en N d / en N meses / en N años; pasado =
   assert.equal(faltanDias(59), 'en 59 d'); assert.equal(faltanDias(60), 'en 2 meses'); assert.equal(faltanDias(364), 'en 11 meses');
   assert.equal(faltanDias(400), 'en 1 año'); assert.equal(faltanDias('1,200'), 'en 3 años');
   for (const x of [null, undefined, '', ' ', NaN, 'abc', Infinity, true, {}, []]) assert.equal(faltanDias(x), '');
+});
+
+test('4.12.62 llegaBarco(): meses y años desde 60 días, adelante y tarde', () => {
+  assert.equal(llegaBarco(59), 'llega en 59 d'); assert.equal(llegaBarco(60), 'llega en 2 meses'); assert.equal(llegaBarco(200), 'llega en 7 meses');
+  assert.equal(llegaBarco(365), 'llega en 1 año'); assert.equal(llegaBarco(-59), '59 d tarde'); assert.equal(llegaBarco(-90), '3 meses tarde');
+  assert.equal(llegaBarco(-400), '1 año tarde'); assert.equal(llegaBarco(-800), '2 años tarde'); assert.equal(llegaBarco(-1), '1 d tarde');
 });

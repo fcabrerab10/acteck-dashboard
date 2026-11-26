@@ -779,6 +779,10 @@ export function llegaBarco(dias) {
   // 4.7.29: «1,200» en texto se lee y los días salen con miles es-MX («llega en 1,200 d», «1,200 d tarde»).
   const k = Math.round(Number(typeof dias === 'string' ? dias.replace(/[,\s]/g, '') : dias)); if (!Number.isFinite(k) || typeof dias === 'boolean') return 'sin ETA';
   const m = (n) => n.toLocaleString('es-MX');
+  // 4.12.62: desde 60 días en meses y desde 365 en años, como `haceDias()` / `faltanDias()` («llega en 3 meses», «1 año tarde»;
+  // antes «llega en 1,200 d» / «1,500 d tarde»).
+  if (k <= -60) return `${haceDias(-k).replace(/^hace /, '')} tarde`;
+  if (k >= 60) return `llega ${faltanDias(k)}`;
   if (k < 0) return `${m(-k)} d tarde`;
   return k === 0 ? 'llega hoy' : k === 1 ? 'llega mañana' : `llega en ${m(k)} d`;
 }
