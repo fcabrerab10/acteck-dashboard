@@ -380,6 +380,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.66) 2026-11-25 23:56 · Cadena de suministro: los tramos vacíos dicen «Sin barcos en el mar» / «Sin camiones en ruta» / «Sin tiendas» / «Sin clientes finales» (antes «0 barcos · 0 pz», «0 de 0 vendieron»), como el puerto; +1 prueba.
   - [x] (4.12.67) 2026-11-26 00:16 · Sin «· 0 pz»: la misión «Descargar» y el arribo de la bitácora sólo dicen piezas si hay (`piezasSiHay()` pura y probada; antes «Descargar C1 · 0 pz»), y una reunión sin hora ya no entra a la bitácora como pasada; +1 prueba.
   - [x] (4.12.72) 2026-11-26 01:56 · `fechaIso()` lee fechas con el año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como Sheets y algunos ERP; antes contaban como «sin fecha» en el puerto, los camiones y las tarjetas); +1 prueba.
+  - [x] (4.12.73) 2026-11-26 02:15 · `fechaIso()` lee día/mes/año con guiones o puntos («26-11-2026», «5.1.2027 08:00», como algunos ERP y Excel en español; antes contaban como «sin fecha»); separadores mezclados o días imposibles siguen null; +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 

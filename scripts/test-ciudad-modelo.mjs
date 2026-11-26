@@ -1118,6 +1118,9 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   // 4.12.70: día/mes/año como en México y Sheets
   assert.equal(fechaIso('26/11/2026'), '2026-11-26'); assert.equal(fechaIso(' 5/1/2027 10:30 '), '2027-01-05', 'sin ceros y con hora');
   for (const x of ['31/02/2026', '12/13/2026', '1/1/26', '26/11/2026x']) assert.equal(fechaIso(x), null, x);
+  // 4.12.73: día/mes/año con guiones o puntos
+  assert.equal(fechaIso('26-11-2026'), '2026-11-26'); assert.equal(fechaIso(' 5.1.2027 08:00 '), '2027-01-05', 'puntos y hora');
+  for (const x of ['26-11/2026', '31-02-2026', '26.13.2026', '26-11-2026x']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaCorta('26/11/2026', new Date(2026, 10, 26)), '26 nov', 'tarjetas');
   // 4.12.72: año primero sin ceros o con diagonales
   assert.equal(fechaIso('2026-1-5'), '2026-01-05'); assert.equal(fechaIso(' 2026/01/05 10:30 '), '2026-01-05', 'diagonales y hora');
