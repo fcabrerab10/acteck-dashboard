@@ -2465,3 +2465,11 @@ test('4.12.87 enMinutos() lee la unidad de minutos y texto con miles', () => {
   assert.equal(enMinutos('1 minuto'), 'en 1 min'); assert.equal(enMinutos('0 min'), 'empieza ya'); assert.equal(enMinutos('1,500'), 'en 1 d');
   for (const x of ['min', '-3 min', 'x min', '  ', '15 h', true, false]) assert.equal(enMinutos(x), '');
 });
+
+test('4.12.88 nombreSucursal(): abreviaturas de domicilio en minúscula', () => {
+  assert.equal(nombreSucursal('PCEL SUC. GUADALAJARA CENTRO'), 'Pcel Suc. Guadalajara Centro'); assert.equal(nombreSucursal('PCEL SUC ZAPOPAN'), 'Pcel Suc Zapopan');
+  assert.equal(nombreSucursal('OFFICE DEPOT AV. VALLARTA NO. 123'), 'Office Depot Av. Vallarta No. 123'); assert.equal(nombreSucursal('BLVD AGUA CALIENTE KM 5'), 'Blvd Agua Caliente km 5');
+  assert.equal(nombreSucursal('SUC.CENTRO'), 'Suc. Centro'); assert.equal(nombreSucursal('COL. CENTRO CDMX'), 'Col. Centro CDMX');
+  assert.equal(nombreSucursal('NO HAY'), 'No Hay'); assert.equal(nombreSucursal('PLAZA CD. JUAREZ'), 'Plaza Ciudad Juárez'); assert.equal(nombreSucursal('S.A. DE C.V.'), 'S.A. de C.V.');
+  assert.equal(nombreSucursal('Pcel SUC. Centro'), 'Pcel SUC. Centro'); // con minúsculas se respeta tal cual
+});
