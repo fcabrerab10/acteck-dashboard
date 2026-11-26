@@ -384,6 +384,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.67) 2026-11-26 00:16 · Sin «· 0 pz»: la misión «Descargar» y el arribo de la bitácora sólo dicen piezas si hay (`piezasSiHay()` pura y probada; antes «Descargar C1 · 0 pz»), y una reunión sin hora ya no entra a la bitácora como pasada; +1 prueba.
   - [x] (4.12.72) 2026-11-26 01:56 · `fechaIso()` lee fechas con el año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como Sheets y algunos ERP; antes contaban como «sin fecha» en el puerto, los camiones y las tarjetas); +1 prueba.
   - [x] (4.12.73) 2026-11-26 02:15 · `fechaIso()` lee día/mes/año con guiones o puntos («26-11-2026», «5.1.2027 08:00», como algunos ERP y Excel en español; antes contaban como «sin fecha»); separadores mezclados o días imposibles siguen null; +1 prueba.
+  - [x] (4.12.77) 2026-11-26 03:36 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30», como Shopify/Amazon; antes «sin fecha» en puerto, camiones y tarjetas); sin día o «feb 31» siguen null; +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -398,6 +399,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 03:36 · v4.12.77 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30»); sin día o fechas imposibles siguen nulas; +1 prueba.
 - 2026-11-26 03:15 · v4.12.76 · `fechaIso()` lee fechas compactas AAAAMMDD («20261126», «20261126 10:30») como SAP y otros ERP; números sueltos y fechas imposibles siguen nulos; +1 prueba (192).
 - 2026-11-26 02:56 · v4.12.75 · `encimaDelCampus()`/`distritoGDL()` con medidas inválidas (negativas, Infinity, basura) cuentan 0; +pruebas.
 - 2026-11-26 02:36 · v4.12.74 · `fechaIso()` lee fechas con el mes en letra («26 nov 2026», «5 de enero de 2027», «26-Nov-2026»); +pruebas.
