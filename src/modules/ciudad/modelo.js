@@ -835,10 +835,14 @@ export function fechaCorta(x, hoy) {
 // estado crudo en inglés («Se actualizaron los datos · success») y un error se anunciaba como actualización.
 // 4.12.47: con `fuente` (nombre del importador, `fuenteSync()`) dice cuál: «Se actualizaron los datos · Inventario ERP»,
 // «Falló una actualización de datos · Ventas ERP (facturación)»; sin fuente queda como antes.
+// 4.12.84: más palabras del estado (mayúsculas, espacios, «_»/«-»): fallos en inglés/español («failure», «errored», «ERROR»),
+// avisos («warn», «warnings», «aviso(s)», «partial», «parcial») y en curso («running», «pending», «en_curso», «en proceso»
+// → 🔄 «Actualizando los datos»); antes salía la palabra cruda («Se actualizaron los datos · running»).
 export function textoSync(status, fuente) {
-  const st = unirTexto(typeof status === 'string' ? status.toLowerCase() : status), f = unirTexto(fuente);
-  if (['error', 'failed', 'fail', 'fallo', 'falló'].includes(st)) return { icono: '⚠️', texto: unirTexto('Falló una actualización de datos', f) };
-  if (st === 'warning') return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, 'con avisos') };
+  const st = unirTexto(typeof status === 'string' ? status.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') : status), f = unirTexto(fuente);
+  if (['error', 'errors', 'errored', 'failed', 'fail', 'failure', 'fallo', 'falló', 'fallido', 'fallida'].includes(st)) return { icono: '⚠️', texto: unirTexto('Falló una actualización de datos', f) };
+  if (['warning', 'warnings', 'warn', 'aviso', 'avisos', 'partial', 'parcial'].includes(st)) return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, 'con avisos') };
+  if (['running', 'pending', 'started', 'in progress', 'en curso', 'en proceso', 'procesando'].includes(st)) return { icono: '🔄', texto: unirTexto('Actualizando los datos', f) };
   return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, ['', 'success', 'ok', 'exito', 'éxito'].includes(st) ? '' : st) };
 }
 // Fuente de la última sincronización (4.12.47): el `status_key` de `sync_events` con el título del catálogo del importador

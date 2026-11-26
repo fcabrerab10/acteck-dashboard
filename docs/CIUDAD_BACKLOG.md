@@ -405,6 +405,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 05:56 · v4.12.84 · `textoSync()` reconoce más estados del puente (mayúsculas, «_»/«-»): fallos en inglés («failure», «errored»), avisos («warn», «partial», «parcial» → «con avisos») y en curso («running», «en_curso» → «Actualizando los datos»); antes salía la palabra cruda en la bitácora; +1 prueba (196).
 - 2026-11-26 05:36 · v4.12.83 · `nombreCiudad()` completa abreviaturas del ERP (Cd./Gral./Sta./Sto./Sn → Ciudad/General/Santa/Santo/San); +1 prueba (195).
 - 2026-11-26 05:16 · v4.12.82 · `numero()` / `leeNum()` ignoran una unidad al final del número en texto («3 días», «45 d», «1 200 pz», «24 °C», «$5,000 MXN»; antes 0 o vacío en DSO, temperatura, piezas y cifras) y `llegaBarco()` lee «3 días» / «5 d» (antes «sin ETA»); la unidad sola sigue siendo basura; +1 prueba.
 - 2026-11-26 04:57 · v4.12.81 · `duracionMin()` lee «90 min», «1 h», «1:30»; viaje con fechas al revés cuenta en la presencia; +1 prueba (193).

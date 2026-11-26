@@ -2159,7 +2159,16 @@ test('textoSync: estado del puente con las palabras del importador (4.12.26)', (
   assert.deepEqual(textoSync(null), { icono: '🔄', texto: 'Se actualizaron los datos' });
   assert.deepEqual(textoSync('warning'), { icono: '🔄', texto: 'Se actualizaron los datos · con avisos' });
   assert.deepEqual(textoSync('Error'), { icono: '⚠️', texto: 'Falló una actualización de datos' });
-  assert.equal(textoSync('parcial').texto, 'Se actualizaron los datos · parcial');
+  assert.equal(textoSync('parcial').texto, 'Se actualizaron los datos · con avisos');
+  assert.equal(textoSync('otra cosa').texto, 'Se actualizaron los datos · otra cosa');
+});
+
+test('textoSync: más palabras de fallo, avisos y en curso (4.12.84)', () => {
+  for (const e of ['FAILURE', ' errored ', 'Fallido']) assert.deepEqual(textoSync(e), { icono: '⚠️', texto: 'Falló una actualización de datos' });
+  for (const w of ['warn', 'WARNINGS', 'Avisos', 'partial']) assert.equal(textoSync(w).texto, 'Se actualizaron los datos · con avisos');
+  for (const r of ['running', 'EN_CURSO', 'en-proceso', ' in  progress ', 'pending']) assert.deepEqual(textoSync(r), { icono: '🔄', texto: 'Actualizando los datos' });
+  assert.equal(textoSync('running', 'Inventario ERP').texto, 'Actualizando los datos · Inventario ERP');
+  assert.equal(textoSync(500).texto, 'Se actualizaron los datos · 500');
   const h = new Date('2026-10-07T11:00:00');
   const b = bitacoraEventos({ hoyIso: '2026-10-07', ultimaSync: { status: 'error', created_at: '2026-10-07T10:40:00' } }, h);
   assert.deepEqual(b.map((x) => [x.icono, x.cuando, x.texto]), [['⚠️', '10:40', 'Falló una actualización de datos']]);
