@@ -162,6 +162,11 @@ test('distritos reales encima del campus: capa mapa, sólo de lejos (3.90.12)', 
   assert.deepEqual([CIUDADES.LEON, CIUDADES.QUERETARO].map((x) => posDe(x)), [posDe(CIUDADES.LEON), posDe(CIUDADES.QUERETARO)], 'su posición en el mapa no cambia');
   for (const mg of [NaN, -3, 'x', null, '']) assert.equal(encimaDelCampus(c, posDe(CIUDADES.LEON), 7, 4.5, cajaGDL, mg), true, `margen ${String(mg)} usa el de omisión`);
   assert.equal(encimaDelCampus(c, posDe(CIUDADES.MONTERREY), 7, 4.5, cajaGDL, '2'), false, 'margen en texto');
+  { const base = encimaDelCampus(c, posDe(CIUDADES.LEON), 0, 0, cajaGDL);
+    for (const v of [-7, Infinity, NaN, 'x', {}, [], '']) assert.equal(encimaDelCampus(c, posDe(CIUDADES.LEON), v, v, cajaGDL), base, `medida ${String(v)} cuenta como 0`);
+    assert.equal(encimaDelCampus(c, posDe(CIUDADES.MONTERREY), '7', ' 4.5 ', cajaGDL), false, 'medidas en texto se leen');
+    const g0 = c.distritoGDL(0, 0); for (const v of [-10, Infinity, 'x', {}, null]) assert.deepEqual(c.distritoGDL(v, v), g0, `distritoGDL ${String(v)} = sin medida`);
+    assert.deepEqual(c.distritoGDL('15', '10'), c.distritoGDL(15, 10), 'distritoGDL lee texto'); }
   assert.equal(encimaDelCampus(null, { x: 0, z: 0 }), false); assert.equal(encimaDelCampus(c, { x: NaN, z: 0 }), false, 'datos inválidos no esconden nada');
   assert.equal(juntarCapas('fino', 'mapa'), 'fino+mapa'); assert.equal(juntarCapas('mapa+fino', 'mapa'), 'fino+mapa', 'sin repetir');
   assert.equal(juntarCapas(undefined, false, ''), undefined); assert.equal(juntarCapas(false, 'mapa'), 'mapa');

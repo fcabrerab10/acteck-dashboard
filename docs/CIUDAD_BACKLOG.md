@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.74) 2026-11-26 02:36 · `fechaIso()` lee fechas con el mes en letra (español o inglés, abreviado o completo, con «de»): «26 nov 2026», «26-Nov-2026», «5 de enero de 2027», «3/Ago/2026 10:30» (antes contaban como «sin fecha» en puerto, camiones y tarjetas). Mes desconocido o «31 feb 2026» siguen null.
+  - [x] (4.12.75) 2026-11-26 02:56 · `encimaDelCampus()` y `distritoGDL()` leen ancho/largo con `medidaCaja()`: negativo, Infinity, texto basura, objeto o lista cuentan como 0 (antes un ancho negativo volteaba la caja y el distrito se dibujaba encima de la base; Infinity mandaba el distrito GDL al infinito); medidas en texto («7») se leen.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
   - [x] (4.12.71) 2026-11-26 01:40 · Más municipios con acento o eñe en `nombreCiudad()` / `nombreSucursal()`: «Tlajomulco de Zúñiga» (antes «Zuniga»), «Ciudad Guzmán», «Ciudad López Mateos», «Chimalhuacán», «Jesús María», «Bahía de Banderas», «Ciénega de Flores», «Teotihuacán»…
   - [x] (4.12.69) 2026-11-26 00:58 · Más conurbados en `ciudadDeSucursal()` (CDMX, Toluca, Puebla, Cuernavaca, Mérida, Morelia): antes esas tiendas no salían en el mapa.
@@ -396,6 +397,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 02:56 · v4.12.75 · `encimaDelCampus()`/`distritoGDL()` con medidas inválidas (negativas, Infinity, basura) cuentan 0; +pruebas.
 - 2026-11-26 02:36 · v4.12.74 · `fechaIso()` lee fechas con el mes en letra («26 nov 2026», «5 de enero de 2027», «26-Nov-2026»); +pruebas.
 - 2026-11-26 01:16 · v4.12.70 · `fechaIso()` lee fechas día/mes/año («26/11/2026», «5/1/2027 10:30») como en México y Sheets; fechas imposibles siguen nulas; +pruebas.
 - 2026-11-26 00:16 · v4.12.67 · Misión «Descargar» y arribo de la bitácora sin «· 0 pz»; reunión sin hora fuera de la bitácora; +1 prueba (191).

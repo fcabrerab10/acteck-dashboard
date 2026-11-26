@@ -146,6 +146,9 @@ export function encuadre(puntos, op) {
   return { cx: hc * der.x + vc * fondo.x, cz: hc * der.z + vc * fondo.z, zoom };
 }
 
+// 4.12.75: medida de una caja (ancho/largo de un distrito) legible y ≥ 0; negativa, Infinity, texto, objeto o lista → 0.
+// Antes un ancho negativo volteaba la caja y el distrito se dibujaba encima de la base, e Infinity mandaba el distrito GDL al infinito.
+function medidaCaja(v) { if (typeof v !== 'number' && (typeof v !== 'string' || v.trim() === '')) return 0; const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; }
 // Campus de la Vista Base (etapa 2): oficina y CEDIS separados por una calle interior, una avenida al frente que los une,
 // el patio de maniobras con andenes al oriente del CEDIS y el distrito «Guadalajara» debajo de la avenida, lejos del puerto
 // (antes se enciman). Todo relativo a `esc` (Guadalajara en la escena). Calles: { a, b, ancho } en línea recta.
@@ -169,7 +172,7 @@ export function campus(esc = { x: 0, z: 0 }) {
     jardin: { x: x - 18.3, z: z + 1.5, ancho: 3.2, largo: 14 }, // x −19.9…−16.7
     faroles: Array.from({ length: 9 }, (_, i) => ({ x: x - 16 + i * 6, z: avenidaZ + 1.5 })).filter((f) => Math.abs(f.x - (x - 1)) > 1.5),
     // distrito GDL: su borde de arriba sobre la avenida y su borde izquierdo (con casitas, ~2.8 más) a la derecha de x + 2
-    distritoGDL: (ancho = 0, largo = 0) => ({ x: x + 5 + (Number(ancho) || 0) / 2, z: avenidaZ + 2 + (Number(largo) || 0) / 2 }),
+    distritoGDL: (ancho = 0, largo = 0) => ({ x: x + 5 + medidaCaja(ancho) / 2, z: avenidaZ + 2 + medidaCaja(largo) / 2 }),
     // terreno del campus (oficina, estacionamiento, jardín, CEDIS, patio, bardas y la banqueta de los faroles) para saber qué
     // distritos reales le caen encima (3.90.12)
     caja: { x0: x - 20, x1: x + 33, z0: z - 23, z1: avenidaZ + 2 }, // z0 −23: incluye el banco
@@ -180,7 +183,7 @@ export function campus(esc = { x: 0, z: 0 }) {
 // (otra caja { x0, x1, z0, z1 })? Esos van en la capa `mapa`: de cerca no se dibujan encima de la base.
 export function encimaDelCampus(c, d, ancho = 0, largo = 0, gdl = null, margen = 1) {
   if (!c?.caja || !d || !Number.isFinite(d.x) || !Number.isFinite(d.z)) return false;
-  const w = Number(ancho) || 0, l = Number(largo) || 0;
+  const w = medidaCaja(ancho), l = medidaCaja(largo);
   margen = Number.isFinite(Number(margen)) && Number(margen) >= 0 && margen !== null && margen !== '' ? Number(margen) : 1;
   const r = { x0: d.x - w / 2 - 2.8 - margen, x1: d.x + w / 2 + margen, z0: d.z - l / 2 - margen, z1: d.z + l / 2 + margen };
   const choca = (b) => !!b && r.x0 < b.x1 && b.x0 < r.x1 && r.z0 < b.z1 && b.z0 < r.z1;
