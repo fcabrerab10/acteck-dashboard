@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
+  - [x] (4.12.64) 2026-11-25 23:18 · Pensamiento de cuota: una tienda al ritmo de su cuota dice «Voy a buen ritmo con mi cuota (60 %)» y, ya cumplida, «¡Ya llegué a mi cuota!» (antes «Voy arriba de mi cuota» aunque llevara 60 % a medio mes).
   - [x] (4.12.63) 2026-11-25 22:56 · Cuenta regresiva de reuniones: `enMinutos()` desde 24 h dice días y desde 60 días meses/años, como `faltanDias()` («en 2 d», «en 3 meses»; antes «en 1,200 h») en la misión y la burbuja de la oficina.
   - [x] (4.12.57) 2026-11-25 06:15 · Pruebas nuevas de `sinNulos()`: entrada que no es objeto da {}, sólo quita null/undefined (0, '', false y NaN se quedan), no toca listas anidadas y no muta los datos crudos (la barra de tiempo los usa antes de limpiar).
   - [x] (4.12.56) 2026-11-25 05:56 · Pruebas nuevas: `claveTexto()` (no tenía) y bordes del semáforo de días de inventario (29 rojo, 29.6 → 30 verde, 120.4 verde, 121 ámbar; texto « 200 » / «1,200»; ilegibles sin tono). Barrido de entradas raras a todas las funciones de `modelo.js`, `construirModelo()` y `tarjetaDe()`: sin errores ni NaN.
@@ -673,3 +674,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-25 03:39 · v4.12.49 · Cadena de suministro dice «1,500 pz» (igual que globos, bitácora y puerto; antes «pzs»).
 - 2026-11-25 05:16 · v4.12.54 · Oficina: tipos y estados de agenda, reuniones y perfiles sin importar mayúsculas, acentos ni espacios (`esClase()`); +1 prueba.
 - 2026-11-25 15:15 · v4.12.58 · Pellizco táctil con dedos encimados ya no brinca el zoom de la Ciudad (`gestoDosDedos()`); +2 pruebas.
+- 2026-11-25 23:18 · v4.12.64 · Pensamiento de cuota de las tiendas: «Voy a buen ritmo con mi cuota (N %)» / «¡Ya llegué a mi cuota!» en vez de «Voy arriba de mi cuota»; +1 prueba.

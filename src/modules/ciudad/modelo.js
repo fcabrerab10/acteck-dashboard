@@ -475,7 +475,7 @@ export function tramoActual(ciclo, paradas) {
 // reglas del modelo (no por tamaño: se mira la tendencia). Una por ciudad como máximo y `max` en total; primero lo que pide
 // atención (rojo), luego lo bueno. Reglas: cuenta con cartera vencida → «Tengo pagos vencidos»; la tienda vendió el mes
 // anterior y éste no → «Este mes no he vendido nada»; cae > 30 % → «Vendo N % menos que el mes pasado»; sube > 30 % →
-// «¡Voy N % arriba del ritmo del mes pasado!»; cuenta al ritmo de su cuota (`m.cuotas`) → «Voy arriba de mi cuota».
+// «¡Voy N % arriba del ritmo del mes pasado!»; cuenta al ritmo de su cuota (`m.cuotas`) → «Voy a buen ritmo con mi cuota (N %)» o, ya cumplida, «¡Ya llegué a mi cuota!».
 export function pensamientos(m, max = 5) {
   max = cuantos(max, 5);
   if (!m) return [];
@@ -505,7 +505,9 @@ export function pensamientos(m, max = 5) {
       else if (cta && venc.get(cta) === 'ambar') p = { tono: 'ambar', peso: 1.5, texto: 'Tengo algo de cartera vencida' };
       else if (cambio != null && cambio < -30) p = { tono: 'ambar', peso: 2, texto: `Voy ${porcentaje(-cambio)} abajo del ritmo del mes pasado` };
       else if (cambio != null && cambio > 30) p = { tono: 'verde', peso: 3, texto: `¡Voy ${porcentaje(cambio)} arriba del ritmo del mes pasado!` };
-      else if (numero(cu?.cuota) > 0 && numero(cu.venta) / numero(cu.cuota) >= ritmo) p = { tono: 'verde', peso: 4, texto: 'Voy arriba de mi cuota' };
+      // 4.12.64: al ritmo de la cuota no es «arriba de mi cuota» (a medio mes con 60 % decía eso): ≥ 100 % «¡Ya llegué a mi
+      // cuota!», si no «Voy a buen ritmo con mi cuota (60 %)».
+      else if (numero(cu?.cuota) > 0 && numero(cu.venta) / numero(cu.cuota) >= ritmo) { const av = numero(cu.venta) / numero(cu.cuota); p = { tono: 'verde', peso: 4, texto: av >= 1 ? '¡Ya llegué a mi cuota!' : `Voy a buen ritmo con mi cuota (${porcentaje(Math.floor(av * 100))})` }; }
       if (p && (!mejor || p.peso < mejor.peso)) mejor = { ...quien, ...p };
     }
     if (mejor) out.push(mejor);

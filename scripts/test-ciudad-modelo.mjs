@@ -648,7 +648,7 @@ test('pensamientos de tiendas', () => {
       { ciudad: 'LEO', tiendas: [T('f', 'Plaza', 150, 100)] },
     ] };
   const p = pensamientos(m, 10);
-  assert.deepEqual(p.map((x) => [x.ciudad, x.tono, x.texto]), [['GDL', 'rojo', 'Tengo pagos vencidos'], ['MTY', 'rojo', 'Este mes no he vendido nada'], ['CDMX', 'ambar', 'Voy 50 % abajo del ritmo del mes pasado'], ['LEO', 'verde', '¡Voy 50 % arriba del ritmo del mes pasado!'], ['PUE', 'verde', 'Voy arriba de mi cuota']]);
+  assert.deepEqual(p.map((x) => [x.ciudad, x.tono, x.texto]), [['GDL', 'rojo', 'Tengo pagos vencidos'], ['MTY', 'rojo', 'Este mes no he vendido nada'], ['CDMX', 'ambar', 'Voy 50 % abajo del ritmo del mes pasado'], ['LEO', 'verde', '¡Voy 50 % arriba del ritmo del mes pasado!'], ['PUE', 'verde', '¡Ya llegué a mi cuota!']]);
   assert.equal(p[0].nombre, 'MALA · Sur'); assert.equal(p[0].sucursal, 'Sur'); assert.ok(!p.some((x) => 'peso' in x));
   assert.equal(pensamientos(m).length, 5); assert.equal(pensamientos(m, 2).length, 2);
   assert.deepEqual(pensamientos(null), []); assert.deepEqual(pensamientos({}), []);
@@ -1865,6 +1865,13 @@ test('cintasCadena() aguanta listas que no son lista y empata la ciudad del cami
   assert.ok(c.every((x) => x.a), 'sin cinta hacia una ciudad vacía');
 });
 
+test('4.12.64 pensamiento de cuota: al ritmo no es «arriba de mi cuota»', () => {
+  const pc = (venta, cuota, hoyIso = '2026-10-15') => pensamientos({ hoyIso, cuotas: new Map([['ct', { cuota, venta }]]), distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'ct', importe: 10, previo: 21 }] }] })[0]?.texto ?? null;
+  assert.equal(pc(600, 1000), 'Voy a buen ritmo con mi cuota (60 %)');
+  assert.equal(pc(999, 1000), 'Voy a buen ritmo con mi cuota (99 %)', '99.9 % no se redondea a 100 %');
+  assert.equal(pc(1000, 1000), '¡Ya llegué a mi cuota!'); assert.equal(pc(1500, 1000), '¡Ya llegué a mi cuota!');
+  assert.equal(pc(400, 1000), null, 'abajo del ritmo no presume');
+});
 test('4.7.71 pensamientos y misiones con listas raras', () => {
   for (const x of ['texto', 5, { a: 1 }, null]) {
     assert.deepEqual(pensamientos({ distritos: x, kpis: { cartera: x } }), []);
@@ -1874,7 +1881,7 @@ test('4.7.71 pensamientos y misiones con listas raras', () => {
   const p = pensamientos({ hoyIso: '2026-10-15', kpis: { cartera: [{ cuenta: ' pcel ', vencido: '$5,000' }] }, distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'pcel', sucursal: 'Centro', importe: 10, previo: 10 }] }] });
   assert.equal(p[0]?.texto, 'Tengo pagos vencidos', 'cuenta con espacios empata la cartera vencida');
   const q = pensamientos({ hoyIso: '2026-10-15', cuotas: new Map([['ct', { cuota: '1,000', venta: '$900' }]]), distritos: [{ ciudad: 'LEON', tiendas: [{ cuenta: 'ct', importe: 10, previo: 21 }] }] });
-  assert.equal(q[0]?.texto, 'Voy arriba de mi cuota', 'cuota y venta en texto cuentan');
+  assert.equal(q[0]?.texto, 'Voy a buen ritmo con mi cuota (90 %)', 'cuota y venta en texto cuentan');
 });
 
 test('4.7.77 llegaBarco/enMinutos/haceDias sólo leen número o texto', () => {
