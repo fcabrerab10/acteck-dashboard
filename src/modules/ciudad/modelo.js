@@ -1335,6 +1335,7 @@ const CIUDADES_LARGAS = Object.keys(CIUDADES).sort((a, b) => b.length - a.length
 
 // Fecha 'AAAA-MM-DD' de un valor de la base (texto ISO, con hora o no, o Date) si es una fecha real; si no (null, «pendiente»,
 // '2026-13-40', Date inválido) → null. Así una fecha mala cuenta como «sin fecha» y no da NaN en el puerto ni en los camiones.
+const MESES_LETRA = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre', 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 export function fechaIso(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
   if (typeof x !== 'string') return null;
@@ -1343,6 +1344,14 @@ export function fechaIso(x) {
   // 4.12.73: también con guiones o puntos («26-11-2026», «5.1.2027», como algunos ERP y Excel en español); separadores mezclados siguen null.
   const dm = x.trim().match(/^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})(?:[\sT].*)?$/);
   if (dm) { const s = `${dm[4]}-${dm[3].padStart(2, '0')}-${dm[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
+  // 4.12.74: con el mes en letra («26 nov 2026», «26-nov-2026», «5 de enero de 2027», «26/Nov/2026 10:30», como exportan
+  // algunos ERP y reportes en español; antes null: contaba como «sin fecha»). Mes desconocido o '31 feb 2026' siguen null.
+  const ml = norm(x).match(/^(\d{1,2})(?:\s+de\s+|[\s/.-]+)([a-z]{3,10})\.?(?:\s+de\s+|[\s/.-]+)(\d{4})(?:[\sT].*)?$/i);
+  if (ml) {
+    const mes = MESES_LETRA.findIndex((m) => ml[2].toLowerCase() === m || (ml[2].length >= 3 && m.startsWith(ml[2].toLowerCase()))) % 12 + 1;
+    if (!mes) return null;
+    const s = `${ml[3]}-${String(mes).padStart(2, '0')}-${ml[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
+  }
   // 4.12.72: año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como exportan Sheets y algunos ERP)
   // también se lee (antes null: contaba como «sin fecha»); '2026/02/30' o mes 13 siguen siendo null.
   const ym = x.trim().match(/^(\d{4})([-/])(\d{1,2})\2(\d{1,2})(?:[\sT].*)?$/);

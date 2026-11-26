@@ -1123,6 +1123,11 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   for (const x of ['26-11/2026', '31-02-2026', '26.13.2026', '26-11-2026x']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaCorta('26/11/2026', new Date(2026, 10, 26)), '26 nov', 'tarjetas');
   // 4.12.72: año primero sin ceros o con diagonales
+  // 4.12.74: mes en letra (español o inglés, abreviado o completo, con «de»).
+  assert.equal(fechaIso('26 nov 2026'), '2026-11-26'); assert.equal(fechaIso('26-Nov-2026'), '2026-11-26'); assert.equal(fechaIso(' 5 de enero de 2027 '), '2027-01-05');
+  assert.equal(fechaIso('3/Ago/2026 10:30'), '2026-08-03'); assert.equal(fechaIso('1 Sept. 2026'), '2026-09-01'); assert.equal(fechaIso('15 march 2026'), '2026-03-15');
+  assert.equal(fechaIso('9 DIC 2026'), '2026-12-09'); assert.equal(fechaIso('2 may 2026'), '2026-05-02'); assert.equal(fechaIso('30 Septiembre 2026'), '2026-09-30');
+  for (const x of ['31 feb 2026', '26 xyz 2026', '26 no 2026', '26 nov 26', '26 nov 2026x', 'nov 2026']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaIso('2026-1-5'), '2026-01-05'); assert.equal(fechaIso(' 2026/01/05 10:30 '), '2026-01-05', 'diagonales y hora');
   assert.equal(fechaIso('2026/11/26'), '2026-11-26'); assert.equal(fechaIso('2026-01-05T08:00:00'), '2026-01-05', 'ISO normal igual');
   for (const x of ['2026/02/30', '2026-13-1', '2026/1-5', '2026/01/05x', '2026-1-5-']) assert.equal(fechaIso(x), null, x);
