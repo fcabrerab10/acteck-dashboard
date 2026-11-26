@@ -375,6 +375,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.61) 2026-11-25 22:16 · `faltanDias()` pura y probada, gemelo de `haceDias()`: la tarjeta del camión fechado adelante dice «Sale · … · en 3 meses» / «en 1 año» (antes «en 400 d»); +1 prueba.
   - [x] (4.12.62) 2026-11-25 22:35 · `llegaBarco()` dice «llega en N meses» / «en N año(s)» desde 60 días y «N meses tarde» / «N año(s) tarde» (antes «llega en 1,200 d» / «1,500 d tarde») en el panel, el globo del barco y la cadena; +1 prueba.
   - [x] (4.12.66) 2026-11-25 23:56 · Cadena de suministro: los tramos vacíos dicen «Sin barcos en el mar» / «Sin camiones en ruta» / «Sin tiendas» / «Sin clientes finales» (antes «0 barcos · 0 pz», «0 de 0 vendieron»), como el puerto; +1 prueba.
+  - [x] (4.12.67) 2026-11-26 00:16 · Sin «· 0 pz»: la misión «Descargar» y el arribo de la bitácora sólo dicen piezas si hay (`piezasSiHay()` pura y probada; antes «Descargar C1 · 0 pz»), y una reunión sin hora ya no entra a la bitácora como pasada; +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -389,6 +390,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 00:16 · v4.12.67 · Misión «Descargar» y arribo de la bitácora sin «· 0 pz»; reunión sin hora fuera de la bitácora; +1 prueba (191).
 - 2026-11-25 23:56 · v4.12.66 · Cadena: tramos vacíos dicen «Sin …» en vez de ceros; +1 prueba (190).
 - 2026-11-25 22:56 · v4.12.63 · `enMinutos()`: reuniones lejanas en días/meses/años; +1 prueba (188).
 - 2026-11-25 22:35 · v4.12.62 · `llegaBarco()`: ETAs lejanas o muy tarde en meses/años; +1 prueba (187).

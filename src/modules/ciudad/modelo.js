@@ -365,7 +365,7 @@ export function misionesDelDia(m, hoy = new Date(), max = 8) {
     out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', nivel: r.estado === 'en curso' || (falta >= 0 && falta <= 15) ? 'ambar' : null, hecha,
       texto: `${unirTexto(r.hora, unirTexto(r.titulo) || 'Reunión') /* 4.7.36: título vacío/null ya no dice «null» */}${r.estado === 'en curso' ? ' · ahora' : !hecha && falta >= 0 && falta <= 15 ? ` · ${enMinutos(falta)}` : ''}`, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' }, orden: ini ?? 24 * 60 });
   }
-  for (const t of comoLista(m.puerto?.tarimas)) if (t) { const id = unirTexto(t.id); out.push({ id: `tarima-${id || 'sin-id'}`, icono: '📦', nivel: null, texto: `Descargar ${id || 'un contenedor'} · ${piezasTexto(t.piezas)}`, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: id ? `Contenedor ${id}` : 'Contenedor' }, orden: 24 * 60 }); } // 4.7.35: sin id ya no dice «undefined»; tarimas que no son lista no truenan
+  for (const t of comoLista(m.puerto?.tarimas)) if (t) { const id = unirTexto(t.id); out.push({ id: `tarima-${id || 'sin-id'}`, icono: '📦', nivel: null, texto: unirTexto(`Descargar ${id || 'un contenedor'}`, piezasSiHay(t.piezas)) /* 4.12.67: sin «· 0 pz» */, ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: t.id, titulo: id ? `Contenedor ${id}` : 'Contenedor' }, orden: 24 * 60 }); } // 4.7.35: sin id ya no dice «undefined»; tarimas que no son lista no truenan
   const peso = (x) => (x.hecha ? 3 : x.nivel === 'rojo' ? 0 : x.nivel === 'ambar' ? 1 : 2);
   return out.sort((a, c) => peso(a) - peso(c) || a.orden - c.orden).slice(0, max).map(({ orden, ...x }) => ({ hecha: false, ...x }));
 }
@@ -544,7 +544,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   for (const b of [...comoLista(m.puerto?.tarimas), ...comoLista(m.puerto?.barcos)]) {
     const f = fechaIso(b?.arribo); if (!f || f > hoyIso) continue;
     const bid = unirTexto(b.id);
-    out.push({ id: idDe('arribo', b.id, f), icono: '📦', texto: unirTexto(`Llegó ${bid || 'un contenedor'} al CEDIS`, piezasTexto(b.piezas)), clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: bid ? `Contenedor ${bid}` : 'Contenedor' } });
+    out.push({ id: idDe('arribo', b.id, f), icono: '📦', texto: unirTexto(`Llegó ${bid || 'un contenedor'} al CEDIS`, piezasSiHay(b.piezas)), clave: `${f} 00:00`, cuando: cuando(f), ir: { tipo: 'cedis' }, tarjeta: { tipo: 'barco', id: b.id, titulo: bid ? `Contenedor ${bid}` : 'Contenedor' } });
   }
   // 4.7.31: textos con `unirTexto()`: cliente, folio, contenedor, concepto, estado o título vacíos/nulos ya no dicen «null».
   // Paso 2 (3.90.51): pagos registrados (Pagos V3, `pagado_at` de los últimos días) y la última sincronización del puente.
@@ -557,7 +557,7 @@ export function bitacoraEventos(m, hoy = new Date(), max = 12) {
   const sy = m.ultimaSync?.created_at ? fechaHora(m.ultimaSync.created_at) : null;
   if (sy && sy.f <= hoyIso) out.push({ id: 'sync', ...textoSync(m.ultimaSync.status, m.ultimaSync.fuente), clave: `${sy.f} ${sy.h}`, cuando: sy.f === hoyIso ? sy.h : cuando(sy.f), ir: null });
   const ahora = hoy.getHours() * 60 + hoy.getMinutes();
-  for (const r of comoLista(m.oficina?.agenda)) if (r && r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${unirTexto(r.titulo) || 'una reunión'}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
+  for (const r of comoLista(m.oficina?.agenda)) if (r && Number.isFinite(r.ini) && r.ini <= ahora) out.push({ id: `reunion-${r.hora}-${r.titulo}`, icono: '📅', texto: `${r.estado === 'en curso' ? 'Empezó' : 'Fue'} ${unirTexto(r.titulo) || 'una reunión'}`, clave: `${hoyIso} ${r.hora}`, cuando: r.hora, ir: { tipo: 'oficina' }, tarjeta: { tipo: 'sala', titulo: 'Sala de juntas', sub: 'Reuniones de hoy' } });
   const vistos = new Set();
   return out.sort((a, c) => (a.clave < c.clave ? 1 : a.clave > c.clave ? -1 : 0)).filter((x) => !vistos.has(x.id) && vistos.add(x.id)).slice(0, max).map(({ clave, ...x }) => ({ grande: false, tarjeta: null, ir: null, ...x }));
 }
@@ -986,6 +986,8 @@ export function temperaturaTexto(v) {
 // Piezas (4.7.27): enteras con miles es-MX («1,200 pz»; antes «1,200.5 pz» con decimales y texto «$1,200» sí cuenta);
 // ilegible → «0 pz». Globos del contenedor/tarima/tráiler, misión de descarga, bitácora de arribos y globo del puerto.
 export function piezasTexto(v) { return `${(Math.round(numero(v)) + 0).toLocaleString('es-MX')} pz`; } // 4.7.56: -0.4 → «0 pz» (antes «-0 pz»)
+// 4.12.67: piezas sólo si hay (> 0 al redondear); 0, negativas o ilegibles → '' para que `unirTexto()` no agregue «· 0 pz».
+export const piezasSiHay = (v) => (Math.round(numero(v)) > 0 ? piezasTexto(v) : '');
 export function plural(n, uno, varios) {
   // 4.7.62: palabra que no es texto o vacía → sólo el número (antes «0 undefineds» / «2 null»); `varios` ausente → uno + «s».
   const u = typeof uno === 'string' && uno.trim() ? uno : '', vs = typeof varios === 'string' && varios.trim() ? varios : u ? `${u}s` : '';
