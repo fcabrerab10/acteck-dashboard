@@ -387,6 +387,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.77) 2026-11-26 03:36 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30», como Shopify/Amazon; antes «sin fecha» en puerto, camiones y tarjetas); sin día o «feb 31» siguen null; +1 prueba.
   - [x] (4.12.78) 2026-11-26 03:56 · `fechaIso()` lee fechas con el día de la semana adelante («Thu Nov 26 2026 03:54:17 GMT-0600» de un Date pasado a texto, «Thu, 26 Nov 2026 10:30:00 GMT» de correos, «jue 26 nov 2026», «Miércoles, 5 de enero de 2027»; antes «sin fecha»); «mar 26, 2026» sigue siendo marzo; +1 prueba.
   - [x] (4.12.79) 2026-11-26 04:16 · `fechaIso()` toma «UTC» / «GMT» en letra como zona («2026-11-23 03:00:00 UTC», «… GMT-0600», «UTC+00:00», como logs, correos y BigQuery): cuenta el día local (antes se quedaba el día de UTC y de noche el camión/arribo salía con un día de más); +1 prueba.
+  - [x] (4.12.80) 2026-11-26 04:36 · `fechaIso()` lee el formato de `date`/asctime con la hora entre el día y el año («Thu Nov 26 04:34:17 CST 2026», «Thu Nov  5 04:34:17 2026», como logs de Unix; antes «sin fecha»); la zona en letra se ignora; «Feb 31» o sin año siguen null; +pruebas.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -401,6 +402,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 04:36 · v4.12.80 · `fechaIso()` lee el formato de `date`/asctime («Thu Nov 26 04:34:17 CST 2026»); +pruebas.
 - 2026-11-26 03:56 · v4.12.78 · `fechaIso()` lee fechas con el día de la semana adelante («Thu Nov 26 2026 …», «Thu, 26 Nov 2026 GMT», «jue 26 nov 2026»); «mar 26, 2026» sigue siendo marzo; +1 prueba (193)
 - 2026-11-26 03:36 · v4.12.77 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30»); sin día o fechas imposibles siguen nulas; +1 prueba.
 - 2026-11-26 03:15 · v4.12.76 · `fechaIso()` lee fechas compactas AAAAMMDD («20261126», «20261126 10:30») como SAP y otros ERP; números sueltos y fechas imposibles siguen nulos; +1 prueba (192).

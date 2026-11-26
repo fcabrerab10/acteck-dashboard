@@ -1829,6 +1829,11 @@ test('fechaIso con hora y zona cuenta el día local (4.7.57)', () => {
     assert.equal(fechaIso(s), loc(u), s);
   assert.equal(fechaIso('2026-11-22 21:00:00 GMT-0600'), loc(u), 'GMT-0600');
   assert.equal(fechaIso('2026-11-23 03:00:00 UTCX'), '2026-11-23', 'zona ilegible: se queda la fecha');
+  // 4.12.80: formato de `date` / asctime (hora entre el día y el año).
+  assert.equal(fechaIso('Thu Nov 26 04:34:17 CST 2026'), '2026-11-26', 'date de Unix');
+  assert.equal(fechaIso('Thu Nov  5 04:34:17 2026'), '2026-11-05', 'asctime');
+  assert.equal(fechaIso('jue nov 26 04:34 2026'), '2026-11-26', 'en español sin segundos');
+  for (const x of ['Feb 31 04:34:17 CST 2026', 'Xyz 26 04:34:17 2026', 'Nov 26 04:34:17 CST', 'Nov 26 04:34:17 CST 2026 basura']) assert.equal(fechaIso(x), null, x);
 });
 
 test('4.7.61 · bitácora: renglones sin folio/id no se pierden ni dicen «null»', () => {

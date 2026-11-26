@@ -1371,6 +1371,13 @@ export function fechaIso(x) {
     const mes = mesLetra(mp[1]); if (!mes) return null;
     const s = `${mp[3]}-${String(mes).padStart(2, '0')}-${mp[2].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
   }
+  // 4.12.80: con la hora entre el día y el año, como `date`, asctime y logs de Unix («Nov 26 04:34:17 CST 2026»,
+  // «Thu Nov 26 04:34:17 2026»; antes null: «sin fecha»). La zona en letra se ignora (cuenta el día escrito); '31 feb' sigue null.
+  const ux = norm(x).match(/^([a-z]{3,10})\.?\s+(\d{1,2})\s+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s+(?:[a-z]{2,5}\s+)?(\d{4})$/i);
+  if (ux) {
+    const mes = mesLetra(ux[1]); if (!mes) return null;
+    const s = `${ux[3]}-${String(mes).padStart(2, '0')}-${ux[2].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
+  }
   // 4.12.72: año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como exportan Sheets y algunos ERP)
   // también se lee (antes null: contaba como «sin fecha»); '2026/02/30' o mes 13 siguen siendo null.
   const ym = x.trim().match(/^(\d{4})([-/])(\d{1,2})\2(\d{1,2})(?:[\sT].*)?$/);
