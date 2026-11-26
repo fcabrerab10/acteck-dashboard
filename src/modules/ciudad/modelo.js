@@ -1383,9 +1383,12 @@ export function fechaIso(x) {
   const t = new Date(`${s}T12:00:00`); if (Number.isNaN(t.getTime()) || isoLocal(t) !== s) return null;
   // 4.7.57: con hora y zona («…T03:00:00Z», «… 03:00:00+00» de Postgres) cuenta el día local, no el de UTC:
   // a las 21:00 de Guadalajara ya es mañana en UTC y el camión/arribo salía con un día de más («llega mañana» siendo hoy).
-  const z = x0.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)\s*(Z|[+-]\d{2}(?::?\d{2})?)$/i);
+  // 4.12.79: también «… 03:00:00 UTC», «… GMT», «… GMT-0600» / «UTC+00:00» (logs, correos, BigQuery; antes se quedaba el día
+  // de UTC y de noche el camión/arribo salía con un día de más).
+  const z = x0.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)\s*(Z|(?:UTC|GMT)?\s*[+-]\d{2}(?::?\d{2})?|UTC|GMT)$/i);
   if (z) {
-    const off = /^z$/i.test(z[3]) ? 'Z' : z[3].length === 3 ? `${z[3]}:00` : z[3].includes(':') ? z[3] : `${z[3].slice(0, 3)}:${z[3].slice(3)}`;
+    const zz = z[3].replace(/^(?:UTC|GMT)\s*/i, '') || 'Z';
+    const off = /^z$/i.test(zz) ? 'Z' : zz.length === 3 ? `${zz}:00` : zz.includes(':') ? zz : `${zz.slice(0, 3)}:${zz.slice(3)}`;
     const u = new Date(`${z[1]}T${z[2]}${off}`); if (!Number.isNaN(u.getTime())) return isoLocal(u);
   }
   return s;

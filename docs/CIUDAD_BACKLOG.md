@@ -386,6 +386,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.73) 2026-11-26 02:15 · `fechaIso()` lee día/mes/año con guiones o puntos («26-11-2026», «5.1.2027 08:00», como algunos ERP y Excel en español; antes contaban como «sin fecha»); separadores mezclados o días imposibles siguen null; +1 prueba.
   - [x] (4.12.77) 2026-11-26 03:36 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30», como Shopify/Amazon; antes «sin fecha» en puerto, camiones y tarjetas); sin día o «feb 31» siguen null; +1 prueba.
   - [x] (4.12.78) 2026-11-26 03:56 · `fechaIso()` lee fechas con el día de la semana adelante («Thu Nov 26 2026 03:54:17 GMT-0600» de un Date pasado a texto, «Thu, 26 Nov 2026 10:30:00 GMT» de correos, «jue 26 nov 2026», «Miércoles, 5 de enero de 2027»; antes «sin fecha»); «mar 26, 2026» sigue siendo marzo; +1 prueba.
+  - [x] (4.12.79) 2026-11-26 04:16 · `fechaIso()` toma «UTC» / «GMT» en letra como zona («2026-11-23 03:00:00 UTC», «… GMT-0600», «UTC+00:00», como logs, correos y BigQuery): cuenta el día local (antes se quedaba el día de UTC y de noche el camión/arribo salía con un día de más); +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -699,3 +700,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-26 00:58 · v4.12.69 · Tiendas de conurbados (Texcoco, Valle de Chalco, Plaza Satélite, Interlomas, Neza, Temixco, Kanasín, Tarímbaro, Cuautlancingo, San Mateo Atenco…) ya salen en su ciudad del mapa; +1 prueba.
 - 2026-11-26 01:40 · v4.12.71 · Nombres de municipios con acento o eñe (Tlajomulco de Zúñiga, Ciudad Guzmán, Ciudad López Mateos, Chimalhuacán, Jesús María, Bahía de Banderas…) en etiquetas, pines y tarjetas; +1 prueba.
 - 2026-11-26 01:56 · v4.12.72 · `fechaIso()` lee fechas con el año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30»); antes contaban como «sin fecha» en el puerto, los camiones y las tarjetas.
+- 2026-11-26 04:16 · v4.12.79 · `fechaIso()` lee «UTC»/«GMT» en letra como zona horaria (día local, no el de UTC).

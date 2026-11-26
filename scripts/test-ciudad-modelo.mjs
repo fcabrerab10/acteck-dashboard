@@ -1824,6 +1824,11 @@ test('fechaIso con hora y zona cuenta el día local (4.7.57)', () => {
   assert.equal(fechaIso('2026-11-23T03:00:00'), '2026-11-23', 'sin zona = hora local, se queda el día');
   assert.equal(fechaIso('2026-11-23 basura'), '2026-11-23', 'cola ilegible: se queda la fecha');
   assert.equal(fechaIso('2026-02-30T03:00:00Z'), null, 'día imposible sigue siendo null');
+  // 4.12.79: «UTC» / «GMT» en letra cuentan como zona.
+  for (const s of ['2026-11-23 03:00:00 UTC', '2026-11-23T03:00:00 GMT', '2026-11-23 03:00 utc', '2026-11-23 03:00:00 UTC+00:00', '2026-11-23T03:00:00GMT+0000'])
+    assert.equal(fechaIso(s), loc(u), s);
+  assert.equal(fechaIso('2026-11-22 21:00:00 GMT-0600'), loc(u), 'GMT-0600');
+  assert.equal(fechaIso('2026-11-23 03:00:00 UTCX'), '2026-11-23', 'zona ilegible: se queda la fecha');
 });
 
 test('4.7.61 · bitácora: renglones sin folio/id no se pierden ni dicen «null»', () => {
