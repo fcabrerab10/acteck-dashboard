@@ -1341,9 +1341,17 @@ const CIUDADES_LARGAS = Object.keys(CIUDADES).sort((a, b) => b.length - a.length
 const MESES_LETRA = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre', 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 // Número de mes (1–12) de un nombre en español o inglés, completo o abreviado (≥ 3 letras); desconocido → 0.
 const mesLetra = (w) => { const v = String(w).toLowerCase(); return MESES_LETRA.findIndex((m) => v === m || (v.length >= 3 && m.startsWith(v))) % 12 + 1; };
+// Día de la semana en español o inglés, completo o abreviado (≥ 3 letras: «jue», «Thu», «Thurs», «miércoles» ya sin acento).
+const DIAS_SEMANA = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const esDiaSemana = (w) => { const v = String(w).toLowerCase(); return v.length >= 3 && DIAS_SEMANA.some((d) => d.startsWith(v)); };
 export function fechaIso(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
   if (typeof x !== 'string') return null;
+  // 4.12.78: con el día de la semana adelante («Thu Nov 26 2026 03:54:17 GMT-0600», como sale un Date pasado a texto;
+  // «Thu, 26 Nov 2026 10:30:00 GMT» de correos y encabezados; «jue 26 nov 2026», «jueves, 26 de noviembre de 2026»; antes
+  // null: «sin fecha»). Sólo si el resto es una fecha: «mar 26, 2026» sigue siendo marzo 26 (no «martes»).
+  const ds = norm(x).match(/^([a-z]{3,10})\.?,?\s+(.+)$/i);
+  if (ds && esDiaSemana(ds[1])) { const f = fechaIso(ds[2]); if (f) return f; }
   // 4.12.70: «26/11/2026» o «5/1/2026 10:30» (día/mes/año como en México y en Sheets) también se lee (antes null: la fecha
   // contaba como «sin fecha»); '31/02/2026' o mes 13 siguen siendo null.
   // 4.12.73: también con guiones o puntos («26-11-2026», «5.1.2027», como algunos ERP y Excel en español); separadores mezclados siguen null.

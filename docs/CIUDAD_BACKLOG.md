@@ -385,6 +385,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.72) 2026-11-26 01:56 · `fechaIso()` lee fechas con el año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como Sheets y algunos ERP; antes contaban como «sin fecha» en el puerto, los camiones y las tarjetas); +1 prueba.
   - [x] (4.12.73) 2026-11-26 02:15 · `fechaIso()` lee día/mes/año con guiones o puntos («26-11-2026», «5.1.2027 08:00», como algunos ERP y Excel en español; antes contaban como «sin fecha»); separadores mezclados o días imposibles siguen null; +1 prueba.
   - [x] (4.12.77) 2026-11-26 03:36 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30», como Shopify/Amazon; antes «sin fecha» en puerto, camiones y tarjetas); sin día o «feb 31» siguen null; +1 prueba.
+  - [x] (4.12.78) 2026-11-26 03:56 · `fechaIso()` lee fechas con el día de la semana adelante («Thu Nov 26 2026 03:54:17 GMT-0600» de un Date pasado a texto, «Thu, 26 Nov 2026 10:30:00 GMT» de correos, «jue 26 nov 2026», «Miércoles, 5 de enero de 2027»; antes «sin fecha»); «mar 26, 2026» sigue siendo marzo; +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -399,6 +400,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 03:56 · v4.12.78 · `fechaIso()` lee fechas con el día de la semana adelante («Thu Nov 26 2026 …», «Thu, 26 Nov 2026 GMT», «jue 26 nov 2026»); «mar 26, 2026» sigue siendo marzo; +1 prueba (193)
 - 2026-11-26 03:36 · v4.12.77 · `fechaIso()` lee fechas con el mes primero al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30»); sin día o fechas imposibles siguen nulas; +1 prueba.
 - 2026-11-26 03:15 · v4.12.76 · `fechaIso()` lee fechas compactas AAAAMMDD («20261126», «20261126 10:30») como SAP y otros ERP; números sueltos y fechas imposibles siguen nulos; +1 prueba (192).
 - 2026-11-26 02:56 · v4.12.75 · `encimaDelCampus()`/`distritoGDL()` con medidas inválidas (negativas, Infinity, basura) cuentan 0; +pruebas.

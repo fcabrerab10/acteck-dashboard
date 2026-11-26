@@ -1142,6 +1142,12 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   assert.equal(fechaIso('Sept 1, 2026'), '2026-09-01'); assert.equal(fechaIso('DIC 9 2026'), '2026-12-09'); assert.equal(fechaIso('may 2, 2026'), '2026-05-02');
   for (const x of ['feb 31, 2026', 'xyz 26, 2026', 'no 26, 2026', 'nov 26, 26', 'nov 26, 2026x', 'nov, 2026', 'nov 2026']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaCorta('Nov 26, 2026', new Date(2026, 10, 26)), '26 nov', 'tarjetas con mes primero');
+  // 4.12.78: con el día de la semana adelante.
+  assert.equal(fechaIso('Thu Nov 26 2026 03:54:17 GMT-0600 (hora estándar central)'), '2026-11-26', 'Date.toString()');
+  assert.equal(fechaIso('Thu, 26 Nov 2026 10:30:00 GMT'), '2026-11-26', 'correo'); assert.equal(fechaIso('jue 26 nov 2026'), '2026-11-26');
+  assert.equal(fechaIso('Miércoles, 5 de enero de 2027'), '2027-01-05'); assert.equal(fechaIso('vie. 27/11/2026'), '2026-11-27'); assert.equal(fechaIso('Sat 2026-11-28'), '2026-11-28');
+  assert.equal(fechaIso('mar 26, 2026'), '2026-03-26', 'mar = marzo, no martes'); assert.equal(fechaIso('mar 24 nov 2026'), '2026-11-24', 'mar = martes');
+  for (const x of ['jue', 'jue 31 feb 2026', 'Thu, 2026', 'jue hoy', 'xyz 26 nov 2026', 'ju 26 nov 2026']) assert.equal(fechaIso(x), null, x);
   // 4.12.76: compacta AAAAMMDD (SAP y otros ERP), sólo en texto.
   assert.equal(fechaIso('20261126'), '2026-11-26'); assert.equal(fechaIso(' 20270105 10:30 '), '2027-01-05', 'con hora'); assert.equal(fechaIso('20261126T083000'), '2026-11-26', 'con T');
   for (const x of ['20260230', '20261326', '2026112', '202611260', '18001126', '20261126x', '20261126 x', 20261126]) assert.equal(fechaIso(x), null, String(x));
