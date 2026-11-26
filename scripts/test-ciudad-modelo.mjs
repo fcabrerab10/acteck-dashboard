@@ -930,6 +930,13 @@ test('pulido: proyección y catálogos coherentes', () => {
   assert.equal(RECORRIDO_CLAVE, 'acteck-ciudad-recorrido');
 });
 
+test('nombreCiudad / nombreSucursal: municipios con acento o eñe (4.12.71)', () => {
+  assert.equal(nombreCiudad('TLAJOMULCO DE ZUÑIGA'), 'Tlajomulco de Zúñiga'); assert.equal(nombreCiudad('TLAJOMULCO DE ZUNIGA'), 'Tlajomulco de Zúñiga');
+  assert.equal(nombreCiudad('CIUDAD GUZMAN'), 'Ciudad Guzmán'); assert.equal(nombreCiudad('CIUDAD LOPEZ MATEOS'), 'Ciudad López Mateos');
+  assert.equal(nombreCiudad('CHIMALHUACAN'), 'Chimalhuacán'); assert.equal(nombreCiudad('JESUS MARIA'), 'Jesús María');
+  assert.equal(nombreCiudad('BAHIA DE BANDERAS'), 'Bahía de Banderas'); assert.equal(nombreCiudad('CIENEGA DE FLORES'), 'Ciénega de Flores');
+  assert.equal(nombreCiudad('Teotihuacán'), 'Teotihuacán'); assert.equal(nombreSucursal('PLAZA SANTA MARIA'), 'Plaza Santa María');
+});
 test('nombreCiudad / nombreSucursal: más acentos y eñes (4.12.51)', () => {
   assert.equal(nombreCiudad('SAN NICOLAS DE LOS GARZA'), 'San Nicolás de los Garza');
   assert.equal(nombreCiudad('SAN PEDRO GARZA GARCIA'), 'San Pedro Garza García');

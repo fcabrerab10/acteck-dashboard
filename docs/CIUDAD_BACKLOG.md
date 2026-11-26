@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.51) 2026-11-25 04:16 · Nombres con acentos y eñes: `nombreCiudad()` / `nombreSucursal()` conocen más palabras del ERP («San Nicolás de los Garza», «San Pedro Garza García», «Ciudad Acuña», «San Juan del Río», «Gómez Palacio», «Plaza Río»…).
+  - [x] (4.12.71) 2026-11-26 01:40 · Más municipios con acento o eñe en `nombreCiudad()` / `nombreSucursal()`: «Tlajomulco de Zúñiga» (antes «Zuniga»), «Ciudad Guzmán», «Ciudad López Mateos», «Chimalhuacán», «Jesús María», «Bahía de Banderas», «Ciénega de Flores», «Teotihuacán»…
   - [x] (4.12.69) 2026-11-26 00:58 · Más conurbados en `ciudadDeSucursal()` (CDMX, Toluca, Puebla, Cuernavaca, Mérida, Morelia): antes esas tiendas no salían en el mapa.
   - [x] (4.12.68) 2026-11-26 00:36 · `cifraCorta()` / `pesosCorto()`: los miles de millones llevan miles es-MX («1,000.0 B»; antes «1000000.0 B» con montos enormes). Pruebas nuevas.
   - [x] (4.12.65) 2026-11-25 23:36 · Panel «En la ciudad»: con una sola tienda dice «1 de 1 tienda activa» (antes «1 de 1 tienda activas»). Prueba nueva de `plural()`; sin prueba visual (el harness no dibuja `Ciudad.jsx`, el build valida el JSX).
@@ -684,3 +685,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-25 15:15 · v4.12.58 · Pellizco táctil con dedos encimados ya no brinca el zoom de la Ciudad (`gestoDosDedos()`); +2 pruebas.
 - 2026-11-25 23:18 · v4.12.64 · Pensamiento de cuota de las tiendas: «Voy a buen ritmo con mi cuota (N %)» / «¡Ya llegué a mi cuota!» en vez de «Voy arriba de mi cuota»; +1 prueba.
 - 2026-11-26 00:58 · v4.12.69 · Tiendas de conurbados (Texcoco, Valle de Chalco, Plaza Satélite, Interlomas, Neza, Temixco, Kanasín, Tarímbaro, Cuautlancingo, San Mateo Atenco…) ya salen en su ciudad del mapa; +1 prueba.
+- 2026-11-26 01:40 · v4.12.71 · Nombres de municipios con acento o eñe (Tlajomulco de Zúñiga, Ciudad Guzmán, Ciudad López Mateos, Chimalhuacán, Jesús María, Bahía de Banderas…) en etiquetas, pines y tarjetas; +1 prueba.
