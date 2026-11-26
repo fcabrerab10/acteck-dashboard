@@ -916,6 +916,15 @@ export function haceDias(v) {
   if (k < 365) return `hace ${Math.min(11, Math.round(k / 30.4))} meses`;
   const a = Math.floor(k / 365); return `hace ${a.toLocaleString('es-MX')} año${a === 1 ? '' : 's'}`;
 }
+// Lo que falta para una fecha futura (4.12.61), gemelo de `haceDias()`: «hoy» (0 o pasado), «mañana», «en N d», desde 60 días
+// «en N meses» y desde 365 «en N año(s)». Antes la tarjeta del camión fechado adelante decía «en 1,200 d». Ilegible → ''.
+export function faltanDias(v) {
+  const n = leeNum(v); if (n == null) return ''; const k = Math.round(n);
+  if (k <= 0) return 'hoy'; if (k === 1) return 'mañana';
+  if (k < 60) return `en ${k} d`;
+  if (k < 365) return `en ${Math.min(11, Math.round(k / 30.4))} meses`;
+  const a = Math.floor(k / 365); return `en ${a.toLocaleString('es-MX')} año${a === 1 ? '' : 's'}`;
+}
 // Semáforo de la cartera vencida como la tarjeta «Cartera» de Inicio (4.12.17): sin vencido verde; con vencido rojo si pasa
 // 15 % del saldo y ámbar si no. Sin % legible (saldo 0, ilegible) queda rojo, como antes. Antes cualquier peso vencido era rojo.
 export function tonoCartera(vencido, pctVencido) {
@@ -1209,7 +1218,7 @@ export function tarjetaDe(tag, modelo) {
       const nd = c.fecha ? dias(c.fecha, m.hoyIso || diaLocal().iso) : null, n = Number.isFinite(nd) ? nd : null; // fecha mala: sin «hace NaN d»
       const fs = fechaIso(c.fecha); // 4.7.23: un Date ya no sale «Wed Oct 07»; ilegible → «—»
       // 4.12.12: con fecha futura (factura/envío fechado adelante) el renglón dice «Sale · 26 nov · mañana» / «· en 3 d» (antes «Salió · 26 nov · hoy»).
-      const futuro = n != null && n < 0, cuando = futuro ? (n === -1 ? 'mañana' : `en ${(-n).toLocaleString('es-MX')} d`) : haceDias(n);
+      const futuro = n != null && n < 0, cuando = futuro ? faltanDias(-n) : haceDias(n); // 4.12.61: «en 3 meses» (antes «en 400 d»)
       const salio = fs ? unirTexto([fechaCorta(fs, m.hoyIso), cuando]) || fechaCorta(fs, m.hoyIso) : '—'; // 4.7.43: «6 oct · ayer» (antes «2026-10-06» crudo)
       const rSalio = [futuro ? 'Sale' : 'Salió', salio];
       // 4.7.41: destino con `nombreCiudad()` («LEON» → «León», «SAN LUIS POTOSI» → «San Luis Potosí», CDMX; antes «Leon»)

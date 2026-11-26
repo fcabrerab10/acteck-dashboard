@@ -369,6 +369,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.58) 2026-11-25 15:15 · Pellizco con dedos encimados (< 1 px al empezar o al juntarlos): `gestoDosDedos()` ya no brinca la cámara al zoom mínimo/máximo ni gira a un ángulo al azar; +2 pruebas.
   - [x] (4.12.59) 2026-11-25 15:35 · Antigüedad legible: `haceDias()` dice «hace N meses» desde 60 días y «hace N año(s)» desde 365 (antes «hace 1,200 d» en la bitácora y la tarjeta del camión); +1 prueba.
   - [x] (4.12.60) 2026-11-25 15:55 · `unirTexto()` salta «NULL» / «Null» / «nan» / «Infinity» / «#N/A» / «None» en cualquier mayúscula (antes sólo «null» exacto: un «NULL» del ERP salía en los globos del contenedor y del camión); +1 prueba.
+  - [x] (4.12.61) 2026-11-25 22:16 · `faltanDias()` pura y probada, gemelo de `haceDias()`: la tarjeta del camión fechado adelante dice «Sale · … · en 3 meses» / «en 1 año» (antes «en 400 d»); +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -383,6 +384,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-25 22:16 · v4.12.61 · `faltanDias()`: fechas futuras en meses/años en la tarjeta del camión; +1 prueba (186).
 - 2026-11-25 15:55 · v4.12.60 · `unirTexto()` salta «NULL»/«#N/A»/«nan» en cualquier mayúscula; +1 prueba (185).
 - 2026-11-25 15:35 · v4.12.59 · `haceDias()` en meses/años para antigüedades largas.
 - 2026-11-25 05:56 · v4.12.56 · Pulido: pruebas de `claveTexto()` y de los bordes del semáforo de días de inventario (+2 pruebas, 183). Barrido de entradas raras sin hallazgos.
