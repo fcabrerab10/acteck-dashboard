@@ -379,6 +379,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.62) 2026-11-25 22:35 · `llegaBarco()` dice «llega en N meses» / «en N año(s)» desde 60 días y «N meses tarde» / «N año(s) tarde» (antes «llega en 1,200 d» / «1,500 d tarde») en el panel, el globo del barco y la cadena; +1 prueba.
   - [x] (4.12.66) 2026-11-25 23:56 · Cadena de suministro: los tramos vacíos dicen «Sin barcos en el mar» / «Sin camiones en ruta» / «Sin tiendas» / «Sin clientes finales» (antes «0 barcos · 0 pz», «0 de 0 vendieron»), como el puerto; +1 prueba.
   - [x] (4.12.67) 2026-11-26 00:16 · Sin «· 0 pz»: la misión «Descargar» y el arribo de la bitácora sólo dicen piezas si hay (`piezasSiHay()` pura y probada; antes «Descargar C1 · 0 pz»), y una reunión sin hora ya no entra a la bitácora como pasada; +1 prueba.
+  - [x] (4.12.72) 2026-11-26 01:56 · `fechaIso()` lee fechas con el año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como Sheets y algunos ERP; antes contaban como «sin fecha» en el puerto, los camiones y las tarjetas); +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -686,3 +687,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-25 23:18 · v4.12.64 · Pensamiento de cuota de las tiendas: «Voy a buen ritmo con mi cuota (N %)» / «¡Ya llegué a mi cuota!» en vez de «Voy arriba de mi cuota»; +1 prueba.
 - 2026-11-26 00:58 · v4.12.69 · Tiendas de conurbados (Texcoco, Valle de Chalco, Plaza Satélite, Interlomas, Neza, Temixco, Kanasín, Tarímbaro, Cuautlancingo, San Mateo Atenco…) ya salen en su ciudad del mapa; +1 prueba.
 - 2026-11-26 01:40 · v4.12.71 · Nombres de municipios con acento o eñe (Tlajomulco de Zúñiga, Ciudad Guzmán, Ciudad López Mateos, Chimalhuacán, Jesús María, Bahía de Banderas…) en etiquetas, pines y tarjetas; +1 prueba.
+- 2026-11-26 01:56 · v4.12.72 · `fechaIso()` lee fechas con el año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30»); antes contaban como «sin fecha» en el puerto, los camiones y las tarjetas.

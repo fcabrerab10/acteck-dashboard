@@ -1342,6 +1342,10 @@ export function fechaIso(x) {
   // contaba como «sin fecha»); '31/02/2026' o mes 13 siguen siendo null.
   const dm = x.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[\sT].*)?$/);
   if (dm) { const s = `${dm[3]}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
+  // 4.12.72: año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como exportan Sheets y algunos ERP)
+  // también se lee (antes null: contaba como «sin fecha»); '2026/02/30' o mes 13 siguen siendo null.
+  const ym = x.trim().match(/^(\d{4})([-/])(\d{1,2})\2(\d{1,2})(?:[\sT].*)?$/);
+  if (ym && (ym[2] === '/' || ym[3].length < 2 || ym[4].length < 2)) { const s = `${ym[1]}-${ym[3].padStart(2, '0')}-${ym[4].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
   const x0 = x.trim(), s = x0.slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   const t = new Date(`${s}T12:00:00`); if (Number.isNaN(t.getTime()) || isoLocal(t) !== s) return null;
   // 4.7.57: con hora y zona («…T03:00:00Z», «… 03:00:00+00» de Postgres) cuenta el día local, no el de UTC:

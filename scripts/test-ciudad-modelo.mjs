@@ -1119,6 +1119,11 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   assert.equal(fechaIso('26/11/2026'), '2026-11-26'); assert.equal(fechaIso(' 5/1/2027 10:30 '), '2027-01-05', 'sin ceros y con hora');
   for (const x of ['31/02/2026', '12/13/2026', '1/1/26', '26/11/2026x']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaCorta('26/11/2026', new Date(2026, 10, 26)), '26 nov', 'tarjetas');
+  // 4.12.72: año primero sin ceros o con diagonales
+  assert.equal(fechaIso('2026-1-5'), '2026-01-05'); assert.equal(fechaIso(' 2026/01/05 10:30 '), '2026-01-05', 'diagonales y hora');
+  assert.equal(fechaIso('2026/11/26'), '2026-11-26'); assert.equal(fechaIso('2026-01-05T08:00:00'), '2026-01-05', 'ISO normal igual');
+  for (const x of ['2026/02/30', '2026-13-1', '2026/1-5', '2026/01/05x', '2026-1-5-']) assert.equal(fechaIso(x), null, x);
+  assert.equal(fechaCorta('2026/11/26', new Date(2026, 10, 26)), '26 nov', 'tarjetas con diagonales');
   const m = construirModelo({ ...d,
     contenedores: [...d.contenedores, { contenedor: 'MALO', supplier: 'X', estatus: 'NAVEGANDO', piezas: 5, etd: 'pendiente', eta_puerto: 'sin fecha', arribo_cedis: '2026-99-99' }, { contenedor: 'MEDIO', estatus: 'NAVEGANDO', etd: 'x', fecha_emision: '2026-09-05', eta_puerto: '2026-10-05' }],
     envios: [...d.envios, { fecha_surtida: 'ayer', fecha_entregada: null, guia_rastreo: 'G-MALA', oc_clientes: { cliente_key: 'pcel' } }, { fecha_surtida: '2026-10-08', fecha_entregada: null, guia_rastreo: 'G-FUT', oc_clientes: { cliente_key: 'pcel' } }],
