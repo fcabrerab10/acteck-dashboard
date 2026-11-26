@@ -1000,7 +1000,8 @@ export function plural(n, uno, varios) {
 export function cifraCorta(v) {
   const n = typeof v === 'string' ? textoNum(v, /[\s$,]/g) : typeof v === 'number' ? v : NaN; if (!Number.isFinite(n)) return '0';
   const a = Math.abs(n); const s = n < 0 && Math.round(a) > 0 ? '-' : '';
-  if (a >= 999.95e6) return `${s}${(a / 1e9).toFixed(1)} B`;
+  // 4.12.68: los miles de millones con miles es-MX («1,000.0 B»; antes «1000000.0 B» con montos enormes).
+  if (a >= 999.95e6) return `${s}${(a / 1e9).toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} B`;
   if (a >= 999500) return `${s}${(a / 1e6).toFixed(1)} M`;
   if (a >= 999.5) return `${s}${Math.round(a / 1e3)} K`;
   return `${s}${Math.round(a)}`;
