@@ -342,6 +342,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.7.74) `carteraPorCuenta()` pone la cuenta en minúsculas («PCEL» / « Digitalife » = `pcel` / `digitalife`, como las cuentas de la Ciudad; antes la cartera vencida no encontraba su tienda ni su sede) y salta clientes que no son texto ni número (antes clave «[object Object]» / «true»).
   - [x] (4.7.75) `claveVista()` limpia el user_id (« u1 » = «u1») y con objeto, lista, booleano, NaN o en blanco usa «anon» (antes la última vista se guardaba en «acteck.ciudad.vista.[object Object]»).
   - [x] (4.7.76) `juntarCapas()` / `capaVisible()` sólo aceptan nombres de capa en texto y sin espacios: un objeto ya no da la capa «[object Object]» y ' mapa ' empata con 'mapa' (antes se repetía y el objeto de la capa mapa se veía de cerca).
+  - [x] (4.12.87) 2026-11-26 15:36 · `enMinutos()` lee con `leeNum()` y la unidad de minutos al final («15 min», «90 minutos», «5 mins.»; antes salía vacío en la misión y la burbuja de la reunión); +1 prueba.
 
   - [x] (4.7.77) `llegaBarco()`, `enMinutos()` y `haceDias()` sólo leen número o texto: una ETA/minutos/antigüedad que llega como lista u objeto ya no sale «llega hoy» / «empieza ya» / «hoy» (`[]` valía 0) y `haceDias(' ')` en blanco ya no dice «hoy».
   - [x] (4.7.78) `hexCss()` sólo acepta enteros 0..0xFFFFFF: un color decimal (255.7, -0.4) ya no se redondea a otro color (#000100 / negro), sale gris como dato roto.
@@ -714,3 +715,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-26 01:40 · v4.12.71 · Nombres de municipios con acento o eñe (Tlajomulco de Zúñiga, Ciudad Guzmán, Ciudad López Mateos, Chimalhuacán, Jesús María, Bahía de Banderas…) en etiquetas, pines y tarjetas; +1 prueba.
 - 2026-11-26 01:56 · v4.12.72 · `fechaIso()` lee fechas con el año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30»); antes contaban como «sin fecha» en el puerto, los camiones y las tarjetas.
 - 2026-11-26 04:16 · v4.12.79 · `fechaIso()` lee «UTC»/«GMT» en letra como zona horaria (día local, no el de UTC).
+- 2026-11-26 15:36 · v4.12.87 · `enMinutos()` lee «15 min» / «90 minutos» (cuenta regresiva de la reunión en misiones y burbujas); +1 prueba.

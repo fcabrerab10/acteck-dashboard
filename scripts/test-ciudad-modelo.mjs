@@ -2459,3 +2459,9 @@ test('nombreSucursal: abreviaturas del ERP (4.12.85)', () => {
   assert.equal(nombreSucursal('GDL CD'), 'GDL CD');
   assert.equal(nombreSucursal('Cd. Juárez'), 'Cd. Juárez');
 });
+
+test('4.12.87 enMinutos() lee la unidad de minutos y texto con miles', () => {
+  assert.equal(enMinutos('15 min'), 'en 15 min'); assert.equal(enMinutos('90 minutos'), 'en 1 h 30 min'); assert.equal(enMinutos(' 5 mins. '), 'en 5 min');
+  assert.equal(enMinutos('1 minuto'), 'en 1 min'); assert.equal(enMinutos('0 min'), 'empieza ya'); assert.equal(enMinutos('1,500'), 'en 1 d');
+  for (const x of ['min', '-3 min', 'x min', '  ', '15 h', true, false]) assert.equal(enMinutos(x), '');
+});
