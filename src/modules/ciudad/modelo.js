@@ -1299,6 +1299,13 @@ const ALIAS = {
   // 4.12.10: nombres comunes de las ciudades nuevas del catálogo; «Álvaro Obregón» es alcaldía de CDMX, no Cd. Obregón.
   'ALVARO OBREGON': 'CIUDAD DE MEXICO', 'CABO SAN LUCAS': 'LOS CABOS', 'SAN JOSE DEL CABO': 'LOS CABOS', 'CD OBREGON': 'CIUDAD OBREGON', 'CD DEL CARMEN': 'CIUDAD DEL CARMEN',
   'PLAYA DEL CARMEN': 'PLAYA DEL CARMEN', 'NVO LAREDO': 'NUEVO LAREDO',
+  // 4.12.69: más municipios conurbados (antes «Texcoco», «Valle de Chalco», «Plaza Satélite», «Interlomas», «Neza», «Temixco»,
+  // «Kanasín»… no salían en el mapa). «Satélite» solo no (hay colonias así en otras ciudades); tampoco «Lerma» ni «Lerdo» (calles).
+  TEXCOCO: 'CIUDAD DE MEXICO', CHALCO: 'CIUDAD DE MEXICO', 'VALLE DE CHALCO': 'CIUDAD DE MEXICO', HUEHUETOCA: 'CIUDAD DE MEXICO',
+  ZUMPANGO: 'CIUDAD DE MEXICO', TULTEPEC: 'CIUDAD DE MEXICO', ACOLMAN: 'CIUDAD DE MEXICO', CHICOLOAPAN: 'CIUDAD DE MEXICO',
+  'LOS REYES LA PAZ': 'CIUDAD DE MEXICO', NEZA: 'CIUDAD DE MEXICO', 'CIUDAD SATELITE': 'CIUDAD DE MEXICO', 'CD SATELITE': 'CIUDAD DE MEXICO',
+  'PLAZA SATELITE': 'CIUDAD DE MEXICO', INTERLOMAS: 'CIUDAD DE MEXICO', 'SAN MATEO ATENCO': 'TOLUCA', CUAUTLANCINGO: 'PUEBLA',
+  TEMIXCO: 'CUERNAVACA', KANASIN: 'MERIDA', TARIMBARO: 'MORELIA',
 };
 /** Ciudad representativa de cada estado (para clientes finales, que vienen por estado). */
 export const CIUDAD_POR_ESTADO = (() => { const m = {}; for (const [k, v] of Object.entries(CIUDADES)) if (!m[v.estado]) m[v.estado] = k; m['ESTADO DE MEXICO'] = 'TOLUCA'; m.GUANAJUATO = 'LEON'; m['BAJA CALIFORNIA'] = 'TIJUANA'; m.COAHUILA = 'SALTILLO'; m.SINALOA = 'CULIACAN'; m.TAMAULIPAS = 'TAMPICO'; m.VERACRUZ = 'VERACRUZ'; return m; })();

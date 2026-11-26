@@ -60,6 +60,9 @@ test('sucursales → ciudad', () => {
   assert.equal(ciudadDeSucursal('AGUASCAL').ciudad, 'AGUASCALIENTES', 'palabra cortada de ≥ 6 letras');
   assert.equal(ciudadDeSucursal('Plaza La Paz').ciudad, 'LA PAZ');
   assert.equal(ciudadDeSucursal('San Nicolás de los Garza').ciudad, 'MONTERREY');
+  // 4.12.69: más conurbados; «Satélite» solo no adivina y «Los Reyes La Paz» no es La Paz
+  for (const [n, c] of [['Texcoco', 'CIUDAD DE MEXICO'], ['Plaza Valle de Chalco', 'CIUDAD DE MEXICO'], ['Plaza Satélite', 'CIUDAD DE MEXICO'], ['Interlomas', 'CIUDAD DE MEXICO'], ['Cd. Neza', 'CIUDAD DE MEXICO'], ['Los Reyes La Paz', 'CIUDAD DE MEXICO'], ['Temixco', 'CUERNAVACA'], ['Kanasín', 'MERIDA'], ['Tarímbaro', 'MORELIA'], ['Cuautlancingo', 'PUEBLA'], ['San Mateo Atenco', 'TOLUCA']]) assert.equal(ciudadDeSucursal(n).ciudad, c, n);
+  assert.equal(ciudadDeSucursal('Satélite').ciudad, null); assert.equal(ciudadDeSucursal('Plaza La Paz').ciudad, 'LA PAZ');
   // 4.7.54: virtual por palabra completa
   assert.deepEqual(ciudadDeSucursal('General Escobedo'), { ciudad: 'MONTERREY', virtual: false });
   assert.deepEqual(ciudadDeSucursal('WEBER PUEBLA'), { ciudad: 'PUEBLA', virtual: false });
