@@ -391,6 +391,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.80) 2026-11-26 04:36 · `fechaIso()` lee el formato de `date`/asctime con la hora entre el día y el año («Thu Nov 26 04:34:17 CST 2026», «Thu Nov  5 04:34:17 2026», como logs de Unix; antes «sin fecha»); la zona en letra se ignora; «Feb 31» o sin año siguen null; +pruebas.
   - [x] (4.12.82) 2026-11-26 05:16 · `numero()` / `leeNum()` ignoran una unidad al final del número en texto («3 días», «45 d», «1 200 pz», «24 °C», «$5,000 MXN»; antes 0 o vacío en DSO, temperatura, piezas y cifras) y `llegaBarco()` lee «3 días» / «5 d» (antes «sin ETA»); la unidad sola sigue siendo basura; +1 prueba.
   - [x] (4.12.83) 2026-11-26 05:36 · `nombreCiudad()` completa las abreviaturas del ERP: «CD. JUAREZ» / «Cd.Obregón» → «Ciudad Juárez» / «Ciudad Obregón», «GRAL. ESCOBEDO» → «General Escobedo», «STA./STO.» → «Santa/Santo», «SN PEDRO» → «San Pedro» (antes «Cd. Juárez», «Gral. Escobedo» en etiquetas, pines, tarjetas y minimapa); +1 prueba.
+  - [x] (4.12.85) 2026-11-26 06:16 · `nombreSucursal()` completa las abreviaturas del ERP como `nombreCiudad()`: «PLAZA CD. JUAREZ» → «Plaza Ciudad Juárez», «GRAL.ESCOBEDO» → «General Escobedo», «SN PEDRO» → «San Pedro», «STA./STO.» (antes «Plaza CD. Juárez» / «SN Pedro»); un «CD» suelto al final sigue como sigla; +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -405,6 +406,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 06:16 · v4.12.85 · `nombreSucursal()` completa abreviaturas del ERP (CD./GRAL./STA./STO./SN → Ciudad/General/Santa/Santo/San) si les sigue otra palabra; +1 prueba (197).
 - 2026-11-26 05:56 · v4.12.84 · `textoSync()` reconoce más estados del puente (mayúsculas, «_»/«-»): fallos en inglés («failure», «errored»), avisos («warn», «partial», «parcial» → «con avisos») y en curso («running», «en_curso» → «Actualizando los datos»); antes salía la palabra cruda en la bitácora; +1 prueba (196).
 - 2026-11-26 05:36 · v4.12.83 · `nombreCiudad()` completa abreviaturas del ERP (Cd./Gral./Sta./Sto./Sn → Ciudad/General/Santa/Santo/San); +1 prueba (195).
 - 2026-11-26 05:16 · v4.12.82 · `numero()` / `leeNum()` ignoran una unidad al final del número en texto («3 días», «45 d», «1 200 pz», «24 °C», «$5,000 MXN»; antes 0 o vacío en DSO, temperatura, piezas y cifras) y `llegaBarco()` lee «3 días» / «5 d» (antes «sin ETA»); la unidad sola sigue siendo basura; +1 prueba.

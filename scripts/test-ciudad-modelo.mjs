@@ -2437,3 +2437,13 @@ test('4.12.82: cifras con unidad al final en texto', async () => {
   assert.equal(M.llegaBarco('3 días'), 'llega en 3 d'); assert.equal(M.llegaBarco(' 1 d '), 'llega mañana'); assert.equal(M.llegaBarco('1,200'), 'llega en 3 años');
   assert.equal(M.llegaBarco('días'), 'sin ETA'); assert.equal(M.llegaBarco('-2 d'), '2 d tarde');
 });
+
+test('nombreSucursal: abreviaturas del ERP (4.12.85)', () => {
+  assert.equal(nombreSucursal('PLAZA CD. JUAREZ'), 'Plaza Ciudad Juárez');
+  assert.equal(nombreSucursal('PLAZA GRAL.ESCOBEDO'), 'Plaza General Escobedo');
+  assert.equal(nombreSucursal('SN PEDRO'), 'San Pedro');
+  assert.equal(nombreSucursal('STA. CATARINA CENTRO'), 'Santa Catarina Centro');
+  assert.equal(nombreSucursal('CEDIS CD'), 'Cedis CD');
+  assert.equal(nombreSucursal('GDL CD'), 'GDL CD');
+  assert.equal(nombreSucursal('Cd. Juárez'), 'Cd. Juárez');
+});

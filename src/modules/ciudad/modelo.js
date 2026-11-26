@@ -905,7 +905,11 @@ export function nombreTienda(t) {
 export function nombreSucursal(s) {
   const t = unirTexto(s).replace(/\s+/g, ' '); if (!t || !/\p{L}/u.test(t) || /\p{Ll}/u.test(t)) return t;
   if (/^(CIUDAD|CD\.?) DE MEXICO$|^CDMX$/.test(norm(t))) return 'CDMX';
-  return t.split(/(\s+|-)/).map((w, i) => {
+  // 4.12.85: abreviaturas del ERP como `nombreCiudad()` («PLAZA CD. JUAREZ» → «Plaza Ciudad Juárez», «PLAZA GRAL.ESCOBEDO» →
+  // «Plaza General Escobedo», «SN PEDRO» → «San Pedro»); sólo si les sigue otra palabra (un «CD» suelto al final sigue como sigla).
+  const ws = t.replace(/(^|\s)(CD|GRAL|STA|STO)\.(?=\p{L})/gu, '$1$2. ').split(/(\s+|-)/);
+  return ws.map((w, i) => {
+    const ab = ABREV_CIUDAD[w.replace(/\.$/, '')]; if (ab && /\p{L}/u.test(ws[i + 2] || '') && ws[i + 1] !== '-') return ab;
     if (!/\p{L}/u.test(w) || /[\d.]/.test(w) || (w.length <= 4 && !/[AEIOUÁÉÍÓÚ]/.test(w))) return w;
     const k = norm(w); return ACENTOS[k] || (i > 0 && CONECTORES.has(k) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase());
   }).join('');
