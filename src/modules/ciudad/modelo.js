@@ -13,8 +13,11 @@ import { estadoCobertura, PERFILES } from '../../lib/cobertura.js';
 // 4.7.72: también «12%» / « 45 % » (como `porcentaje()`; antes 0).
 // 4.12.53: negativo contable entre paréntesis («(1,500)», «$(2,000)») se lee negativo (antes 0: una nota de crédito o un
 // ajuste de Sheets no restaba); «()» vacío sigue siendo basura.
+// 4.12.82: una unidad al final tras el número («3 días», «45 d», «1 200 pz», «24 °C», «$5,000 MXN») se ignora (antes 0 o
+// vacío: DSO, temperatura, piezas y ETA en texto no salían); la unidad sola («días», «pz») sigue siendo basura.
+const UNIDAD_FINAL = /(\d|\))\s*(?:piezas?|pzas?|pz|d[ií]as?|d|°\s*c?|grados?|mxn|pesos?|unidades?|uds?)\.?$/i;
 function textoNum(s, quita) {
-  const t = s.trim().replace(/^\$\s*(?=\()/, ''); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
+  const t = s.trim().replace(UNIDAD_FINAL, '$1').replace(/^\$\s*(?=\()/, ''); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
   if (!c) return NaN; const n = Number(c); return p ? (n < 0 ? NaN : -n) : n;
 }
 export const numero = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,%]/g) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };
@@ -795,7 +798,8 @@ export function llegaBarco(dias) {
   // 4.7.77: sólo número o texto; una lista/objeto ya no se lee como 0 («llega hoy» con `[]`).
   if (dias == null || (typeof dias !== 'number' && typeof dias !== 'string') || (typeof dias === 'string' && !dias.trim())) return 'sin ETA';
   // 4.7.29: «1,200» en texto se lee y los días salen con miles es-MX («llega en 1,200 d», «1,200 d tarde»).
-  const k = Math.round(Number(typeof dias === 'string' ? dias.replace(/[,\s]/g, '') : dias)); if (!Number.isFinite(k) || typeof dias === 'boolean') return 'sin ETA';
+  // 4.12.82: con `leeNum()` también «3 días» / «5 d» (antes «sin ETA»).
+  const k = Math.round(typeof dias === 'string' ? leeNum(dias) ?? NaN : dias); if (!Number.isFinite(k) || typeof dias === 'boolean') return 'sin ETA';
   const m = (n) => n.toLocaleString('es-MX');
   // 4.12.62: desde 60 días en meses y desde 365 en años, como `haceDias()` / `faltanDias()` («llega en 3 meses», «1 año tarde»;
   // antes «llega en 1,200 d» / «1,500 d tarde»).

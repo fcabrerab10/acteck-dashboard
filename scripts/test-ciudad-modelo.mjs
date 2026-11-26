@@ -2409,3 +2409,14 @@ test('4.12.81 duración de reunión en texto con unidad y viaje con fechas al re
   assert.equal(est({ fecha: null, fecha_fin: '2026-11-26' }), 'disponible');
   assert.equal(presenciaPersonas([{ id: 'a' }], [{ fecha: '2026-11-26T09:00:00', duracion_min: '90 min', creado_por: 'a' }], [], new Date(2026, 10, 26, 10, 15))[0].presencia.estado, 'reunion');
 });
+
+test('4.12.82: cifras con unidad al final en texto', async () => {
+  const M = await import('../src/modules/ciudad/modelo.js');
+  assert.equal(M.numero('3 días'), 3); assert.equal(M.numero('45 d'), 45); assert.equal(M.numero('1 200 pz'), 1200); assert.equal(M.numero('$5,000 MXN'), 5000);
+  assert.equal(M.numero('(1,500) pesos'), -1500); assert.equal(M.numero('12 Piezas.'), 12); assert.equal(M.numero('1 día'), 1);
+  for (const mal of ['días', 'pz', 'd', '°C', 'abc d', '3 dólares']) assert.equal(M.numero(mal), 0, mal);
+  assert.equal(M.dsoTexto('45 días'), 'DSO 45 días'); assert.equal(M.temperaturaTexto('24 °C'), '24°'); assert.equal(M.temperaturaTexto('-3°'), '-3°');
+  assert.equal(M.piezasTexto('1,200 pz'), '1,200 pz'); assert.equal(M.cifraCorta('1,500,000 pz'), '1.5 M');
+  assert.equal(M.llegaBarco('3 días'), 'llega en 3 d'); assert.equal(M.llegaBarco(' 1 d '), 'llega mañana'); assert.equal(M.llegaBarco('1,200'), 'llega en 3 años');
+  assert.equal(M.llegaBarco('días'), 'sin ETA'); assert.equal(M.llegaBarco('-2 d'), '2 d tarde');
+});
