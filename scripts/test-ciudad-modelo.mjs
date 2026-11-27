@@ -2643,3 +2643,10 @@ test('4.12.113: leeDias() con rangos y horas', () => {
   assert.equal(haceDias('72 hrs'), 'hace 3 d'); assert.equal(llegaBarco('1-2'), 'llega en 2 d'); assert.equal(llegaBarco('-3'), '3 d tarde');
   assert.equal(llegaBarco('horas'), 'sin ETA'); assert.equal(llegaBarco('3 - '), 'sin ETA');
 });
+
+test('4.12.114: leeDias() con aproximaciones', () => {
+  assert.equal(llegaBarco('~5 días'), 'llega en 5 d'); assert.equal(llegaBarco('aprox. 10 días'), 'llega en 10 d'); assert.equal(haceDias('aprox 10 dias'), 'hace 10 d');
+  assert.equal(llegaBarco('≈ 3 semanas'), 'llega en 21 d'); assert.equal(llegaBarco('unos 5 días'), 'llega en 5 d'); assert.equal(haceDias('cerca de 4 días'), 'hace 4 d');
+  assert.equal(llegaBarco('5 días aprox.'), 'llega en 5 d'); assert.equal(llegaBarco('aproximadamente una semana'), 'llega en 7 d'); assert.equal(llegaBarco('unas semanas'), 'sin ETA');
+  assert.equal(llegaBarco('aprox.'), 'sin ETA'); assert.equal(llegaBarco('~'), 'sin ETA');
+});

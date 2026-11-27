@@ -1145,6 +1145,9 @@ const PALABRAS_NUM = { un: 1, una: 1, uno: 1, medio: 0.5, media: 0.5, dos: 2, tr
 const NUM_PALABRA = /^\s*(un|una|uno|medio|media|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+(?=\S)/i;
 const leeDias = (v) => {
   if (typeof v !== 'string') return leeNum(v);
+  // 4.12.114: aproximaciones («~5 días», «≈ 3 semanas», «aprox. 10 días», «unos 5 días», «cerca de 4 días», «5 días aprox.») se
+  // leen como la cantidad (antes «sin ETA» / sin texto).
+  v = v.replace(/^\s*(?:~|≈|aprox(?:imadamente|\.)?|unos|unas|cerca\s+de|alrededor\s+de|como)\s*(?=[\d\p{L}])/iu, '').replace(/\s+(?:aprox(?:imadamente|\.)?|aprox)\s*$/i, '');
   const w = NUM_PALABRA.exec(v); if (w) v = `${PALABRAS_NUM[w[1].toLowerCase()]} ${v.slice(w[0].length)}`;
   // 4.12.112: «y medio/a» al final suma media unidad («1 año y medio» = 1.5 años, «2 semanas y media» = 17.5 d).
   const y = /^\s*(\d+)\s+(\S+)\s+y\s+medi[oa]\.?\s*$/i.exec(v); if (y) v = `${Number(y[1]) + 0.5} ${y[2]}`;
