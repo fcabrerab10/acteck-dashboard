@@ -1088,8 +1088,16 @@ export function pendientesTexto(pendientes, hechas) {
   return `${plural(c(pendientes), 'pendiente')} hoy · ${plural(c(hechas), 'hecha')}`;
 }
 // Temperatura (4.7.45): «24°» redondeada (0 y bajo cero valen: «-3°»); sin dato o ilegible → '' (antes «NaN° en Guadalajara»).
+// 4.12.108: en texto lee la escala al final con «°», «º» (ordinal, como teclean en español) o sin signo y «grados»
+// («24 C», «24ºC», «24 grados», «24 °C»); «°F» / «F» / «Fahrenheit» se pasa a Celsius («75 °F» → «24°»; antes salían vacíos).
 export function temperaturaTexto(v) {
-  const k = leeNum(v); if (k == null) return ''; const r = Math.round(k); return `${r === 0 ? 0 : r}°`;
+  let x = v, f = false;
+  if (typeof v === 'string') {
+    const m = v.trim().match(/^(.*?\d)\s*(?:[°º˚]\s*)?(c|celsius|centígrados|centigrados|f|fahrenheit|grados(?:\s+(c|celsius|centígrados|centigrados|f|fahrenheit))?)\.?$/i);
+    if (m) { const e = (m[3] || m[2]).toLowerCase(); f = e[0] === 'f'; x = m[1]; }
+    else x = v.replace(/º|˚/g, '°');
+  }
+  let k = leeNum(x); if (k == null) return ''; if (f) k = (k - 32) * 5 / 9; const r = Math.round(k); return `${r === 0 ? 0 : r}°`;
 }
 // Piezas (4.7.27): enteras con miles es-MX («1,200 pz»; antes «1,200.5 pz» con decimales y texto «$1,200» sí cuenta);
 // ilegible → «0 pz». Globos del contenedor/tarima/tráiler, misión de descarga, bitácora de arribos y globo del puerto.

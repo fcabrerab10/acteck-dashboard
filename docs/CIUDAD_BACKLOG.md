@@ -414,6 +414,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.95) 2026-11-27 00:17 · `numero()` / `leeNum()` / `cifraCorta()` leen montos abreviados («1.2M», «$1.5 M», «2.5K», «3 mil», «1.5 millones», «4 MDP», «4.35MM», «(1,5 M)») y «MXN» al inicio («MXN 5,000»); antes 0 («$0» en tarjetas y cifras). La «m» minúscula sola sigue sin ser millón; +1 prueba.
   - [x] (4.12.100) 2026-11-27 01:37 · `contenedorCerrado()` pura y probada: el contenedor «Cancelada», «Concluida», «Cerrado/a» (acentos, guiones bajos, plural) ya no se dibuja como barco ni tarima, como `CONCLUIDOS`/`CANCELADOS` de `forecast/reuniones/cruce.js`; antes sólo «CONCLUIDO»/«CANCELADO» exactos.
   - [x] (4.12.107) 2026-11-27 03:56 · `nombrePersona()` aparta los signos al inicio como `nombreCiudad()`: «JUAN PÉREZ (JP)» → «Juan Pérez (JP)», «ANA "LA JEFA" LÓPEZ» → «Ana "La Jefa" López», «luis.garcía» → «Luis.García» (antes «(jp)», «"la Jefa"», «Luis.garcía») en escritorio, tarjeta y globo; +1 prueba.
+  - [x] (4.12.108) 2026-11-27 04:16 · `temperaturaTexto()` lee la escala en texto: «24 C», «24ºC» (º ordinal), «24 grados», «24 celsius» → «24°» y pasa Fahrenheit a Celsius («75 °F» / «75 grados F» → «24°»); antes salían vacíos en el clima de la barra.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -428,6 +429,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 04:16 · v4.12.108 · `temperaturaTexto()` lee «24 C», «24ºC», «24 grados» y convierte «°F» a Celsius.
 - 2026-11-27 03:37 · v4.12.106 · `textoSync()`: cancelada/omitida → ⏸️ «Se canceló una actualización de datos»; en cola → «Actualizando los datos»; +1 prueba.
 - 2026-11-27 03:18 · v4.12.105 · `nombreCiudad()` / `nombreSucursal()`: 33 palabras más con acento («El Marqués», «Paraíso», «Moroleón», «Tizimín», «Cuatro Ciénegas»…); +1 prueba (214).
 - 2026-11-27 02:56 · v4.12.104 · ETA y «hace N d» leen semanas («2 semanas» → «llega en 14 d»); +1 prueba (213).

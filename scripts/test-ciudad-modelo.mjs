@@ -1589,6 +1589,11 @@ test('temperaturaTexto(): grados redondeados, 0 y negativos valen; sin dato → 
   assert.equal(temperaturaTexto(23.6), '24°'); assert.equal(temperaturaTexto(' 18 '), '18°'); assert.equal(temperaturaTexto(-2.6), '-3°');
   assert.equal(temperaturaTexto(0), '0°'); assert.equal(temperaturaTexto(-0.2), '0°');
   for (const x of [null, undefined, '', '  ', NaN, 'abc', Infinity, true, {}]) assert.equal(temperaturaTexto(x), '');
+  // 4.12.108: escala en texto con «º» ordinal, sin signo o en palabra; Fahrenheit se pasa a Celsius.
+  for (const x of ['24 C', '24ºC', '24 °c', '24 grados', '24 grados C', '24 celsius', '24˚']) assert.equal(temperaturaTexto(x), '24°', x);
+  for (const x of ['75°F', '75 F', '75 ºF', '75 grados F', '75 fahrenheit']) assert.equal(temperaturaTexto(x), '24°', x);
+  assert.equal(temperaturaTexto('32 °f'), '0°'); assert.equal(temperaturaTexto('14 °F'), '-10°');
+  for (const x of ['F', '°C', 'grados', 'C 24x']) assert.equal(temperaturaTexto(x), '', x);
 });
 test('piezasTexto(): piezas enteras con miles es-MX y texto con comas; ilegible → 0 pz', () => {
   assert.equal(piezasTexto(1200.5), '1,201 pz'); assert.equal(piezasTexto('1,200'), '1,200 pz'); assert.equal(piezasTexto(' 95 '), '95 pz');
