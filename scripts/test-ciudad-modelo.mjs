@@ -2206,6 +2206,13 @@ test('textoSync: más palabras de fallo, avisos y en curso (4.12.84)', () => {
   assert.deepEqual(b.map((x) => [x.icono, x.cuando, x.texto]), [['⚠️', '10:40', 'Falló una actualización de datos']]);
 });
 
+test('textoSync: sinónimos de éxito y de fallo (4.12.101)', () => {
+  for (const e of ['COMPLETED', ' done ', 'Terminado', 'finished', 'succeeded', 'Listo', 'completada']) assert.deepEqual(textoSync(e), { icono: '🔄', texto: 'Se actualizaron los datos' });
+  for (const f of ['timeout', 'TIMED_OUT', 'timed-out', 'Aborted']) assert.deepEqual(textoSync(f), { icono: '⚠️', texto: 'Falló una actualización de datos' });
+  assert.equal(textoSync('done', 'Precios ERP').texto, 'Se actualizaron los datos · Precios ERP');
+  assert.equal(textoSync('otra cosa').texto, 'Se actualizaron los datos · otra cosa');
+});
+
 test('Banco: cartera a más de 90 días como la frase de cartera de Inicio (4.12.27)', () => {
   const cp = carteraPorCuenta([{ cliente: 'a', saldo_actual: 1000, saldo_vencido: 400, aging_mas90: '$250' }, { cliente: 'b', saldo_actual: 500, saldo_vencido: 100, aging_mas90: null }]);
   assert.equal(cp.get('a').mas90, 250); assert.equal(cp.get('b').mas90, 0);

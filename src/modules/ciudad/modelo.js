@@ -880,10 +880,12 @@ export function fechaCorta(x, hoy) {
 // → 🔄 «Actualizando los datos»); antes salía la palabra cruda («Se actualizaron los datos · running»).
 export function textoSync(status, fuente) {
   const st = unirTexto(typeof status === 'string' ? status.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') : status), f = unirTexto(fuente);
-  if (['error', 'errors', 'errored', 'failed', 'fail', 'failure', 'fallo', 'falló', 'fallido', 'fallida'].includes(st)) return { icono: '⚠️', texto: unirTexto('Falló una actualización de datos', f) };
+  // 4.12.101: «timeout» / «timed out» / «aborted» también son fallo, y «completed», «done», «terminado», «listo»… son éxito
+  // (antes la bitácora decía «Se actualizaron los datos · completed» con la palabra cruda).
+  if (['error', 'errors', 'errored', 'failed', 'fail', 'failure', 'fallo', 'falló', 'fallido', 'fallida', 'timeout', 'timed out', 'time out', 'aborted', 'abortado', 'abortada'].includes(st)) return { icono: '⚠️', texto: unirTexto('Falló una actualización de datos', f) };
   if (['warning', 'warnings', 'warn', 'aviso', 'avisos', 'partial', 'parcial'].includes(st)) return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, 'con avisos') };
   if (['running', 'pending', 'started', 'in progress', 'en curso', 'en proceso', 'procesando'].includes(st)) return { icono: '🔄', texto: unirTexto('Actualizando los datos', f) };
-  return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, ['', 'success', 'ok', 'exito', 'éxito'].includes(st) ? '' : st) };
+  return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, ['', 'success', 'succeeded', 'successful', 'ok', 'exito', 'éxito', 'exitoso', 'exitosa', 'completed', 'complete', 'completado', 'completada', 'done', 'finished', 'terminado', 'terminada', 'listo', 'lista', 'correcto', 'correcta'].includes(st) ? '' : st) };
 }
 // Fuente de la última sincronización (4.12.47): el `status_key` de `sync_events` con el título del catálogo del importador
 // (`PUENTE` de `settings/importador/config.js`, que `datos.js` pasa para que este archivo no lo importe): 'erp_inventario' →
