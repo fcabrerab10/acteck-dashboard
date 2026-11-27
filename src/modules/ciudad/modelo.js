@@ -1146,6 +1146,8 @@ const NUM_PALABRA = /^\s*(un|una|uno|medio|media|dos|tres|cuatro|cinco|seis|siet
 const leeDias = (v) => {
   if (typeof v !== 'string') return leeNum(v);
   const w = NUM_PALABRA.exec(v); if (w) v = `${PALABRAS_NUM[w[1].toLowerCase()]} ${v.slice(w[0].length)}`;
+  // 4.12.112: «y medio/a» al final suma media unidad («1 año y medio» = 1.5 años, «2 semanas y media» = 17.5 d).
+  const y = /^\s*(\d+)\s+(\S+)\s+y\s+medi[oa]\.?\s*$/i.exec(v); if (y) v = `${Number(y[1]) + 0.5} ${y[2]}`;
   const s = SEMANAS.exec(v); if (s) return Number(s[1].replace(',', '.')) * 7;
   const m = MESES_ANIOS.exec(v); if (m) return Number(m[1].replace(',', '.')) * (m[2][0].toLowerCase() === 'm' ? 30.4 : 365);
   return leeNum(v);

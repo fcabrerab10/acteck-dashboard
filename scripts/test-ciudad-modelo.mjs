@@ -2630,3 +2630,9 @@ test('4.12.111: leeDias() con cantidades en palabras', () => {
   assert.equal(llegaBarco('un día'), 'llega mañana'); assert.equal(faltanDias('doce meses'), 'en 1 año'); assert.equal(llegaBarco('media semana'), 'llega en 4 d');
   assert.equal(llegaBarco('una'), 'sin ETA'); assert.equal(haceDias('uno'), ''); assert.equal(llegaBarco('unas semanas'), 'sin ETA');
 });
+
+test('4.12.112: leeDias() con «y medio/a»', () => {
+  assert.equal(llegaBarco('2 semanas y media'), 'llega en 18 d'); assert.equal(haceDias('una semana y media'), 'hace 11 d');
+  assert.equal(faltanDias('3 días y medio'), 'en 4 d'); assert.equal(llegaBarco('un año y medio'), 'llega en 1 año'); assert.equal(haceDias('dos meses y medio'), 'hace 3 meses');
+  assert.equal(llegaBarco('y medio'), 'sin ETA'); assert.equal(llegaBarco('1 y medio'), 'sin ETA');
+});
