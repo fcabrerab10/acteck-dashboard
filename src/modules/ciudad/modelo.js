@@ -227,7 +227,9 @@ const ACENTOS = { MERIDA: 'Mérida', JUAREZ: 'Juárez', CULIACAN: 'Culiacán', M
   // 4.12.51: más palabras de ciudades/estados/sucursales del ERP (antes «San Nicolás» salía «San Nicolas», «Ciudad Acuña» «Ciudad Acuna»).
   MICHOACAN: 'Michoacán', YUCATAN: 'Yucatán', NICOLAS: 'Nicolás', GARCIA: 'García', JOSE: 'José', RIO: 'Río', GOMEZ: 'Gómez', MARTIN: 'Martín', ANDRES: 'Andrés', CRISTOBAL: 'Cristóbal', CUAUHTEMOC: 'Cuauhtémoc', COYOACAN: 'Coyoacán', ALVARO: 'Álvaro', NEZAHUALCOYOTL: 'Nezahualcóyotl', MARTINEZ: 'Martínez', TECAMAC: 'Tecámac', CUAUTITLAN: 'Cuautitlán', TULTITLAN: 'Tultitlán', TLAHUAC: 'Tláhuac', OCOTLAN: 'Ocotlán', TEPATITLAN: 'Tepatitlán', AUTLAN: 'Autlán', APATZINGAN: 'Apatzingán', ZITACUARO: 'Zitácuaro', PENJAMO: 'Pénjamo', ACAMBARO: 'Acámbaro', RINCON: 'Rincón', JUCHITAN: 'Juchitán', COMITAN: 'Comitán', PATZCUARO: 'Pátzcuaro', TECOMAN: 'Tecomán', QUINTIN: 'Quintín', ACUNA: 'Acuña', PENASCO: 'Peñasco',
   // 4.12.71: más municipios con acento o eñe (antes «Tlajomulco de Zuniga», «Ciudad Guzman», «Ciudad Lopez Mateos», «Chimalhuacan»).
-  ZUNIGA: 'Zúñiga', LOPEZ: 'López', GUZMAN: 'Guzmán', CHIMALHUACAN: 'Chimalhuacán', TEZIUTLAN: 'Teziutlán', ZACATLAN: 'Zacatlán', TEOTIHUACAN: 'Teotihuacán', TEPOTZOTLAN: 'Tepotzotlán', ZAPOTLAN: 'Zapotlán', ACATLAN: 'Acatlán', IXTLAN: 'Ixtlán', TIZAPAN: 'Tizapán', MIAHUATLAN: 'Miahuatlán', JALOSTOTITLAN: 'Jalostotitlán', PANUCO: 'Pánuco', GUAMUCHIL: 'Guamúchil', ANAHUAC: 'Anáhuac', VALPARAISO: 'Valparaíso', ALAMOS: 'Álamos', JIMENEZ: 'Jiménez', ZINAPECUARO: 'Zinapécuaro', ENCARNACION: 'Encarnación', CONCEPCION: 'Concepción', ASUNCION: 'Asunción', JESUS: 'Jesús', MARIA: 'María', BAHIA: 'Bahía', CIENEGA: 'Ciénega', ESTACION: 'Estación', PURISIMA: 'Purísima', GONZALEZ: 'González', HERNANDEZ: 'Hernández', PEREZ: 'Pérez', RAMIREZ: 'Ramírez', SANCHEZ: 'Sánchez', DIAZ: 'Díaz', PENON: 'Peñón' };
+  ZUNIGA: 'Zúñiga', LOPEZ: 'López', GUZMAN: 'Guzmán', CHIMALHUACAN: 'Chimalhuacán', TEZIUTLAN: 'Teziutlán', ZACATLAN: 'Zacatlán', TEOTIHUACAN: 'Teotihuacán', TEPOTZOTLAN: 'Tepotzotlán', ZAPOTLAN: 'Zapotlán', ACATLAN: 'Acatlán', IXTLAN: 'Ixtlán', TIZAPAN: 'Tizapán', MIAHUATLAN: 'Miahuatlán', JALOSTOTITLAN: 'Jalostotitlán', PANUCO: 'Pánuco', GUAMUCHIL: 'Guamúchil', ANAHUAC: 'Anáhuac', VALPARAISO: 'Valparaíso', ALAMOS: 'Álamos', JIMENEZ: 'Jiménez', ZINAPECUARO: 'Zinapécuaro', ENCARNACION: 'Encarnación', CONCEPCION: 'Concepción', ASUNCION: 'Asunción', JESUS: 'Jesús', MARIA: 'María', BAHIA: 'Bahía', CIENEGA: 'Ciénega', ESTACION: 'Estación', PURISIMA: 'Purísima', GONZALEZ: 'González', HERNANDEZ: 'Hernández', PEREZ: 'Pérez', RAMIREZ: 'Ramírez', SANCHEZ: 'Sánchez', DIAZ: 'Díaz', PENON: 'Peñón',
+  // 4.12.103: palabras comunes de plazas y sucursales del ERP (antes «Galerias», «Aragon», «Malecon», «Almacen», «Satelite»).
+  GALERIAS: 'Galerías', ARAGON: 'Aragón', MALECON: 'Malecón', ALMACEN: 'Almacén', SATELITE: 'Satélite', JARDIN: 'Jardín' };
 const CONECTORES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'EL']);
 const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo', SN: 'San', PTO: 'Puerto', EDO: 'Estado' }; // 4.12.99: «PTO. VALLARTA», «EDO. DE MEXICO»
 export function nombreCiudad(ciudad) {
@@ -238,12 +240,15 @@ export function nombreCiudad(ciudad) {
   // «STA. CATARINA» → «Santa Catarina», «SN PEDRO» → «San Pedro»; antes «Cd. Juárez» / «Gral. Escobedo»). Sólo para mostrar.
   // 4.12.99: siglas con punto quedan en mayúsculas («S.L.P.», «N.L.», antes «S.l.p.») y la palabra con coma o punto al final
   // conserva su acento («MERIDA, YUC.» → «Mérida, Yuc.», antes «Merida, Yuc.»; «SAN LUIS POTOSI, S.L.P.»).
-  return k.replace(/^(CD|GRAL|STA|STO|PTO|EDO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i) => {
-    const ab = ABREV_CIUDAD[w.replace(/\.$/, '')]; if (ab) return ab;
+  // 4.12.103: las palabras se arman sobre el texto original en mayúsculas (con sus acentos y eñes) y sólo se buscan con `norm()`:
+  // antes «CAÑADA» / «MONTAÑA» salían «Canada» / «Montana» porque `norm()` quita la tilde de la ñ.
+  const o = typeof ciudad === 'string' ? ciudad.normalize('NFC').toLocaleUpperCase('es-MX').trim() : k;
+  return o.replace(/^(CD|GRAL|STA|STO|PTO|EDO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i) => {
+    const ab = ABREV_CIUDAD[norm(w.replace(/\.$/, ''))]; if (ab) return ab;
     if (/^(\p{L}\.){2,}$/u.test(w.replace(/^[("«'“¿¡[]+|[,;:)"»'”\]]+$/gu, ''))) return w; // 4.12.102: «(S.A.» / «C.V.)» siguen siglas
     // 4.12.102: signos al inicio («(», comillas, «¿») se apartan como los del final («(PERISUR)» → «(Perisur)», antes «(perisur)»).
-    const [, a, c, p] = /^([("«'“¿¡[]*)(.*?)([.,;:)"»'”\]]*)$/u.exec(w);
-    return a + (ACENTOS[c] || (i > 0 && CONECTORES.has(c) ? c.toLowerCase() : c.charAt(0) + c.slice(1).toLowerCase())) + p;
+    const [, a, c, p] = /^([("«'“¿¡[]*)(.*?)([.,;:)"»'”\]]*)$/u.exec(w), n = norm(c);
+    return a + (ACENTOS[n] || (i > 0 && CONECTORES.has(n) ? c.toLocaleLowerCase('es-MX') : c.charAt(0) + c.slice(1).toLocaleLowerCase('es-MX'))) + p;
   }).join(' ');
 }
 export function pinCiudad(distrito, camiones = []) {

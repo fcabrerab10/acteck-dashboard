@@ -2563,3 +2563,20 @@ test('4.12.102: nombreSucursal()/nombreCiudad() capitalizan tras paréntesis, co
   assert.equal(nombreCiudad('OFFICE DEPOT (S.A. DE C.V.)'), 'Office Depot (S.A. de C.V.)'); assert.equal(nombreCiudad('MERIDA, YUC.'), 'Mérida, Yuc.');
   assert.equal(nombreCiudad('SAN LUIS POTOSI, S.L.P.'), 'San Luis Potosí, S.L.P.'); assert.equal(nombreSucursal('SAMS CLUB - LEON GTO'), 'Sams Club - León Gto');
 });
+
+test('nombreCiudad: conserva la eñe y los acentos del original (4.12.103)', () => {
+  assert.equal(nombreCiudad('CAÑADA'), 'Cañada'); assert.equal(nombreCiudad('LA MONTAÑA'), 'La Montaña');
+  assert.equal(nombreCiudad('PEÑA DE BERNAL'), 'Peña de Bernal'); assert.equal(nombreCiudad('peñón de los baños'), 'Peñón de los Baños');
+  assert.equal(nombreCiudad('CANADA'), 'Canada'); // sin ñ en el original no se adivina
+  assert.equal(nombreCiudad('MÉRIDA'), 'Mérida'); assert.equal(nombreCiudad('CD. JUÁREZ'), 'Ciudad Juárez');
+  assert.equal(nombreCiudad('Ciudad de México'), 'CDMX'); assert.equal(nombreCiudad('CD.OBREGÓN'), 'Ciudad Obregón');
+  assert.equal(nombreCiudad('San Luis Potosí, S.L.P.'), 'San Luis Potosí, S.L.P.');
+  assert.equal(nombreCiudad('CAN\u0303ADA'), 'Cañada'); // ñ descompuesta (NFD)
+  assert.equal(nombreCiudad(123), ''); assert.equal(nombreCiudad(null), '');
+});
+test('nombreCiudad / nombreSucursal: plazas comunes con acento (4.12.103)', () => {
+  assert.equal(nombreCiudad('GALERIAS GUADALAJARA'), 'Galerías Guadalajara'); assert.equal(nombreCiudad('PLAZA SATELITE'), 'Plaza Satélite');
+  assert.equal(nombreSucursal('MULTIPLAZA ARAGON'), 'Multiplaza Aragón'); assert.equal(nombreSucursal('CANCUN MALECON'), 'Cancún Malecón');
+  assert.equal(nombreSucursal('ALMACEN GENERAL'), 'Almacén General'); assert.equal(nombreSucursal('PLAZA JARDIN'), 'Plaza Jardín');
+  assert.equal(nombreSucursal('Galerias GDL'), 'Galerias GDL'); // mixta se respeta
+});
