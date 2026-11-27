@@ -2554,3 +2554,12 @@ test('4.12.100: contenedorCerrado() reconoce concluido/cancelado/cerrado en feme
   ] }, new Date('2026-11-27T12:00:00'));
   assert.deepEqual(m.puerto.barcos.map((b) => b.id), ['C3']);
 });
+
+test('4.12.102: nombreSucursal()/nombreCiudad() capitalizan tras paréntesis, comillas, «_» y «/»', () => {
+  assert.equal(nombreSucursal('LIVERPOOL (PERISUR)'), 'Liverpool (Perisur)'); assert.equal(nombreCiudad('LIVERPOOL (PERISUR)'), 'Liverpool (Perisur)');
+  assert.equal(nombreSucursal('(GDL) PLAZA'), '(GDL) Plaza'); assert.equal(nombreSucursal('"LA GRAN PLAZA"'), '"La Gran Plaza"');
+  assert.equal(nombreSucursal('CYBERPUERTA_GDL'), 'Cyberpuerta_GDL'); assert.equal(nombreSucursal('PLAZA DEL SOL / GDL'), 'Plaza del Sol / GDL');
+  assert.equal(nombreSucursal('MERIDA, YUC.'), 'Mérida, YUC.'); assert.equal(nombreSucursal('OFFICE DEPOT (S.A. DE C.V.)'), 'Office Depot (S.A. de C.V.)');
+  assert.equal(nombreCiudad('OFFICE DEPOT (S.A. DE C.V.)'), 'Office Depot (S.A. de C.V.)'); assert.equal(nombreCiudad('MERIDA, YUC.'), 'Mérida, Yuc.');
+  assert.equal(nombreCiudad('SAN LUIS POTOSI, S.L.P.'), 'San Luis Potosí, S.L.P.'); assert.equal(nombreSucursal('SAMS CLUB - LEON GTO'), 'Sams Club - León Gto');
+});

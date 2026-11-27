@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
+  - [x] (4.12.102) 2026-11-27 02:17 · `nombreSucursal()` / `nombreCiudad()` ponen mayúscula tras paréntesis y comillas («LIVERPOOL (PERISUR)» → «Liverpool (Perisur)», antes «(perisur)»; «(GDL)» y «(S.A. de C.V.)» siguen siglas) y la sucursal separa por «_» y «/» («Cyberpuerta_GDL»); «MERIDA,» → «Mérida,».
   - [x] (4.12.101) 2026-11-27 01:57 · `textoSync()` reconoce más palabras del puente: «completed», «done», «finished», «terminado», «listo»… = éxito y «timeout», «timed out», «aborted» = fallo ⚠️ (antes la bitácora decía «Se actualizaron los datos · completed» o «· timeout»); +1 prueba.
   - [x] (4.12.97) 2026-11-27 00:55 · `rumboBarcos()` lee la ETA con `leeNum()` («4 días», «0 d»), como `llegaBarco()` y la cadena: antes el barco se quedaba en mar abierto aunque su tarjeta dijera «llega en 4 d»; +1 prueba.
   - [x] (4.12.98) 2026-11-27 01:16 · `estatusBarco()` recupera los acentos del estatus que no está en la tabla («EN TRANSITO» → «En tránsito», «EN REVISION DE ADUANA» → «En revisión de aduana», «LLEGO A ALMACEN» → «Llegó a almacén»; antes sin acento en la tarjeta del barco) y lee «EN_TRANSITO» / «en-puerto» con espacios; +1 prueba.
@@ -422,6 +423,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 02:17 · v4.12.102 · `nombreSucursal()` / `nombreCiudad()`: mayúscula tras «(» y comillas («Liverpool (Perisur)»), siglas entre paréntesis intactas, «_»/«/» separan; +1 prueba (211).
 - 2026-11-27 01:57 · v4.12.101 · `textoSync()`: sinónimos de éxito («completed», «done», «terminado») y de fallo («timeout», «aborted») en la bitácora; +1 prueba (210).
 - 2026-11-27 01:19 · v4.12.99 · `nombreCiudad()` lee «PTO./EDO.», siglas «S.L.P.»/«N.L.» y acentos antes de coma («Mérida, Yuc.»).
 - 2026-11-27 01:16 · v4.12.98 · `estatusBarco()` pone acentos al estatus desconocido («En tránsito», «En revisión», «Llegó a almacén») y lee guion bajo/guion como espacio.
