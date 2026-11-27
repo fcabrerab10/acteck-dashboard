@@ -2476,3 +2476,9 @@ test('4.12.88 nombreSucursal(): abreviaturas de domicilio en minúscula', () => 
   assert.equal(nombreSucursal('NO HAY'), 'No Hay'); assert.equal(nombreSucursal('PLAZA CD. JUAREZ'), 'Plaza Ciudad Juárez'); assert.equal(nombreSucursal('S.A. DE C.V.'), 'S.A. de C.V.');
   assert.equal(nombreSucursal('Pcel SUC. Centro'), 'Pcel SUC. Centro'); // con minúsculas se respeta tal cual
 });
+
+test('porcentaje(): negativo contable entre paréntesis (4.12.90)', () => {
+  assert.equal(porcentaje('(12 %)'), '-12 %'); assert.equal(porcentaje('(3.6)'), '-4 %'); assert.equal(porcentaje(' (1,250%) '), '-1,250 %');
+  assert.equal(porcentaje('(12 %)', { signo: true }), '-12 %'); assert.equal(porcentaje('()'), '—'); assert.equal(porcentaje('(-5)'), '—'); assert.equal(porcentaje('(abc)'), '—');
+  assert.equal(porcentaje('12 %'), '12 %'); assert.equal(porcentaje('-0.4'), '0 %'); assert.equal(porcentaje('  '), '—');
+});

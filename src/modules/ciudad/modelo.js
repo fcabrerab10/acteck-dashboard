@@ -952,7 +952,8 @@ export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto
   // 4.7.55: texto con comas, espacios o «%» («1,250», « 45 %») se lee (antes «—»).
   // 4.7.72: sólo número o texto; una lista u objeto → «—» (antes `[]` salía «0 %»).
   if (v == null || v === '' || (typeof v !== 'number' && typeof v !== 'string')) return '—';
-  const k = Math.round(Number(typeof v === 'string' ? (v.trim() ? v.replace(/[\s,%]/g, '') : NaN) : v)); if (!Number.isFinite(k)) return '—';
+  // 4.12.90: negativo contable entre paréntesis («(12 %)», «(3.5)», como `numero()`) se lee negativo (antes «—»).
+  const k = Math.round(typeof v === 'string' ? textoNum(v, /[\s,%]/g) : v); if (!Number.isFinite(k)) return '—';
   const z = k === 0 ? 0 : k; return `${signo && z > 0 ? '+' : ''}${z.toLocaleString('es-MX')} %`;
 }
 // DSO de la cartera (4.7.26): días redondeados en singular/plural con miles es-MX («DSO 45 días», «DSO 1 día»);
