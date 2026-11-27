@@ -2650,3 +2650,9 @@ test('4.12.114: leeDias() con aproximaciones', () => {
   assert.equal(llegaBarco('5 días aprox.'), 'llega en 5 d'); assert.equal(llegaBarco('aproximadamente una semana'), 'llega en 7 d'); assert.equal(llegaBarco('unas semanas'), 'sin ETA');
   assert.equal(llegaBarco('aprox.'), 'sin ETA'); assert.equal(llegaBarco('~'), 'sin ETA');
 });
+
+test('4.12.115: leeDias() con «en», «dentro de», «faltan»', () => {
+  assert.equal(llegaBarco('en 5 días'), 'llega en 5 d'); assert.equal(llegaBarco('dentro de 2 semanas'), 'llega en 14 d'); assert.equal(llegaBarco('faltan 3 días'), 'llega en 3 d');
+  assert.equal(llegaBarco('llega en una semana'), 'llega en 7 d'); assert.equal(llegaBarco('en aprox. 10 días'), 'llega en 10 d'); assert.equal(llegaBarco('Falta 1 día'), 'llega mañana');
+  assert.equal(llegaBarco('en'), 'sin ETA'); assert.equal(llegaBarco('en camino'), 'sin ETA'); assert.equal(llegaBarco('dentro de'), 'sin ETA');
+});

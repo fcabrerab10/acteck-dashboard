@@ -1147,6 +1147,9 @@ const leeDias = (v) => {
   if (typeof v !== 'string') return leeNum(v);
   // 4.12.114: aproximaciones («~5 días», «≈ 3 semanas», «aprox. 10 días», «unos 5 días», «cerca de 4 días», «5 días aprox.») se
   // leen como la cantidad (antes «sin ETA» / sin texto).
+  // 4.12.115: plazo con «en», «dentro de», «faltan», «llega en», «sale en» al inicio («en 5 días», «dentro de 2 semanas»,
+  // «faltan 3 días») se lee como la cantidad (antes «sin ETA» / sin texto).
+  v = v.replace(/^\s*(?:(?:llega|sale)\s+en|dentro\s+de|faltan?|en)\s+(?=\S)/i, '');
   v = v.replace(/^\s*(?:~|≈|aprox(?:imadamente|\.)?|unos|unas|cerca\s+de|alrededor\s+de|como)\s*(?=[\d\p{L}])/iu, '').replace(/\s+(?:aprox(?:imadamente|\.)?|aprox)\s*$/i, '');
   const w = NUM_PALABRA.exec(v); if (w) v = `${PALABRAS_NUM[w[1].toLowerCase()]} ${v.slice(w[0].length)}`;
   // 4.12.112: «y medio/a» al final suma media unidad («1 año y medio» = 1.5 años, «2 semanas y media» = 17.5 d).
