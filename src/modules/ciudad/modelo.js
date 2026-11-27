@@ -895,10 +895,13 @@ export function unirTexto(...partes) {
 // `comercial/forecast/sopCalculo.js`): «TRANSITO MARITIMO» → «En el mar», «PROXIMO A ZARPAR» → «Por zarpar»… Acepta
 // espacios, minúsculas y acentos («Tránsito marítimo»); uno desconocido sale en minúsculas como allá; vacío → ''.
 const ESTATUS_BARCO = { 'TRANSITO MARITIMO': 'en el mar', 'PROXIMO A ZARPAR': 'por zarpar', 'EN PRODUCCION': 'en producción', 'EN ESPERA DE CONSOLIDAR': 'por consolidar', 'EN RESGUARDO': 'en resguardo', 'PENDIENTE MODULAR': 'pendiente', 'EN PUERTO': 'en puerto' };
+// 4.12.98: el estatus que no está en la tabla recupera sus acentos («EN TRANSITO» → «En tránsito», antes «En transito»)
+// y «EN_TRANSITO» / «en-puerto» se leen con espacios, como vienen de algunos ERP y Sheets.
+const ACENTOS_ESTATUS = { transito: 'tránsito', maritimo: 'marítimo', produccion: 'producción', liberacion: 'liberación', revision: 'revisión', inspeccion: 'inspección', recepcion: 'recepción', almacen: 'almacén', camion: 'camión', deposito: 'depósito', llego: 'llegó', despacho: 'despacho', documentacion: 'documentación', consolidacion: 'consolidación', fabricacion: 'fabricación' };
 export function estatusBarco(x) {
-  const s = unirTexto(x).replace(/\s+/g, ' '); if (!s) return '';
+  const s = unirTexto(x).replace(/[_]+/g, ' ').replace(/(\p{L})-(\p{L})/gu, '$1 $2').replace(/\s+/g, ' ').trim(); if (!s) return '';
   const clave = s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
-  const t = ESTATUS_BARCO[clave] || s.toLowerCase();
+  const t = ESTATUS_BARCO[clave] || s.toLowerCase().replace(/\p{L}+/gu, (w) => ACENTOS_ESTATUS[w] || w);
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 // Título del camión (4.7.37): «Factura F1 · promo» / «Envío · F1»; sin folio (null, vacío, «undefined») dice sólo

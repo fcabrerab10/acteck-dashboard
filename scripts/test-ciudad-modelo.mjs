@@ -1726,7 +1726,7 @@ test('tarjeta del camión: destino con acentos y sin «null» (4.7.41)', () => {
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'F1' }, m).numeros[0][1], 'CT');
   assert.equal(tarjetaDe({ tipo: 'camion', folio: 'E1' }, { ...m, camiones: [{ ...m.camiones[0], ciudad: '' }] }).numeros[3][1], '—');
   const b = tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: '  ' } }, m); assert.equal(b.numeros.length, 3);
-  assert.deepEqual(tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: ' EN TRANSITO ' } }, m).numeros[3], ['Estatus', 'En transito']);
+  assert.deepEqual(tarjetaDe({ tipo: 'barco', barco: { piezas: 1, estatus: ' EN TRANSITO ' } }, m).numeros[3], ['Estatus', 'En tránsito']);
 });
 
 test('fechaCorta() y tarjetas del contenedor con fecha corta (4.7.42)', () => {
@@ -2030,6 +2030,13 @@ test('diasCedis() / diasTexto(): CEDIS sin medida de días como Inventario (4.7.
   assert.equal(m2.cedis.dias, 130); assert.equal(tarjetaDe({ tipo: 'cedis' }, m2).estado, 'ambar');
 });
 
+test('estatusBarco(): acentos y guiones en estatus desconocidos (4.12.98)', () => {
+  assert.equal(estatusBarco('EN TRANSITO'), 'En tránsito'); assert.equal(estatusBarco('en_transito'), 'En tránsito');
+  assert.equal(estatusBarco('EN REVISION DE ADUANA'), 'En revisión de aduana'); assert.equal(estatusBarco('LLEGO A ALMACEN'), 'Llegó a almacén');
+  assert.equal(estatusBarco('TRANSITO_MARITIMO'), 'En el mar', 'con guion bajo también empata la tabla'); assert.equal(estatusBarco('en-puerto'), 'En puerto');
+  assert.equal(estatusBarco('En tránsito'), 'En tránsito', 'el que ya trae acento no cambia'); assert.equal(estatusBarco('TRANSITORIO'), 'Transitorio', 'sólo palabras completas');
+  assert.equal(estatusBarco('ETA 2026-11-30'), 'Eta 2026-11-30', 'guion entre números se queda');
+});
 test('estatusBarco(): nombres cortos del Plan de compras (4.7.84)', () => {
   assert.equal(estatusBarco('TRANSITO MARITIMO'), 'En el mar'); assert.equal(estatusBarco(' Tránsito  marítimo '), 'En el mar');
   assert.equal(estatusBarco('PROXIMO A ZARPAR'), 'Por zarpar'); assert.equal(estatusBarco('Pendiente modular'), 'Pendiente'); assert.equal(estatusBarco('EN PRODUCCION'), 'En producción');
