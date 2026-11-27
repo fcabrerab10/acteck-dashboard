@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
+  - [x] (4.12.105) 2026-11-27 03:18 · `nombreCiudad()` / `nombreSucursal()` conocen más municipios con acento («El Marqués», «Paraíso», «Moroleón», «Tizimín», «Cuatro Ciénegas», «Villa de Álvarez», «Ébano», «Izúcar de Matamoros», «Escárcega», «Champotón»…; antes sin acento en etiquetas, pines y tarjetas).
   - [x] (4.12.102) 2026-11-27 02:17 · `nombreSucursal()` / `nombreCiudad()` ponen mayúscula tras paréntesis y comillas («LIVERPOOL (PERISUR)» → «Liverpool (Perisur)», antes «(perisur)»; «(GDL)» y «(S.A. de C.V.)» siguen siglas) y la sucursal separa por «_» y «/» («Cyberpuerta_GDL»); «MERIDA,» → «Mérida,».
   - [x] (4.12.103) 2026-11-27 02:37 · `nombreCiudad()` conserva la eñe y los acentos del original («CAÑADA» → «Cañada», «LA MONTAÑA» → «La Montaña»; antes «Canada» / «Montana» porque `norm()` quita la tilde) y `nombreCiudad()` / `nombreSucursal()` acentúan plazas comunes del ERP («Galerías», «Aragón», «Malecón», «Almacén», «Satélite», «Jardín»); +2 pruebas.
   - [x] (4.12.101) 2026-11-27 01:57 · `textoSync()` reconoce más palabras del puente: «completed», «done», «finished», «terminado», «listo»… = éxito y «timeout», «timed out», «aborted» = fallo ⚠️ (antes la bitácora decía «Se actualizaron los datos · completed» o «· timeout»); +1 prueba.
@@ -425,6 +426,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 03:18 · v4.12.105 · `nombreCiudad()` / `nombreSucursal()`: 33 palabras más con acento («El Marqués», «Paraíso», «Moroleón», «Tizimín», «Cuatro Ciénegas»…); +1 prueba (214).
 - 2026-11-27 02:56 · v4.12.104 · ETA y «hace N d» leen semanas («2 semanas» → «llega en 14 d»); +1 prueba (213).
 - 2026-11-27 02:17 · v4.12.102 · `nombreSucursal()` / `nombreCiudad()`: mayúscula tras «(» y comillas («Liverpool (Perisur)»), siglas entre paréntesis intactas, «_»/«/» separan; +1 prueba (211).
 - 2026-11-27 01:57 · v4.12.101 · `textoSync()`: sinónimos de éxito («completed», «done», «terminado») y de fallo («timeout», «aborted») en la bitácora; +1 prueba (210).

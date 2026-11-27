@@ -2584,3 +2584,9 @@ test('nombreCiudad / nombreSucursal: plazas comunes con acento (4.12.103)', () =
   assert.equal(nombreSucursal('ALMACEN GENERAL'), 'Almacén General'); assert.equal(nombreSucursal('PLAZA JARDIN'), 'Plaza Jardín');
   assert.equal(nombreSucursal('Galerias GDL'), 'Galerias GDL'); // mixta se respeta
 });
+test('nombreCiudad / nombreSucursal: más municipios con acento (4.12.105)', () => {
+  for (const [s, r] of [['EL MARQUES', 'El Marqués'], ['PARAISO', 'Paraíso'], ['MOROLEON', 'Moroleón'], ['TIZIMIN', 'Tizimín'],
+    ['CUATRO CIENEGAS', 'Cuatro Ciénegas'], ['CIENEGA DE FLORES', 'Ciénega de Flores'], ['VILLA DE ALVAREZ', 'Villa de Álvarez'],
+    ['EBANO', 'Ébano'], ['IZUCAR DE MATAMOROS', 'Izúcar de Matamoros'], ['ESCARCEGA', 'Escárcega'], ['EL MARQUÉS', 'El Marqués']]) assert.equal(nombreCiudad(s), r);
+  assert.equal(nombreSucursal('PLAZA PASEO CHAMPOTON'), 'Plaza Paseo Champotón');
+});
