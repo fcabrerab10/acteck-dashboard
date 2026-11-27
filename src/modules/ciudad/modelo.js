@@ -1041,6 +1041,9 @@ export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto
 // «hace 2.6 d»); ilegible → ''. Bitácora (camiones/arribos) y tarjeta del camión.
 export function haceDias(v) {
   // 4.7.77: con `leeNum()`: texto en blanco (« ») y listas (`[]`) ya no dicen «hoy».
+  // 4.12.119: antigüedad ya escrita como pasado («hace 3 días», «3 días atrás», «desde hace 2 semanas», «2 meses de antigüedad»,
+  // «hace una semana») se lee como la cantidad (antes sin texto). Sólo aquí: en `faltanDias()` / ETAs «hace» no es un plazo.
+  if (typeof v === 'string') v = v.replace(/^\s*(?:desde\s+)?hace\s+(?=\S)/i, '').replace(/\s+(?:atr[aá]s|de\s+antig[uü]edad)\.?\s*$/i, '');
   const n = leeDias(v); if (n == null) return ''; const k = Math.round(n);
   // 4.12.59: desde 60 días en meses y desde 365 en años («hace 3 meses», «hace 1 año»; antes «hace 1,200 d»).
   if (k <= 0) return 'hoy'; if (k === 1) return 'ayer';

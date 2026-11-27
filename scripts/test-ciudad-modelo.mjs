@@ -2665,3 +2665,8 @@ test('4.12.118: signo menos tipográfico (−, –, —, －) en números de tex
   assert.equal(porcentaje('−12 %'), '-12 %'); assert.equal(porcentaje('−8', { signo: true }), '-8 %'); assert.equal(cifraCorta('−1.5 M'), '-1.5 M');
   assert.equal(temperaturaTexto('−3 °C'), '-3°'); assert.equal(numero('5–10'), 0); assert.equal(numero('1,200'), 1200);
 });
+test('4.12.119: haceDias() con «hace», «atrás», «de antigüedad»', () => {
+  assert.equal(haceDias('hace 3 días'), 'hace 3 d'); assert.equal(haceDias('3 días atrás'), 'hace 3 d'); assert.equal(haceDias('Desde hace 2 semanas'), 'hace 14 d');
+  assert.equal(haceDias('hace una semana'), 'hace 7 d'); assert.equal(haceDias('2 meses de antiguedad'), 'hace 2 meses'); assert.equal(haceDias('hace 1 día'), 'ayer');
+  assert.equal(haceDias('hace'), ''); assert.equal(haceDias('atrás'), ''); assert.equal(haceDias('hace mucho'), ''); assert.equal(faltanDias('en 2 semanas'), 'en 14 d');
+});
