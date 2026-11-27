@@ -1139,8 +1139,13 @@ const leeNum = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,]/g)
 const SEMANAS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(?:semanas?|sem|sems)\.?\s*$/i;
 // 4.12.110: también meses (× 30.4) y años (× 365): «2 meses» → «hace 2 meses», «1 año» → «en 1 año» (antes ilegibles: sin texto).
 const MESES_ANIOS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(mes(?:es)?|años?|anios?)\.?\s*$/i;
+// 4.12.111: cantidad en palabras al inicio («una semana», «un mes», «medio año», «dos semanas», «tres días»; hasta doce) se
+// pasa a número antes de leer (antes «sin ETA» / sin texto en el puerto, los barcos, la cadena y la antigüedad).
+const PALABRAS_NUM = { un: 1, una: 1, uno: 1, medio: 0.5, media: 0.5, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12 };
+const NUM_PALABRA = /^\s*(un|una|uno|medio|media|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+(?=\S)/i;
 const leeDias = (v) => {
   if (typeof v !== 'string') return leeNum(v);
+  const w = NUM_PALABRA.exec(v); if (w) v = `${PALABRAS_NUM[w[1].toLowerCase()]} ${v.slice(w[0].length)}`;
   const s = SEMANAS.exec(v); if (s) return Number(s[1].replace(',', '.')) * 7;
   const m = MESES_ANIOS.exec(v); if (m) return Number(m[1].replace(',', '.')) * (m[2][0].toLowerCase() === 'm' ? 30.4 : 365);
   return leeNum(v);

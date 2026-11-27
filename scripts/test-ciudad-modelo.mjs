@@ -2623,3 +2623,10 @@ test('4.12.109: más unidades de conteo al final', async () => {
   assert.equal(M.piezasTexto('1,500 pzs'), '1,500 pz'); assert.equal(M.plural('3 tiendas', 'tienda'), '3 tiendas');
   assert.equal(M.numero('tiendas'), 0); assert.equal(M.numero('pzs'), 0); assert.equal(M.numero('1.5 M'), 1500000); assert.equal(M.numero('3 mil'), 3000);
 });
+
+test('4.12.111: leeDias() con cantidades en palabras', () => {
+  assert.equal(llegaBarco('una semana'), 'llega en 7 d'); assert.equal(llegaBarco('UNA SEMANA'), 'llega en 7 d'); assert.equal(haceDias('Un mes'), 'hace 30 d');
+  assert.equal(faltanDias('medio año'), 'en 6 meses'); assert.equal(llegaBarco('dos semanas'), 'llega en 14 d'); assert.equal(haceDias('tres días'), 'hace 3 d');
+  assert.equal(llegaBarco('un día'), 'llega mañana'); assert.equal(faltanDias('doce meses'), 'en 1 año'); assert.equal(llegaBarco('media semana'), 'llega en 4 d');
+  assert.equal(llegaBarco('una'), 'sin ETA'); assert.equal(haceDias('uno'), ''); assert.equal(llegaBarco('unas semanas'), 'sin ETA');
+});
