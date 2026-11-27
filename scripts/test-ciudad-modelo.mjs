@@ -2660,3 +2660,8 @@ test('4.12.115: leeDias() con «en», «dentro de», «faltan»', () => {
   assert.equal(llegaBarco('llega en una semana'), 'llega en 7 d'); assert.equal(llegaBarco('en aprox. 10 días'), 'llega en 10 d'); assert.equal(llegaBarco('Falta 1 día'), 'llega mañana');
   assert.equal(llegaBarco('en'), 'sin ETA'); assert.equal(llegaBarco('en camino'), 'sin ETA'); assert.equal(llegaBarco('dentro de'), 'sin ETA');
 });
+test('4.12.118: signo menos tipográfico (−, –, —, －) en números de texto', () => {
+  assert.equal(numero('−12'), -12); assert.equal(numero('–5'), -5); assert.equal(numero('— 3,5'), -3.5); assert.equal(numero('－7'), -7);
+  assert.equal(porcentaje('−12 %'), '-12 %'); assert.equal(porcentaje('−8', { signo: true }), '-8 %'); assert.equal(cifraCorta('−1.5 M'), '-1.5 M');
+  assert.equal(temperaturaTexto('−3 °C'), '-3°'); assert.equal(numero('5–10'), 0); assert.equal(numero('1,200'), 1200);
+});

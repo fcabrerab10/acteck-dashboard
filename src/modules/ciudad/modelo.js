@@ -24,8 +24,11 @@ const COMA_DECIMAL = /^([-+(]?\s*\$?\s*\(?\s*-?\d+),(\d{1,2}\s*%?\)?)$/;
 // 4.12.95: montos abreviados («1.2M», «$1.5 M», «2.5K», «3 mil», «1.5 millones», «4 MDP», «(1,5 M)») y «MXN» al inicio
 // («MXN 5,000») se leen (antes 0: «$0» en tarjetas y cifras); la «m» minúscula sola no es millón (metros/minutos: sigue basura).
 const MULTIPLO = /(\d)\s*(k|mil|mm|mdp|m|mill[oó]n(?:es)?|mill?s?\.?)\s*(\)?)$/i;
+// 4.12.118: el signo menos tipográfico («−12» U+2212, «–5» / «—5» guiones largos, «－», como los pegan Excel, Word o una
+// hoja con formato) se lee como «-» (antes «−12» valía 0 y el porcentaje salía «—»).
+const MENOS = /[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g;
 function textoNum(s, quita) {
-  let t = s.trim().replace(UNIDAD_FINAL, '$1').replace(/^mxn\s*/i, ''); let e = 0; const m = MULTIPLO.exec(t);
+  let t = s.trim().replace(MENOS, '-').replace(UNIDAD_FINAL, '$1').replace(/^mxn\s*/i, ''); let e = 0; const m = MULTIPLO.exec(t);
   if (m && m[2] !== 'm') { e = /^(k|mil)$/i.test(m[2]) ? 3 : 6; t = t.slice(0, m.index) + m[1] + m[3]; }
   t = t.replace(/^\$\s*(?=\()/, '').replace(COMA_DECIMAL, '$1.$2'); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
   if (!c) return NaN; const n = Number(e && !/e/i.test(c) ? `${c}e${e}` : c) * (e && /e/i.test(c) ? 10 ** e : 1); return p ? (n < 0 ? NaN : -n) : n;

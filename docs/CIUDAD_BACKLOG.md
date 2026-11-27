@@ -433,6 +433,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 15:37 · v4.12.118 · `numero()` / `leeNum()` / `porcentaje()` leen el signo menos tipográfico («−12», «–5», «—3,5», «－7», como lo pegan Excel, Word o una hoja con formato; antes 0 o «—» en cifras, porcentajes y temperatura); +1 prueba (222).
 - 2026-11-27 15:16 · v4.12.117 · `enMinutos()` lee plazo y cantidad en palabras («en 15 minutos», «dentro de una hora», «faltan dos horas y media», «aprox. 20 min», «un cuarto de hora»; antes sin texto en la cuenta regresiva); +1 prueba.
 - 2026-11-27 06:16 · v4.12.116 · `enMinutos()` lee días y semanas en texto («2 días» → «en 2 d», «2 semanas» → «en 14 d»; antes «2 días» salía «en 2 min»); +1 prueba (221).
 - 2026-11-27 05:19 · v4.12.112 · `leeDias()` lee «y medio/a» («2 semanas y media» → «llega en 18 d»); +1 prueba (218).
