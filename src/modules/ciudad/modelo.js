@@ -229,14 +229,21 @@ const ACENTOS = { MERIDA: 'Mérida', JUAREZ: 'Juárez', CULIACAN: 'Culiacán', M
   // 4.12.71: más municipios con acento o eñe (antes «Tlajomulco de Zuniga», «Ciudad Guzman», «Ciudad Lopez Mateos», «Chimalhuacan»).
   ZUNIGA: 'Zúñiga', LOPEZ: 'López', GUZMAN: 'Guzmán', CHIMALHUACAN: 'Chimalhuacán', TEZIUTLAN: 'Teziutlán', ZACATLAN: 'Zacatlán', TEOTIHUACAN: 'Teotihuacán', TEPOTZOTLAN: 'Tepotzotlán', ZAPOTLAN: 'Zapotlán', ACATLAN: 'Acatlán', IXTLAN: 'Ixtlán', TIZAPAN: 'Tizapán', MIAHUATLAN: 'Miahuatlán', JALOSTOTITLAN: 'Jalostotitlán', PANUCO: 'Pánuco', GUAMUCHIL: 'Guamúchil', ANAHUAC: 'Anáhuac', VALPARAISO: 'Valparaíso', ALAMOS: 'Álamos', JIMENEZ: 'Jiménez', ZINAPECUARO: 'Zinapécuaro', ENCARNACION: 'Encarnación', CONCEPCION: 'Concepción', ASUNCION: 'Asunción', JESUS: 'Jesús', MARIA: 'María', BAHIA: 'Bahía', CIENEGA: 'Ciénega', ESTACION: 'Estación', PURISIMA: 'Purísima', GONZALEZ: 'González', HERNANDEZ: 'Hernández', PEREZ: 'Pérez', RAMIREZ: 'Ramírez', SANCHEZ: 'Sánchez', DIAZ: 'Díaz', PENON: 'Peñón' };
 const CONECTORES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'EL']);
-const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo', SN: 'San' };
+const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo', SN: 'San', PTO: 'Puerto', EDO: 'Estado' }; // 4.12.99: «PTO. VALLARTA», «EDO. DE MEXICO»
 export function nombreCiudad(ciudad) {
   // 4.12.2: «CDMX» / «Cd. de México» ya no salen «Cdmx» / «Cd de México»; sin letras («123», «-», un número) no es ciudad → ''.
   const k = norm(ciudad); if (!k || !/\p{L}/u.test(k)) return '';
   if (/^(CIUDAD|CD\.?) DE MEXICO$|^CDMX$|^D\.?F\.?$/.test(k)) return 'CDMX';
   // 4.12.83: abreviaturas del ERP completas («CD. JUAREZ» → «Ciudad Juárez», «GRAL. ESCOBEDO» → «General Escobedo»,
   // «STA. CATARINA» → «Santa Catarina», «SN PEDRO» → «San Pedro»; antes «Cd. Juárez» / «Gral. Escobedo»). Sólo para mostrar.
-  return k.replace(/^(CD|GRAL|STA|STO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i) => ABREV_CIUDAD[w.replace(/\.$/, '')] || ACENTOS[w] ||(i > 0 && CONECTORES.has(w) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase())).join(' ');
+  // 4.12.99: siglas con punto quedan en mayúsculas («S.L.P.», «N.L.», antes «S.l.p.») y la palabra con coma o punto al final
+  // conserva su acento («MERIDA, YUC.» → «Mérida, Yuc.», antes «Merida, Yuc.»; «SAN LUIS POTOSI, S.L.P.»).
+  return k.replace(/^(CD|GRAL|STA|STO|PTO|EDO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i) => {
+    const ab = ABREV_CIUDAD[w.replace(/\.$/, '')]; if (ab) return ab;
+    if (/^(\p{L}\.){2,}$/u.test(w)) return w;
+    const [, c, p] = /^(.*?)([.,;:]*)$/u.exec(w);
+    return (ACENTOS[c] || (i > 0 && CONECTORES.has(c) ? c.toLowerCase() : c.charAt(0) + c.slice(1).toLowerCase())) + p;
+  }).join(' ');
 }
 export function pinCiudad(distrito, camiones = []) {
   const nombre = nombreCiudad(distrito?.ciudad);
@@ -945,7 +952,7 @@ export function nombreSucursal(s) {
   if (/^(CIUDAD|CD\.?) DE MEXICO$|^CDMX$/.test(norm(t))) return 'CDMX';
   // 4.12.85: abreviaturas del ERP como `nombreCiudad()` («PLAZA CD. JUAREZ» → «Plaza Ciudad Juárez», «PLAZA GRAL.ESCOBEDO» →
   // «Plaza General Escobedo», «SN PEDRO» → «San Pedro»); sólo si les sigue otra palabra (un «CD» suelto al final sigue como sigla).
-  const ws = t.replace(/(^|\s)(CD|GRAL|STA|STO|SUC|AV|COL|BLVD)\.(?=\p{L})/gu, '$1$2. ').split(/(\s+|-)/);
+  const ws = t.replace(/(^|\s)(CD|GRAL|STA|STO|PTO|EDO|SUC|AV|COL|BLVD)\.(?=\p{L})/gu, '$1$2. ').split(/(\s+|-)/);
   return ws.map((w, i) => {
     const ab = ABREV_CIUDAD[w.replace(/\.$/, '')]; if (ab && /\p{L}/u.test(ws[i + 2] || '') && ws[i + 1] !== '-') return ab;
     // 4.12.88: abreviaturas de domicilio del ERP en minúscula («PCEL SUC. ZAPOPAN» → «Pcel Suc. Zapopan», «AV.», «BLVD», «COL.»,

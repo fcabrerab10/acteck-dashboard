@@ -200,6 +200,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
   - [x] (4.12.97) 2026-11-27 00:55 · `rumboBarcos()` lee la ETA con `leeNum()` («4 días», «0 d»), como `llegaBarco()` y la cadena: antes el barco se quedaba en mar abierto aunque su tarjeta dijera «llega en 4 d»; +1 prueba.
   - [x] (4.12.98) 2026-11-27 01:16 · `estatusBarco()` recupera los acentos del estatus que no está en la tabla («EN TRANSITO» → «En tránsito», «EN REVISION DE ADUANA» → «En revisión de aduana», «LLEGO A ALMACEN» → «Llegó a almacén»; antes sin acento en la tarjeta del barco) y lee «EN_TRANSITO» / «en-puerto» con espacios; +1 prueba.
+  - [x] (4.12.99) 2026-11-27 01:19 · `nombreCiudad()` completa «PTO.» / «EDO.» («Puerto Vallarta», «Estado de México»; también en `nombreSucursal()`), deja las siglas con punto en mayúsculas («S.L.P.», «N.L.», «D.F.»; antes «S.l.p.») y conserva el acento de la palabra con coma («MERIDA, YUC.» → «Mérida, Yuc.»; antes «Merida»); +1 prueba.
   - [x] (4.12.96) 2026-11-27 00:37 · `plural()` lee el número en texto con `leeNum()` («3 días», «12 pz», «1.2 K», «$1,200»); antes salía «0 días».
   - [x] (4.12.89) 2026-11-26 22:16 · `nombrePersona()`: el nombre que llega todo en mayúsculas/minúsculas pone mayúscula también tras guion o apóstrofo («ANA-MARÍA O'NEIL» → «Ana-María O'Neil»; antes «Ana-maría O'neil» en escritorio, tarjeta y globo); uno ya mixto se respeta.
   - [x] (4.12.90) 2026-11-26 22:36 · `porcentaje()` lee el negativo contable entre paréntesis («(12 %)» → «-12 %», como `numero()`; antes «—» en la capa de ventas, la cuota y los pensamientos); «()» o «(-5)» siguen «—»; +1 prueba.
@@ -419,6 +420,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 01:19 · v4.12.99 · `nombreCiudad()` lee «PTO./EDO.», siglas «S.L.P.»/«N.L.» y acentos antes de coma («Mérida, Yuc.»).
 - 2026-11-27 01:16 · v4.12.98 · `estatusBarco()` pone acentos al estatus desconocido («En tránsito», «En revisión», «Llegó a almacén») y lee guion bajo/guion como espacio.
 - 2026-11-27 00:37 · v4.12.96 · `plural()` lee números en texto con unidad, «$» y «K» («3 días» → «3 días», antes «0 días»); +1 prueba (206).
 - 2026-11-26 23:56 · v4.12.94 · `numero()` / `leeNum()` leen coma decimal («24,5» → 24.5; antes 245°, «DSO 455 días»); miles «1,200» igual; +1 prueba (204).

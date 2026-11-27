@@ -2030,6 +2030,14 @@ test('diasCedis() / diasTexto(): CEDIS sin medida de días como Inventario (4.7.
   assert.equal(m2.cedis.dias, 130); assert.equal(tarjetaDe({ tipo: 'cedis' }, m2).estado, 'ambar');
 });
 
+test('nombreCiudad(): Puerto/Estado, siglas con punto y acento antes de la coma (4.12.99)', () => {
+  assert.equal(nombreCiudad('PTO. VALLARTA'), 'Puerto Vallarta'); assert.equal(nombreCiudad('PTO VALLARTA'), 'Puerto Vallarta'); assert.equal(nombreCiudad('PTO.VALLARTA'), 'Puerto Vallarta');
+  assert.equal(nombreCiudad('EDO. DE MEXICO'), 'Estado de México');
+  assert.equal(nombreCiudad('SAN LUIS POTOSI, S.L.P.'), 'San Luis Potosí, S.L.P.'); assert.equal(nombreCiudad('STA. CATARINA N.L.'), 'Santa Catarina N.L.');
+  assert.equal(nombreCiudad('MERIDA, YUC.'), 'Mérida, Yuc.'); assert.equal(nombreCiudad('ZAPOPAN, JAL.'), 'Zapopan, Jal.'); assert.equal(nombreCiudad('LAGOS DE MORENO'), 'Lagos de Moreno');
+  assert.equal(nombreCiudad('MEXICO D.F.'), 'México D.F.'); assert.equal(nombreCiudad('D.F.'), 'CDMX');
+  assert.equal(nombreSucursal('PCEL PTO. VALLARTA'), 'Pcel Puerto Vallarta'); assert.equal(nombreSucursal('PLAZA PTO.VALLARTA'), 'Plaza Puerto Vallarta');
+});
 test('estatusBarco(): acentos y guiones en estatus desconocidos (4.12.98)', () => {
   assert.equal(estatusBarco('EN TRANSITO'), 'En tránsito'); assert.equal(estatusBarco('en_transito'), 'En tránsito');
   assert.equal(estatusBarco('EN REVISION DE ADUANA'), 'En revisión de aduana'); assert.equal(estatusBarco('LLEGO A ALMACEN'), 'Llegó a almacén');
