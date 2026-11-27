@@ -2608,3 +2608,14 @@ test('nombrePersona(): signos al inicio y siglas entre paréntesis (4.12.107)', 
   assert.equal(nombrePersona({ nombre: 'JOSÉ DE LA CRUZ' }), 'José de la Cruz');
   assert.equal(nombrePersona({ nombre: "ANA-MARÍA O'NEIL" }), "Ana-María O'Neil");
 });
+
+test('4.12.109: más unidades de conteo al final', async () => {
+  const M = await import('../src/modules/ciudad/modelo.js');
+  assert.equal(M.numero('1,500 pzs'), 1500); assert.equal(M.numero('1500 pcs'), 1500); assert.equal(M.numero('1500 pzs.'), 1500);
+  assert.equal(M.numero('12 tiendas'), 12); assert.equal(M.numero('3 sucursales'), 3); assert.equal(M.numero('1 sucursal'), 1);
+  assert.equal(M.numero('4 clientes'), 4); assert.equal(M.numero('5 cajas'), 5); assert.equal(M.numero('6 tarimas'), 6);
+  assert.equal(M.numero('8 contenedores'), 8); assert.equal(M.numero('2 personas'), 2); assert.equal(M.numero('7 SKUs'), 7);
+  assert.equal(M.numero('10 u'), 10); assert.equal(M.numero('5 días hábiles'), 5); assert.equal(M.numero('30 dias naturales'), 30);
+  assert.equal(M.piezasTexto('1,500 pzs'), '1,500 pz'); assert.equal(M.plural('3 tiendas', 'tienda'), '3 tiendas');
+  assert.equal(M.numero('tiendas'), 0); assert.equal(M.numero('pzs'), 0); assert.equal(M.numero('1.5 M'), 1500000); assert.equal(M.numero('3 mil'), 3000);
+});
