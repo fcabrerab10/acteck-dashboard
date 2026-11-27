@@ -1469,6 +1469,10 @@ test('llegaBarco(): hoy, mañana, en N d, tarde y sin ETA', () => {
   // 4.12.104: semanas = ×7
   assert.equal(llegaBarco('2 semanas'), 'llega en 14 d'); assert.equal(llegaBarco('1 sem'), 'llega en 7 d'); assert.equal(llegaBarco('-1 semana'), '7 d tarde'); assert.equal(llegaBarco('12 semanas'), 'llega en 3 meses');
   assert.equal(haceDias('1,5 semanas'), 'hace 11 d'); assert.equal(faltanDias('3 semanas'), 'en 21 d'); assert.equal(llegaBarco('semanas'), 'sin ETA');
+  // 4.12.110: meses (× 30.4) y años (× 365)
+  assert.equal(haceDias('2 meses'), 'hace 2 meses'); assert.equal(faltanDias('1 año'), 'en 1 año'); assert.equal(haceDias('1 mes'), 'hace 30 d');
+  assert.equal(faltanDias('1,5 años'), 'en 1 año'); assert.equal(haceDias('3 AÑOS'), 'hace 3 años'); assert.equal(llegaBarco('2 meses'), 'llega en 2 meses');
+  assert.equal(haceDias('meses'), ''); assert.equal(faltanDias('-1 mes'), 'hoy');
   assert.deepEqual(rumboBarcos([{ llegaEnDias: '1 semana' }, { llegaEnDias: '0 sem' }]).map((x) => x.modo), ['llegando', 'atracado']);
   assert.equal(llegaBarco(1200), 'llega en 3 años'); assert.equal(llegaBarco('1,200'), 'llega en 3 años'); assert.equal(llegaBarco(-1500), '4 años tarde'); assert.equal(llegaBarco(true), 'sin ETA');
   assert.equal(enMinutos(60 * 1200), 'en 50 d'); assert.equal(enMinutos('1,500'), 'en 1 d'); assert.equal(enMinutos(true), '');

@@ -1137,7 +1137,14 @@ const leeNum = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,]/g)
 // 4.12.104: días escritos en semanas («2 semanas», «1 sem», «1,5 semanas») = ×7 (antes «sin ETA» / vacío en el puerto, los
 // barcos, la cadena y «hace N d»); lo demás como `leeNum()`.
 const SEMANAS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(?:semanas?|sem|sems)\.?\s*$/i;
-const leeDias = (v) => { const s = typeof v === 'string' ? SEMANAS.exec(v) : null; return s ? Number(s[1].replace(',', '.')) * 7 : leeNum(v); };
+// 4.12.110: también meses (× 30.4) y años (× 365): «2 meses» → «hace 2 meses», «1 año» → «en 1 año» (antes ilegibles: sin texto).
+const MESES_ANIOS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(mes(?:es)?|años?|anios?)\.?\s*$/i;
+const leeDias = (v) => {
+  if (typeof v !== 'string') return leeNum(v);
+  const s = SEMANAS.exec(v); if (s) return Number(s[1].replace(',', '.')) * 7;
+  const m = MESES_ANIOS.exec(v); if (m) return Number(m[1].replace(',', '.')) * (m[2][0].toLowerCase() === 'm' ? 30.4 : 365);
+  return leeNum(v);
+};
 // 4.12.46: porcentaje en texto con «%» al final («12 %», «70%») se lee para los semáforos (antes ilegible: cartera roja y cuota sin tono).
 const leePct = (v) => leeNum(typeof v === 'string' ? v.replace(/\s*%\s*$/, '') : v);
 const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n) > 0 ? plural(n, 'PO') : null; };

@@ -430,6 +430,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 04:56 · v4.12.110 · `leeDias()` lee meses y años («2 meses» → «hace 2 meses», «1 año» → «en 1 año»; antes sin texto) en antigüedad, ETA y llegada del barco; +1 prueba.
 - 2026-11-27 04:36 · v4.12.109 · `numero()` lee conteos con unidad al final («1,500 pzs», «12 tiendas», «3 sucursales», «6 tarimas», «7 SKUs», «5 días hábiles»; antes 0); +1 prueba.
 - 2026-11-27 04:16 · v4.12.108 · `temperaturaTexto()` lee «24 C», «24ºC», «24 grados» y convierte «°F» a Celsius.
 - 2026-11-27 03:37 · v4.12.106 · `textoSync()`: cancelada/omitida → ⏸️ «Se canceló una actualización de datos»; en cola → «Actualizando los datos»; +1 prueba.
