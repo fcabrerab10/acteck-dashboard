@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
+  - [x] (4.12.96) 2026-11-27 00:37 · `plural()` lee el número en texto con `leeNum()` («3 días», «12 pz», «1.2 K», «$1,200»); antes salía «0 días».
   - [x] (4.12.89) 2026-11-26 22:16 · `nombrePersona()`: el nombre que llega todo en mayúsculas/minúsculas pone mayúscula también tras guion o apóstrofo («ANA-MARÍA O'NEIL» → «Ana-María O'Neil»; antes «Ana-maría O'neil» en escritorio, tarjeta y globo); uno ya mixto se respeta.
   - [x] (4.12.90) 2026-11-26 22:36 · `porcentaje()` lee el negativo contable entre paréntesis («(12 %)» → «-12 %», como `numero()`; antes «—» en la capa de ventas, la cuota y los pensamientos); «()» o «(-5)» siguen «—»; +1 prueba.
   - [x] (4.12.74) 2026-11-26 02:36 · `fechaIso()` lee fechas con el mes en letra (español o inglés, abreviado o completo, con «de»): «26 nov 2026», «26-Nov-2026», «5 de enero de 2027», «3/Ago/2026 10:30» (antes contaban como «sin fecha» en puerto, camiones y tarjetas). Mes desconocido o «31 feb 2026» siguen null.
@@ -416,6 +417,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 00:37 · v4.12.96 · `plural()` lee números en texto con unidad, «$» y «K» («3 días» → «3 días», antes «0 días»); +1 prueba (206).
 - 2026-11-26 23:56 · v4.12.94 · `numero()` / `leeNum()` leen coma decimal («24,5» → 24.5; antes 245°, «DSO 455 días»); miles «1,200» igual; +1 prueba (204).
 - 2026-11-26 23:35 · v4.12.93 · `enMinutos()` lee coma decimal, «media hora», «N h y media/cuarto/tres cuartos» y «h:mm:ss»; +aserciones (203).
 - 2026-11-26 23:16 · v4.12.92 · `enMinutos()` lee formas compactas (1h30, 1h30m, 1:30 h, 90 m); +1 prueba (203).

@@ -2514,3 +2514,9 @@ test('numero / cifraCorta: montos abreviados «1.2M», «2.5K», «3 mil», «1.
   assert.equal(numero('90 m'), 0, 'm minúscula sola no es millón'); assert.equal(numero('M'), 0); assert.equal(numero('k'), 0); assert.equal(numero('1e6'), 1000000);
   assert.equal(cifraCorta('1.2M'), '1.2 M'); assert.equal(pesosCorto('$2.5K'), '$3 K'); assert.equal(numero('1,200'), 1200, 'miles siguen');
 });
+
+test('4.12.96: plural() lee el número en texto con unidad, «$» y «K»', () => {
+  assert.equal(plural('3 días', 'día'), '3 días'); assert.equal(plural('12 pz', 'pieza'), '12 piezas'); assert.equal(plural('1.2 K', 'pedido'), '1,200 pedidos');
+  assert.equal(plural('$1,200', 'peso'), '1,200 pesos'); assert.equal(plural('1 día', 'día'), '1 día'); assert.equal(plural('abc', 'tienda'), '0 tiendas');
+  assert.equal(plural('  ', 'día'), '0 días'); assert.equal(plural('1,200', 'pedido'), '1,200 pedidos'); assert.equal(plural('-0.2', 'día'), '0 días');
+});

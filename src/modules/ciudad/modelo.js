@@ -1060,7 +1060,9 @@ export function plural(n, uno, varios) {
   // 4.7.62: palabra que no es texto o vacía → sólo el número (antes «0 undefineds» / «2 null»); `varios` ausente → uno + «s».
   const u = typeof uno === 'string' && uno.trim() ? uno : '', vs = typeof varios === 'string' && varios.trim() ? varios : u ? `${u}s` : '';
   // 4.7.55: «1,200» / « 3 » en texto se leen (antes «0 pedidos»); booleanos y basura → 0 (antes true = «1 barco»).
-  const k = typeof n === 'string' ? Math.round(Number(n.trim() ? n.replace(/[\s,]/g, '') : NaN)) : typeof n === 'number' ? Math.round(n) : NaN; const v = Number.isFinite(k) ? k + 0 : 0; // 4.7.56: + 0 quita el «-0» (-0.4 → «0 días», antes «-0 días»)
+  // 4.12.96: el texto se lee con `leeNum()` (unidad al final, «$», «K»/«mil»): «3 días» / «12 pz» / «1.2 K» → 3 / 12 / 1,200
+  // (antes «0 días» / «0 piezas»).
+  const k = typeof n === 'string' ? Math.round(leeNum(n) ?? NaN) : typeof n === 'number' ? Math.round(n) : NaN; const v = Number.isFinite(k) ? k + 0 : 0; // 4.7.56: + 0 quita el «-0» (-0.4 → «0 días», antes «-0 días»)
   const w = Math.abs(v) === 1 ? u : vs; return w ? `${v.toLocaleString('es-MX')} ${w}` : v.toLocaleString('es-MX');
 }
 // Texto con «$», comas de miles o espacios («$1,200», « 2,500 ») se lee como número; ≥ mil millones sale «1.2 B» como el
