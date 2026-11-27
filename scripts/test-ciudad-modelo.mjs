@@ -2540,6 +2540,9 @@ test('4.12.92 enMinutos(): formas compactas «1h30», «1:30 h» y «90 m»', ()
   assert.equal(enMinutos('1,5 h'), 'en 1 h 30 min'); assert.equal(enMinutos('1,5 horas'), 'en 1 h 30 min'); assert.equal(enMinutos('media hora'), 'en 30 min');
   assert.equal(enMinutos('1 hora y media'), 'en 1 h 30 min'); assert.equal(enMinutos('2 horas y cuarto'), 'en 2 h 15 min'); assert.equal(enMinutos('1 h y tres cuartos'), 'en 1 h 45 min');
   assert.equal(enMinutos('01:30:00'), 'en 1 h 30 min'); assert.equal(enMinutos('00:45:40'), 'en 46 min'); assert.equal(enMinutos('1:75:00'), ''); assert.equal(enMinutos('y media'), '');
+  assert.equal(enMinutos('en 15 minutos'), 'en 15 min'); assert.equal(enMinutos('dentro de una hora'), 'en 1 h'); assert.equal(enMinutos('faltan dos horas y media'), 'en 2 h 30 min');
+  assert.equal(enMinutos('aprox. 20 min'), 'en 20 min'); assert.equal(enMinutos('un cuarto de hora'), 'en 15 min'); assert.equal(enMinutos('tres cuartos de hora'), 'en 45 min');
+  assert.equal(enMinutos('empieza en 5 min'), 'en 5 min'); assert.equal(enMinutos('media hora'), 'en 30 min'); assert.equal(enMinutos('una'), ''); assert.equal(enMinutos('en'), '');
 });
 test('4.12.94: coma decimal en texto', async () => {
   const M = await import('../src/modules/ciudad/modelo.js');

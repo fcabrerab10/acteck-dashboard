@@ -848,7 +848,14 @@ export function llegaBarco(dias) {
 // 4.12.91: minutos de un texto: número suelto o con «min», horas («h», «hr(s)», «hora(s)», decimal con punto),
 // «1 h 30 min» y «h:mm»; ilegible → NaN.
 function minutosTexto(t) {
-  const x = t.trim().replace(/^(\d+),(\d+)(?=\s*(?:h|hrs?|horas?)\.?$)/i, '$1.$2'); let r; // 4.12.93: «1,5 h» con coma decimal
+  // 4.12.117: plazo y cantidad en palabras como `leeDias()` («en 15 minutos», «dentro de una hora», «faltan dos horas y media»,
+  // «aprox. 20 min», «un cuarto de hora», «tres cuartos de hora»); antes sin texto en la cuenta regresiva.
+  let y = t.trim().replace(/^(?:(?:empieza|inicia|sale|llega)\s+en|dentro\s+de|faltan?|en)\s+(?=\S)/i, '')
+    .replace(/^(?:~|≈|aprox(?:imadamente|\.)?|unos|unas|cerca\s+de|alrededor\s+de|como)\s*(?=[\d\p{L}])/iu, '').replace(/\s+aprox(?:imadamente|\.)?\s*$/i, '');
+  if (/^(?:un\s+)?cuarto\s+de\s+hora$/i.test(y)) return 15;
+  if (/^tres\s+cuartos\s+de\s+hora$/i.test(y)) return 45;
+  const w = /^media\s+hora$/i.test(y) ? null : NUM_PALABRA.exec(y); if (w) y = `${PALABRAS_NUM[w[1].toLowerCase()]} ${y.slice(w[0].length)}`;
+  const x = y.replace(/^(\d+),(\d+)(?=\s*(?:h|hrs?|horas?)\.?$)/i, '$1.$2'); let r; // 4.12.93: «1,5 h» con coma decimal
   // 4.12.93: en palabras («media hora», «1 hora y media», «2 h y cuarto», «1 hora y tres cuartos») y «h:mm:ss» («01:30:00»).
   const frac = { media: 30, cuarto: 15, 'tres cuartos': 45 };
   if (/^media\s+hora$/i.test(x)) return 30;
