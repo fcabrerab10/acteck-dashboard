@@ -905,6 +905,13 @@ const ESTATUS_BARCO = { 'TRANSITO MARITIMO': 'en el mar', 'PROXIMO A ZARPAR': 'p
 // 4.12.98: el estatus que no está en la tabla recupera sus acentos («EN TRANSITO» → «En tránsito», antes «En transito»)
 // y «EN_TRANSITO» / «en-puerto» se leen con espacios, como vienen de algunos ERP y Sheets.
 const ACENTOS_ESTATUS = { transito: 'tránsito', maritimo: 'marítimo', produccion: 'producción', liberacion: 'liberación', revision: 'revisión', inspeccion: 'inspección', recepcion: 'recepción', almacen: 'almacén', camion: 'camión', deposito: 'depósito', llego: 'llegó', despacho: 'despacho', documentacion: 'documentación', consolidacion: 'consolidación', fabricacion: 'fabricación' };
+// 4.12.100: contenedor que ya no viaja (no se dibuja barco ni tarima): concluido/a, cancelado/a o cerrado/a, en cualquier
+// caso, con acentos o guiones bajos, como `CONCLUIDOS` / `CANCELADOS` de `forecast/reuniones/cruce.js`. Antes sólo
+// «CONCLUIDO» / «CANCELADO» exactos: «Cancelada» o «Concluida» seguían saliendo como barco en el mar.
+export function contenedorCerrado(x) {
+  const s = unirTexto(x).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return /(^|[^A-Z])(CONCLUID[OA]S?|CANCELAD[OA]S?|CERRAD[OA]S?)([^A-Z]|$)/.test(s.replace(/_/g, ' '));
+}
 export function estatusBarco(x) {
   const s = unirTexto(x).replace(/[_]+/g, ' ').replace(/(\p{L})-(\p{L})/gu, '$1 $2').replace(/\s+/g, ' ').trim(); if (!s) return '';
   const clave = s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
@@ -1691,7 +1698,7 @@ export function construirModelo(d, hoy = new Date()) {
   // ── Puerto: contenedores en camino o llegando ──
   const barcos = []; const tarimas = [];
   for (const c of d.contenedores || []) {
-    if (/CONCLUIDO|CANCELADO/i.test(c.estatus || '')) continue;
+    if (contenedorCerrado(c.estatus)) continue;
     const arribo = fechaIso(c.arribo_cedis); const eta = fechaIso(c.eta_puerto); // fecha mala = sin fecha (antes progreso/llegada NaN)
     if (arribo && dias(hoyIso, arribo) < -3) continue; // llegó hace días: ya no se dibuja
     const inicio = fechaIso(c.etd) || fechaIso(c.fin_produccion) || fechaIso(c.fecha_emision);

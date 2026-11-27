@@ -406,6 +406,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.93) 2026-11-26 23:35 · `enMinutos()` lee coma decimal y palabras («1,5 h», «media hora», «1 hora y media», «2 horas y cuarto», «1 h y tres cuartos») y «h:mm:ss» («01:30:00»); antes '' en la misión y la burbuja de la reunión; +aserciones.
   - [x] (4.12.94) 2026-11-26 23:56 · Coma decimal en texto: `numero()` / `leeNum()` leen «24,5», «-3,2», «45,5 días», «$1,50», «12,5%» como decimales (antes «24,5» se leía 245: «245°» en el clima y «DSO 455 días»); «1,200» y «1,234,567» siguen como miles; +1 prueba.
   - [x] (4.12.95) 2026-11-27 00:17 · `numero()` / `leeNum()` / `cifraCorta()` leen montos abreviados («1.2M», «$1.5 M», «2.5K», «3 mil», «1.5 millones», «4 MDP», «4.35MM», «(1,5 M)») y «MXN» al inicio («MXN 5,000»); antes 0 («$0» en tarjetas y cifras). La «m» minúscula sola sigue sin ser millón; +1 prueba.
+  - [x] (4.12.100) 2026-11-27 01:37 · `contenedorCerrado()` pura y probada: el contenedor «Cancelada», «Concluida», «Cerrado/a» (acentos, guiones bajos, plural) ya no se dibuja como barco ni tarima, como `CONCLUIDOS`/`CANCELADOS` de `forecast/reuniones/cruce.js`; antes sólo «CONCLUIDO»/«CANCELADO» exactos.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -739,3 +740,5 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-26 04:16 · v4.12.79 · `fechaIso()` lee «UTC»/«GMT» en letra como zona horaria (día local, no el de UTC).
 - 2026-11-26 15:36 · v4.12.87 · `enMinutos()` lee «15 min» / «90 minutos» (cuenta regresiva de la reunión en misiones y burbujas); +1 prueba.
 - 2026-11-27 00:17 · v4.12.95 · Montos abreviados en texto («1.2M», «2.5K», «3 mil», «1.5 millones», «MXN 5,000») ya se leen en tarjetas y cifras (antes $0); +1 prueba.
+
+- 2026-11-27 01:37 · v4.12.100 · Contenedores «Cancelada»/«Concluida»/«Cerrado» ya no salen como barco en el mar; +1 prueba.
