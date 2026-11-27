@@ -2636,3 +2636,10 @@ test('4.12.112: leeDias() con «y medio/a»', () => {
   assert.equal(faltanDias('3 días y medio'), 'en 4 d'); assert.equal(llegaBarco('un año y medio'), 'llega en 1 año'); assert.equal(haceDias('dos meses y medio'), 'hace 3 meses');
   assert.equal(llegaBarco('y medio'), 'sin ETA'); assert.equal(llegaBarco('1 y medio'), 'sin ETA');
 });
+
+test('4.12.113: leeDias() con rangos y horas', () => {
+  assert.equal(llegaBarco('3-5 días'), 'llega en 5 d'); assert.equal(llegaBarco('15–20 dias'), 'llega en 20 d'); assert.equal(llegaBarco('3 a 5 semanas'), 'llega en 35 d');
+  assert.equal(haceDias('5-3 días'), 'hace 5 d'); assert.equal(llegaBarco('48 horas'), 'llega en 2 d'); assert.equal(llegaBarco('24 h'), 'llega mañana');
+  assert.equal(haceDias('72 hrs'), 'hace 3 d'); assert.equal(llegaBarco('1-2'), 'llega en 2 d'); assert.equal(llegaBarco('-3'), '3 d tarde');
+  assert.equal(llegaBarco('horas'), 'sin ETA'); assert.equal(llegaBarco('3 - '), 'sin ETA');
+});

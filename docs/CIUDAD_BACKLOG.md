@@ -764,3 +764,4 @@ Principios que no se rompen en ninguna etapa:
 
 - 2026-11-27 01:37 · v4.12.100 · Contenedores «Cancelada»/«Concluida»/«Cerrado» ya no salen como barco en el mar; +1 prueba.
 - 2026-11-27 03:56 · v4.12.107 · Nombres de personas con siglas entre paréntesis y apodos entre comillas salen legibles («Juan Pérez (JP)», «Ana \"La Jefa\" López»); +1 prueba.
+- 2026-11-27 05:36 · v4.12.113 · `leeDias()` lee rangos («3-5 días», «3 a 5 semanas»: toma el mayor) y horas («48 horas», «24 h»); antes «sin ETA»; +1 prueba.

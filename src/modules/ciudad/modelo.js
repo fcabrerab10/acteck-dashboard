@@ -1148,6 +1148,11 @@ const leeDias = (v) => {
   const w = NUM_PALABRA.exec(v); if (w) v = `${PALABRAS_NUM[w[1].toLowerCase()]} ${v.slice(w[0].length)}`;
   // 4.12.112: «y medio/a» al final suma media unidad («1 año y medio» = 1.5 años, «2 semanas y media» = 17.5 d).
   const y = /^\s*(\d+)\s+(\S+)\s+y\s+medi[oa]\.?\s*$/i.exec(v); if (y) v = `${Number(y[1]) + 0.5} ${y[2]}`;
+  // 4.12.113: rango «3-5 días», «15–20 dias», «3 a 5 semanas» toma el mayor (a más tardar) y horas «48 horas», «24 h», «12 hrs»
+  // valen ÷ 24 (antes «sin ETA» / sin texto en el puerto, los barcos, la cadena y la antigüedad).
+  const r = /^\s*(\d+(?:[.,]\d+)?)\s*(?:-|–|—|a|al)\s*(\d+(?:[.,]\d+)?)(?=\s*\D|\s*$)/i.exec(v);
+  if (r) v = `${Math.max(Number(r[1].replace(',', '.')), Number(r[2].replace(',', '.')))}${v.slice(r[0].length)}`;
+  const h = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(?:horas?|hrs?|h)\.?\s*$/i.exec(v); if (h) return Number(h[1].replace(',', '.')) / 24;
   const s = SEMANAS.exec(v); if (s) return Number(s[1].replace(',', '.')) * 7;
   const m = MESES_ANIOS.exec(v); if (m) return Number(m[1].replace(',', '.')) * (m[2][0].toLowerCase() === 'm' ? 30.4 : 365);
   return leeNum(v);
