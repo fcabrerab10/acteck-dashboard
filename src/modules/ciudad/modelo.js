@@ -819,10 +819,20 @@ export function llegaBarco(dias) {
   return k === 0 ? 'llega hoy' : k === 1 ? 'llega mañana' : `llega en ${m(k)} d`;
 }
 
+// 4.12.91: minutos de un texto: número suelto o con «min», horas («h», «hr(s)», «hora(s)», decimal con punto),
+// «1 h 30 min» y «h:mm»; ilegible → NaN.
+function minutosTexto(t) {
+  const x = t.trim(); let r;
+  if ((r = x.match(/^(\d+):([0-5]\d)$/))) return Number(r[1]) * 60 + Number(r[2]);
+  if ((r = x.match(/^(\d+)\s*(?:h|hrs?|horas?)\.?\s*(?:y\s*)?(\d+)\s*min(?:uto)?s?\.?$/i))) return Number(r[1]) * 60 + Number(r[2]);
+  if ((r = x.match(/^(\d+(?:\.\d+)?)\s*(?:h|hrs?|horas?)\.?$/i))) return Number(r[1]) * 60;
+  return leeNum(x.replace(/(\d)\s*min(?:uto)?s?\.?\s*$/i, '$1')) ?? NaN;
+}
 export function enMinutos(min) {
   if (min == null || (typeof min !== 'number' && typeof min !== 'string') || (typeof min === 'string' && !min.trim())) return ''; // 4.7.77: `[]` ya no «empieza ya»
   // 4.12.87: con `leeNum()` y la unidad de minutos al final («15 min», «90 minutos», «5 mins.»), como `llegaBarco()`; antes ''.
-  const k = Math.round(typeof min === 'string' ? leeNum(min.replace(/(\d)\s*min(?:uto)?s?\.?\s*$/i, '$1')) ?? NaN : min); if (!Number.isFinite(k) || k < 0) return '';
+  // 4.12.91: también horas en texto («2 h», «1.5 horas», «2 hrs», «1 h 30 min», «1:30» → 120/90/120/90/90 min); antes ''.
+  const k = Math.round(typeof min === 'string' ? minutosTexto(min) : min); if (!Number.isFinite(k) || k < 0) return '';
   if (k === 0) return 'empieza ya';
   // 4.12.63: desde 24 h en días y desde 60 días en meses/años, como `faltanDias()` («en 2 d», «en 3 meses»; antes «en 1,200 h»).
   if (k >= 1440) { const d = Math.round(k / 1440); return d < 60 ? `en ${d.toLocaleString('es-MX')} d` : faltanDias(d); }

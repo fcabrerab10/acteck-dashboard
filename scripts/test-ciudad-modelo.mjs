@@ -2466,7 +2466,8 @@ test('nombreSucursal: abreviaturas del ERP (4.12.85)', () => {
 test('4.12.87 enMinutos() lee la unidad de minutos y texto con miles', () => {
   assert.equal(enMinutos('15 min'), 'en 15 min'); assert.equal(enMinutos('90 minutos'), 'en 1 h 30 min'); assert.equal(enMinutos(' 5 mins. '), 'en 5 min');
   assert.equal(enMinutos('1 minuto'), 'en 1 min'); assert.equal(enMinutos('0 min'), 'empieza ya'); assert.equal(enMinutos('1,500'), 'en 1 d');
-  for (const x of ['min', '-3 min', 'x min', '  ', '15 h', true, false]) assert.equal(enMinutos(x), '');
+  for (const x of ['min', '-3 min', 'x min', '  ', true, false]) assert.equal(enMinutos(x), '');
+  assert.equal(enMinutos('15 h'), 'en 15 h'); // 4.12.91: las horas ya se leen
 });
 
 test('4.12.88 nombreSucursal(): abreviaturas de domicilio en minúscula', () => {
@@ -2481,4 +2482,11 @@ test('porcentaje(): negativo contable entre paréntesis (4.12.90)', () => {
   assert.equal(porcentaje('(12 %)'), '-12 %'); assert.equal(porcentaje('(3.6)'), '-4 %'); assert.equal(porcentaje(' (1,250%) '), '-1,250 %');
   assert.equal(porcentaje('(12 %)', { signo: true }), '-12 %'); assert.equal(porcentaje('()'), '—'); assert.equal(porcentaje('(-5)'), '—'); assert.equal(porcentaje('(abc)'), '—');
   assert.equal(porcentaje('12 %'), '12 %'); assert.equal(porcentaje('-0.4'), '0 %'); assert.equal(porcentaje('  '), '—');
+});
+
+test('enMinutos(): horas en texto (4.12.91)', () => {
+  assert.equal(enMinutos('2 h'), 'en 2 h'); assert.equal(enMinutos('1.5 horas'), 'en 1 h 30 min'); assert.equal(enMinutos('2 hrs.'), 'en 2 h');
+  assert.equal(enMinutos('1 hora'), 'en 1 h'); assert.equal(enMinutos('1 h 30 min'), 'en 1 h 30 min'); assert.equal(enMinutos('1 hora y 5 minutos'), 'en 1 h 5 min');
+  assert.equal(enMinutos('1:30'), 'en 1 h 30 min'); assert.equal(enMinutos('0:00'), 'empieza ya'); assert.equal(enMinutos('1:75'), ''); assert.equal(enMinutos('h'), '');
+  assert.equal(enMinutos('15 min'), 'en 15 min'); assert.equal(enMinutos('1,500'), 'en 1 d'); assert.equal(enMinutos('48 h'), 'en 2 d');
 });
