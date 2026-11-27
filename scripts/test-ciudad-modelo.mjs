@@ -2594,3 +2594,12 @@ test('nombreCiudad / nombreSucursal: más municipios con acento (4.12.105)', () 
     ['EBANO', 'Ébano'], ['IZUCAR DE MATAMOROS', 'Izúcar de Matamoros'], ['ESCARCEGA', 'Escárcega'], ['EL MARQUÉS', 'El Marqués']]) assert.equal(nombreCiudad(s), r);
   assert.equal(nombreSucursal('PLAZA PASEO CHAMPOTON'), 'Plaza Paseo Champotón');
 });
+
+test('nombrePersona(): signos al inicio y siglas entre paréntesis (4.12.107)', () => {
+  assert.equal(nombrePersona({ nombre: 'JUAN PÉREZ (JP)' }), 'Juan Pérez (JP)');
+  assert.equal(nombrePersona({ nombre: 'ANA "LA JEFA" LÓPEZ' }), 'Ana "La Jefa" López');
+  assert.equal(nombrePersona({ nombre: 'luis.garcía' }), 'Luis.García');
+  assert.equal(nombrePersona({ nombre: 'MARÍA (VENTAS)' }), 'María (Ventas)');
+  assert.equal(nombrePersona({ nombre: 'JOSÉ DE LA CRUZ' }), 'José de la Cruz');
+  assert.equal(nombrePersona({ nombre: "ANA-MARÍA O'NEIL" }), "Ana-María O'Neil");
+});

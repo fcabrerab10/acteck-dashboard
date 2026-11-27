@@ -947,8 +947,14 @@ export function nombrePersona(p) {
   const n = unirTexto(p?.nombre).replace(/\s+/g, ' ');
   if (n && /\p{L}/u.test(n) && (!/\p{Ll}/u.test(n) || !/\p{Lu}/u.test(n))) {
     // 4.12.89: también tras guion o apóstrofo («ANA-MARÍA O'NEIL» → «Ana-María O'Neil»; antes «Ana-maría O'neil»).
-    return n.split(' ').map((w, i) => (i > 0 && CONECTORES.has(norm(w)) ? w.toLocaleLowerCase('es-MX')
-      : w.toLocaleLowerCase('es-MX').replace(/(^|[-'’])(\p{L})/gu, (_, s, l) => s + l.toLocaleUpperCase('es-MX')))).join(' ');
+    // 4.12.107: signos al inicio («(», comillas, ««») se apartan como en `nombreCiudad()`: «(JP)» → «(JP)» (sigla sin vocal),
+    // «"LA JEFA"» → «"La Jefa"» y «luis.garcía» → «Luis.García» (antes «(jp)», «"la Jefa"», «Luis.garcía»).
+    return n.split(' ').map((w, i) => {
+      const [, a, c, p] = /^([("«'“¿¡[]*)(.*?)([.,;:)"»'”\]]*)$/u.exec(w);
+      if (a.includes('(') && /^\p{Lu}{2,4}$/u.test(c) && !/[AEIOUÁÉÍÓÚ]/u.test(c)) return w;
+      return a + (i > 0 && !a && CONECTORES.has(norm(c)) ? c.toLocaleLowerCase('es-MX')
+        : c.toLocaleLowerCase('es-MX').replace(/(^|[-'’./])(\p{L})/gu, (_, s, l) => s + l.toLocaleUpperCase('es-MX'))) + p;
+    }).join(' ');
   }
   if (n) return n;
   const e = unirTexto(p?.email).split('@')[0].split(/[._\-+\s]+/).filter((w) => /\p{L}/u.test(w))
