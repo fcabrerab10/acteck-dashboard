@@ -822,7 +822,12 @@ export function llegaBarco(dias) {
 // 4.12.91: minutos de un texto: número suelto o con «min», horas («h», «hr(s)», «hora(s)», decimal con punto),
 // «1 h 30 min» y «h:mm»; ilegible → NaN.
 function minutosTexto(t) {
-  const x = t.trim(); let r;
+  const x = t.trim().replace(/^(\d+),(\d+)(?=\s*(?:h|hrs?|horas?)\.?$)/i, '$1.$2'); let r; // 4.12.93: «1,5 h» con coma decimal
+  // 4.12.93: en palabras («media hora», «1 hora y media», «2 h y cuarto», «1 hora y tres cuartos») y «h:mm:ss» («01:30:00»).
+  const frac = { media: 30, cuarto: 15, 'tres cuartos': 45 };
+  if (/^media\s+hora$/i.test(x)) return 30;
+  if ((r = x.match(/^(\d+)\s*(?:h|hrs?|horas?)\.?\s+y\s+(media|cuarto|tres\s+cuartos)$/i))) return Number(r[1]) * 60 + frac[r[2].toLowerCase().replace(/\s+/g, ' ')];
+  if ((r = x.match(/^(\d+):([0-5]\d):([0-5]\d)$/))) return Number(r[1]) * 60 + Number(r[2]) + Number(r[3]) / 60;
   // 4.12.92: formas compactas «1h30», «1h30m», «1:30 h» / «1:30 hrs» y la «m» sola de minutos («90 m», «90m»).
   if ((r = x.match(/^(\d+):([0-5]\d)(?:\s*(?:h|hrs?|horas?)\.?)?$/i))) return Number(r[1]) * 60 + Number(r[2]);
   if ((r = x.match(/^(\d+)\s*(?:h|hrs?|horas?)\.?\s*(?:y\s*)?([0-5]?\d)\s*(?:m|min(?:uto)?s?)?\.?$/i))) return Number(r[1]) * 60 + Number(r[2]);

@@ -2495,4 +2495,7 @@ test('4.12.92 enMinutos(): formas compactas «1h30», «1:30 h» y «90 m»', ()
   assert.equal(enMinutos('1h30'), 'en 1 h 30 min'); assert.equal(enMinutos('1h30m'), 'en 1 h 30 min'); assert.equal(enMinutos('2 h 5 m'), 'en 2 h 5 min');
   assert.equal(enMinutos('1:30 h'), 'en 1 h 30 min'); assert.equal(enMinutos('1:30 hrs'), 'en 1 h 30 min'); assert.equal(enMinutos('90 m'), 'en 1 h 30 min');
   assert.equal(enMinutos('45m'), 'en 45 min'); assert.equal(enMinutos('1h75'), ''); assert.equal(enMinutos('m'), ''); assert.equal(enMinutos('1 h 30 min'), 'en 1 h 30 min');
+  assert.equal(enMinutos('1,5 h'), 'en 1 h 30 min'); assert.equal(enMinutos('1,5 horas'), 'en 1 h 30 min'); assert.equal(enMinutos('media hora'), 'en 30 min');
+  assert.equal(enMinutos('1 hora y media'), 'en 1 h 30 min'); assert.equal(enMinutos('2 horas y cuarto'), 'en 2 h 15 min'); assert.equal(enMinutos('1 h y tres cuartos'), 'en 1 h 45 min');
+  assert.equal(enMinutos('01:30:00'), 'en 1 h 30 min'); assert.equal(enMinutos('00:45:40'), 'en 46 min'); assert.equal(enMinutos('1:75:00'), ''); assert.equal(enMinutos('y media'), '');
 });

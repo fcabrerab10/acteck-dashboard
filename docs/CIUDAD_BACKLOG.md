@@ -399,6 +399,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.86) 2026-11-26 15:17 · `fechaHoy()`: «hoy» 'AAAA-MM-DD' imposible ('2026-02-30', mes 13) cae en ahora (antes se recorría al 2 de marzo) y el texto sin hora que entiende `fechaIso()` («26/11/2026», «26 nov 2026», «20261126») va a mediodía local de ese día (antes «26/11/2026» caía en ahora y «26 nov» a medianoche); con hora se respeta.
   - [x] (4.12.91) 2026-11-26 22:56 · `enMinutos()` lee horas en texto («2 h», «1.5 horas», «2 hrs», «1 h 30 min», «1:30»; antes '' en la misión y la burbuja de la reunión); +1 prueba.
   - [x] (4.12.92) 2026-11-26 23:16 · `enMinutos()` lee formas compactas («1h30», «1h30m», «2 h 5 m», «1:30 h» / «1:30 hrs», «90 m»; antes '' en la misión y la burbuja de la reunión); «1h75» sigue ''; +1 prueba.
+  - [x] (4.12.93) 2026-11-26 23:35 · `enMinutos()` lee coma decimal y palabras («1,5 h», «media hora», «1 hora y media», «2 horas y cuarto», «1 h y tres cuartos») y «h:mm:ss» («01:30:00»); antes '' en la misión y la burbuja de la reunión; +aserciones.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -413,6 +414,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 23:35 · v4.12.93 · `enMinutos()` lee coma decimal, «media hora», «N h y media/cuarto/tres cuartos» y «h:mm:ss»; +aserciones (203).
 - 2026-11-26 23:16 · v4.12.92 · `enMinutos()` lee formas compactas (1h30, 1h30m, 1:30 h, 90 m); +1 prueba (203).
 - 2026-11-26 22:56 · v4.12.91 · `enMinutos()` lee horas en texto (h, hrs, horas, «1 h 30 min», «h:mm»); +1 prueba (202).
 - 2026-11-26 22:36 · v4.12.90 · `porcentaje()` lee el negativo contable entre paréntesis («(12 %)» → «-12 %», como `numero()`; antes «—» en la capa de ventas, la cuota y los pensamientos); «()» o «(-5)» siguen «—»; +1 prueba.
