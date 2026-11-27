@@ -2490,3 +2490,9 @@ test('enMinutos(): horas en texto (4.12.91)', () => {
   assert.equal(enMinutos('1:30'), 'en 1 h 30 min'); assert.equal(enMinutos('0:00'), 'empieza ya'); assert.equal(enMinutos('1:75'), ''); assert.equal(enMinutos('h'), '');
   assert.equal(enMinutos('15 min'), 'en 15 min'); assert.equal(enMinutos('1,500'), 'en 1 d'); assert.equal(enMinutos('48 h'), 'en 2 d');
 });
+
+test('4.12.92 enMinutos(): formas compactas «1h30», «1:30 h» y «90 m»', () => {
+  assert.equal(enMinutos('1h30'), 'en 1 h 30 min'); assert.equal(enMinutos('1h30m'), 'en 1 h 30 min'); assert.equal(enMinutos('2 h 5 m'), 'en 2 h 5 min');
+  assert.equal(enMinutos('1:30 h'), 'en 1 h 30 min'); assert.equal(enMinutos('1:30 hrs'), 'en 1 h 30 min'); assert.equal(enMinutos('90 m'), 'en 1 h 30 min');
+  assert.equal(enMinutos('45m'), 'en 45 min'); assert.equal(enMinutos('1h75'), ''); assert.equal(enMinutos('m'), ''); assert.equal(enMinutos('1 h 30 min'), 'en 1 h 30 min');
+});

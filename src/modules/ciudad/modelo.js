@@ -823,10 +823,11 @@ export function llegaBarco(dias) {
 // «1 h 30 min» y «h:mm»; ilegible → NaN.
 function minutosTexto(t) {
   const x = t.trim(); let r;
-  if ((r = x.match(/^(\d+):([0-5]\d)$/))) return Number(r[1]) * 60 + Number(r[2]);
-  if ((r = x.match(/^(\d+)\s*(?:h|hrs?|horas?)\.?\s*(?:y\s*)?(\d+)\s*min(?:uto)?s?\.?$/i))) return Number(r[1]) * 60 + Number(r[2]);
+  // 4.12.92: formas compactas «1h30», «1h30m», «1:30 h» / «1:30 hrs» y la «m» sola de minutos («90 m», «90m»).
+  if ((r = x.match(/^(\d+):([0-5]\d)(?:\s*(?:h|hrs?|horas?)\.?)?$/i))) return Number(r[1]) * 60 + Number(r[2]);
+  if ((r = x.match(/^(\d+)\s*(?:h|hrs?|horas?)\.?\s*(?:y\s*)?([0-5]?\d)\s*(?:m|min(?:uto)?s?)?\.?$/i))) return Number(r[1]) * 60 + Number(r[2]);
   if ((r = x.match(/^(\d+(?:\.\d+)?)\s*(?:h|hrs?|horas?)\.?$/i))) return Number(r[1]) * 60;
-  return leeNum(x.replace(/(\d)\s*min(?:uto)?s?\.?\s*$/i, '$1')) ?? NaN;
+  return leeNum(x.replace(/(\d)\s*(?:m|min(?:uto)?s?)\.?\s*$/i, '$1')) ?? NaN;
 }
 export function enMinutos(min) {
   if (min == null || (typeof min !== 'number' && typeof min !== 'string') || (typeof min === 'string' && !min.trim())) return ''; // 4.7.77: `[]` ya no «empieza ya»
