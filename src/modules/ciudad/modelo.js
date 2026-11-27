@@ -417,7 +417,8 @@ export function repartoPorEstado(cuenta, filas = [], op) {
 // el más atrasado atraca y descarga (`muelle` 0), los demás esperan en fila (`muelle` 1, 2…); llega en ≤ 7 días → se
 // acerca (`avance` = 1 − días/8); más lejos o sin ETA → mar abierto (`avance` ≤ .6, con el progreso de sus fechas).
 // (4.3.10) ETA en texto («3») cuenta igual; vacía o basura («», «abc», NaN) = sin ETA (antes «» se tomaba como 0 y atracaba).
-const etaDias = (v) => (v == null || (typeof v === 'string' && !v.trim()) ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
+// 4.12.97: con `leeNum()` como `llegaBarco()` y la cadena: «3 días», «5 d», «(2)» cuentan (antes mar abierto aunque la tarjeta dijera «llega en 3 d»).
+const etaDias = (v) => leeNum(v);
 export function rumboBarcos(barcos = []) {
   barcos = Array.isArray(barcos) ? barcos : [];
   const enPuerto = barcos.map((b, i) => ({ b, i, d: etaDias(b?.llegaEnDias) })).filter(({ b, d }) => !b?.arribo && d != null && d <= 0).sort((a, c) => a.d - c.d || a.i - c.i);

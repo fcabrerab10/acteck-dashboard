@@ -710,6 +710,8 @@ test('barcos por ETA real: atracado, en fila, llegando, mar abierto', () => {
   const t = rumboBarcos([{ llegaEnDias: '' }, { llegaEnDias: 'abc', progreso: .2 }, { llegaEnDias: '-1' }, { llegaEnDias: ' 4 ' }, { llegaEnDias: NaN }, null]);
   assert.deepEqual(t.map((x) => x.modo), ['navegando', 'navegando', 'atracado', 'llegando', 'navegando', 'navegando']);
   assert.equal(t[1].avance, .2); assert.equal(t[3].avance, .5); assert.deepEqual(rumboBarcos({ a: 1 }), []);
+  // 4.12.97: ETA con unidad, como llegaBarco()
+  assert.deepEqual(rumboBarcos([{ llegaEnDias: '4 días' }, { llegaEnDias: '0 d' }, { llegaEnDias: '20 días' }, { llegaEnDias: true }]).map((x) => x.modo), ['llegando', 'atracado', 'navegando', 'navegando']);
 });
 
 test('cuentas sin sucursal repartidas por estado', () => {
