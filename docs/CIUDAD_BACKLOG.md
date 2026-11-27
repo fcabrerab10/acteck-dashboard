@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
+  - [x] (4.12.116) 2026-11-27 06:16 · `enMinutos()` entiende «2 días», «1 d», «2 semanas», «1 sem.» (antes «2 días» → «en 2 min» en misiones y burbujas de reunión).
   - [x] (4.12.111) 2026-11-27 05:16 · `leeDias()` lee cantidades en palabras al inicio («una semana», «un mes», «medio año», «dos semanas», «tres días», hasta «doce»); antes «sin ETA» / sin texto en el puerto, los barcos, la cadena y la antigüedad; +1 prueba.
   - [x] (4.12.112) 2026-11-27 05:19 · `leeDias()` suma media unidad con «y medio/a» al final («1 año y medio», «2 semanas y media» = 18 d, «dos meses y medio»); antes «sin ETA»; +1 prueba.
   - [x] (4.12.109) 2026-11-27 04:36 · `numero()` / `leeNum()` ignoran más unidades de conteo al final («1,500 pzs», «1500 pcs», «12 tiendas», «3 sucursales», «4 clientes», «6 tarimas», «8 contenedores», «7 SKUs», «10 u», «5 días hábiles»); antes 0 («0 pz» en tarjetas y racks); +1 prueba.
@@ -432,6 +433,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 06:16 · v4.12.116 · `enMinutos()` lee días y semanas en texto («2 días» → «en 2 d», «2 semanas» → «en 14 d»; antes «2 días» salía «en 2 min»); +1 prueba (221).
 - 2026-11-27 05:19 · v4.12.112 · `leeDias()` lee «y medio/a» («2 semanas y media» → «llega en 18 d»); +1 prueba (218).
 - 2026-11-27 05:16 · v4.12.111 · `leeDias()` lee «una semana», «un mes», «medio año», «dos semanas» (antes «sin ETA»); +1 prueba (217).
 - 2026-11-27 04:56 · v4.12.110 · `leeDias()` lee meses y años («2 meses» → «hace 2 meses», «1 año» → «en 1 año»; antes sin texto) en antigüedad, ETA y llegada del barco; +1 prueba.

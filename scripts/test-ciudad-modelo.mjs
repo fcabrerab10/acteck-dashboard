@@ -1449,6 +1449,7 @@ test('cadenaSuministro() en singular: «1 pz», «1 recién llegado», «1 barco
 test('enMinutos(): «empieza ya» en 0, minutos y horas; ilegible o negativa vacía; misión y burbuja de reunión', () => {
   assert.equal(enMinutos(0), 'empieza ya'); assert.equal(enMinutos(5), 'en 5 min'); assert.equal(enMinutos('12'), 'en 12 min');
   assert.equal(enMinutos(60), 'en 1 h'); assert.equal(enMinutos(65), 'en 1 h 5 min'); assert.equal(enMinutos(0.4), 'empieza ya');
+  assert.equal(enMinutos('2 días'), 'en 2 d'); assert.equal(enMinutos('1 d'), 'en 1 d'); assert.equal(enMinutos('1.5 dias'), 'en 2 d'); assert.equal(enMinutos('2 semanas'), 'en 14 d'); assert.equal(enMinutos('1 sem.'), 'en 7 d'); assert.equal(enMinutos('3 dientes'), '');
   assert.equal(enMinutos(-3), ''); assert.equal(enMinutos('x'), ''); assert.equal(enMinutos(null), ''); assert.equal(enMinutos(Infinity), '');
   const hoy = new Date(2026, 9, 8, 10, 0);
   const m = { oficina: { agenda: [{ hora: '10:00', titulo: 'Junta', ini: 600, estado: 'próxima' }] } };

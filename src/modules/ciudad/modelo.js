@@ -858,6 +858,9 @@ function minutosTexto(t) {
   if ((r = x.match(/^(\d+):([0-5]\d)(?:\s*(?:h|hrs?|horas?)\.?)?$/i))) return Number(r[1]) * 60 + Number(r[2]);
   if ((r = x.match(/^(\d+)\s*(?:h|hrs?|horas?)\.?\s*(?:y\s*)?([0-5]?\d)\s*(?:m|min(?:uto)?s?)?\.?$/i))) return Number(r[1]) * 60 + Number(r[2]);
   if ((r = x.match(/^(\d+(?:\.\d+)?)\s*(?:h|hrs?|horas?)\.?$/i))) return Number(r[1]) * 60;
+  // 4.12.116: días y semanas en texto («2 días», «1 d», «1.5 dias», «2 semanas», «1 sem.»); antes «2 días» se leía como 2 min.
+  if ((r = x.match(/^(\d+(?:\.\d+)?)\s*(?:d|d[ií]as?)\.?$/i))) return Number(r[1]) * 1440;
+  if ((r = x.match(/^(\d+(?:\.\d+)?)\s*(?:sem|semanas?)\.?$/i))) return Number(r[1]) * 10080;
   return leeNum(x.replace(/(\d)\s*(?:m|min(?:uto)?s?)\.?\s*$/i, '$1')) ?? NaN;
 }
 export function enMinutos(min) {
