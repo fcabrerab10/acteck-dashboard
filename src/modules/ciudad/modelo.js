@@ -16,8 +16,11 @@ import { estadoCobertura, PERFILES } from '../../lib/cobertura.js';
 // 4.12.82: una unidad al final tras el número («3 días», «45 d», «1 200 pz», «24 °C», «$5,000 MXN») se ignora (antes 0 o
 // vacío: DSO, temperatura, piezas y ETA en texto no salían); la unidad sola («días», «pz») sigue siendo basura.
 const UNIDAD_FINAL = /(\d|\))\s*(?:piezas?|pzas?|pz|d[ií]as?|d|°\s*c?|grados?|mxn|pesos?|unidades?|uds?)\.?$/i;
+// 4.12.94: coma decimal de Sheets/Excel en español («24,5», «-3,2», «45,5 días», «$1,50»): una sola coma con 1–2 dígitos
+// detrás y sin puntos es decimal (antes «24,5» se leía 245: «245°», «DSO 455 días»); «1,200» / «1,234,567» siguen siendo miles.
+const COMA_DECIMAL = /^([-+(]?\s*\$?\s*\(?\s*-?\d+),(\d{1,2}\s*%?\)?)$/;
 function textoNum(s, quita) {
-  const t = s.trim().replace(UNIDAD_FINAL, '$1').replace(/^\$\s*(?=\()/, ''); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
+  const t = s.trim().replace(UNIDAD_FINAL, '$1').replace(/^\$\s*(?=\()/, '').replace(COMA_DECIMAL, '$1.$2'); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
   if (!c) return NaN; const n = Number(c); return p ? (n < 0 ? NaN : -n) : n;
 }
 export const numero = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,%]/g) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };

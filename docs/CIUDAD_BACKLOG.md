@@ -400,6 +400,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.91) 2026-11-26 22:56 · `enMinutos()` lee horas en texto («2 h», «1.5 horas», «2 hrs», «1 h 30 min», «1:30»; antes '' en la misión y la burbuja de la reunión); +1 prueba.
   - [x] (4.12.92) 2026-11-26 23:16 · `enMinutos()` lee formas compactas («1h30», «1h30m», «2 h 5 m», «1:30 h» / «1:30 hrs», «90 m»; antes '' en la misión y la burbuja de la reunión); «1h75» sigue ''; +1 prueba.
   - [x] (4.12.93) 2026-11-26 23:35 · `enMinutos()` lee coma decimal y palabras («1,5 h», «media hora», «1 hora y media», «2 horas y cuarto», «1 h y tres cuartos») y «h:mm:ss» («01:30:00»); antes '' en la misión y la burbuja de la reunión; +aserciones.
+  - [x] (4.12.94) 2026-11-26 23:56 · Coma decimal en texto: `numero()` / `leeNum()` leen «24,5», «-3,2», «45,5 días», «$1,50», «12,5%» como decimales (antes «24,5» se leía 245: «245°» en el clima y «DSO 455 días»); «1,200» y «1,234,567» siguen como miles; +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -414,6 +415,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-26 23:56 · v4.12.94 · `numero()` / `leeNum()` leen coma decimal («24,5» → 24.5; antes 245°, «DSO 455 días»); miles «1,200» igual; +1 prueba (204).
 - 2026-11-26 23:35 · v4.12.93 · `enMinutos()` lee coma decimal, «media hora», «N h y media/cuarto/tres cuartos» y «h:mm:ss»; +aserciones (203).
 - 2026-11-26 23:16 · v4.12.92 · `enMinutos()` lee formas compactas (1h30, 1h30m, 1:30 h, 90 m); +1 prueba (203).
 - 2026-11-26 22:56 · v4.12.91 · `enMinutos()` lee horas en texto (h, hrs, horas, «1 h 30 min», «h:mm»); +1 prueba (202).

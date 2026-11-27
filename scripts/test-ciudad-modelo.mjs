@@ -2499,3 +2499,10 @@ test('4.12.92 enMinutos(): formas compactas «1h30», «1:30 h» y «90 m»', ()
   assert.equal(enMinutos('1 hora y media'), 'en 1 h 30 min'); assert.equal(enMinutos('2 horas y cuarto'), 'en 2 h 15 min'); assert.equal(enMinutos('1 h y tres cuartos'), 'en 1 h 45 min');
   assert.equal(enMinutos('01:30:00'), 'en 1 h 30 min'); assert.equal(enMinutos('00:45:40'), 'en 46 min'); assert.equal(enMinutos('1:75:00'), ''); assert.equal(enMinutos('y media'), '');
 });
+test('4.12.94: coma decimal en texto', async () => {
+  const M = await import('../src/modules/ciudad/modelo.js');
+  assert.equal(M.numero('24,5'), 24.5); assert.equal(M.numero('-3,2'), -3.2); assert.equal(M.numero('$1,50'), 1.5); assert.equal(M.numero('(1,5)'), -1.5);
+  assert.equal(M.numero('12,5%'), 12.5); assert.equal(M.numero('45,5 días'), 45.5); assert.equal(M.numero('0,45'), 0.45);
+  assert.equal(M.numero('1,200'), 1200, 'miles siguen'); assert.equal(M.numero('1,234,567'), 1234567); assert.equal(M.numero('$5,000 MXN'), 5000);
+  assert.equal(M.temperaturaTexto('24,5'), '25°'); assert.equal(M.temperaturaTexto('-3,2'), '-3°'); assert.equal(M.dsoTexto('45,5'), 'DSO 46 días');
+});
