@@ -1678,6 +1678,9 @@ test('nombrePersona(): sin nombre usa el correo y sin nada dice «Persona» (ant
   assert.equal(nombrePersona({ email: 'ana2@x.com' }), 'Ana2');
   assert.equal(nombrePersona({ nombre: '  ', email: ' ' }), 'Persona');
   assert.equal(nombrePersona(null), 'Persona');
+  assert.equal(nombrePersona({ nombre: "ANA-MARÍA O'NEIL DE LA CRUZ" }), "Ana-María O'Neil de la Cruz");
+  assert.equal(nombrePersona({ nombre: 'josé-luis pérez' }), 'José-Luis Pérez');
+  assert.equal(nombrePersona({ nombre: 'Ana-maría McGregor' }), 'Ana-maría McGregor');
   // 4.12.34: todo en mayúsculas o minúsculas sale legible; mezcla se respeta.
   assert.equal(nombrePersona({ nombre: 'ANA LÓPEZ DE LA CRUZ' }), 'Ana López de la Cruz');
   assert.equal(nombrePersona({ nombre: ' juan   pérez ' }), 'Juan Pérez');

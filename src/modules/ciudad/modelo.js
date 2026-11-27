@@ -891,8 +891,9 @@ export function tituloCamion(c, promo) {
 export function nombrePersona(p) {
   const n = unirTexto(p?.nombre).replace(/\s+/g, ' ');
   if (n && /\p{L}/u.test(n) && (!/\p{Ll}/u.test(n) || !/\p{Lu}/u.test(n))) {
+    // 4.12.89: también tras guion o apóstrofo («ANA-MARÍA O'NEIL» → «Ana-María O'Neil»; antes «Ana-maría O'neil»).
     return n.split(' ').map((w, i) => (i > 0 && CONECTORES.has(norm(w)) ? w.toLocaleLowerCase('es-MX')
-      : w.charAt(0).toLocaleUpperCase('es-MX') + w.slice(1).toLocaleLowerCase('es-MX'))).join(' ');
+      : w.toLocaleLowerCase('es-MX').replace(/(^|[-'’])(\p{L})/gu, (_, s, l) => s + l.toLocaleUpperCase('es-MX')))).join(' ');
   }
   if (n) return n;
   const e = unirTexto(p?.email).split('@')[0].split(/[._\-+\s]+/).filter((w) => /\p{L}/u.test(w))
