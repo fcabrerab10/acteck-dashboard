@@ -1466,6 +1466,10 @@ test('tarjetaDe(barco): ETA en palabras (mañana, hoy, tarde)', () => {
 test('llegaBarco(): hoy, mañana, en N d, tarde y sin ETA', () => {
   assert.equal(llegaBarco(0), 'llega hoy'); assert.equal(llegaBarco(1), 'llega mañana'); assert.equal(llegaBarco(5), 'llega en 5 d'); assert.equal(llegaBarco(' 3 '), 'llega en 3 d');
   assert.equal(llegaBarco(-2), '2 d tarde'); assert.equal(llegaBarco(0.3), 'llega hoy');
+  // 4.12.104: semanas = ×7
+  assert.equal(llegaBarco('2 semanas'), 'llega en 14 d'); assert.equal(llegaBarco('1 sem'), 'llega en 7 d'); assert.equal(llegaBarco('-1 semana'), '7 d tarde'); assert.equal(llegaBarco('12 semanas'), 'llega en 3 meses');
+  assert.equal(haceDias('1,5 semanas'), 'hace 11 d'); assert.equal(faltanDias('3 semanas'), 'en 21 d'); assert.equal(llegaBarco('semanas'), 'sin ETA');
+  assert.deepEqual(rumboBarcos([{ llegaEnDias: '1 semana' }, { llegaEnDias: '0 sem' }]).map((x) => x.modo), ['llegando', 'atracado']);
   assert.equal(llegaBarco(1200), 'llega en 3 años'); assert.equal(llegaBarco('1,200'), 'llega en 3 años'); assert.equal(llegaBarco(-1500), '4 años tarde'); assert.equal(llegaBarco(true), 'sin ETA');
   assert.equal(enMinutos(60 * 1200), 'en 50 d'); assert.equal(enMinutos('1,500'), 'en 1 d'); assert.equal(enMinutos(true), '');
   assert.equal(llegaBarco(null), 'sin ETA'); assert.equal(llegaBarco(''), 'sin ETA'); assert.equal(llegaBarco('x'), 'sin ETA'); assert.equal(llegaBarco(Infinity), 'sin ETA');

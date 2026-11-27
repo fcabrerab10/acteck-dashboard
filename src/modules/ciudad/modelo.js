@@ -431,7 +431,7 @@ export function repartoPorEstado(cuenta, filas = [], op) {
 // acerca (`avance` = 1 − días/8); más lejos o sin ETA → mar abierto (`avance` ≤ .6, con el progreso de sus fechas).
 // (4.3.10) ETA en texto («3») cuenta igual; vacía o basura («», «abc», NaN) = sin ETA (antes «» se tomaba como 0 y atracaba).
 // 4.12.97: con `leeNum()` como `llegaBarco()` y la cadena: «3 días», «5 d», «(2)» cuentan (antes mar abierto aunque la tarjeta dijera «llega en 3 d»).
-const etaDias = (v) => leeNum(v);
+const etaDias = (v) => leeDias(v);
 export function rumboBarcos(barcos = []) {
   barcos = Array.isArray(barcos) ? barcos : [];
   const enPuerto = barcos.map((b, i) => ({ b, i, d: etaDias(b?.llegaEnDias) })).filter(({ b, d }) => !b?.arribo && d != null && d <= 0).sort((a, c) => a.d - c.d || a.i - c.i);
@@ -451,7 +451,7 @@ export function cadenaSuministro(m, hoyIso = m?.hoyIso) {
   if (!m) return { tramos: [], atasco: null };
   const n = numero; const pz = piezasTexto; // 4.12.49: «1,500 pz» como globos, bitácora y puerto (antes «pzs»)
   // ETA en días legible (texto «-2» cuenta; vacía, null o basura = sin ETA, sigue en el mar).
-  const eta = (b) => leeNum(b.llegaEnDias);
+  const eta = (b) => leeDias(b.llegaEnDias);
   const barcos = comoLista(m.puerto?.barcos).filter(Boolean);
   const mar = barcos.filter((b) => !(eta(b) != null && eta(b) <= 0)), enPuerto = barcos.filter((b) => eta(b) != null && eta(b) <= 0);
   const tarde = enPuerto.filter((b) => eta(b) < -3).length;
@@ -831,7 +831,7 @@ export function llegaBarco(dias) {
   if (dias == null || (typeof dias !== 'number' && typeof dias !== 'string') || (typeof dias === 'string' && !dias.trim())) return 'sin ETA';
   // 4.7.29: «1,200» en texto se lee y los días salen con miles es-MX («llega en 1,200 d», «1,200 d tarde»).
   // 4.12.82: con `leeNum()` también «3 días» / «5 d» (antes «sin ETA»).
-  const k = Math.round(typeof dias === 'string' ? leeNum(dias) ?? NaN : dias); if (!Number.isFinite(k) || typeof dias === 'boolean') return 'sin ETA';
+  const k = Math.round(typeof dias === 'string' ? leeDias(dias) ?? NaN : dias); if (!Number.isFinite(k) || typeof dias === 'boolean') return 'sin ETA';
   const m = (n) => n.toLocaleString('es-MX');
   // 4.12.62: desde 60 días en meses y desde 365 en años, como `haceDias()` / `faltanDias()` («llega en 3 meses», «1 año tarde»;
   // antes «llega en 1,200 d» / «1,500 d tarde»).
@@ -1015,7 +1015,7 @@ export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto
 // «hace 2.6 d»); ilegible → ''. Bitácora (camiones/arribos) y tarjeta del camión.
 export function haceDias(v) {
   // 4.7.77: con `leeNum()`: texto en blanco (« ») y listas (`[]`) ya no dicen «hoy».
-  const n = leeNum(v); if (n == null) return ''; const k = Math.round(n);
+  const n = leeDias(v); if (n == null) return ''; const k = Math.round(n);
   // 4.12.59: desde 60 días en meses y desde 365 en años («hace 3 meses», «hace 1 año»; antes «hace 1,200 d»).
   if (k <= 0) return 'hoy'; if (k === 1) return 'ayer';
   if (k < 60) return `hace ${k} d`;
@@ -1025,7 +1025,7 @@ export function haceDias(v) {
 // Lo que falta para una fecha futura (4.12.61), gemelo de `haceDias()`: «hoy» (0 o pasado), «mañana», «en N d», desde 60 días
 // «en N meses» y desde 365 «en N año(s)». Antes la tarjeta del camión fechado adelante decía «en 1,200 d». Ilegible → ''.
 export function faltanDias(v) {
-  const n = leeNum(v); if (n == null) return ''; const k = Math.round(n);
+  const n = leeDias(v); if (n == null) return ''; const k = Math.round(n);
   if (k <= 0) return 'hoy'; if (k === 1) return 'mañana';
   if (k < 60) return `en ${k} d`;
   if (k < 365) return `en ${Math.min(11, Math.round(k / 30.4))} meses`;
@@ -1113,6 +1113,10 @@ export const pesosCorto = (v) => { const c = cifraCorta(v); return c[0] === '-' 
 // 4.7.34: conteos en texto con comas/espacios («1,200») se leen (antes «1,200» → sin POs) y salen con miles es-MX y `plural()`
 // («1,200 POs»; antes «1200 POs»); cobertura «1,200» en texto también (antes sin días). Basura, booleanos, ≤ 0 → nada.
 const leeNum = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,]/g) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : null; };
+// 4.12.104: días escritos en semanas («2 semanas», «1 sem», «1,5 semanas») = ×7 (antes «sin ETA» / vacío en el puerto, los
+// barcos, la cadena y «hace N d»); lo demás como `leeNum()`.
+const SEMANAS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(?:semanas?|sem|sems)\.?\s*$/i;
+const leeDias = (v) => { const s = typeof v === 'string' ? SEMANAS.exec(v) : null; return s ? Number(s[1].replace(',', '.')) * 7 : leeNum(v); };
 // 4.12.46: porcentaje en texto con «%» al final («12 %», «70%») se lee para los semáforos (antes ilegible: cartera roja y cuota sin tono).
 const leePct = (v) => leeNum(typeof v === 'string' ? v.replace(/\s*%\s*$/, '') : v);
 const posTexto = (p) => { const n = leeNum(p); return n != null && Math.round(n) > 0 ? plural(n, 'PO') : null; };

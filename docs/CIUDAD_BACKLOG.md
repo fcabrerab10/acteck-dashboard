@@ -201,6 +201,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.102) 2026-11-27 02:17 · `nombreSucursal()` / `nombreCiudad()` ponen mayúscula tras paréntesis y comillas («LIVERPOOL (PERISUR)» → «Liverpool (Perisur)», antes «(perisur)»; «(GDL)» y «(S.A. de C.V.)» siguen siglas) y la sucursal separa por «_» y «/» («Cyberpuerta_GDL»); «MERIDA,» → «Mérida,».
   - [x] (4.12.103) 2026-11-27 02:37 · `nombreCiudad()` conserva la eñe y los acentos del original («CAÑADA» → «Cañada», «LA MONTAÑA» → «La Montaña»; antes «Canada» / «Montana» porque `norm()` quita la tilde) y `nombreCiudad()` / `nombreSucursal()` acentúan plazas comunes del ERP («Galerías», «Aragón», «Malecón», «Almacén», «Satélite», «Jardín»); +2 pruebas.
   - [x] (4.12.101) 2026-11-27 01:57 · `textoSync()` reconoce más palabras del puente: «completed», «done», «finished», «terminado», «listo»… = éxito y «timeout», «timed out», «aborted» = fallo ⚠️ (antes la bitácora decía «Se actualizaron los datos · completed» o «· timeout»); +1 prueba.
+  - [x] (4.12.104) 2026-11-27 02:56 · `haceDias()` / `faltanDias()` / `llegaBarco()` y la ETA del puerto, los barcos y la cadena (`leeDias()`) leen días escritos en semanas («2 semanas» = 14 d, «1 sem», «1,5 semanas»); antes «sin ETA» o vacío; +1 prueba.
   - [x] (4.12.97) 2026-11-27 00:55 · `rumboBarcos()` lee la ETA con `leeNum()` («4 días», «0 d»), como `llegaBarco()` y la cadena: antes el barco se quedaba en mar abierto aunque su tarjeta dijera «llega en 4 d»; +1 prueba.
   - [x] (4.12.98) 2026-11-27 01:16 · `estatusBarco()` recupera los acentos del estatus que no está en la tabla («EN TRANSITO» → «En tránsito», «EN REVISION DE ADUANA» → «En revisión de aduana», «LLEGO A ALMACEN» → «Llegó a almacén»; antes sin acento en la tarjeta del barco) y lee «EN_TRANSITO» / «en-puerto» con espacios; +1 prueba.
   - [x] (4.12.99) 2026-11-27 01:19 · `nombreCiudad()` completa «PTO.» / «EDO.» («Puerto Vallarta», «Estado de México»; también en `nombreSucursal()`), deja las siglas con punto en mayúsculas («S.L.P.», «N.L.», «D.F.»; antes «S.l.p.») y conserva el acento de la palabra con coma («MERIDA, YUC.» → «Mérida, Yuc.»; antes «Merida»); +1 prueba.
@@ -424,6 +425,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 02:56 · v4.12.104 · ETA y «hace N d» leen semanas («2 semanas» → «llega en 14 d»); +1 prueba (213).
 - 2026-11-27 02:17 · v4.12.102 · `nombreSucursal()` / `nombreCiudad()`: mayúscula tras «(» y comillas («Liverpool (Perisur)»), siglas entre paréntesis intactas, «_»/«/» separan; +1 prueba (211).
 - 2026-11-27 01:57 · v4.12.101 · `textoSync()`: sinónimos de éxito («completed», «done», «terminado») y de fallo («timeout», «aborted») en la bitácora; +1 prueba (210).
 - 2026-11-27 01:19 · v4.12.99 · `nombreCiudad()` lee «PTO./EDO.», siglas «S.L.P.»/«N.L.» y acentos antes de coma («Mérida, Yuc.»).
