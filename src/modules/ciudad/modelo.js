@@ -19,9 +19,14 @@ const UNIDAD_FINAL = /(\d|\))\s*(?:piezas?|pzas?|pz|d[ií]as?|d|°\s*c?|grados?|
 // 4.12.94: coma decimal de Sheets/Excel en español («24,5», «-3,2», «45,5 días», «$1,50»): una sola coma con 1–2 dígitos
 // detrás y sin puntos es decimal (antes «24,5» se leía 245: «245°», «DSO 455 días»); «1,200» / «1,234,567» siguen siendo miles.
 const COMA_DECIMAL = /^([-+(]?\s*\$?\s*\(?\s*-?\d+),(\d{1,2}\s*%?\)?)$/;
+// 4.12.95: montos abreviados («1.2M», «$1.5 M», «2.5K», «3 mil», «1.5 millones», «4 MDP», «(1,5 M)») y «MXN» al inicio
+// («MXN 5,000») se leen (antes 0: «$0» en tarjetas y cifras); la «m» minúscula sola no es millón (metros/minutos: sigue basura).
+const MULTIPLO = /(\d)\s*(k|mil|mm|mdp|m|mill[oó]n(?:es)?|mill?s?\.?)\s*(\)?)$/i;
 function textoNum(s, quita) {
-  const t = s.trim().replace(UNIDAD_FINAL, '$1').replace(/^\$\s*(?=\()/, '').replace(COMA_DECIMAL, '$1.$2'); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
-  if (!c) return NaN; const n = Number(c); return p ? (n < 0 ? NaN : -n) : n;
+  let t = s.trim().replace(UNIDAD_FINAL, '$1').replace(/^mxn\s*/i, ''); let e = 0; const m = MULTIPLO.exec(t);
+  if (m && m[2] !== 'm') { e = /^(k|mil)$/i.test(m[2]) ? 3 : 6; t = t.slice(0, m.index) + m[1] + m[3]; }
+  t = t.replace(/^\$\s*(?=\()/, '').replace(COMA_DECIMAL, '$1.$2'); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
+  if (!c) return NaN; const n = Number(e && !/e/i.test(c) ? `${c}e${e}` : c) * (e && /e/i.test(c) ? 10 ** e : 1); return p ? (n < 0 ? NaN : -n) : n;
 }
 export const numero = (v) => { const k = typeof v === 'string' ? textoNum(v, /[\s$,%]/g) : typeof v === 'number' ? v : NaN; return Number.isFinite(k) ? k : 0; };
 const N = numero;

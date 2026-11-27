@@ -2506,3 +2506,11 @@ test('4.12.94: coma decimal en texto', async () => {
   assert.equal(M.numero('1,200'), 1200, 'miles siguen'); assert.equal(M.numero('1,234,567'), 1234567); assert.equal(M.numero('$5,000 MXN'), 5000);
   assert.equal(M.temperaturaTexto('24,5'), '25°'); assert.equal(M.temperaturaTexto('-3,2'), '-3°'); assert.equal(M.dsoTexto('45,5'), 'DSO 46 días');
 });
+
+test('numero / cifraCorta: montos abreviados «1.2M», «2.5K», «3 mil», «1.5 millones», «MXN 5,000» (4.12.95)', () => {
+  assert.equal(numero('1.2M'), 1200000); assert.equal(numero('$1.5 M'), 1500000); assert.equal(numero('2.5K'), 2500); assert.equal(numero('-2.5k'), -2500);
+  assert.equal(numero('3 mil'), 3000); assert.equal(numero('1.5 millones'), 1500000); assert.equal(numero('1 millón'), 1000000); assert.equal(numero('4 MDP'), 4000000);
+  assert.equal(numero('4.35MM'), 4350000, 'sin error de punto flotante'); assert.equal(numero('(1,5 M)'), -1500000); assert.equal(numero('MXN 5,000'), 5000);
+  assert.equal(numero('90 m'), 0, 'm minúscula sola no es millón'); assert.equal(numero('M'), 0); assert.equal(numero('k'), 0); assert.equal(numero('1e6'), 1000000);
+  assert.equal(cifraCorta('1.2M'), '1.2 M'); assert.equal(pesosCorto('$2.5K'), '$3 K'); assert.equal(numero('1,200'), 1200, 'miles siguen');
+});
