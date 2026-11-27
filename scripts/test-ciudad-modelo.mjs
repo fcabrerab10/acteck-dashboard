@@ -2351,6 +2351,10 @@ test('(4.12.47) la bitácora dice qué fuente se actualizó', () => {
   assert.deepEqual(textoSync('warning', 'Inventario ERP'), { icono: '🔄', texto: 'Se actualizaron los datos · Inventario ERP · con avisos' });
   assert.deepEqual(textoSync('error', ' Precios ERP '), { icono: '⚠️', texto: 'Falló una actualización de datos · Precios ERP' });
   assert.equal(textoSync('success', {}).texto, 'Se actualizaron los datos');
+  // 4.12.106: cancelada / omitida no es actualización; en cola cuenta como en curso.
+  assert.deepEqual(textoSync('cancelled', 'Inventario ERP'), { icono: '⏸️', texto: 'Se canceló una actualización de datos · Inventario ERP' });
+  for (const s of ['CANCELED', ' Cancelado ', 'skipped', 'omitida', 'stopped']) assert.equal(textoSync(s).texto, 'Se canceló una actualización de datos', s);
+  for (const s of ['queued', 'En cola', 'esperando', 'PENDIENTE']) assert.equal(textoSync(s).texto, 'Actualizando los datos', s);
   const ev = bitacoraEventos({ ultimaSync: { status: 'error', fuente: 'Precios ERP', created_at: '2026-10-08T10:00:00' } }, new Date('2026-10-08T12:00:00'));
   assert.ok(comoLista(ev).some((e) => e.id === 'sync' && e.texto === 'Falló una actualización de datos · Precios ERP'));
 });

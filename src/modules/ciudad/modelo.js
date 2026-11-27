@@ -892,7 +892,10 @@ export function textoSync(status, fuente) {
   // (antes la bitácora decía «Se actualizaron los datos · completed» con la palabra cruda).
   if (['error', 'errors', 'errored', 'failed', 'fail', 'failure', 'fallo', 'falló', 'fallido', 'fallida', 'timeout', 'timed out', 'time out', 'aborted', 'abortado', 'abortada'].includes(st)) return { icono: '⚠️', texto: unirTexto('Falló una actualización de datos', f) };
   if (['warning', 'warnings', 'warn', 'aviso', 'avisos', 'partial', 'parcial'].includes(st)) return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, 'con avisos') };
-  if (['running', 'pending', 'started', 'in progress', 'en curso', 'en proceso', 'procesando'].includes(st)) return { icono: '🔄', texto: unirTexto('Actualizando los datos', f) };
+  // 4.12.106: «cancelled» / «skipped» / «cancelado» / «omitido» ya no se anuncian como actualización (antes «Se actualizaron los
+  // datos · cancelled»): ⏸️ «Se canceló una actualización de datos»; «queued» / «en cola» / «esperando» cuentan como en curso.
+  if (['cancelled', 'canceled', 'cancel', 'cancelado', 'cancelada', 'skipped', 'skip', 'omitido', 'omitida', 'stopped', 'detenido', 'detenida'].includes(st)) return { icono: '⏸️', texto: unirTexto('Se canceló una actualización de datos', f) };
+  if (['running', 'pending', 'started', 'in progress', 'en curso', 'en proceso', 'procesando', 'queued', 'waiting', 'en cola', 'esperando', 'pendiente'].includes(st)) return { icono: '🔄', texto: unirTexto('Actualizando los datos', f) };
   return { icono: '🔄', texto: unirTexto('Se actualizaron los datos', f, ['', 'success', 'succeeded', 'successful', 'ok', 'exito', 'éxito', 'exitoso', 'exitosa', 'completed', 'complete', 'completado', 'completada', 'done', 'finished', 'terminado', 'terminada', 'listo', 'lista', 'correcto', 'correcta'].includes(st) ? '' : st) };
 }
 // Fuente de la última sincronización (4.12.47): el `status_key` de `sync_events` con el título del catálogo del importador
