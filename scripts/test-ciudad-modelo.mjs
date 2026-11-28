@@ -1144,7 +1144,7 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   for (const x of [null, undefined, '', 'pendiente', '2026-13-40', '2026-02-30', 20261005, new Date('x'), {}]) assert.equal(fechaIso(x), null, String(x));
   // 4.12.70: día/mes/año como en México y Sheets
   assert.equal(fechaIso('26/11/2026'), '2026-11-26'); assert.equal(fechaIso(' 5/1/2027 10:30 '), '2027-01-05', 'sin ceros y con hora');
-  for (const x of ['31/02/2026', '12/13/2026', '26/11/2026x']) assert.equal(fechaIso(x), null, x);
+  for (const x of ['31/02/2026', '26/13/2026', '26/11/2026x']) assert.equal(fechaIso(x), null, x);
   // 4.12.73: día/mes/año con guiones o puntos
   assert.equal(fechaIso('26-11-2026'), '2026-11-26'); assert.equal(fechaIso(' 5.1.2027 08:00 '), '2027-01-05', 'puntos y hora');
   for (const x of ['26-11/2026', '31-02-2026', '26.13.2026', '26-11-2026x']) assert.equal(fechaIso(x), null, x);
@@ -1156,6 +1156,11 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   for (const x of ['26/11/26', '26-11-26', '26.11.26', '26-nov-26', '26 nov 26', '26 de noviembre de 26', ' 26/11/26 10:30 ']) assert.equal(fechaIso(x), '2026-11-26', x);
   assert.equal(fechaIso('5/1/27'), '2027-01-05', 'sin ceros');
   for (const x of ['31/02/26', '26/13/26', '26/11/262', '26/11/6', '26-11/26', '26 nov 10:30', '26 xyz 26']) assert.equal(fechaIso(x), null, x);
+  // 4.12.131: mes/día de EE. UU. con diagonal sólo si el día pasa de 12; lo ambiguo sigue día/mes
+  for (const x of ['11/26/2026', '11/26/26', ' 11/26/2026 10:30 ', '11/26/2026T10:30']) assert.equal(fechaIso(x), '2026-11-26', x);
+  assert.equal(fechaIso('1/31/27'), '2027-01-31', 'sin ceros'); assert.equal(fechaIso('5/1/2026'), '2026-01-05', 'ambigua = día/mes');
+  assert.equal(fechaIso('12/13/2026'), '2026-12-13', 'mes 12');
+  for (const x of ['2/30/2026', '13/26/2026', '11-26-2026', '11.26.2026', '0/26/2026', '11/32/2026']) assert.equal(fechaIso(x), null, x);
   // 4.12.122: «del» antes del año, coma tras el mes y mes primero en español
   for (const x of ['26 de noviembre del 2026', '26 de Noviembre, 2026', 'noviembre 26 de 2026', 'Nov 26 del 2026', ' 26 DE NOVIEMBRE DEL 2026 10:30 ']) assert.equal(fechaIso(x), '2026-11-26', x);
   for (const x of ['31 de febrero del 2026', '26 de nada del 2026', 'noviembre 26 dela 2026', '26 del noviembre 2026']) assert.equal(fechaIso(x), null, x);

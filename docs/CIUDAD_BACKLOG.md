@@ -430,6 +430,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.126) 2026-11-27 23:19 · `porcentaje()` lee «12 por ciento», «12 porciento», «12.5 pct» y «(3 por ciento)» (antes «—» en capas, tarjetas y banderín de cuota); +1 prueba (227).
   - [x] (4.12.127) 2026-11-27 23:36 · `numero()` / `leeNum()` / `cifraCorta()` leen miles con punto y coma decimal («1.200,50», «$1.234.567,89», «1.200.000», «1 200,5», como Excel en configuración europea/latina); antes «1.200,50» se leía 1.2005 y «1.200.000» valía 0. «1.200» solo sigue siendo decimal; +1 prueba (228).
   - [x] (4.12.129) 2026-11-28 00:16 · `porcentaje()` lee «12 percent», «12 per cent», «12 por cien» y «12 porc.» (reportes y CSV en inglés o abreviados; antes «—» en capas, tarjetas y banderín de cuota); +1 prueba (230).
+  - [x] (4.12.131) 2026-11-28 00:56 · `fechaIso()` lee mes/día de EE. UU. con diagonal cuando no hay duda («11/26/2026», «1/31/27 10:30», exportes de Shopify/Amazon US y Sheets en inglés; antes null: «sin fecha»); lo ambiguo («5/1/2026») sigue día/mes; +aserciones.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -444,6 +445,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-28 00:56 · v4.12.131 · Fechas «11/26/2026» (mes/día de EE. UU., sólo si el día pasa de 12) ya no salen «sin fecha».
 - 2026-11-28 00:16 · v4.12.129 · Porcentajes «12 percent» / «12 por cien» / «12 porc.» ya se leen (antes «—»); +1 prueba (230).
 - 2026-11-27 23:19 · v4.12.126 · Porcentajes en texto «12 por ciento» / «12.5 pct» ya se leen (antes «—»); +1 prueba (227).
 - 2026-11-27 23:17 · v4.12.125 · Temperatura en Kelvin («297.15 K») sale en Celsius (antes «297000°»); +1 prueba (226).

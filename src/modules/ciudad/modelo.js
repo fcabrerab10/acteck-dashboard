@@ -1578,6 +1578,9 @@ export function fechaIso(x) {
   // 4.12.73: también con guiones o puntos («26-11-2026», «5.1.2027», como algunos ERP y Excel en español); separadores mezclados siguen null.
   // 4.12.130: año de dos dígitos («26/11/26», «26-nov-26», como Excel y Sheets en México; antes null: «sin fecha») = 20AA.
   const dm = x.trim().match(/^(\d{1,2})([/.-])(\d{1,2})\2(\d{4}|\d{2})(?:[\sT].*)?$/);
+  // 4.12.131: mes/día al estilo EE. UU. con diagonal sólo cuando no hay duda («11/26/2026», «1/31/26 10:30», como exportan
+  // Shopify, Amazon US y Sheets en inglés; antes null: «sin fecha»): el segundo número pasa de 12 y el primero no. «5/1/2026» sigue siendo 5 de enero.
+  if (dm && dm[2] === '/' && +dm[1] >= 1 && +dm[1] <= 12 && +dm[3] > 12) { const s = `${anio4(dm[4])}-${dm[1].padStart(2, '0')}-${dm[3].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
   if (dm) { const s = `${anio4(dm[4])}-${dm[3].padStart(2, '0')}-${dm[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
   // 4.12.74: con el mes en letra («26 nov 2026», «26-nov-2026», «5 de enero de 2027», «26/Nov/2026 10:30», como exportan
   // algunos ERP y reportes en español; antes null: contaba como «sin fecha»). Mes desconocido o '31 feb 2026' siguen null.
