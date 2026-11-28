@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
+  - [x] (4.12.145) 2026-11-28 05:36 · `nombreCiudad()` pone coma ante la sigla de estado con puntos o espacios («ENSENADA B.C.» → «Ensenada, B.C.», «APODACA, N. L.» → «Apodaca, N.L.», «CHETUMAL Q.ROO» → «Chetumal, Q. Roo») y conoce Morelos y Sinaloa («CUERNAVACA MOR» → «Cuernavaca, Mor.», «CULIACAN SIN» → «Culiacán, Sin.»); «Santa Rosalía» con acento; +1 prueba.
   - [x] (4.12.134) 2026-11-28 01:55 · `pluralEs()` pone + s a los préstamos que terminan en c, f, g, k, p, t, v, w («racks», «tickets», «chats», «robots», «clics»; antes «rackes», «ticketes», «clices»); l, r, n, d, j, y, ch siguen + es («tráileres», «redes», «sándwiches»); +1 prueba.
   - [x] (4.12.130) 2026-11-28 00:36 · `fechaIso()` lee el año de dos dígitos («26/11/26», «26-11-26», «26-nov-26», «26 de noviembre de 26», como Excel y Sheets en México) como 20AA; antes null: «sin fecha» en puerto, camiones y tarjetas. «31/02/26» o año de 1/3 dígitos siguen null.
   - [x] (4.12.123) 2026-11-27 22:58 · `numero()` / `leeNum()` leen pesos con «M.N.» / «MN» al final («$1,200.00 M.N.», «1,200 pesos M.N.») y «MX$» / «M.N.» al inicio (antes 0: «$0» en tarjetas y cifras); «USD» sigue fuera a propósito para no sumarlo como pesos; +1 prueba.
@@ -457,6 +458,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-28 05:36 · v4.12.145 · nombreCiudad: sigla de estado con puntos sin coma (B.C., N. L., Q.ROO), Morelos y Sinaloa, «Rosalía».
 - 2026-11-28 05:16 · v4.12.144 · `nombreCiudad()`: «MEXICO D.F.» / «CIUDAD DE MEXICO, CDMX» → «CDMX»; +1 prueba.
 - 2026-11-28 04:56 · v4.12.143 · `nombreCiudad()`: coma pegada («MONTERREY,NL» → «Monterrey, N.L.»), sigla tras coma y «EDO MEX» → «Estado de México»; +1 prueba.
 - 2026-11-28 04:36 · v4.12.142 · nombreCiudad: siglas sueltas (GDL, MTY, EDOMEX, SLP, NL, QRO) y «EDO. DE MEX» → «Estado de México».

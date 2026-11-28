@@ -2101,7 +2101,7 @@ test('nombreCiudad(): México D.F. y Ciudad de México con sigla son CDMX (4.12.
 test('nombreCiudad(): Puerto/Estado, siglas con punto y acento antes de la coma (4.12.99)', () => {
   assert.equal(nombreCiudad('PTO. VALLARTA'), 'Puerto Vallarta'); assert.equal(nombreCiudad('PTO VALLARTA'), 'Puerto Vallarta'); assert.equal(nombreCiudad('PTO.VALLARTA'), 'Puerto Vallarta');
   assert.equal(nombreCiudad('EDO. DE MEXICO'), 'Estado de México');
-  assert.equal(nombreCiudad('SAN LUIS POTOSI, S.L.P.'), 'San Luis Potosí, S.L.P.'); assert.equal(nombreCiudad('STA. CATARINA N.L.'), 'Santa Catarina N.L.');
+  assert.equal(nombreCiudad('SAN LUIS POTOSI, S.L.P.'), 'San Luis Potosí, S.L.P.'); assert.equal(nombreCiudad('STA. CATARINA N.L.'), 'Santa Catarina, N.L.'); // 4.12.145: con coma, como «MONTERREY NL»
   assert.equal(nombreCiudad('MERIDA, YUC.'), 'Mérida, Yuc.'); assert.equal(nombreCiudad('ZAPOPAN, JAL.'), 'Zapopan, Jal.'); assert.equal(nombreCiudad('LAGOS DE MORENO'), 'Lagos de Moreno');
   assert.equal(nombreCiudad('MEXICO D.F.'), 'CDMX'); assert.equal(nombreCiudad('D.F.'), 'CDMX');
   assert.equal(nombreSucursal('PCEL PTO. VALLARTA'), 'Pcel Puerto Vallarta'); assert.equal(nombreSucursal('PLAZA PTO.VALLARTA'), 'Plaza Puerto Vallarta');
@@ -2794,4 +2794,10 @@ test('nombreCiudad: coma pegada, sigla tras coma y «EDO MEX» (4.12.143)', () =
     ['EDO MEX', 'Estado de México'], ['EDO. MEX.', 'Estado de México'], ['NAUCALPAN, EDO MEX', 'Naucalpan, Estado de México'], ['NAUCALPAN,EDO. MEX.', 'Naucalpan, Estado de México'],
     ['GUADALAJARA, JALISCO', 'Guadalajara, Jalisco'], ['GUADALAJARA, JAL., MEXICO', 'Guadalajara, Jal., México'], ['MEXICO, D.F.', 'CDMX'],
     ['SAN LUIS POTOSI, S.L.P.', 'San Luis Potosí, S.L.P.'], ['1,200', '']]) assert.equal(nombreCiudad(s), r, s);
+});
+test('nombreCiudad: sigla con puntos sin coma, Morelos y Sinaloa (4.12.145)', () => {
+  for (const [s, r] of [['ENSENADA B.C.', 'Ensenada, B.C.'], ['APODACA, N. L.', 'Apodaca, N.L.'], ['CHETUMAL Q.ROO', 'Chetumal, Q. Roo'],
+    ['CUERNAVACA MOR', 'Cuernavaca, Mor.'], ['CULIACAN, SIN.', 'Culiacán, Sin.'], ['STA. ROSALIA', 'Santa Rosalía'], ['LA PAZ, B. C. S.', 'La Paz, B.C.S.'],
+    ['SAN LUIS POTOSI S.L.P.', 'San Luis Potosí, S.L.P.'], ['MERIDA, YUC.', 'Mérida, Yuc.'], ['EDO DE MEX', 'Estado de México'], ['MOR', 'Mor.'],
+    ['CD. JUAREZ', 'Ciudad Juárez'], ['PTO. VALLARTA', 'Puerto Vallarta'], ['LAGOS DE MORENO', 'Lagos de Moreno']]) assert.equal(nombreCiudad(s), r, s);
 });
