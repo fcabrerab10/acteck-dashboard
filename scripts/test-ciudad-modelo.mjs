@@ -2743,3 +2743,10 @@ test('4.12.129 porcentaje() con «percent», «per cent», «por cien» y «porc
   assert.equal(porcentaje('12 porc.'), '12 %'); assert.equal(porcentaje('(3 percent)'), '-3 %'); assert.equal(porcentaje('percent'), '—');
   assert.equal(porcentaje('4 percent', { signo: true }), '+4 %'); assert.equal(porcentaje('12 por ciento'), '12 %');
 });
+
+test('4.12.135 numero() / porcentaje() / cifraCorta() con el negativo al final (SAP/ERP)', () => {
+  assert.equal(numero('1,200-'), -1200); assert.equal(numero('$1,200.50-'), -1200.5); assert.equal(numero('1.200,50-'), -1200.5);
+  assert.equal(numero('1,200 MXN-'), -1200); assert.equal(numero(' 350- '), -350); assert.equal(numero('350 -'), 0); assert.equal(numero('1,200−'), -1200);
+  assert.equal(numero('-5-'), 0); assert.equal(numero('1-2'), 0); assert.equal(numero('-'), 0); assert.equal(numero('1,200'), 1200);
+  assert.equal(porcentaje('12 %-'), '-12 %'); assert.equal(porcentaje('3-'), '-3 %'); assert.equal(cifraCorta('1,500,000-'), '-1.5 M');
+});
