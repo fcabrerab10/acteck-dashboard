@@ -1172,6 +1172,9 @@ function pluralPalabra(w) {
   else if (ult === 'z' || ult === 'Z') p = `${w.slice(0, -1)}${ult === 'z' ? 'ces' : 'CES'}`;
   else if (/[sx]$/i.test(w)) p = /[áéíóú]s$/i.test(w) || (w.match(/[aeiouáéíóú]+/gi) || []).length < 2 ? `${w}es` : w;
   else if (/[áéíóú]n$/i.test(w)) p = `${w.slice(0, -2)}${SIN_TILDE[w.slice(-2, -1)]}nes`;
+  // 4.12.134: consonante final rara en español (c, f, g, k, p, t, v, w; préstamos) → + s como pide la RAE («racks», «tickets»,
+  // «chats», «robots», «clics», «blocs»); antes «rackes» / «ticketes» / «clices». l, r, n, d, j, y, ch siguen + es.
+  else if (/[cfgkptvw]$/i.test(w)) p = `${w}s`;
   else p = `${w}es`;
   return p;
 }

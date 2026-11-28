@@ -1447,6 +1447,7 @@ test('plural(): singular con 1, plural con 0/varios y n ilegible; la cadena dice
   assert.equal(plural(1500, 'pieza'), '1,500 piezas'); assert.equal(plural(3, 'mes', 'meses'), '3 meses');
   // 4.12.121: plural en español sin `varios` (antes «2 mess», «2 camións», «2 lápizs», «2 pzs»)
   for (const [u, v] of [['mes', 'meses'], ['camión', 'camiones'], ['andén', 'andenes'], ['lápiz', 'lápices'], ['reloj', 'relojes'], ['vendedor', 'vendedores'], ['autobús', 'autobuses'], ['país', 'países'], ['lunes', 'lunes'], ['SKU', 'SKUs'], ['pz', 'pz'], ['día', 'días'], ['propuesta abierta', 'propuestas abiertas'], ['pedido de cliente detenido', 'pedidos de cliente detenidos'], ['recién llegado', 'recién llegados']]) assert.equal(pluralEs(u), v, u);
+  for (const [u, v] of [['rack', 'racks'], ['ticket', 'tickets'], ['chat', 'chats'], ['robot', 'robots'], ['clic', 'clics'], ['bloc', 'blocs'], ['tráiler', 'tráileres'], ['red', 'redes'], ['rey', 'reyes'], ['sándwich', 'sándwiches'], ['rack de piso', 'racks de piso']]) assert.equal(pluralEs(u), v, `4.12.134 ${u}`);
   assert.equal(pluralEs(null), ''); assert.equal(pluralEs('  '), ''); assert.equal(plural(2, 'mes'), '2 meses'); assert.equal(plural(1, 'camión'), '1 camión'); assert.equal(plural(3, 'reunión', 'juntas'), '3 juntas', 'varios manda');
   // 4.12.65: panel «En la ciudad»: «1 de 1 tienda activa» (antes «1 tienda activas»).
   assert.equal(plural(1, 'tienda activa', 'tiendas activas'), '1 tienda activa'); assert.equal(plural(1200, 'tienda activa', 'tiendas activas'), '1,200 tiendas activas');
