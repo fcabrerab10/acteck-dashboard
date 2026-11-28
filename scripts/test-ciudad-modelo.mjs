@@ -2698,3 +2698,8 @@ test('4.12.124 apóstrofo y guion bajo como separador de miles', () => {
   assert.equal(numero("1'234'567"), 1234567); assert.equal(numero("$1'500"), 1500); assert.equal(cifraCorta("1'200,000"), '1.2 M');
   assert.equal(numero("12'3456"), 0); assert.equal(numero("5'"), 0);
 });
+
+test('4.12.125 temperaturaTexto() pasa Kelvin a Celsius', () => {
+  assert.equal(temperaturaTexto('297.15 K'), '24°'); assert.equal(temperaturaTexto('297K'), '24°'); assert.equal(temperaturaTexto('273.15 kelvin'), '0°');
+  assert.equal(temperaturaTexto('-5 K'), ''); assert.equal(temperaturaTexto('24 °C'), '24°'); assert.equal(temperaturaTexto('75 °F'), '24°');
+});

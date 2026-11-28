@@ -424,7 +424,8 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.107) 2026-11-27 03:56 · `nombrePersona()` aparta los signos al inicio como `nombreCiudad()`: «JUAN PÉREZ (JP)» → «Juan Pérez (JP)», «ANA "LA JEFA" LÓPEZ» → «Ana "La Jefa" López», «luis.garcía» → «Luis.García» (antes «(jp)», «"la Jefa"», «Luis.garcía») en escritorio, tarjeta y globo; +1 prueba.
   - [x] (4.12.108) 2026-11-27 04:16 · `temperaturaTexto()` lee la escala en texto: «24 C», «24ºC» (º ordinal), «24 grados», «24 celsius» → «24°» y pasa Fahrenheit a Celsius («75 °F» / «75 grados F» → «24°»); antes salían vacíos en el clima de la barra.
   - [x] (4.12.120) 2026-11-27 22:16 · `leeDias()` / `haceDias()` leen días relativos («hoy», «mañana», «pasado mañana» como plazo; «ayer», «antier», «anteayer» sólo como antigüedad), quincenas («una quincena», «2 quincenas» = 15/30 d) y números en palabras hasta sesenta («quince días», «treinta días», «veinte minutos»); antes «sin ETA» / sin texto; +1 prueba.
-  - [x] (4.12.124) 2026-11-27 23:16 · `numero()` / `leeNum()` / `cifraCorta()` leen apóstrofo, comilla tipográfica y guion bajo como separador de miles («1'200,000», «1’200.50», «1_200_000», Excel en config. suiza o CSV de sistema; antes 0); sólo entre dígito y grupos de tres; +1 prueba (225). Sigue: «297 K» en `temperaturaTexto()` sale «297000°» (la K se lee como miles).
+  - [x] (4.12.124) 2026-11-27 23:16 · `numero()` / `leeNum()` / `cifraCorta()` leen apóstrofo, comilla tipográfica y guion bajo como separador de miles («1'200,000», «1’200.50», «1_200_000», Excel en config. suiza o CSV de sistema; antes 0); sólo entre dígito y grupos de tres; +1 prueba (225).
+  - [x] (4.12.125) 2026-11-27 23:17 · `temperaturaTexto()` pasa «K» / «Kelvin» a Celsius («297.15 K» → «24°», como APIs de clima sin `units=metric`; antes la K se leía como miles: «297000°»); Kelvin negativo → ''; +1 prueba (226).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -439,6 +440,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 23:17 · v4.12.125 · Temperatura en Kelvin («297.15 K») sale en Celsius (antes «297000°»); +1 prueba (226).
 - 2026-11-27 23:16 · v4.12.124 · Separador de miles con apóstrofo o guion bajo («1'200,000», «1_200_000») ya se lee (antes 0); +1 prueba (225).
 - 2026-11-27 22:58 · v4.12.123 · Montos con «M.N.» / «MN» / «MX$» (facturas) ya se leen como pesos (antes $0); +1 prueba.
 - 2026-11-27 22:56 · v4.12.122 · Fechas «26 de noviembre del 2026» y «noviembre 26 de 2026» ya se leen (antes «sin fecha»); +1 prueba (224).
