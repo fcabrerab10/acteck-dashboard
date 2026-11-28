@@ -1573,6 +1573,10 @@ export function fechaIso(x) {
   // null: «sin fecha»). Sólo si el resto es una fecha: «mar 26, 2026» sigue siendo marzo 26 (no «martes»).
   const ds = norm(x).match(/^([a-z]{3,10})\.?,?\s+(.+)$/i);
   if (ds && esDiaSemana(ds[1])) { const f = fechaIso(ds[2]); if (f) return f; }
+  // 4.12.132: día con ordinal («Nov 26th, 2026», «26th Nov 2026», «1º de enero de 2027», «1ro / 1er de enero», como
+  // exportan plataformas en inglés y oficios en español; antes null: «sin fecha»). Sólo si sin el ordinal queda una fecha.
+  const od = x.replace(/(^|[\s,/.-])(\d{1,2})\s?(?:st|nd|rd|th|ero|ro|er|o\.|\.?º|\.?°|ª)(?=[\s,/.-]|$)/i, '$1$2');
+  if (od !== x) return fechaIso(od);
   // 4.12.70: «26/11/2026» o «5/1/2026 10:30» (día/mes/año como en México y en Sheets) también se lee (antes null: la fecha
   // contaba como «sin fecha»); '31/02/2026' o mes 13 siguen siendo null.
   // 4.12.73: también con guiones o puntos («26-11-2026», «5.1.2027», como algunos ERP y Excel en español); separadores mezclados siguen null.

@@ -1188,6 +1188,9 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   for (const x of ['jue', 'jue 31 feb 2026', 'Thu, 2026', 'jue hoy', 'xyz 26 nov 2026', 'ju 26 nov 2026']) assert.equal(fechaIso(x), null, x);
   // 4.12.76: compacta AAAAMMDD (SAP y otros ERP), sólo en texto.
   assert.equal(fechaIso('20261126'), '2026-11-26'); assert.equal(fechaIso(' 20270105 10:30 '), '2027-01-05', 'con hora'); assert.equal(fechaIso('20261126T083000'), '2026-11-26', 'con T');
+  for (const x of ['Nov 26th, 2026', '26th Nov 2026', 'Thu, Nov 26th 2026', '26TH-NOV-2026', 'noviembre 26vo de 2026'.replace('vo', 'º')]) assert.equal(fechaIso(x), '2026-11-26', x);
+  for (const x of ['1º de enero de 2027', '1ro de enero de 2027', '1er de enero de 2027', '1° de enero de 2027', '1st/Jan/2027', 'Jan 1st 2027']) assert.equal(fechaIso(x), '2027-01-01', x);
+  for (const x of ['31st feb 2026', '26th', '2026th', 'nov 26th', '26xx nov 2026']) assert.equal(fechaIso(x), null, x);
   for (const x of ['20260230', '20261326', '2026112', '202611260', '18001126', '20261126x', '20261126 x', 20261126]) assert.equal(fechaIso(x), null, String(x));
   assert.equal(fechaCorta('20261126', new Date(2026, 10, 26)), '26 nov', 'tarjetas con fecha compacta');
   const m = construirModelo({ ...d,
