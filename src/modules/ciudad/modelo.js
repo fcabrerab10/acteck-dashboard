@@ -254,6 +254,8 @@ const ACENTOS = { MERIDA: 'Mérida', JUAREZ: 'Juárez', CULIACAN: 'Culiacán', M
   // 4.12.105: más municipios con acento (antes «El Marques», «Paraiso», «Moroleon», «Tizimin», «Cuatro Cienegas», «Villa de Alvarez»).
   MARQUES: 'Marqués', PARAISO: 'Paraíso', MOROLEON: 'Moroleón', TIZIMIN: 'Tizimín', TACAMBARO: 'Tacámbaro', MULEGE: 'Mulegé', COMONDU: 'Comondú', MUZQUIZ: 'Múzquiz', CIENEGAS: 'Ciénegas', CIENEGA: 'Ciénega', BALANCAN: 'Balancán', CHAMPOTON: 'Champotón', ESCARCEGA: 'Escárcega', CALKINI: 'Calkiní', HECELCHAKAN: 'Hecelchakán', UMAN: 'Umán', KANASIN: 'Kanasín', TAMUIN: 'Tamuín', EBANO: 'Ébano', NOCHISTLAN: 'Nochistlán', CUENCAME: 'Cuencamé', CANATLAN: 'Canatlán', MAPIMI: 'Mapimí', ARMERIA: 'Armería', ALVAREZ: 'Álvarez', PURUANDIRO: 'Puruándiro', YURECUARO: 'Yurécuaro', TANGANCICUARO: 'Tangancícuaro', MARAVATIO: 'Maravatío', ZACUALTIPAN: 'Zacualtipán', IZUCAR: 'Izúcar', PESQUERIA: 'Pesquería', ANAHUAC: 'Anáhuac' };
 const CONECTORES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'EL']);
+const EDO_SIGLA = Object.fromEntries(['AGS', 'CAMP', 'CHIS', 'CHIH', 'COAH', 'COL', 'DGO', 'GTO', 'GRO', 'HGO', 'JAL', 'MEX', 'MICH', 'NAY', 'OAX', 'PUE', 'QRO', 'SON', 'TAB', 'TAMPS', 'TLAX', 'VER', 'YUC', 'ZAC']
+  .map((s) => [s, `${s}.`]).concat([['NL', 'N.L.'], ['SLP', 'S.L.P.'], ['BC', 'B.C.'], ['BCS', 'B.C.S.'], ['QROO', 'Q. ROO']]));
 const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo', SN: 'San', PTO: 'Puerto', EDO: 'Estado' }; // 4.12.99: «PTO. VALLARTA», «EDO. DE MEXICO»
 export function nombreCiudad(ciudad) {
   // 4.12.2: «CDMX» / «Cd. de México» ya no salen «Cdmx» / «Cd de México»; sin letras («123», «-», un número) no es ciudad → ''.
@@ -265,7 +267,12 @@ export function nombreCiudad(ciudad) {
   // conserva su acento («MERIDA, YUC.» → «Mérida, Yuc.», antes «Merida, Yuc.»; «SAN LUIS POTOSI, S.L.P.»).
   // 4.12.103: las palabras se arman sobre el texto original en mayúsculas (con sus acentos y eñes) y sólo se buscan con `norm()`:
   // antes «CAÑADA» / «MONTAÑA» salían «Canada» / «Montana» porque `norm()` quita la tilde de la ñ.
-  const o = typeof ciudad === 'string' ? ciudad.normalize('NFC').toLocaleUpperCase('es-MX').trim() : k;
+  let o = typeof ciudad === 'string' ? ciudad.normalize('NFC').toLocaleUpperCase('es-MX').trim() : k;
+  // 4.12.139: estado abreviado al final sin coma («LEON GTO», «MONTERREY NL», «CANCUN QROO») sale como con coma
+  // («León, Gto.», «Monterrey, N.L.», «Cancún, Q. Roo»; antes «León Gto» / «Monterrey Nl»). No si lo precede un conector
+  // («EDO DE MEX» sigue «Estado de Mex») ni si la clave es sólo la sigla.
+  const ed = /^(.*\p{L})\s+(\p{L}+)\.?$/u.exec(o);
+  if (ed && EDO_SIGLA[norm(ed[2])] && !CONECTORES.has(norm(ed[1].split(/\s+/).pop()))) o = `${ed[1]}, ${EDO_SIGLA[norm(ed[2])]}`;
   return o.replace(/^(CD|GRAL|STA|STO|PTO|EDO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i) => {
     const ab = ABREV_CIUDAD[norm(w.replace(/\.$/, ''))]; if (ab) return ab;
     if (/^(\p{L}\.){2,}$/u.test(w.replace(/^[("«'“¿¡[]+|[,;:)"»'”\]]+$/gu, ''))) return w; // 4.12.102: «(S.A.» / «C.V.)» siguen siglas

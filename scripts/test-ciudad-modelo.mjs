@@ -2762,3 +2762,8 @@ test('4.12.135 numero() / porcentaje() / cifraCorta() con el negativo al final (
   assert.equal(numero('-5-'), 0); assert.equal(numero('1-2'), 0); assert.equal(numero('-'), 0); assert.equal(numero('1,200'), 1200);
   assert.equal(porcentaje('12 %-'), '-12 %'); assert.equal(porcentaje('3-'), '-3 %'); assert.equal(cifraCorta('1,500,000-'), '-1.5 M');
 });
+test('nombreCiudad: estado abreviado al final sin coma (4.12.139)', () => {
+  for (const [s, r] of [['LEON GTO', 'León, Gto.'], ['MONTERREY NL', 'Monterrey, N.L.'], ['CANCUN QROO', 'Cancún, Q. Roo'], ['QUERETARO QRO.', 'Querétaro, Qro.'],
+    ['SAN LUIS POTOSI SLP', 'San Luis Potosí, S.L.P.'], ['TIJUANA BC', 'Tijuana, B.C.'], ['CD. JUAREZ CHIH', 'Ciudad Juárez, Chih.'], ['LEON, GTO.', 'León, Gto.'],
+    ['EDO DE MEX', 'Estado de Mex'], ['GTO', 'Gto'], ['GUADALAJARA', 'Guadalajara'], ['EDO. DE MEXICO', 'Estado de México']]) assert.equal(nombreCiudad(s), r);
+});

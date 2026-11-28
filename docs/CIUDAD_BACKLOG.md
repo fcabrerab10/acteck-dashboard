@@ -807,3 +807,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-27 05:56 · v4.12.115 · `leeDias()` lee plazos con «en», «dentro de», «faltan», «llega en», «sale en» al inicio («en 5 días», «dentro de 2 semanas», «faltan 3 días»; antes «sin ETA» / sin texto en el puerto, los barcos, la cadena y la antigüedad); +1 prueba.
 - 2026-11-27 22:16 · v4.12.120 · ETAs y antigüedades en palabras («mañana», «pasado mañana», «antier», «una quincena», «quince días») ya se leen en el puerto, los barcos y la bitácora; +1 prueba.
 - 2026-11-27 23:55 · v4.12.128 · `numero()` lee «mil millones» (1e9) y la moneda tras el múltiplo («2 millones de pesos», «5 mil pesos», «1.5 M de MXN»); antes 0 en tarjetas y cifras; +1 prueba.
+- 2026-11-28 03:36 · v4.12.139 · `nombreCiudad()` lee el estado abreviado al final sin coma («LEON GTO» → «León, Gto.», «MONTERREY NL» → «Monterrey, N.L.», «CANCUN QROO» → «Cancún, Q. Roo»; antes «León Gto»); +1 prueba.
