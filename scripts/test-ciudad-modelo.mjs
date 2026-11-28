@@ -2775,5 +2775,12 @@ test('4.12.135 numero() / porcentaje() / cifraCorta() con el negativo al final (
 test('nombreCiudad: estado abreviado al final sin coma (4.12.139)', () => {
   for (const [s, r] of [['LEON GTO', 'León, Gto.'], ['MONTERREY NL', 'Monterrey, N.L.'], ['CANCUN QROO', 'Cancún, Q. Roo'], ['QUERETARO QRO.', 'Querétaro, Qro.'],
     ['SAN LUIS POTOSI SLP', 'San Luis Potosí, S.L.P.'], ['TIJUANA BC', 'Tijuana, B.C.'], ['CD. JUAREZ CHIH', 'Ciudad Juárez, Chih.'], ['LEON, GTO.', 'León, Gto.'],
-    ['EDO DE MEX', 'Estado de Mex'], ['GTO', 'Gto'], ['GUADALAJARA', 'Guadalajara'], ['EDO. DE MEXICO', 'Estado de México']]) assert.equal(nombreCiudad(s), r);
+    ['EDO DE MEX', 'Estado de México'], ['GTO', 'Gto.'], ['GUADALAJARA', 'Guadalajara'], ['EDO. DE MEXICO', 'Estado de México']]) assert.equal(nombreCiudad(s), r);
+});
+
+test('nombreCiudad: siglas de ciudad y estado sueltas, «DE MEX» (4.12.142)', () => {
+  for (const [s, r] of [['GDL', 'Guadalajara'], ['Gdl', 'Guadalajara'], ['MTY.', 'Monterrey'], ['EDOMEX', 'Estado de México'], ['SLP', 'S.L.P.'], ['NL', 'N.L.'],
+    ['QRO', 'Qro.'], ['QROO', 'Q. Roo'], ['BCS', 'B.C.S.'], ['EDO. DE MEX', 'Estado de México'], ['ESTADO DE MEX.', 'Estado de México'],
+    ['NAUCALPAN, EDO. DE MEX.', 'Naucalpan, Estado de México'], ['TOLUCA, EDO DE MEX', 'Toluca, Estado de México'], ['MEXICALI', 'Mexicali'],
+    ['GDL CENTRO', 'Gdl Centro'], ['CDMX', 'CDMX'], ['SAN LUIS POTOSI, S.L.P.', 'San Luis Potosí, S.L.P.']]) assert.equal(nombreCiudad(s), r, s);
 });

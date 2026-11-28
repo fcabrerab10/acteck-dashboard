@@ -440,6 +440,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.138) 2026-11-28 03:15 · `fechaIso()` lee año primero con el mes en letra («2026-Nov-26», «2026/nov/26», «2026 noviembre 26», «2026-NOV-26 10:30», como exportan Oracle y algunos ERP); antes null: «sin fecha». Mes desconocido o «2026-feb-31» siguen null; +aserciones.
   - [x] (4.12.140) 2026-11-28 03:55 · `fechaIso()` lee la hora pegada al año con dos puntos, como los logs de Apache/Nginx y CDN («26/Nov/2026:10:30:00 -0600»; antes null: «sin fecha»). Sólo si sigue HH:MM; «26/Nov/2026:» o «:10» siguen null; +aserciones.
   - [x] (4.12.141) 2026-11-28 04:16 · `fechaIso()` lee el número de serie de Excel / Sheets (46352 = 2026-11-26, como número o texto, con hora decimal; así llega una fecha leída sin formato de la hoja o pegada como número); antes null: «sin fecha». Sólo 2000–2099 (36526–73050): folios, importes o años sueltos siguen null; +aserciones.
+  - [x] (4.12.142) 2026-11-28 04:36 · `nombreCiudad()` muestra las siglas de ciudad sueltas con su nombre («GDL» → «Guadalajara», «MTY» → «Monterrey», «EDOMEX» → «Estado de México») y un estado suelto con su sigla («SLP» → «S.L.P.», «NL» → «N.L.», «QRO» → «Qro.»); «MEX» tras «DE» es México («EDO. DE MEX» → «Estado de México», antes «Estado de Mex»); +1 prueba (234).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -454,6 +455,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-28 04:36 · v4.12.142 · nombreCiudad: siglas sueltas (GDL, MTY, EDOMEX, SLP, NL, QRO) y «EDO. DE MEX» → «Estado de México».
 - 2026-11-28 04:16 · v4.12.141 · `fechaIso()` lee el serial de Excel/Sheets («46352» = 26 nov 2026); antes «sin fecha»; +aserciones.
 - 2026-11-28 03:55 · v4.12.140 · `fechaIso()` lee «26/Nov/2026:10:30:00 -0600» (formato de logs Apache/Nginx); antes «sin fecha»; +aserciones.
 - 2026-11-28 03:15 · v4.12.138 · `fechaIso()` lee «2026-Nov-26» (año primero con mes en letra, Oracle/ERP); antes «sin fecha»; +aserciones.
