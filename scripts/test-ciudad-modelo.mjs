@@ -2801,3 +2801,12 @@ test('nombreCiudad: sigla con puntos sin coma, Morelos y Sinaloa (4.12.145)', ()
     ['SAN LUIS POTOSI S.L.P.', 'San Luis Potosí, S.L.P.'], ['MERIDA, YUC.', 'Mérida, Yuc.'], ['EDO DE MEX', 'Estado de México'], ['MOR', 'Mor.'],
     ['CD. JUAREZ', 'Ciudad Juárez'], ['PTO. VALLARTA', 'Puerto Vallarta'], ['LAGOS DE MORENO', 'Lagos de Moreno']]) assert.equal(nombreCiudad(s), r, s);
 });
+test('nombreCiudad: estado completo al final sin coma y «GTZ» (4.12.146)', () => {
+  for (const [s, r] of [['ZAPOPAN JALISCO', 'Zapopan, Jalisco'], ['LEON GUANAJUATO', 'León, Guanajuato'], ['SAN NICOLAS NUEVO LEON', 'San Nicolás, Nuevo León'],
+    ['LA PAZ BAJA CALIFORNIA SUR', 'La Paz, Baja California Sur'], ['TIJUANA BAJA CALIFORNIA', 'Tijuana, Baja California'], ['CANCUN QUINTANA ROO', 'Cancún, Quintana Roo'],
+    ['CD VALLES SAN LUIS POTOSI', 'Ciudad Valles, San Luis Potosí'], ['TUXTLA GTZ', 'Tuxtla Gutiérrez'], ['MORELIA MICHOACAN', 'Morelia, Michoacán'],
+    // sin cambio: conector, prefijo de lugar, municipios con nombre de estado, el estado solo y la coma ya puesta
+    ['VICTORIA DE DURANGO', 'Victoria de Durango'], ['CIUDAD HIDALGO', 'Ciudad Hidalgo'], ['PUERTO MORELOS', 'Puerto Morelos'], ['DOLORES HIDALGO', 'Dolores Hidalgo'],
+    ['VICENTE GUERRERO', 'Vicente Guerrero'], ['SAN LUIS POTOSI', 'San Luis Potosí'], ['NUEVO LEON', 'Nuevo León'], ['JALISCO', 'Jalisco'], ['ZAPOPAN, JALISCO', 'Zapopan, Jalisco'],
+    ['SANTIAGO DE QUERETARO', 'Santiago de Querétaro'], ['CD. JUAREZ', 'Ciudad Juárez'], ['LEON GTO', 'León, Gto.']]) assert.equal(nombreCiudad(s), r, s);
+});

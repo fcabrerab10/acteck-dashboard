@@ -257,7 +257,9 @@ const CONECTORES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'EL']);
 const EDO_SIGLA = Object.fromEntries(['AGS', 'CAMP', 'CHIS', 'CHIH', 'COAH', 'COL', 'DGO', 'GTO', 'GRO', 'HGO', 'JAL', 'MEX', 'MICH', 'MOR', 'NAY', 'OAX', 'PUE', 'QRO', 'SIN', 'SON', 'TAB', 'TAMPS', 'TLAX', 'VER', 'YUC', 'ZAC']
   .map((s) => [s, `${s}.`]).concat([['NL', 'N.L.'], ['SLP', 'S.L.P.'], ['BC', 'B.C.'], ['BCS', 'B.C.S.'], ['QROO', 'Q. ROO']]));
 const SIGLA_CIUDAD = { GDL: 'Guadalajara', MTY: 'Monterrey', EDOMEX: 'Estado de México', ZMG: 'Zona Metropolitana de Guadalajara' };
-const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo', SN: 'San', PTO: 'Puerto', EDO: 'Estado' }; // 4.12.99: «PTO. VALLARTA», «EDO. DE MEXICO»
+const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo', SN: 'San', PTO: 'Puerto', EDO: 'Estado', GTZ: 'Gutiérrez' }; // 4.12.99: «PTO. VALLARTA», «EDO. DE MEXICO»; 4.12.146: «TUXTLA GTZ»
+const ESTADO_NOMBRE = new Set(['AGUASCALIENTES', 'BAJA CALIFORNIA', 'BAJA CALIFORNIA SUR', 'CAMPECHE', 'CHIAPAS', 'CHIHUAHUA', 'COAHUILA', 'COLIMA', 'DURANGO', 'GUANAJUATO', 'JALISCO', 'MICHOACAN', 'NAYARIT', 'NUEVO LEON', 'OAXACA', 'PUEBLA', 'QUERETARO', 'QUINTANA ROO', 'SAN LUIS POTOSI', 'SINALOA', 'SONORA', 'TABASCO', 'TAMAULIPAS', 'TLAXCALA', 'VERACRUZ', 'YUCATAN', 'ZACATECAS']);
+const PREFIJO_LUGAR = new Set(['CIUDAD', 'CD', 'VILLA', 'PUERTO', 'PTO', 'HEROICA', 'NUEVO', 'NUEVA', 'SAN', 'SANTA', 'SN', 'STA']);
 export function nombreCiudad(ciudad) {
   // 4.12.2: «CDMX» / «Cd. de México» ya no salen «Cdmx» / «Cd de México»; sin letras («123», «-», un número) no es ciudad → ''.
   const k = norm(ciudad); if (!k || !/\p{L}/u.test(k)) return '';
@@ -286,6 +288,17 @@ export function nombreCiudad(ciudad) {
   const ed = /^(.*\p{L})(?:\s*,\s*|\s+)((?:\p{L}{1,4}\.\s?){1,3}\p{L}*\.?|\p{L}+\.?)$/u.exec(o);
   const edK = ed ? norm(ed[2]).replace(/[.\s]/g, '') : '';
   if (ed && EDO_SIGLA[edK] && !CONECTORES.has(norm(ed[1].split(/\s+/).pop()))) o = `${ed[1]}, ${EDO_SIGLA[edK]}`;
+  // 4.12.146: estado escrito completo al final sin coma («ZAPOPAN JALISCO» → «Zapopan, Jalisco», «SAN NICOLAS NUEVO LEON» →
+  // «San Nicolás, Nuevo León»; antes «Zapopan Jalisco»). No tras conector («VICTORIA DE DURANGO»), ni tras «Ciudad/Villa/Puerto»
+  // («CIUDAD OBREGON», «PUERTO MORELOS»), ni Hidalgo/Guerrero/Morelos/México, que también son nombres de municipios.
+  else {
+    const ws = o.split(/\s+/);
+    for (const n of [3, 2, 1]) {
+      if (ws.length <= n) continue;
+      const antes = ws[ws.length - n - 1], ak = norm(antes).replace(/\.$/, '');
+      if (ESTADO_NOMBRE.has(norm(ws.slice(-n).join(' '))) && /\p{L}\.?$/u.test(antes) && !CONECTORES.has(ak) && !PREFIJO_LUGAR.has(ak)) { o = `${ws.slice(0, -n).join(' ')}, ${ws.slice(-n).join(' ')}`; break; }
+    }
+  }
   return o.replace(/^(CD|GRAL|STA|STO|PTO|EDO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i, ws) => {
     // 4.12.142: «MEX» tras «DE» es México («EDO. DE MEX» → «Estado de México», «NAUCALPAN, EDO DE MEX.»; antes «Estado de Mex»).
     if (i > 0 && norm(ws[i - 1]) === 'DE' && /^MEX\.?[,;)]?$/.test(norm(w))) return `México${w.replace(/^MEX\.?/i, '')}`;
