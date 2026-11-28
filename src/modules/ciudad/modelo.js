@@ -1577,6 +1577,10 @@ export function fechaIso(x) {
   // Sólo enteros de 2000 a 2099 (13 dígitos): un folio, importe o segundos sueltos siguen null. Cuenta el día local.
   if (typeof x === 'number') return Number.isInteger(x) && x >= 946684800000 && x < 4102444800000 ? isoLocal(new Date(x)) : null;
   if (typeof x !== 'string') return null;
+  // 4.12.137: fecha JSON de .NET / WCF («/Date(1764221400000)/», «/Date(1764221400000-0600)/», como exportan servicios web
+  // ASP.NET de ERP viejos; antes null: «sin fecha»). Mismos límites que los milisegundos sueltos; cuenta el día local.
+  const nd = x.trim().match(/^\\?\/Date\((\d{12,13})(?:[+-]\d{4})?\)\\?\/$/);
+  if (nd) return fechaIso(Number(nd[1]));
   // 4.12.78: con el día de la semana adelante («Thu Nov 26 2026 03:54:17 GMT-0600», como sale un Date pasado a texto;
   // «Thu, 26 Nov 2026 10:30:00 GMT» de correos y encabezados; «jue 26 nov 2026», «jueves, 26 de noviembre de 2026»; antes
   // null: «sin fecha»). Sólo si el resto es una fecha: «mar 26, 2026» sigue siendo marzo 26 (no «martes»).

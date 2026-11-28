@@ -1904,6 +1904,11 @@ test('fechaIso con hora y zona cuenta el día local (4.7.57)', () => {
   assert.equal(fechaIso(ms), '2026-11-26', 'Date.now() de noche se queda en el día local');
   assert.equal(fechaIso(new Date(2000, 0, 2).getTime()), '2000-01-02', 'año 2000');
   for (const x of [0, 12345, 1200000, 1764140400, ms + 0.5, NaN, Infinity, -ms, 4102444800000]) assert.equal(fechaIso(x), null, String(x));
+  // 4.12.137: fecha JSON de .NET («/Date(ms)/», con zona o con diagonales escapadas); fuera de rango o basura siguen null.
+  assert.equal(fechaIso(`/Date(${ms})/`), '2026-11-26', '/Date(ms)/');
+  assert.equal(fechaIso(` /Date(${ms}-0600)/ `), '2026-11-26', 'con zona');
+  assert.equal(fechaIso(`\\/Date(${ms})\\/`), '2026-11-26', 'diagonales escapadas');
+  for (const x of ['/Date(12345)/', '/Date(4102444800000)/', '/Date()/', `/Date(${ms})/ x`, `Date(${ms})`, '/Date(-1)/']) assert.equal(fechaIso(x), null, x);
 });
 
 test('4.7.61 · bitácora: renglones sin folio/id no se pierden ni dicen «null»', () => {
