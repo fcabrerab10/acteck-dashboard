@@ -2094,12 +2094,16 @@ test('diasCedis() / diasTexto(): CEDIS sin medida de días como Inventario (4.7.
   assert.equal(m2.cedis.dias, 130); assert.equal(tarjetaDe({ tipo: 'cedis' }, m2).estado, 'ambar');
 });
 
+test('nombreCiudad(): México D.F. y Ciudad de México con sigla son CDMX (4.12.144)', () => {
+  for (const s of ['MEXICO D.F.', 'MÉXICO, D.F.', 'MEXICO DF', 'mexico, d. f.', 'CIUDAD DE MEXICO, CDMX', 'CD. DE MEXICO D.F.', 'Ciudad de México, DF', 'D. F.', 'MEXICO CDMX']) assert.equal(nombreCiudad(s), 'CDMX', s);
+  assert.equal(nombreCiudad('EDO. DE MEXICO'), 'Estado de México'); assert.equal(nombreCiudad('NUEVO MEXICO'), 'Nuevo México'); assert.equal(nombreCiudad('MEXICALI'), 'Mexicali');
+});
 test('nombreCiudad(): Puerto/Estado, siglas con punto y acento antes de la coma (4.12.99)', () => {
   assert.equal(nombreCiudad('PTO. VALLARTA'), 'Puerto Vallarta'); assert.equal(nombreCiudad('PTO VALLARTA'), 'Puerto Vallarta'); assert.equal(nombreCiudad('PTO.VALLARTA'), 'Puerto Vallarta');
   assert.equal(nombreCiudad('EDO. DE MEXICO'), 'Estado de México');
   assert.equal(nombreCiudad('SAN LUIS POTOSI, S.L.P.'), 'San Luis Potosí, S.L.P.'); assert.equal(nombreCiudad('STA. CATARINA N.L.'), 'Santa Catarina N.L.');
   assert.equal(nombreCiudad('MERIDA, YUC.'), 'Mérida, Yuc.'); assert.equal(nombreCiudad('ZAPOPAN, JAL.'), 'Zapopan, Jal.'); assert.equal(nombreCiudad('LAGOS DE MORENO'), 'Lagos de Moreno');
-  assert.equal(nombreCiudad('MEXICO D.F.'), 'México D.F.'); assert.equal(nombreCiudad('D.F.'), 'CDMX');
+  assert.equal(nombreCiudad('MEXICO D.F.'), 'CDMX'); assert.equal(nombreCiudad('D.F.'), 'CDMX');
   assert.equal(nombreSucursal('PCEL PTO. VALLARTA'), 'Pcel Puerto Vallarta'); assert.equal(nombreSucursal('PLAZA PTO.VALLARTA'), 'Plaza Puerto Vallarta');
 });
 test('estatusBarco(): acentos y guiones en estatus desconocidos (4.12.98)', () => {
@@ -2788,6 +2792,6 @@ test('nombreCiudad: siglas de ciudad y estado sueltas, «DE MEX» (4.12.142)', (
 test('nombreCiudad: coma pegada, sigla tras coma y «EDO MEX» (4.12.143)', () => {
   for (const [s, r] of [['MONTERREY,NL', 'Monterrey, N.L.'], ['LEON,GTO.', 'León, Gto.'], ['MONTERREY, NL', 'Monterrey, N.L.'], ['TIJUANA , BC', 'Tijuana, B.C.'],
     ['EDO MEX', 'Estado de México'], ['EDO. MEX.', 'Estado de México'], ['NAUCALPAN, EDO MEX', 'Naucalpan, Estado de México'], ['NAUCALPAN,EDO. MEX.', 'Naucalpan, Estado de México'],
-    ['GUADALAJARA, JALISCO', 'Guadalajara, Jalisco'], ['GUADALAJARA, JAL., MEXICO', 'Guadalajara, Jal., México'], ['MEXICO, D.F.', 'México, D.F.'],
+    ['GUADALAJARA, JALISCO', 'Guadalajara, Jalisco'], ['GUADALAJARA, JAL., MEXICO', 'Guadalajara, Jal., México'], ['MEXICO, D.F.', 'CDMX'],
     ['SAN LUIS POTOSI, S.L.P.', 'San Luis Potosí, S.L.P.'], ['1,200', '']]) assert.equal(nombreCiudad(s), r, s);
 });

@@ -261,7 +261,8 @@ const ABREV_CIUDAD = { CD: 'Ciudad', GRAL: 'General', STA: 'Santa', STO: 'Santo'
 export function nombreCiudad(ciudad) {
   // 4.12.2: «CDMX» / «Cd. de México» ya no salen «Cdmx» / «Cd de México»; sin letras («123», «-», un número) no es ciudad → ''.
   const k = norm(ciudad); if (!k || !/\p{L}/u.test(k)) return '';
-  if (/^(CIUDAD|CD\.?) DE MEXICO$|^CDMX$|^D\.?F\.?$/.test(k)) return 'CDMX';
+  // 4.12.144: «MEXICO D.F.», «MEXICO, DF», «CIUDAD DE MEXICO, CDMX», «CD. DE MEXICO D.F.» también son CDMX (antes «México D.F.»).
+  if (/^(?:(?:(?:CIUDAD|CD\.?) DE )?MEXICO\s*,?\s*)?(?:CDMX|D\.?\s?F\.?)$|^(?:CIUDAD|CD\.?) DE MEXICO(?:\s*,?\s*(?:CDMX|D\.?\s?F\.?))?$/.test(k)) return 'CDMX';
   // 4.12.142: siglas de ciudad sueltas como las escriben en Sheets/ERP («GDL», «MTY», «EDOMEX») salen con su nombre
   // (antes «Gdl» / «Mty» / «Edomex») y un estado suelto con su sigla («SLP» → «S.L.P.», «NL» → «N.L.», «QRO» → «Qro.»).
   const sigla = SIGLA_CIUDAD[k.replace(/\.$/, '')]; if (sigla) return sigla;

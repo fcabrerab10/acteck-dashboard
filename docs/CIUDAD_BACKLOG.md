@@ -442,6 +442,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.141) 2026-11-28 04:16 · `fechaIso()` lee el número de serie de Excel / Sheets (46352 = 2026-11-26, como número o texto, con hora decimal; así llega una fecha leída sin formato de la hoja o pegada como número); antes null: «sin fecha». Sólo 2000–2099 (36526–73050): folios, importes o años sueltos siguen null; +aserciones.
   - [x] (4.12.142) 2026-11-28 04:36 · `nombreCiudad()` muestra las siglas de ciudad sueltas con su nombre («GDL» → «Guadalajara», «MTY» → «Monterrey», «EDOMEX» → «Estado de México») y un estado suelto con su sigla («SLP» → «S.L.P.», «NL» → «N.L.», «QRO» → «Qro.»); «MEX» tras «DE» es México («EDO. DE MEX» → «Estado de México», antes «Estado de Mex»); +1 prueba (234).
   - [x] (4.12.143) 2026-11-28 04:56 · `nombreCiudad()` pone espacio en la coma pegada y lee la sigla del estado tras coma («MONTERREY,NL» / «MONTERREY, NL» → «Monterrey, N.L.», «LEON,GTO.» → «León, Gto.»; antes «Monterrey,nl» / «Leon,gto.») y «EDO MEX» / «EDO. MEX.» → «Estado de México» (antes «Edo, Mex.»); +1 prueba (234).
+  - [x] (4.12.144) 2026-11-28 05:16 · `nombreCiudad()` lee «MEXICO D.F.», «MÉXICO, DF», «CIUDAD DE MEXICO, CDMX» y «CD. DE MEXICO D.F.» como «CDMX» (antes «México D.F.» / «México, D.F.»); «Edo. de México», «Nuevo México» y «Mexicali» no cambian; +1 prueba (235).
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -456,6 +457,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-28 05:16 · v4.12.144 · `nombreCiudad()`: «MEXICO D.F.» / «CIUDAD DE MEXICO, CDMX» → «CDMX»; +1 prueba.
 - 2026-11-28 04:56 · v4.12.143 · `nombreCiudad()`: coma pegada («MONTERREY,NL» → «Monterrey, N.L.»), sigla tras coma y «EDO MEX» → «Estado de México»; +1 prueba.
 - 2026-11-28 04:36 · v4.12.142 · nombreCiudad: siglas sueltas (GDL, MTY, EDOMEX, SLP, NL, QRO) y «EDO. DE MEX» → «Estado de México».
 - 2026-11-28 04:16 · v4.12.141 · `fechaIso()` lee el serial de Excel/Sheets («46352» = 26 nov 2026); antes «sin fecha»; +aserciones.
