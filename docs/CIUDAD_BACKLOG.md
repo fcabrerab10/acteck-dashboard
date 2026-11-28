@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
+  - [x] (4.12.123) 2026-11-27 22:58 · `numero()` / `leeNum()` leen pesos con «M.N.» / «MN» al final («$1,200.00 M.N.», «1,200 pesos M.N.») y «MX$» / «M.N.» al inicio (antes 0: «$0» en tarjetas y cifras); «USD» sigue fuera a propósito para no sumarlo como pesos; +1 prueba.
   - [x] (4.12.122) 2026-11-27 22:56 · `fechaIso()` lee «del» antes del año, coma tras el mes y el mes primero en español («26 de noviembre del 2026», «5 de enero, 2027», «noviembre 26 de 2026», «nov 26 del 2026»); antes null: «sin fecha» en ETAs, camiones y bitácora; +1 prueba.
   - [x] (4.12.121) 2026-11-27 22:36 · `pluralEs()` pura y probada: `plural()` sin forma plural explícita sigue las reglas del español («2 meses», «2 camiones», «2 lápices», «2 autobuses», «2 relojes»; «pz»/«km» y «lunes» no cambian; varias palabras «propuestas abiertas», «pedidos de cliente detenidos»). Antes siempre + «s» («2 mess», «2 camións»).
   - [x] (4.12.119) 2026-11-27 15:56 · `haceDias()` lee la antigüedad escrita en pasado («hace 3 días», «3 días atrás», «desde hace 2 semanas», «2 meses de antigüedad»); antes sin texto.
@@ -437,6 +438,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 22:58 · v4.12.123 · Montos con «M.N.» / «MN» / «MX$» (facturas) ya se leen como pesos (antes $0); +1 prueba.
 - 2026-11-27 22:56 · v4.12.122 · Fechas «26 de noviembre del 2026» y «noviembre 26 de 2026» ya se leen (antes «sin fecha»); +1 prueba (224).
 - 2026-11-27 22:36 · v4.12.121 · `plural()` en español sin forma explícita (`pluralEs()`: «meses», «camiones», «lápices», «autobuses»; abreviaturas sin vocal igual; varias palabras con conectores); +1 prueba (224).
 - 2026-11-27 15:56 · v4.12.119 · `haceDias()` lee «hace 3 días», «3 días atrás», «desde hace 2 semanas», «2 meses de antigüedad» (antes sin texto en la antigüedad); +1 prueba (223).
