@@ -2709,6 +2709,11 @@ test('4.12.126 porcentaje() con «por ciento» y «pct»', () => {
   assert.equal(porcentaje('(3 por ciento)'), '-3 %'); assert.equal(porcentaje('por ciento'), '—'); assert.equal(porcentaje('8 pct', { signo: true }), '+8 %');
 });
 
+test('4.12.128 numero() con «mil millones» y moneda tras el múltiplo', () => {
+  assert.equal(numero('3 mil millones'), 3e9); assert.equal(numero('1.2 mil millones'), 1.2e9); assert.equal(numero('2 millones de pesos'), 2e6);
+  assert.equal(numero('5 mil pesos'), 5000); assert.equal(numero('1.5 M de MXN'), 1.5e6); assert.equal(numero('(2 mil millones)'), -2e9);
+  assert.equal(numero('5 mdd'), 0); assert.equal(numero('2 mil'), 2000); assert.equal(numero('1.5 millones'), 1.5e6); assert.equal(cifraCorta('2 millones de pesos'), '2.0 M');
+});
 test('4.12.127 numero() con miles en punto y coma decimal (formato europeo)', () => {
   assert.equal(numero('1.200,50'), 1200.5); assert.equal(numero('$1.234.567,89'), 1234567.89); assert.equal(numero('1.200.000'), 1200000);
   assert.equal(numero('(1.200,50)'), -1200.5); assert.equal(numero('1 200,5'), 1200.5); assert.equal(numero('1.234.567,89 MXN'), 1234567.89);
