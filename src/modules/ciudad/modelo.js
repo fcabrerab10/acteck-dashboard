@@ -1564,6 +1564,7 @@ const mesLetra = (w) => { const v = String(w).toLowerCase(); return MESES_LETRA.
 // Día de la semana en español o inglés, completo o abreviado (≥ 3 letras: «jue», «Thu», «Thurs», «miércoles» ya sin acento).
 const DIAS_SEMANA = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const esDiaSemana = (w) => { const v = String(w).toLowerCase(); return v.length >= 3 && DIAS_SEMANA.some((d) => d.startsWith(v)); };
+const anio4 = (a) => (a.length === 2 ? `20${a}` : a);
 export function fechaIso(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
   if (typeof x !== 'string') return null;
@@ -1575,15 +1576,16 @@ export function fechaIso(x) {
   // 4.12.70: «26/11/2026» o «5/1/2026 10:30» (día/mes/año como en México y en Sheets) también se lee (antes null: la fecha
   // contaba como «sin fecha»); '31/02/2026' o mes 13 siguen siendo null.
   // 4.12.73: también con guiones o puntos («26-11-2026», «5.1.2027», como algunos ERP y Excel en español); separadores mezclados siguen null.
-  const dm = x.trim().match(/^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})(?:[\sT].*)?$/);
-  if (dm) { const s = `${dm[4]}-${dm[3].padStart(2, '0')}-${dm[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
+  // 4.12.130: año de dos dígitos («26/11/26», «26-nov-26», como Excel y Sheets en México; antes null: «sin fecha») = 20AA.
+  const dm = x.trim().match(/^(\d{1,2})([/.-])(\d{1,2})\2(\d{4}|\d{2})(?:[\sT].*)?$/);
+  if (dm) { const s = `${anio4(dm[4])}-${dm[3].padStart(2, '0')}-${dm[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
   // 4.12.74: con el mes en letra («26 nov 2026», «26-nov-2026», «5 de enero de 2027», «26/Nov/2026 10:30», como exportan
   // algunos ERP y reportes en español; antes null: contaba como «sin fecha»). Mes desconocido o '31 feb 2026' siguen null.
   // 4.12.122: «del» antes del año y coma tras el mes («26 de noviembre del 2026», «5 de enero, 2027»; antes null: «sin fecha»).
-  const ml = norm(x).match(/^(\d{1,2})(?:\s+de\s+|[\s/.-]+)([a-z]{3,10})\.?,?(?:\s+del?\s+|[\s/.-]+)(\d{4})(?:[\sT].*)?$/i);
+  const ml = norm(x).match(/^(\d{1,2})(?:\s+de\s+|[\s/.-]+)([a-z]{3,10})\.?,?(?:\s+del?\s+|[\s/.-]+)(\d{4}|\d{2})(?:[\sT].*)?$/i);
   if (ml) {
     const mes = mesLetra(ml[2]); if (!mes) return null;
-    const s = `${ml[3]}-${String(mes).padStart(2, '0')}-${ml[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
+    const s = `${anio4(ml[3])}-${String(mes).padStart(2, '0')}-${ml[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
   }
   // 4.12.77: mes primero, al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30», como exportan Shopify,
   // Amazon y otras plataformas en inglés; antes null: «sin fecha»). Sin día o '31 feb' siguen null.
