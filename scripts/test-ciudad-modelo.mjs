@@ -2784,3 +2784,10 @@ test('nombreCiudad: siglas de ciudad y estado sueltas, «DE MEX» (4.12.142)', (
     ['NAUCALPAN, EDO. DE MEX.', 'Naucalpan, Estado de México'], ['TOLUCA, EDO DE MEX', 'Toluca, Estado de México'], ['MEXICALI', 'Mexicali'],
     ['GDL CENTRO', 'Gdl Centro'], ['CDMX', 'CDMX'], ['SAN LUIS POTOSI, S.L.P.', 'San Luis Potosí, S.L.P.']]) assert.equal(nombreCiudad(s), r, s);
 });
+
+test('nombreCiudad: coma pegada, sigla tras coma y «EDO MEX» (4.12.143)', () => {
+  for (const [s, r] of [['MONTERREY,NL', 'Monterrey, N.L.'], ['LEON,GTO.', 'León, Gto.'], ['MONTERREY, NL', 'Monterrey, N.L.'], ['TIJUANA , BC', 'Tijuana, B.C.'],
+    ['EDO MEX', 'Estado de México'], ['EDO. MEX.', 'Estado de México'], ['NAUCALPAN, EDO MEX', 'Naucalpan, Estado de México'], ['NAUCALPAN,EDO. MEX.', 'Naucalpan, Estado de México'],
+    ['GUADALAJARA, JALISCO', 'Guadalajara, Jalisco'], ['GUADALAJARA, JAL., MEXICO', 'Guadalajara, Jal., México'], ['MEXICO, D.F.', 'México, D.F.'],
+    ['SAN LUIS POTOSI, S.L.P.', 'San Luis Potosí, S.L.P.'], ['1,200', '']]) assert.equal(nombreCiudad(s), r, s);
+});

@@ -273,10 +273,13 @@ export function nombreCiudad(ciudad) {
   // antes «CAÑADA» / «MONTAÑA» salían «Canada» / «Montana» porque `norm()` quita la tilde de la ñ.
   let o = typeof ciudad === 'string' ? ciudad.normalize('NFC').toLocaleUpperCase('es-MX').trim() : k;
   if (EDO_SIGLA[k.replace(/\.$/, '')]) o = EDO_SIGLA[k.replace(/\.$/, '')];
+  // 4.12.143: coma pegada entre letras lleva espacio («MONTERREY,NL» → «Monterrey, N.L.», «LEON,GTO.» → «León, Gto.»; antes
+  // «Monterrey,nl» / «Leon,gto.») y «EDO MEX» / «EDO. MEX.» al final es el Estado de México (antes «Edo, Mex.» / «Estado Mex.»).
+  o = o.replace(/(\p{L}\.?)\s*,\s*(?=\p{L})/gu, '$1, ').replace(/(^|[\s,])EDO\.?\s+MEX(ICO)?\.?$/u, '$1ESTADO DE MÉXICO');
   // 4.12.139: estado abreviado al final sin coma («LEON GTO», «MONTERREY NL», «CANCUN QROO») sale como con coma
   // («León, Gto.», «Monterrey, N.L.», «Cancún, Q. Roo»; antes «León Gto» / «Monterrey Nl»). No si lo precede un conector
-  // («EDO DE MEX» sigue «Estado de Mex») ni si la clave es sólo la sigla.
-  const ed = /^(.*\p{L})\s+(\p{L}+)\.?$/u.exec(o);
+  // («EDO DE MEX» sigue «Estado de Mex») ni si la clave es sólo la sigla. 4.12.143: también con coma («MONTERREY, NL» → «Monterrey, N.L.»).
+  const ed = /^(.*\p{L})(?:\s*,\s*|\s+)(\p{L}+)\.?$/u.exec(o);
   if (ed && EDO_SIGLA[norm(ed[2])] && !CONECTORES.has(norm(ed[1].split(/\s+/).pop()))) o = `${ed[1]}, ${EDO_SIGLA[norm(ed[2])]}`;
   return o.replace(/^(CD|GRAL|STA|STO|PTO|EDO)\.(?=\p{L})/u, '$1. ').split(/\s+/).map((w, i, ws) => {
     // 4.12.142: «MEX» tras «DE» es México («EDO. DE MEX» → «Estado de México», «NAUCALPAN, EDO DE MEX.»; antes «Estado de Mex»).
