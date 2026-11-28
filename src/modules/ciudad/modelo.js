@@ -33,8 +33,13 @@ const MN_FINAL = /(\d|\)|pesos?|mxn)\s*m\.?\s?n\.?$/i;
 // 4.12.124: apóstrofo, comilla tipográfica o guion bajo como separador de miles («1'200,000», «1’200.50», «1_200_000», como Excel
 // en configuración suiza o un CSV de sistema): sólo entre un dígito y grupos de tres. Antes salían 0.
 const MILES_RAROS = /(\d)['’_](?=\d{3}(?!\d))/g;
+// 4.12.127: miles con punto y decimales con coma, como Excel/Sheets en configuración europea o latina («1.200,50», «$1.234.567,89»,
+// «1.200.000») y miles con espacio + coma decimal («1 200,5»): antes «1.200,50» se leía 1.2005 y «1.200.000» valía 0. Un solo
+// punto sin coma («1.200») sigue siendo decimal (ambiguo).
+const PUNTO_MILES = /(\d{1,3}(?:\.\d{3})+),(\d+)(?!\d)|(\d{1,3}(?:\.\d{3}){2,})(?![\d.,])|(\d{1,3}(?:[ \u00a0\u202f]\d{3})+),(\d{1,2})(?![\d.,])/g;
+const sinPuntoMiles = (t) => t.replace(PUNTO_MILES, (_, a, b, c, d, e) => a ? `${a.replace(/\./g, '')}.${b}` : c ? c.replace(/\./g, '') : `${d.replace(/[ \u00a0\u202f]/g, '')}.${e}`);
 function textoNum(s, quita) {
-  let t = s.trim().replace(MILES_RAROS, '$1').replace(MENOS, '-').replace(MN_FINAL, '$1').replace(UNIDAD_FINAL, '$1').replace(/^(?:mxn|mx(?=\s*\$)|m\.?\s?n\.?(?=\s*[$\d(-]))\s*/i, ''); let e = 0; const m = MULTIPLO.exec(t);
+  let t = sinPuntoMiles(s.trim().replace(MILES_RAROS, '$1')).replace(MENOS, '-').replace(MN_FINAL, '$1').replace(UNIDAD_FINAL, '$1').replace(/^(?:mxn|mx(?=\s*\$)|m\.?\s?n\.?(?=\s*[$\d(-]))\s*/i, ''); let e = 0; const m = MULTIPLO.exec(t);
   if (m && m[2] !== 'm') { e = /^(k|mil)$/i.test(m[2]) ? 3 : 6; t = t.slice(0, m.index) + m[1] + m[3]; }
   t = t.replace(/^\$\s*(?=\()/, '').replace(COMA_DECIMAL, '$1.$2'); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
   if (!c) return NaN; const n = Number(e && !/e/i.test(c) ? `${c}e${e}` : c) * (e && /e/i.test(c) ? 10 ** e : 1); return p ? (n < 0 ? NaN : -n) : n;

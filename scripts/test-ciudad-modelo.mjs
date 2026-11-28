@@ -2708,3 +2708,9 @@ test('4.12.126 porcentaje() con «por ciento» y «pct»', () => {
   assert.equal(porcentaje('12 por ciento'), '12 %'); assert.equal(porcentaje('12 porciento'), '12 %'); assert.equal(porcentaje('12.5 pct'), '13 %');
   assert.equal(porcentaje('(3 por ciento)'), '-3 %'); assert.equal(porcentaje('por ciento'), '—'); assert.equal(porcentaje('8 pct', { signo: true }), '+8 %');
 });
+
+test('4.12.127 numero() con miles en punto y coma decimal (formato europeo)', () => {
+  assert.equal(numero('1.200,50'), 1200.5); assert.equal(numero('$1.234.567,89'), 1234567.89); assert.equal(numero('1.200.000'), 1200000);
+  assert.equal(numero('(1.200,50)'), -1200.5); assert.equal(numero('1 200,5'), 1200.5); assert.equal(numero('1.234.567,89 MXN'), 1234567.89);
+  assert.equal(numero('1.200'), 1.2); assert.equal(numero('1,200.50'), 1200.5); assert.equal(numero('1.2.3'), 0); assert.equal(cifraCorta('1.200.000'), '1.2 M');
+});

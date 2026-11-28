@@ -427,6 +427,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.124) 2026-11-27 23:16 · `numero()` / `leeNum()` / `cifraCorta()` leen apóstrofo, comilla tipográfica y guion bajo como separador de miles («1'200,000», «1’200.50», «1_200_000», Excel en config. suiza o CSV de sistema; antes 0); sólo entre dígito y grupos de tres; +1 prueba (225).
   - [x] (4.12.125) 2026-11-27 23:17 · `temperaturaTexto()` pasa «K» / «Kelvin» a Celsius («297.15 K» → «24°», como APIs de clima sin `units=metric`; antes la K se leía como miles: «297000°»); Kelvin negativo → ''; +1 prueba (226).
   - [x] (4.12.126) 2026-11-27 23:19 · `porcentaje()` lee «12 por ciento», «12 porciento», «12.5 pct» y «(3 por ciento)» (antes «—» en capas, tarjetas y banderín de cuota); +1 prueba (227).
+  - [x] (4.12.127) 2026-11-27 23:36 · `numero()` / `leeNum()` / `cifraCorta()` leen miles con punto y coma decimal («1.200,50», «$1.234.567,89», «1.200.000», «1 200,5», como Excel en configuración europea/latina); antes «1.200,50» se leía 1.2005 y «1.200.000» valía 0. «1.200» solo sigue siendo decimal; +1 prueba (228).
 
 ## Necesita a Fernando (el agente no lo hace)
 
