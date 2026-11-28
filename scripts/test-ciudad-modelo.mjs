@@ -2703,3 +2703,8 @@ test('4.12.125 temperaturaTexto() pasa Kelvin a Celsius', () => {
   assert.equal(temperaturaTexto('297.15 K'), '24°'); assert.equal(temperaturaTexto('297K'), '24°'); assert.equal(temperaturaTexto('273.15 kelvin'), '0°');
   assert.equal(temperaturaTexto('-5 K'), ''); assert.equal(temperaturaTexto('24 °C'), '24°'); assert.equal(temperaturaTexto('75 °F'), '24°');
 });
+
+test('4.12.126 porcentaje() con «por ciento» y «pct»', () => {
+  assert.equal(porcentaje('12 por ciento'), '12 %'); assert.equal(porcentaje('12 porciento'), '12 %'); assert.equal(porcentaje('12.5 pct'), '13 %');
+  assert.equal(porcentaje('(3 por ciento)'), '-3 %'); assert.equal(porcentaje('por ciento'), '—'); assert.equal(porcentaje('8 pct', { signo: true }), '+8 %');
+});
