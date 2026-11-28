@@ -1129,9 +1129,38 @@ export function temperaturaTexto(v) {
 export function piezasTexto(v) { return `${(Math.round(numero(v)) + 0).toLocaleString('es-MX')} pz`; } // 4.7.56: -0.4 → «0 pz» (antes «-0 pz»)
 // 4.12.67: piezas sólo si hay (> 0 al redondear); 0, negativas o ilegibles → '' para que `unirTexto()` no agregue «· 0 pz».
 export const piezasSiHay = (v) => (Math.round(numero(v)) > 0 ? piezasTexto(v) : '');
+// 4.12.121: plural en español de la última palabra cuando no se da `varios` (antes siempre + «s»: «2 mess», «2 camións»,
+// «2 lápizs»): vocal o sigla → + s («SKUs»); z → ces («lápices»); aguda en -n con tilde la pierde + es («camiones»,
+// «andenes», «autobuses»); abreviatura sin vocal igual («pz», «km»); otra consonante + es («meses», «relojes», «vendedores»); s/x tras más de una sílaba se queda («lunes», «tórax»).
+const SIN_TILDE = { á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', Á: 'A', É: 'E', Í: 'I', Ó: 'O', Ú: 'U' };
+// Varias palabras: cada una al plural salvo conectores, adverbios y lo que va tras «de/con/sin/por» («propuesta abierta» →
+// «propuestas abiertas», «pedido de cliente detenido» → «pedidos de cliente detenidos», «recién llegado» → «recién llegados»).
+const SIN_PLURAL = new Set(['de', 'del', 'con', 'sin', 'por', 'para', 'a', 'al', 'en', 'y', 'o', 'e', 'u', 'el', 'la', 'lo', 'recién', 'muy', 'más', 'menos', 'no']);
+const TRAS_DE = new Set(['de', 'del', 'con', 'sin', 'por', 'para', 'a', 'al', 'en']);
+export function pluralEs(uno) {
+  if (typeof uno !== 'string' || !uno.trim()) return '';
+  const ws = uno.split(/(\s+)/);
+  if (ws.filter((x) => x.trim()).length > 1) {
+    let prev = '';
+    return ws.map((x) => { if (!x.trim()) return x; const l = x.toLowerCase(), r = SIN_PLURAL.has(l) || TRAS_DE.has(prev) ? x : pluralPalabra(x); prev = l; return r; }).join('');
+  }
+  return uno.replace(/\S+/, pluralPalabra);
+}
+function pluralPalabra(w) {
+  const ult = w.slice(-1), May = w === w.toUpperCase() && /[A-ZÑ]/.test(w);
+  let p;
+  if (!/[aeiouáéíóúü]/i.test(w)) p = w; // abreviatura sin vocal («pz», «km», «kg») no cambia
+  else if (May || /[aeiouáéíóúAEIOUÁÉÍÓÚ]$/.test(w) || !/[a-záéíóúüñ]$/i.test(w)) p = `${w}s`;
+  else if (/[^aeiou][áéíóú][ns]$/i.test(w)) p = `${w.slice(0, -2)}${SIN_TILDE[w.slice(-2, -1)]}${w.slice(-1)}es`; // «autobuses»; «país» (hiato) cae abajo
+  else if (ult === 'z' || ult === 'Z') p = `${w.slice(0, -1)}${ult === 'z' ? 'ces' : 'CES'}`;
+  else if (/[sx]$/i.test(w)) p = /[áéíóú]s$/i.test(w) || (w.match(/[aeiouáéíóú]+/gi) || []).length < 2 ? `${w}es` : w;
+  else if (/[áéíóú]n$/i.test(w)) p = `${w.slice(0, -2)}${SIN_TILDE[w.slice(-2, -1)]}nes`;
+  else p = `${w}es`;
+  return p;
+}
 export function plural(n, uno, varios) {
-  // 4.7.62: palabra que no es texto o vacía → sólo el número (antes «0 undefineds» / «2 null»); `varios` ausente → uno + «s».
-  const u = typeof uno === 'string' && uno.trim() ? uno : '', vs = typeof varios === 'string' && varios.trim() ? varios : u ? `${u}s` : '';
+  // 4.7.62: palabra que no es texto o vacía → sólo el número (antes «0 undefineds» / «2 null»); `varios` ausente → `pluralEs(uno)`.
+  const u = typeof uno === 'string' && uno.trim() ? uno : '', vs = typeof varios === 'string' && varios.trim() ? varios : u ? pluralEs(u) : '';
   // 4.7.55: «1,200» / « 3 » en texto se leen (antes «0 pedidos»); booleanos y basura → 0 (antes true = «1 barco»).
   // 4.12.96: el texto se lee con `leeNum()` (unidad al final, «$», «K»/«mil»): «3 días» / «12 pz» / «1.2 K» → 3 / 12 / 1,200
   // (antes «0 días» / «0 piezas»).

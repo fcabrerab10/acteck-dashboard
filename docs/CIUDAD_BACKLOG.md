@@ -198,6 +198,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.3.10) `rumboBarcos()` toma la ETA en texto («3», « 4 ») y trata la vacía o basura como sin ETA (antes «» se leía como 0 y el barco salía atracado) y acepta algo que no es lista; `acomodoEscritorios()` redondea n (3.7 → 3) y `cols` 0 ya no da NaN.
   - [x] (4.3.11) `acomodoRacks()` aguanta `cols` 0/decimal (antes x NaN/Infinity en los racks del CEDIS), `maxNiveles` inválido, marcas vacías y algo que no es lista; `circuitoVendedor()` acepta `tieneRuta` que no es función y `max` 0/decimal.
   - [x] (4.12.88) 2026-11-26 15:57 · `nombreSucursal()` pone en minúscula las abreviaturas de domicilio del ERP («PCEL SUC. GUADALAJARA CENTRO» → «Pcel Suc. Guadalajara Centro»; «AV.», «BLVD», «COL.», «NO.», «KM» → «km»; «SUC.CENTRO» se separa). Antes «SUC.» y «BLVD» quedaban en mayúsculas en tarjetas y etiquetas.
+  - [x] (4.12.121) 2026-11-27 22:36 · `pluralEs()` pura y probada: `plural()` sin forma plural explícita sigue las reglas del español («2 meses», «2 camiones», «2 lápices», «2 autobuses», «2 relojes»; «pz»/«km» y «lunes» no cambian; varias palabras «propuestas abiertas», «pedidos de cliente detenidos»). Antes siempre + «s» («2 mess», «2 camións»).
   - [x] (4.12.119) 2026-11-27 15:56 · `haceDias()` lee la antigüedad escrita en pasado («hace 3 días», «3 días atrás», «desde hace 2 semanas», «2 meses de antigüedad»); antes sin texto.
   - [x] (4.12.116) 2026-11-27 06:16 · `enMinutos()` entiende «2 días», «1 d», «2 semanas», «1 sem.» (antes «2 días» → «en 2 min» en misiones y burbujas de reunión).
   - [x] (4.12.111) 2026-11-27 05:16 · `leeDias()` lee cantidades en palabras al inicio («una semana», «un mes», «medio año», «dos semanas», «tres días», hasta «doce»); antes «sin ETA» / sin texto en el puerto, los barcos, la cadena y la antigüedad; +1 prueba.
@@ -435,6 +436,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-27 22:36 · v4.12.121 · `plural()` en español sin forma explícita (`pluralEs()`: «meses», «camiones», «lápices», «autobuses»; abreviaturas sin vocal igual; varias palabras con conectores); +1 prueba (224).
 - 2026-11-27 15:56 · v4.12.119 · `haceDias()` lee «hace 3 días», «3 días atrás», «desde hace 2 semanas», «2 meses de antigüedad» (antes sin texto en la antigüedad); +1 prueba (223).
 - 2026-11-27 15:37 · v4.12.118 · `numero()` / `leeNum()` / `porcentaje()` leen el signo menos tipográfico («−12», «–5», «—3,5», «－7», como lo pegan Excel, Word o una hoja con formato; antes 0 o «—» en cifras, porcentajes y temperatura); +1 prueba (222).
 - 2026-11-27 15:16 · v4.12.117 · `enMinutos()` lee plazo y cantidad en palabras («en 15 minutos», «dentro de una hora», «faltan dos horas y media», «aprox. 20 min», «un cuarto de hora»; antes sin texto en la cuenta regresiva); +1 prueba.
