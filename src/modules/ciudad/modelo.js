@@ -1620,8 +1620,10 @@ export function fechaIso(x) {
   }
   // 4.12.72: año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como exportan Sheets y algunos ERP)
   // también se lee (antes null: contaba como «sin fecha»); '2026/02/30' o mes 13 siguen siendo null.
-  const ym = x.trim().match(/^(\d{4})([-/])(\d{1,2})\2(\d{1,2})(?:[\sT].*)?$/);
-  if (ym && (ym[2] === '/' || ym[3].length < 2 || ym[4].length < 2)) { const s = `${ym[1]}-${ym[3].padStart(2, '0')}-${ym[4].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
+  // 4.12.136: también con puntos («2026.11.26», «2026.1.5 10:30», como exportan algunos ERP y Excel en configuración
+  // asiática/alemana; antes null: «sin fecha»); separadores mezclados siguen null.
+  const ym = x.trim().match(/^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})(?:[\sT].*)?$/);
+  if (ym && (ym[2] !== '-' || ym[3].length < 2 || ym[4].length < 2)) { const s = `${ym[1]}-${ym[3].padStart(2, '0')}-${ym[4].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
   // 4.12.76: compacta AAAAMMDD («20261126», «20261126 10:30», como exportan SAP y otros ERP; antes null: «sin fecha»).
   // Sólo en texto (un número suelto puede ser folio o importe) y año 1900–2099; '20260230' o mes 13 siguen siendo null.
   const cp = x.trim().match(/^((?:19|20)\d{2})(\d{2})(\d{2})(?:[\sT]\d.*)?$/);

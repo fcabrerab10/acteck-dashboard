@@ -435,6 +435,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.132) 2026-11-28 01:16 · `fechaIso()` lee el día con ordinal («Nov 26th, 2026», «26th Nov 2026», «1º / 1° / 1ro / 1er de enero de 2027», «1st/Jan/2027»); antes null: «sin fecha»; +aserciones.
   - [x] (4.12.133) 2026-11-28 01:36 · `fechaIso()` lee marcas de tiempo en milisegundos como número (Date.now(), JSON de APIs y webhooks; día local, sólo enteros 2000–2099); antes null: «sin fecha». Folios, importes y segundos sueltos siguen null; +aserciones.
   - [x] (4.12.135) 2026-11-28 02:16 · `numero()` / `leeNum()` / `porcentaje()` / `cifraCorta()` leen el negativo con el signo al final, como exportan SAP y otros ERP («1,200-», «$1,200.50-», «12 %-», «1,200 MXN-»); antes 0 / «—». «3 - » (rango incompleto) sigue sin ETA; +1 prueba (231).
+  - [x] (4.12.136) 2026-11-28 02:36 · `fechaIso()` lee año primero con puntos («2026.11.26», «2026.1.5 10:30», como algunos ERP y Excel en configuración asiática/alemana); antes null: «sin fecha». Separadores mezclados siguen null; +aserciones.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -449,6 +450,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-28 02:36 · v4.12.136 · `fechaIso()` lee «2026.11.26» (año primero con puntos); antes «sin fecha»; +aserciones.
 - 2026-11-28 02:16 · v4.12.135 · `numero()` / `porcentaje()` / `cifraCorta()` leen el negativo al final estilo SAP/ERP («1,200-», «12 %-»); antes 0 / «—»; +1 prueba.
 - 2026-11-28 01:36 · v4.12.133 · Fechas en milisegundos como número (Date.now(), APIs) ya no salen «sin fecha».
 - 2026-11-28 01:16 · v4.12.132 · Fechas con ordinal («Nov 26th, 2026», «1º de enero de 2027») ya no salen «sin fecha».
