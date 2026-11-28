@@ -2692,3 +2692,9 @@ test('4.12.120 días relativos, quincenas y números en palabras hasta sesenta',
   assert.equal(faltanDias('sesenta días'), 'en 2 meses');
   assert.equal(enMinutos('quince minutos'), enMinutos('15 min')); assert.equal(enMinutos('veinte min'), enMinutos(20));
 });
+
+test('4.12.124 apóstrofo y guion bajo como separador de miles', () => {
+  assert.equal(numero("1'200,000"), 1200000); assert.equal(numero('1’200.50'), 1200.5); assert.equal(numero('1_200_000'), 1200000);
+  assert.equal(numero("1'234'567"), 1234567); assert.equal(numero("$1'500"), 1500); assert.equal(cifraCorta("1'200,000"), '1.2 M');
+  assert.equal(numero("12'3456"), 0); assert.equal(numero("5'"), 0);
+});

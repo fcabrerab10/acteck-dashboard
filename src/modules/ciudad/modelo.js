@@ -30,8 +30,11 @@ const MENOS = /[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g;
 // 4.12.123: «M.N.» / «MN» (moneda nacional, como en facturas: «$1,200.00 M.N.», «1,200 pesos M.N.») al final y «MX$» / «M.N.» al
 // inicio se leen como pesos (antes 0: «$0» en tarjetas y cifras). «USD» sigue fuera a propósito: no se suma como pesos.
 const MN_FINAL = /(\d|\)|pesos?|mxn)\s*m\.?\s?n\.?$/i;
+// 4.12.124: apóstrofo, comilla tipográfica o guion bajo como separador de miles («1'200,000», «1’200.50», «1_200_000», como Excel
+// en configuración suiza o un CSV de sistema): sólo entre un dígito y grupos de tres. Antes salían 0.
+const MILES_RAROS = /(\d)['’_](?=\d{3}(?!\d))/g;
 function textoNum(s, quita) {
-  let t = s.trim().replace(MENOS, '-').replace(MN_FINAL, '$1').replace(UNIDAD_FINAL, '$1').replace(/^(?:mxn|mx(?=\s*\$)|m\.?\s?n\.?(?=\s*[$\d(-]))\s*/i, ''); let e = 0; const m = MULTIPLO.exec(t);
+  let t = s.trim().replace(MILES_RAROS, '$1').replace(MENOS, '-').replace(MN_FINAL, '$1').replace(UNIDAD_FINAL, '$1').replace(/^(?:mxn|mx(?=\s*\$)|m\.?\s?n\.?(?=\s*[$\d(-]))\s*/i, ''); let e = 0; const m = MULTIPLO.exec(t);
   if (m && m[2] !== 'm') { e = /^(k|mil)$/i.test(m[2]) ? 3 : 6; t = t.slice(0, m.index) + m[1] + m[3]; }
   t = t.replace(/^\$\s*(?=\()/, '').replace(COMA_DECIMAL, '$1.$2'); const p = /^\((.*)\)$/.exec(t); const c = (p ? p[1] : t).replace(quita, '');
   if (!c) return NaN; const n = Number(e && !/e/i.test(c) ? `${c}e${e}` : c) * (e && /e/i.test(c) ? 10 ** e : 1); return p ? (n < 0 ? NaN : -n) : n;
