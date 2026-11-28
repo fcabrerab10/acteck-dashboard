@@ -1582,8 +1582,13 @@ export function fechaIso(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
   // 4.12.133: marca de tiempo en milisegundos como número (Date.now(), JSON de APIs y webhooks; antes null: «sin fecha»).
   // Sólo enteros de 2000 a 2099 (13 dígitos): un folio, importe o segundos sueltos siguen null. Cuenta el día local.
+  // 4.12.141: número de serie de Excel / Sheets (días desde 1899-12-30: 46352 = 2026-11-26, «46352.4375» con hora; así
+  // llega una fecha leída sin formato de la hoja o pegada como número; antes null: «sin fecha»). Sólo de 2000 a 2099
+  // (36526–73050): un folio, importe o año sueltos siguen null.
+  if (typeof x === 'number' && x >= 36526 && x < 73051) return isoLocal(new Date(1899, 11, 30 + Math.floor(x), 12));
   if (typeof x === 'number') return Number.isInteger(x) && x >= 946684800000 && x < 4102444800000 ? isoLocal(new Date(x)) : null;
   if (typeof x !== 'string') return null;
+  if (/^\s*\d{5}(?:\.\d+)?\s*$/.test(x)) return fechaIso(Number(x));
   // 4.12.137: fecha JSON de .NET / WCF («/Date(1764221400000)/», «/Date(1764221400000-0600)/», como exportan servicios web
   // ASP.NET de ERP viejos; antes null: «sin fecha»). Mismos límites que los milisegundos sueltos; cuenta el día local.
   const nd = x.trim().match(/^\\?\/Date\((\d{12,13})(?:[+-]\d{4})?\)\\?\/$/);

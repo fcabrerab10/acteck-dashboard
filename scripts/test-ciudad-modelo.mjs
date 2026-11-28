@@ -1916,6 +1916,13 @@ test('fechaIso con hora y zona cuenta el día local (4.7.57)', () => {
   assert.equal(fechaIso(` /Date(${ms}-0600)/ `), '2026-11-26', 'con zona');
   assert.equal(fechaIso(`\\/Date(${ms})\\/`), '2026-11-26', 'diagonales escapadas');
   for (const x of ['/Date(12345)/', '/Date(4102444800000)/', '/Date()/', `/Date(${ms})/ x`, `Date(${ms})`, '/Date(-1)/']) assert.equal(fechaIso(x), null, x);
+  // 4.12.141: número de serie de Excel / Sheets (días desde 1899-12-30), como número o texto, con o sin hora; fuera de 2000–2099 null.
+  assert.equal(fechaIso(46352), '2026-11-26', 'serial Excel');
+  assert.equal(fechaIso(46352.9999), '2026-11-26', 'serial con hora de noche');
+  assert.equal(fechaIso(' 46352.4375 '), '2026-11-26', 'serial en texto');
+  assert.equal(fechaIso(36526), '2000-01-01', 'serial 2000');
+  assert.equal(fechaIso(46082), '2026-03-01', 'serial tras febrero');
+  for (const x of [36525, 73051, '12345', '463520', '46352x', '4635.2', -46352]) assert.equal(fechaIso(x), null, String(x));
 });
 
 test('4.7.61 · bitácora: renglones sin folio/id no se pierden ni dicen «null»', () => {
