@@ -2670,3 +2670,15 @@ test('4.12.119: haceDias() con «hace», «atrás», «de antigüedad»', () => 
   assert.equal(haceDias('hace una semana'), 'hace 7 d'); assert.equal(haceDias('2 meses de antiguedad'), 'hace 2 meses'); assert.equal(haceDias('hace 1 día'), 'ayer');
   assert.equal(haceDias('hace'), ''); assert.equal(haceDias('atrás'), ''); assert.equal(haceDias('hace mucho'), ''); assert.equal(faltanDias('en 2 semanas'), 'en 14 d');
 });
+
+test('4.12.120 días relativos, quincenas y números en palabras hasta sesenta', () => {
+  assert.equal(haceDias('ayer'), 'ayer'); assert.equal(haceDias('Antier'), 'hace 2 d'); assert.equal(haceDias('anteayer.'), 'hace 2 d');
+  assert.equal(haceDias('antes de ayer'), 'hace 2 d'); assert.equal(haceDias('hoy'), 'hoy'); assert.equal(haceDias('mañana'), 'hoy');
+  assert.equal(faltanDias('hoy'), 'hoy'); assert.equal(faltanDias('Mañana'), 'mañana'); assert.equal(faltanDias('pasado mañana'), 'en 2 d');
+  assert.equal(llegaBarco('mañana'), 'llega mañana'); assert.equal(llegaBarco('HOY'), 'llega hoy'); assert.equal(llegaBarco('manana'), 'llega mañana');
+  assert.equal(faltanDias('ayer'), ''); assert.equal(llegaBarco('antier'), 'sin ETA');
+  assert.equal(faltanDias('una quincena'), 'en 15 d'); assert.equal(haceDias('2 quincenas'), 'hace 30 d'); assert.equal(llegaBarco('quincena'), 'sin ETA');
+  assert.equal(faltanDias('quince días'), 'en 15 d'); assert.equal(haceDias('hace treinta días'), 'hace 30 d'); assert.equal(llegaBarco('en veinte días'), 'llega en 20 d');
+  assert.equal(faltanDias('sesenta días'), 'en 2 meses');
+  assert.equal(enMinutos('quince minutos'), enMinutos('15 min')); assert.equal(enMinutos('veinte min'), enMinutos(20));
+});

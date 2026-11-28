@@ -1043,6 +1043,13 @@ export function haceDias(v) {
   // 4.7.77: con `leeNum()`: texto en blanco (« ») y listas (`[]`) ya no dicen «hoy».
   // 4.12.119: antigüedad ya escrita como pasado («hace 3 días», «3 días atrás», «desde hace 2 semanas», «2 meses de antigüedad»,
   // «hace una semana») se lee como la cantidad (antes sin texto). Sólo aquí: en `faltanDias()` / ETAs «hace» no es un plazo.
+  // 4.12.120: «ayer» = 1, «antier»/«anteayer»/«antes de ayer» = 2 y lo que aún no pasa («mañana», «pasado mañana») = «hoy», como
+  // un número futuro (antes sin texto; «mañana» se habría leído como 1 día atrás = «ayer»).
+  if (typeof v === 'string') {
+    const t = v.trim().replace(/\.$/, '').toLowerCase();
+    if (t === 'ayer') return 'ayer'; if (/^(?:antier|anteayer|antes\s+de\s+ayer)$/.test(t)) return 'hace 2 d';
+    if (/^(?:pasado\s+)?ma[ñn]ana$/.test(t)) return 'hoy';
+  }
   if (typeof v === 'string') v = v.replace(/^\s*(?:desde\s+)?hace\s+(?=\S)/i, '').replace(/\s+(?:atr[aá]s|de\s+antig[uü]edad)\.?\s*$/i, '');
   const n = leeDias(v); if (n == null) return ''; const k = Math.round(n);
   // 4.12.59: desde 60 días en meses y desde 365 en años («hace 3 meses», «hace 1 año»; antes «hace 1,200 d»).
@@ -1157,8 +1164,11 @@ const SEMANAS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(?:semanas?|sem|sems)\.?\s*$/i;
 const MESES_ANIOS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(mes(?:es)?|años?|anios?)\.?\s*$/i;
 // 4.12.111: cantidad en palabras al inicio («una semana», «un mes», «medio año», «dos semanas», «tres días»; hasta doce) se
 // pasa a número antes de leer (antes «sin ETA» / sin texto en el puerto, los barcos, la cadena y la antigüedad).
-const PALABRAS_NUM = { un: 1, una: 1, uno: 1, medio: 0.5, media: 0.5, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12 };
-const NUM_PALABRA = /^\s*(un|una|uno|medio|media|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+(?=\S)/i;
+// 4.12.120: también trece, catorce, quince, veinte, treinta, cuarenta y sesenta («quince días», «treinta días», «veinte minutos»).
+const PALABRAS_NUM = { un: 1, una: 1, uno: 1, medio: 0.5, media: 0.5, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, veinte: 20, treinta: 30, cuarenta: 40, sesenta: 60 };
+const NUM_PALABRA = /^\s*(un|una|uno|medio|media|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|sesenta)\s+(?=\S)/i;
+// 4.12.120: quincenas (× 15): «una quincena», «2 quincenas» (antes «sin ETA» / sin texto).
+const QUINCENAS = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*quincenas?\.?\s*$/i;
 const leeDias = (v) => {
   if (typeof v !== 'string') return leeNum(v);
   // 4.12.114: aproximaciones («~5 días», «≈ 3 semanas», «aprox. 10 días», «unos 5 días», «cerca de 4 días», «5 días aprox.») se
@@ -1166,6 +1176,9 @@ const leeDias = (v) => {
   // 4.12.115: plazo con «en», «dentro de», «faltan», «llega en», «sale en» al inicio («en 5 días», «dentro de 2 semanas»,
   // «faltan 3 días») se lee como la cantidad (antes «sin ETA» / sin texto).
   v = v.replace(/^\s*(?:(?:llega|sale)\s+en|dentro\s+de|faltan?|en)\s+(?=\S)/i, '');
+  // 4.12.120: días relativos de plazo: «hoy» = 0, «mañana» = 1, «pasado mañana» = 2 (antes «sin ETA»). «Ayer»/«antier» sólo
+  // valen como antigüedad (`haceDias()`): en una ETA no son plazo.
+  const rel = /^\s*(hoy|ma[ñn]ana|pasado\s+ma[ñn]ana)\.?\s*$/i.exec(v); if (rel) return /^hoy/i.test(rel[1]) ? 0 : /^pasado/i.test(rel[1]) ? 2 : 1;
   v = v.replace(/^\s*(?:~|≈|aprox(?:imadamente|\.)?|unos|unas|cerca\s+de|alrededor\s+de|como)\s*(?=[\d\p{L}])/iu, '').replace(/\s+(?:aprox(?:imadamente|\.)?|aprox)\s*$/i, '');
   const w = NUM_PALABRA.exec(v); if (w) v = `${PALABRAS_NUM[w[1].toLowerCase()]} ${v.slice(w[0].length)}`;
   // 4.12.112: «y medio/a» al final suma media unidad («1 año y medio» = 1.5 años, «2 semanas y media» = 17.5 d).
@@ -1175,6 +1188,7 @@ const leeDias = (v) => {
   const r = /^\s*(\d+(?:[.,]\d+)?)\s*(?:-|–|—|a|al)\s*(\d+(?:[.,]\d+)?)(?=\s*\D|\s*$)/i.exec(v);
   if (r) v = `${Math.max(Number(r[1].replace(',', '.')), Number(r[2].replace(',', '.')))}${v.slice(r[0].length)}`;
   const h = /^\s*([-+]?\d+(?:[.,]\d+)?)\s*(?:horas?|hrs?|h)\.?\s*$/i.exec(v); if (h) return Number(h[1].replace(',', '.')) / 24;
+  const q = QUINCENAS.exec(v); if (q) return Number(q[1].replace(',', '.')) * 15;
   const s = SEMANAS.exec(v); if (s) return Number(s[1].replace(',', '.')) * 7;
   const m = MESES_ANIOS.exec(v); if (m) return Number(m[1].replace(',', '.')) * (m[2][0].toLowerCase() === 'm' ? 30.4 : 365);
   return leeNum(v);

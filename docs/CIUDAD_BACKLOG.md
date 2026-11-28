@@ -420,6 +420,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.100) 2026-11-27 01:37 · `contenedorCerrado()` pura y probada: el contenedor «Cancelada», «Concluida», «Cerrado/a» (acentos, guiones bajos, plural) ya no se dibuja como barco ni tarima, como `CONCLUIDOS`/`CANCELADOS` de `forecast/reuniones/cruce.js`; antes sólo «CONCLUIDO»/«CANCELADO» exactos.
   - [x] (4.12.107) 2026-11-27 03:56 · `nombrePersona()` aparta los signos al inicio como `nombreCiudad()`: «JUAN PÉREZ (JP)» → «Juan Pérez (JP)», «ANA "LA JEFA" LÓPEZ» → «Ana "La Jefa" López», «luis.garcía» → «Luis.García» (antes «(jp)», «"la Jefa"», «Luis.garcía») en escritorio, tarjeta y globo; +1 prueba.
   - [x] (4.12.108) 2026-11-27 04:16 · `temperaturaTexto()` lee la escala en texto: «24 C», «24ºC» (º ordinal), «24 grados», «24 celsius» → «24°» y pasa Fahrenheit a Celsius («75 °F» / «75 grados F» → «24°»); antes salían vacíos en el clima de la barra.
+  - [x] (4.12.120) 2026-11-27 22:16 · `leeDias()` / `haceDias()` leen días relativos («hoy», «mañana», «pasado mañana» como plazo; «ayer», «antier», «anteayer» sólo como antigüedad), quincenas («una quincena», «2 quincenas» = 15/30 d) y números en palabras hasta sesenta («quince días», «treinta días», «veinte minutos»); antes «sin ETA» / sin texto; +1 prueba.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -773,3 +774,4 @@ Principios que no se rompen en ninguna etapa:
 - 2026-11-27 05:36 · v4.12.113 · `leeDias()` lee rangos («3-5 días», «3 a 5 semanas»: toma el mayor) y horas («48 horas», «24 h»); antes «sin ETA»; +1 prueba.
 - 2026-11-27 05:38 · v4.12.114 · `leeDias()` lee aproximaciones («~5 días», «aprox. 10 días», «unos 5 días», «cerca de 4 días», «5 días aprox.»); antes «sin ETA»; +1 prueba.
 - 2026-11-27 05:56 · v4.12.115 · `leeDias()` lee plazos con «en», «dentro de», «faltan», «llega en», «sale en» al inicio («en 5 días», «dentro de 2 semanas», «faltan 3 días»; antes «sin ETA» / sin texto en el puerto, los barcos, la cadena y la antigüedad); +1 prueba.
+- 2026-11-27 22:16 · v4.12.120 · ETAs y antigüedades en palabras («mañana», «pasado mañana», «antier», «una quincena», «quince días») ya se leen en el puerto, los barcos y la bitácora; +1 prueba.
