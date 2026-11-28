@@ -438,6 +438,7 @@ Principios que no se rompen en ninguna etapa:
   - [x] (4.12.136) 2026-11-28 02:36 · `fechaIso()` lee año primero con puntos («2026.11.26», «2026.1.5 10:30», como algunos ERP y Excel en configuración asiática/alemana); antes null: «sin fecha». Separadores mezclados siguen null; +aserciones.
   - [x] (4.12.137) 2026-11-28 02:55 · `fechaIso()` lee la fecha JSON de .NET / WCF («/Date(1764221400000)/», con zona «-0600» o diagonales escapadas, como exportan servicios web ASP.NET de ERP viejos; día local); antes null: «sin fecha». Fuera de 2000–2099 o con basura sigue null; +aserciones.
   - [x] (4.12.138) 2026-11-28 03:15 · `fechaIso()` lee año primero con el mes en letra («2026-Nov-26», «2026/nov/26», «2026 noviembre 26», «2026-NOV-26 10:30», como exportan Oracle y algunos ERP); antes null: «sin fecha». Mes desconocido o «2026-feb-31» siguen null; +aserciones.
+  - [x] (4.12.140) 2026-11-28 03:55 · `fechaIso()` lee la hora pegada al año con dos puntos, como los logs de Apache/Nginx y CDN («26/Nov/2026:10:30:00 -0600»; antes null: «sin fecha»). Sólo si sigue HH:MM; «26/Nov/2026:» o «:10» siguen null; +aserciones.
 
 ## Necesita a Fernando (el agente no lo hace)
 
@@ -452,6 +453,7 @@ Principios que no se rompen en ninguna etapa:
 - Precisión del pronóstico en la torre (Etapa 3): mover `compararForecast()` de `comercial/proyectos/ForecastSeguimiento.jsx` a un archivo puro (p. ej. `forecastCalc.js`) y decir de dónde sale la serie real por SKU que usa «Forecast vs real»; con eso el agente la muestra en la tarjeta de la torre.
 
 ## Hecho
+- 2026-11-28 03:55 · v4.12.140 · `fechaIso()` lee «26/Nov/2026:10:30:00 -0600» (formato de logs Apache/Nginx); antes «sin fecha»; +aserciones.
 - 2026-11-28 03:15 · v4.12.138 · `fechaIso()` lee «2026-Nov-26» (año primero con mes en letra, Oracle/ERP); antes «sin fecha»; +aserciones.
 - 2026-11-28 02:55 · v4.12.137 · `fechaIso()` lee la fecha JSON de .NET («/Date(ms)/», ERP con servicios ASP.NET); antes «sin fecha»; +aserciones.
 - 2026-11-28 02:36 · v4.12.136 · `fechaIso()` lee «2026.11.26» (año primero con puntos); antes «sin fecha»; +aserciones.

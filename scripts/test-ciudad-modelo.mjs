@@ -1180,6 +1180,9 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   for (const x of ['2026.02.30', '2026.13.1', '2026.1-5', '2026/1.5', '2026.11.26x']) assert.equal(fechaIso(x), null, x);
   // 4.12.138: año primero con el mes en letra.
   for (const x of ['2026-Nov-26', '2026/nov/26', '2026 noviembre 26', ' 2026-NOV-26 10:30 ', '2026.nov.26', '2026-Nov.-26']) assert.equal(fechaIso(x), '2026-11-26', x);
+  // 4.12.140: hora pegada al año con dos puntos (logs Apache/Nginx/CDN)
+  for (const x of ['26/Nov/2026:10:30:00 -0600', '26/nov/2026:04:05', '26-Nov-2026:10:30:00 +0000']) assert.equal(fechaIso(x), '2026-11-26', x);
+  for (const x of ['26/Nov/2026:', '26/Nov/2026:xx', '26/Nov/2026:10', '31/Feb/2026:10:30:00']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaIso('2027-ene-5'), '2027-01-05');
   for (const x of ['2026-feb-31', '2026-xyz-26', '2026-no-26', '2026-nov-26x', '2026-nov', '2026-nov-123']) assert.equal(fechaIso(x), null, x);
   // 4.12.77: mes primero, al estilo inglés.

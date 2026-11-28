@@ -1609,7 +1609,9 @@ export function fechaIso(x) {
   // 4.12.74: con el mes en letra («26 nov 2026», «26-nov-2026», «5 de enero de 2027», «26/Nov/2026 10:30», como exportan
   // algunos ERP y reportes en español; antes null: contaba como «sin fecha»). Mes desconocido o '31 feb 2026' siguen null.
   // 4.12.122: «del» antes del año y coma tras el mes («26 de noviembre del 2026», «5 de enero, 2027»; antes null: «sin fecha»).
-  const ml = norm(x).match(/^(\d{1,2})(?:\s+de\s+|[\s/.-]+)([a-z]{3,10})\.?,?(?:\s+del?\s+|[\s/.-]+)(\d{4}|\d{2})(?:[\sT].*)?$/i);
+  // 4.12.140: la hora pegada al año con dos puntos, como el formato común de logs de Apache/Nginx y CDN («26/Nov/2026:10:30:00
+  // -0600»; antes null: «sin fecha»). Sólo si tras los dos puntos viene una hora (HH:MM); la zona se ignora (cuenta el día escrito).
+  const ml = norm(x).match(/^(\d{1,2})(?:\s+de\s+|[\s/.-]+)([a-z]{3,10})\.?,?(?:\s+del?\s+|[\s/.-]+)(\d{4}|\d{2})(?:(?:[\sT]|:(?=\d{1,2}:\d{2})).*)?$/i);
   if (ml) {
     const mes = mesLetra(ml[2]); if (!mes) return null;
     const s = `${anio4(ml[3])}-${String(mes).padStart(2, '0')}-${ml[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
