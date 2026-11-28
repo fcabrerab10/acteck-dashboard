@@ -1604,7 +1604,7 @@ test('tarjetaDe(): torre, tienda, camión y vendedor leen texto/Date y dicen sin
 
 test('porcentaje(): miles es-MX, signo opcional y «—» con lo ilegible; capa de ventas y pensamientos lo usan', () => {
   assert.equal(porcentaje(45), '45 %'); assert.equal(porcentaje(1250), '1,250 %'); assert.equal(porcentaje(12.6), '13 %');
-  assert.equal(porcentaje(-0.4), '0 %'); assert.equal(porcentaje(-25), '-25 %'); assert.equal(porcentaje('80'), '80 %');
+  assert.equal(porcentaje(-0.4), '0 %'); assert.equal(porcentaje(0.3), '<1 %'); assert.equal(porcentaje('0.4 %'), '<1 %'); assert.equal(porcentaje(0.2, { signo: true }), '+<1 %'); assert.equal(porcentaje(0.5), '1 %'); assert.equal(porcentaje(0), '0 %'); assert.equal(porcentaje(-25), '-25 %'); assert.equal(porcentaje('80'), '80 %');
   assert.equal(porcentaje(30, { signo: true }), '+30 %'); assert.equal(porcentaje(0, { signo: true }), '0 %'); assert.equal(porcentaje(-5, { signo: true }), '-5 %');
   for (const x of [null, undefined, '', NaN, 'abc', Infinity, true, {}]) assert.equal(porcentaje(x), '—');
   assert.equal(porcentaje('1,250'), '1,250 %'); assert.equal(porcentaje(' 45 % '), '45 %'); assert.equal(porcentaje('+30', { signo: true }), '+30 %'); assert.equal(porcentaje('  '), '—');

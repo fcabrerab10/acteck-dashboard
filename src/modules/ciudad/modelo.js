@@ -1085,7 +1085,10 @@ export function porcentaje(v, op) { // 4.7.62: opciones null o que no son objeto
   // 4.12.90: negativo contable entre paréntesis («(12 %)», «(3.5)», como `numero()`) se lee negativo (antes «—»).
   // 4.12.129: también «12 por cien», «12 porc.» y en inglés «12 percent» / «12 per cent» (reportes y CSV en inglés; antes «—»).
   // 4.12.126: «12 por ciento», «12 porciento», «12.5 pct» (como lo escriben en una hoja o un correo) se leen (antes «—»).
-  const k = Math.round(typeof v === 'string' ? textoNum(v.replace(/(\d)\s*(?:por\s?ciento|por\s?cien|porc\.?|per\s?cent|pct\.?)\s*(\)?)\s*$/i, '$1$2'), /[\s,%]/g) : v); if (!Number.isFinite(k)) return '—';
+  const crudo = typeof v === 'string' ? textoNum(v.replace(/(\d)\s*(?:por\s?ciento|por\s?cien|porc\.?|per\s?cent|pct\.?)\s*(\)?)\s*$/i, '$1$2'), /[\s,%]/g) : v;
+  const k = Math.round(crudo); if (!Number.isFinite(k)) return '—';
+  // 4.12.147: un positivo chico que redondea a 0 (0.3 % del inventario, 0.4 % de la cuota) dice «<1 %», no «0 %» como si no hubiera nada.
+  if (k === 0 && crudo > 0) return `${signo ? '+' : ''}<1 %`;
   const z = k === 0 ? 0 : k; return `${signo && z > 0 ? '+' : ''}${z.toLocaleString('es-MX')} %`;
 }
 // DSO de la cartera (4.7.26): días redondeados en singular/plural con miles es-MX («DSO 45 días», «DSO 1 día»);
