@@ -1567,6 +1567,9 @@ const esDiaSemana = (w) => { const v = String(w).toLowerCase(); return v.length 
 const anio4 = (a) => (a.length === 2 ? `20${a}` : a);
 export function fechaIso(x) {
   if (x instanceof Date) return Number.isNaN(x.getTime()) ? null : isoLocal(x);
+  // 4.12.133: marca de tiempo en milisegundos como número (Date.now(), JSON de APIs y webhooks; antes null: «sin fecha»).
+  // Sólo enteros de 2000 a 2099 (13 dígitos): un folio, importe o segundos sueltos siguen null. Cuenta el día local.
+  if (typeof x === 'number') return Number.isInteger(x) && x >= 946684800000 && x < 4102444800000 ? isoLocal(new Date(x)) : null;
   if (typeof x !== 'string') return null;
   // 4.12.78: con el día de la semana adelante («Thu Nov 26 2026 03:54:17 GMT-0600», como sale un Date pasado a texto;
   // «Thu, 26 Nov 2026 10:30:00 GMT» de correos y encabezados; «jue 26 nov 2026», «jueves, 26 de noviembre de 2026»; antes

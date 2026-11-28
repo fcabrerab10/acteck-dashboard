@@ -1895,6 +1895,11 @@ test('fechaIso con hora y zona cuenta el día local (4.7.57)', () => {
   assert.equal(fechaIso('Thu Nov  5 04:34:17 2026'), '2026-11-05', 'asctime');
   assert.equal(fechaIso('jue nov 26 04:34 2026'), '2026-11-26', 'en español sin segundos');
   for (const x of ['Feb 31 04:34:17 CST 2026', 'Xyz 26 04:34:17 2026', 'Nov 26 04:34:17 CST', 'Nov 26 04:34:17 CST 2026 basura']) assert.equal(fechaIso(x), null, x);
+  // 4.12.133: milisegundos como número (día local); folios, importes, segundos, decimales y NaN siguen null.
+  const ms = new Date(2026, 10, 26, 23, 30).getTime();
+  assert.equal(fechaIso(ms), '2026-11-26', 'Date.now() de noche se queda en el día local');
+  assert.equal(fechaIso(new Date(2000, 0, 2).getTime()), '2000-01-02', 'año 2000');
+  for (const x of [0, 12345, 1200000, 1764140400, ms + 0.5, NaN, Infinity, -ms, 4102444800000]) assert.equal(fechaIso(x), null, String(x));
 });
 
 test('4.7.61 · bitácora: renglones sin folio/id no se pierden ni dicen «null»', () => {
