@@ -1562,14 +1562,16 @@ export function fechaIso(x) {
   if (dm) { const s = `${dm[4]}-${dm[3].padStart(2, '0')}-${dm[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null; }
   // 4.12.74: con el mes en letra («26 nov 2026», «26-nov-2026», «5 de enero de 2027», «26/Nov/2026 10:30», como exportan
   // algunos ERP y reportes en español; antes null: contaba como «sin fecha»). Mes desconocido o '31 feb 2026' siguen null.
-  const ml = norm(x).match(/^(\d{1,2})(?:\s+de\s+|[\s/.-]+)([a-z]{3,10})\.?(?:\s+de\s+|[\s/.-]+)(\d{4})(?:[\sT].*)?$/i);
+  // 4.12.122: «del» antes del año y coma tras el mes («26 de noviembre del 2026», «5 de enero, 2027»; antes null: «sin fecha»).
+  const ml = norm(x).match(/^(\d{1,2})(?:\s+de\s+|[\s/.-]+)([a-z]{3,10})\.?,?(?:\s+del?\s+|[\s/.-]+)(\d{4})(?:[\sT].*)?$/i);
   if (ml) {
     const mes = mesLetra(ml[2]); if (!mes) return null;
     const s = `${ml[3]}-${String(mes).padStart(2, '0')}-${ml[1].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
   }
   // 4.12.77: mes primero, al estilo inglés («Nov 26, 2026», «November 5 2027», «nov. 26, 2026 10:30», como exportan Shopify,
   // Amazon y otras plataformas en inglés; antes null: «sin fecha»). Sin día o '31 feb' siguen null.
-  const mp = norm(x).match(/^([a-z]{3,10})\.?\s+(\d{1,2}),?\s+(\d{4})(?:[\sT].*)?$/i);
+  // 4.12.122: también «noviembre 26 de 2026» / «nov 26 del 2026» (mes primero en español; antes null).
+  const mp = norm(x).match(/^([a-z]{3,10})\.?\s+(\d{1,2}),?\s+(?:del?\s+)?(\d{4})(?:[\sT].*)?$/i);
   if (mp) {
     const mes = mesLetra(mp[1]); if (!mes) return null;
     const s = `${mp[3]}-${String(mes).padStart(2, '0')}-${mp[2].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;

@@ -1148,6 +1148,9 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   // 4.12.73: día/mes/año con guiones o puntos
   assert.equal(fechaIso('26-11-2026'), '2026-11-26'); assert.equal(fechaIso(' 5.1.2027 08:00 '), '2027-01-05', 'puntos y hora');
   for (const x of ['26-11/2026', '31-02-2026', '26.13.2026', '26-11-2026x']) assert.equal(fechaIso(x), null, x);
+  // 4.12.122: «del» antes del año, coma tras el mes y mes primero en español
+  for (const x of ['26 de noviembre del 2026', '26 de Noviembre, 2026', 'noviembre 26 de 2026', 'Nov 26 del 2026', ' 26 DE NOVIEMBRE DEL 2026 10:30 ']) assert.equal(fechaIso(x), '2026-11-26', x);
+  for (const x of ['31 de febrero del 2026', '26 de nada del 2026', 'noviembre 26 dela 2026', '26 del noviembre 2026']) assert.equal(fechaIso(x), null, x);
   assert.equal(fechaCorta('26/11/2026', new Date(2026, 10, 26)), '26 nov', 'tarjetas');
   // 4.12.72: año primero sin ceros o con diagonales
   // 4.12.74: mes en letra (español o inglés, abreviado o completo, con «de»).
