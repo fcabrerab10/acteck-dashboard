@@ -1622,6 +1622,13 @@ export function fechaIso(x) {
     const mes = mesLetra(ux[1]); if (!mes) return null;
     const s = `${ux[3]}-${String(mes).padStart(2, '0')}-${ux[2].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
   }
+  // 4.12.138: año primero con el mes en letra («2026-Nov-26», «2026/nov/26», «2026 noviembre 26», «2026-NOV-26 10:30», como
+  // exportan Oracle, algunos ERP y logs; antes null: «sin fecha»). Mes desconocido o '2026-feb-31' siguen null.
+  const yl = norm(x).match(/^(\d{4})[\s/.-]+([a-z]{3,10})\.?[\s/.-]+(\d{1,2})(?:[\sT].*)?$/i);
+  if (yl) {
+    const mes = mesLetra(yl[2]); if (!mes) return null;
+    const s = `${yl[1]}-${String(mes).padStart(2, '0')}-${yl[3].padStart(2, '0')}`; const t = new Date(`${s}T12:00:00`); return !Number.isNaN(t.getTime()) && isoLocal(t) === s ? s : null;
+  }
   // 4.12.72: año primero sin ceros o con diagonales («2026-1-5», «2026/01/05 10:30», como exportan Sheets y algunos ERP)
   // también se lee (antes null: contaba como «sin fecha»); '2026/02/30' o mes 13 siguen siendo null.
   // 4.12.136: también con puntos («2026.11.26», «2026.1.5 10:30», como exportan algunos ERP y Excel en configuración

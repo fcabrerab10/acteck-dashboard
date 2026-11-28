@@ -1178,6 +1178,10 @@ test('fechaIso y fechas malas en puerto y camiones (sin NaN)', () => {
   // 4.12.136: año primero con puntos.
   assert.equal(fechaIso('2026.11.26'), '2026-11-26'); assert.equal(fechaIso(' 2026.1.5 10:30 '), '2026-01-05', 'puntos y hora');
   for (const x of ['2026.02.30', '2026.13.1', '2026.1-5', '2026/1.5', '2026.11.26x']) assert.equal(fechaIso(x), null, x);
+  // 4.12.138: año primero con el mes en letra.
+  for (const x of ['2026-Nov-26', '2026/nov/26', '2026 noviembre 26', ' 2026-NOV-26 10:30 ', '2026.nov.26', '2026-Nov.-26']) assert.equal(fechaIso(x), '2026-11-26', x);
+  assert.equal(fechaIso('2027-ene-5'), '2027-01-05');
+  for (const x of ['2026-feb-31', '2026-xyz-26', '2026-no-26', '2026-nov-26x', '2026-nov', '2026-nov-123']) assert.equal(fechaIso(x), null, x);
   // 4.12.77: mes primero, al estilo inglés.
   assert.equal(fechaIso('Nov 26, 2026'), '2026-11-26'); assert.equal(fechaIso(' November 5 2027 '), '2027-11-05'); assert.equal(fechaIso('nov. 26, 2026 10:30'), '2026-11-26', 'con hora');
   assert.equal(fechaIso('Sept 1, 2026'), '2026-09-01'); assert.equal(fechaIso('DIC 9 2026'), '2026-12-09'); assert.equal(fechaIso('may 2, 2026'), '2026-05-02');
